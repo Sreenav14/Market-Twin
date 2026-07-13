@@ -1,0 +1,68 @@
+[project]
+name = "markettwin-workspace"
+version = "0.1.0"
+description = "MarketTwin V1 enterprise agentic product-testing platform"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.25,<1.0",
+    "ruff>=0.11,<1.0",
+    "pyright>=1.1,<2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "services/control-api",
+    "services/knowledge-worker",
+    "services/execution-orchestrator",
+    "services/evaluation-worker",
+    "packages/shared-python",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = [
+    "services",
+    "packages",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "ASYNC",
+]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = [
+    "services/control-api/tests",
+    "services/knowledge-worker/tests",
+    "services/execution-orchestrator/tests",
+    "services/evaluation-worker/tests",
+    "packages/shared-python/tests",
+]
+addopts = "-ra --import-mode=importlib"
+asyncio_mode = "auto"
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+include = [
+    "services",
+    "packages/shared-python",
+]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+]

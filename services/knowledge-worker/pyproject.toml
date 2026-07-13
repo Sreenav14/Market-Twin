@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "markettwin-knowledge-worker"
+version = "0.1.0"
+description = "MarketTwin ingestion and knowledge-generation worker"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "markettwin-shared-python",
+]
+
+[tool.uv.sources]
+markettwin-shared-python = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/markettwin_knowledge_worker"]

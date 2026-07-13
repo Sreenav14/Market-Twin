@@ -1,0 +1,7 @@
+﻿{
+  "name": "@markettwin/openapi-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generated TypeScript client for the Control API"
+}

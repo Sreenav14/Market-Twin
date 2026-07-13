@@ -1,0 +1,7 @@
+﻿{
+  "name": "@markettwin/policy-rules",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic execution policy contracts"
+}

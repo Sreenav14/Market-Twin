@@ -1,0 +1,88 @@
+﻿# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Node.js and npm
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+.npm/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# IDE and operating system
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# MarketTwin runtime artifacts
+artifacts/
+uploads/
+downloads/
+screenshots/
+traces/
+videos/
+keyframes/
+tmp/
+temp/
+
+# Local infrastructure data
+infra/compose/data/
+postgres-data/
+kafka-data/
+minio-data/
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Kubernetes secrets
+*-secret.yaml
+secrets.yaml
+
+# Local AWS configuration
+.aws/
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# Generated API client
+packages/openapi-client/generated/

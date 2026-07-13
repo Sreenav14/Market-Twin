@@ -1,0 +1,13 @@
+﻿{
+  "name": "@markettwin/browser-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MarketTwin Playwright MCP and Chromium runtime",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test",
+    "clean": "node -e \"console.log('No browser runtime build artifacts to clean yet.')\""
+  }
+}

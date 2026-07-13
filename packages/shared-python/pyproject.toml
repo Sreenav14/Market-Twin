@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "markettwin-shared-python"
+version = "0.1.0"
+description = "Shared Python contracts and utilities for MarketTwin"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/markettwin_shared"]

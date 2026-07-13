@@ -1,0 +1,24 @@
+﻿{
+  "name": "markettwin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MarketTwin V1 enterprise agentic product-testing platform",
+  "workspaces": [
+    "apps/*",
+    "services/browser-runtime",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "test:browser-runtime": "npm test --workspace=@markettwin/browser-runtime"
+  }
+}
