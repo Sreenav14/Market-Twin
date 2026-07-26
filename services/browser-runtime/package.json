@@ -1,13 +1,24 @@
-﻿{
+{
   "name": "@markettwin/browser-runtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "MarketTwin Playwright MCP and Chromium runtime",
   "scripts": {
-    "dev": "node src/index.js",
-    "start": "node src/index.js",
-    "test": "node --test",
-    "clean": "node -e \"console.log('No browser runtime build artifacts to clean yet.')\""
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "tsx --test tests/**/*.test.ts",
+    "clean": "node -e \"console.log('No browser runtime build artifacts to clean yet.')\"",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "ipaddr.js": "2.4.0",
+    "playwright": "1.61.1"
   }
 }

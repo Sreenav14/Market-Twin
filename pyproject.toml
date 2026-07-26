@@ -58,6 +58,8 @@ asyncio_mode = "auto"
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
 include = [
     "services",
     "packages/shared-python",

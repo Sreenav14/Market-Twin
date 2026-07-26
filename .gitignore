@@ -86,3 +86,7 @@ blob-report/
 
 # Generated API client
 packages/openapi-client/generated/
+
+# Package manager configuration
+.npmrc
+uv.lock
