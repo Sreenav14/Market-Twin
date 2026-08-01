@@ -10,6 +10,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi[standard-no-fastapi-cloud-cli]==0.139.2",
     "markettwin-shared-python",
+    "mcp>=1.27,<2",
     "pydantic-settings>=2.14.2",
 ]
 
