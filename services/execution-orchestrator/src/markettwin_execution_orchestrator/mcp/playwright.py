@@ -13,18 +13,9 @@ PLAYWRIGHT_MCP_PACKAGE: Final[str] = "@playwright/mcp@0.0.78"
 
 PLAYWRIGHT_MCP_ALLOWED_TOOLS: Final[tuple[str, ...]] = (
     "browser_navigate",
-    "browser_navigate_back",
     "browser_snapshot",
-    "browser_click",
-    "browser_type",
-    "browser_press_key",
-    "browser_select_option",
-    "browser_hover",
-    "browser_wait_for",
     "browser_take_screenshot",
-    "browser_console_messages",
-    "browser_tabs",
-    "browser_close",
+    "browser_tab",
 )
 
 def create_playwright_toolset() -> MCPToolset:
@@ -44,10 +35,12 @@ def create_playwright_toolset() -> MCPToolset:
                     "--codegen",
                     "none",
                     "--snapshot-mode",
-                    "full",
+                    "none",
+                    "--image-responses",
+                    "omit",
                 ],
             ),
-            timeout = 90.0,
+            timeout = 180.0,
         ),
         tool_filter = list(PLAYWRIGHT_MCP_ALLOWED_TOOLS),
     )

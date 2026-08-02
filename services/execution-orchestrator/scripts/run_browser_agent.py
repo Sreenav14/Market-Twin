@@ -1,7 +1,6 @@
 """Run the first MarketTwin browser-agent mission."""
 
 import asyncio
-import os
 from uuid import uuid4
 
 from google.adk.runners import InMemoryRunner
@@ -9,24 +8,24 @@ from google.genai import types
 from markettwin_execution_orchestrator.agents.browser_agent import (
     create_browser_agent,
 )
+from markettwin_execution_orchestrator.mcp.playwright import (
+    create_playwright_toolset,
+)
 
 AUTHORIZED_TARGET = ("https://en.wikipedia.org/wiki/Software_testing")
 EXPECTED_HEADING = "Software testing"
 
 APP_NAME = "markettwin_gate_a"
 USER_ID = "local_developer"
-MODEL_NAME = "gemini-3.5-flash-lite"
 
 
 async def main() -> None:
     """Execute one authorized public-site browser mission."""
 
-    if not os.getenv("GOOGLE_API_KEY"):
-        raise RuntimeError(
-            "GOOGLE_API_KEY is not configured in the environment."
-        )
-
-    agent = create_browser_agent(model=MODEL_NAME)
+    playwright_toolset = create_playwright_toolset()
+    agent = create_browser_agent(
+        playwright_toolset=playwright_toolset,
+    )
 
     runner = InMemoryRunner(
         agent=agent,
@@ -42,19 +41,22 @@ async def main() -> None:
     )
 
     mission = f"""
-AUTHORIZED_TARGET: {AUTHORIZED_TARGET}
+/no_think
 
-Mission:
-1. Navigate only to the authorized target: {AUTHORIZED_TARGET}.
-2. Inspect the page using a browser snapshot.
-3. Verify that the page contains the heading "{EXPECTED_HEADING}".
-4. Take a screenshot.
-5. Report whether the mission succeeded.
-6. Include the final page URL.
+Authorized target: {AUTHORIZED_TARGET}
 
-Do not navigate to any other domain.
+Do exactly this:
+1. Call browser_navigate once with the authorized target.
+2. Call browser_snapshot once.
+3. Verify whether the heading "{EXPECTED_HEADING}" is present.
+4. Call browser_take_screenshot once.
+5. Call browser_close once.
+6. STOP using tools.
+7. Return a final text response containing SUCCESS or FAILURE.
+
+Never navigate more than once.
+Do not call any other tools.
 """.strip()
-
     message = types.Content(
         role="user",
         parts=[
