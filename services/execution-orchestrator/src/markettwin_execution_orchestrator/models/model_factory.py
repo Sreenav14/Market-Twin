@@ -11,7 +11,9 @@ DEFAULT_OLLAMA_NUM_CTX: Final[int] = 8_192
 DEFAULT_MAX_TOKENS: Final[int] = 256
 
 
-def create_model() -> LiteLlm:
+def create_model(
+    *, max_tokens: int = DEFAULT_MAX_TOKENS ,
+    ) -> LiteLlm:
     """Create the local Ollama-backed LLM used by MarketTwin agents."""
 
     model_name = os.getenv("OLLAMA_MODEL_NAME", DEFAULT_OLLAMA_MODEL_NAME)
@@ -21,7 +23,7 @@ def create_model() -> LiteLlm:
     return LiteLlm(
         model=model_name,
         api_base=api_base,
-        max_tokens=DEFAULT_MAX_TOKENS,
+        max_tokens=max_tokens,
         num_ctx=num_ctx,
         reasoning_effort="none",
     )
