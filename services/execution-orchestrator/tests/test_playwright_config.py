@@ -30,11 +30,10 @@ def test_playwright_toolset_keeps_agent_context_small(
         "browser_navigate",
         "browser_snapshot",
         "browser_take_screenshot",
-        "browser_tabs",
     )
     assert server_params.args[-4:] == [
         "--snapshot-mode",
-        "none",
+        "full",
         "--image-responses",
         "omit",
     ]

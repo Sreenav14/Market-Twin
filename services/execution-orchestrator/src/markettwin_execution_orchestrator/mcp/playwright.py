@@ -15,7 +15,7 @@ PLAYWRIGHT_MCP_ALLOWED_TOOLS: Final[tuple[str, ...]] = (
     "browser_navigate",
     "browser_snapshot",
     "browser_take_screenshot",
-    "browser_tab",
+    
 )
 
 def create_playwright_toolset() -> MCPToolset:
@@ -35,7 +35,7 @@ def create_playwright_toolset() -> MCPToolset:
                     "--codegen",
                     "none",
                     "--snapshot-mode",
-                    "none",
+                    "full",
                     "--image-responses",
                     "omit",
                 ],
