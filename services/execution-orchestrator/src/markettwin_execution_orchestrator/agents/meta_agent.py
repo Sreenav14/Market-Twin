@@ -20,7 +20,7 @@ def create_meta_agent() -> LlmAgent:
             max_tokens = META_AGENT_MAX_TOKENS,
         ),
         description = (
-            "Create diverse realistic user perspectives for"
+            "Create diverse realistic user perspectives for "
             "testing an authorized application."
         ),
         instruction = """ 
