@@ -36,7 +36,7 @@ class MetaAgentFactory:
     ) -> None:
         self._registry = (
             registry
-            if registry is not None
+            if registry is None
             else create_default_agent_registry()
         )
         self._registry = registry
