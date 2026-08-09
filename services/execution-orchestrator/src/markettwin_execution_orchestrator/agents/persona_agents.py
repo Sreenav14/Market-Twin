@@ -3,18 +3,18 @@
 from google.adk.agents import LlmAgent
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
-from markettwin_execution_orchestrator.agents.schemas.persona import PersonaSpec
+from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
 from markettwin_execution_orchestrator.models.model_factory import create_model
 
 
 def create_persona_agent(
     *,
-    persona: PersonaSpec,
+    journey: PersonaJourneySpec,
     playwright_toolset: McpToolset,
 ) -> LlmAgent:
     """ Create one isolated MarkekTwin persona-testing agent."""
     
-    persona_name = f"markettwin_persona_{persona.persona_id}"
+    persona_name = f"markettwin_persona_{journey.persona.persona_id}"
     
     instruction = f"""
     /no_think
@@ -29,22 +29,22 @@ def create_persona_agent(
     PERSONA:
     
     Name:
-    {persona.name}
+    {journey.persona.name}
     
     Perspective:
-    {persona.perspective}
+    {journey.persona.perspective}
     
     Objective:
-    {persona.objective}
+    {journey.mission.objective}
     
     Behavior tarits:
-    {", ".join(persona.behavior_traits)}
+    {", ".join(journey.persona.behavior_traits)}
     
     Priorities:
-    {", ".join(persona.priorities)}
+    {", ".join(journey.persona.priorities)}
     
     Success criteria:
-    {", ".join(persona.success_criteria)}
+    {", ".join(journey.mission.success_criteria)}
     
     BEHAVIOR
     
@@ -78,7 +78,7 @@ Return a concise journey result describing:
         name = persona_name,
         model = create_model(),
         description=(
-            f"Simulates the MarketTwin user persona '{persona.name}' "
+            f"Simulates the MarketTwin user persona '{journey.persona.name}' "
             "while testing an authorized application."
         ),
         instruction=instruction,

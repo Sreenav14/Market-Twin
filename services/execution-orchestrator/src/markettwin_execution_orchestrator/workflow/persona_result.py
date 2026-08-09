@@ -1,45 +1,60 @@
-""" Execution results for one MarketTwin persona journey."""
+"""Execution results for one MarketTwin persona journey."""
 
 from enum import StrEnum
 
-from pydantic import BaseModel,ConfigDict,Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from markettwin_execution_orchestrator.agents.schemas.persona import (
-    PersonaSpec,
+from markettwin_execution_orchestrator.agents.schemas.journey import (
+    PersonaJourneySpec,
 )
 
-class PersonaJourneyStatus(StrEnum):
-    """Execution status for one simulated user journey."""
+
+class JourneyExecutionStatus(StrEnum):
+    """Infrastructure lifecycle for a persona journey."""
+
+    PENDING = "pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    POLICY_BLOCKED = "policy_blocked"
+
+
+class JourneyOutcome(StrEnum):
+    """Observed product outcome for the simulated user."""
 
     PASSED = "passed"
     FAILED = "failed"
-    BLOCKED = "blocked"
-    TIMED_OUT = "timed_out"
-    ERROR = "error"
-    
-    
+    PARTIAL = "partial"
+    INCONCLUSIVE = "inconclusive"
+
+
 class PersonaJourneyResult(BaseModel):
-    """ Execution status for one simulated user journey."""
-    
+    """Structured result for one persona/mission execution."""
+
     model_config = ConfigDict(
-        extra = "forbid",
-        frozen = True,
+        extra="forbid",
+        frozen=True,
     )
-    
-    persona: PersonaSpec
-    status: PersonaJourneyStatus
-    
-    summary: str = Field(
-        min_length = 1,
-        max_length = 2_000,
+
+    journey: PersonaJourneySpec
+
+    status: JourneyExecutionStatus
+    outcome: JourneyOutcome | None = None
+
+    summary: str | None = Field(
+        default=None,
+        max_length=2_000,
     )
-    
-    actions: tuple[str,...] = ()
-    observations: tuple[str,...]= ()
-    friction_points: tuple[str,...] =()
-    blocker: tuple[str,...] =()
-    satisfied_criteria: tuple[str,...] =()
-    unsatisfied_criteria: tuple[str,...] =()
-    
-    
+
+    actions: tuple[str, ...] = ()
+    observations: tuple[str, ...] = ()
+    friction_points: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+
+    satisfied_criteria: tuple[str, ...] = ()
+    unsatisfied_criteria: tuple[str, ...] = ()
+
     final_url: str | None = None

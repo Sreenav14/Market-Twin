@@ -26,12 +26,7 @@ class PersonaSpec(BaseModel):
         min_length = 1,
         max_length = 500,
     )
-    
-    objective: str = Field(
-        min_length = 1,
-        max_length = 500,
-    )
-    
+        
     behavior_traits: tuple[str,...] = Field(
         min_length = 1,
         max_length = 6,
@@ -42,10 +37,6 @@ class PersonaSpec(BaseModel):
         max_length = 6,
     )
     
-    success_criteria: tuple[str,...] = Field(
-        min_length = 1,
-        max_length = 8,
-    )
     
 class MetaAgentPlan(BaseModel):
     """ Structured testing plan produced by the MarketTwin Meta Agent"""
