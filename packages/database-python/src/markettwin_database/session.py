@@ -1,6 +1,6 @@
 """Shared asynchronous SQLAlchemy session infrastructure."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
@@ -41,7 +41,7 @@ def create_session_factory(
 @asynccontextmanager
 async def session_scope(
     session_factory: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncSession]:
+) -> AsyncGenerator[AsyncSession]:
     """Provide one database session with rollback safety."""
 
     async with session_factory() as session:
