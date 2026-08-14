@@ -14,7 +14,7 @@ class TestMissionSpec(BaseModel):
     mission_id: str = Field(
         min_length = 3,
         max_length = 64,
-        pattern = r"[a-z][a-z0-9]*$"
+        pattern = r"[a-z][a-z0-9_]*$"
     )
     
     name: str = Field(

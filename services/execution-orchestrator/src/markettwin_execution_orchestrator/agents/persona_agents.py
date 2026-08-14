@@ -14,7 +14,7 @@ def create_persona_agent(
 ) -> LlmAgent:
     """ Create one isolated MarkekTwin persona-testing agent."""
     
-    persona_name = f"markettwin_persona_{journey.persona.persona_id}"
+    persona_name = f"markettwin_{journey.journey_key}"
     
     instruction = f"""
     /no_think
@@ -37,7 +37,7 @@ def create_persona_agent(
     Objective:
     {journey.mission.objective}
     
-    Behavior tarits:
+    Behavior traits:
     {", ".join(journey.persona.behavior_traits)}
     
     Priorities:
@@ -60,7 +60,7 @@ def create_persona_agent(
 - Do not log in, enter credentials, solve CAPTCHA, handle MFA or OTP,
   purchase products, submit payments, delete data, or upload files
   unless MarketTwin explicitly enables an approved human-assisted flow.
-- Stop when the persona objective is complete, impossible, or blocked
+- Stop when the mission is complete, impossible, or blocked
   by MarketTwin policy.
 - Capture evidence before completing the journey.
 

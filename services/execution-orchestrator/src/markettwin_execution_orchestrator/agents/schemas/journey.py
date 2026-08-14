@@ -20,7 +20,7 @@ class PersonaJourneySpec(BaseModel):
     
     journey_key: str = Field(
         min_length = 3,
-        max_length = 64,
+        max_length = 140,
         pattern = r"[a-z][a-z0-9]*$"
     )
     

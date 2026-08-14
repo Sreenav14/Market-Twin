@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from markettwin_execution_orchestrator.agents.schemas.persona import (
+from markettwin_execution_orchestrator.agents.schemas.plan import (
     MetaAgentPlan,
 )
 from markettwin_execution_orchestrator.workflow.persona_result import (
