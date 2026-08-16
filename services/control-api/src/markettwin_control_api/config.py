@@ -35,7 +35,18 @@ class Settings(BaseSettings):
         extra = "ignore",
         case_sensitive = False,
     )
-    
+    @property
+    def database_url(self) -> str:
+        """Return the async PostgreSQL database URL."""
+        return (
+            "Postgresql+asyncpg://"
+            f"{self.postgres_user}:"
+            f"{self.postgres_password}@"
+            f"{self.postgres_host}:"
+            f"{self.postgres_port}/"
+            f"{self.postgres_db}"
+        )
+
 @lru_cache
 def get_settings() -> Settings:
     "Get the settings for the Control API."

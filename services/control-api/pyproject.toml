@@ -10,12 +10,14 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi[standard-no-fastapi-cloud-cli]==0.139.2",
     "markettwin-shared-python",
-    "mcp>=1.27,<2",
+    "markettwin-database",
     "pydantic-settings>=2.14.2",
 ]
 
 [tool.uv.sources]
 markettwin-shared-python = { workspace = true }
+markettwin-database = { workspace = true }
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/markettwin_control_api"]

@@ -3,7 +3,14 @@ name = "markettwin-workspace"
 version = "0.1.0"
 description = "MarketTwin V1 enterprise agentic product-testing platform"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "markettwin-control-api",
+    "markettwin-database",
+    "markettwin-evaluation-worker",
+    "markettwin-execution-orchestrator",
+    "markettwin-knowledge-worker",
+    "markettwin-shared-python",
+]
 
 [dependency-groups]
 dev = [
@@ -15,6 +22,14 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+markettwin-control-api = { workspace = true }
+markettwin-database = { workspace = true }
+markettwin-evaluation-worker = { workspace = true }
+markettwin-execution-orchestrator = { workspace = true }
+markettwin-knowledge-worker = { workspace = true }
+markettwin-shared-python = { workspace = true }
 
 [tool.uv.workspace]
 members = [
