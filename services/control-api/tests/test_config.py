@@ -6,7 +6,7 @@ from markettwin_control_api.config import Settings
 def test_default_settings() -> None:
     """Settings should provide safe local defaults."""
 
-    settings = Settings(_env_file=None)
+    settings = Settings.model_validate({})
 
     assert settings.app_name == "MarketTwin"
     assert settings.app_env == "local"

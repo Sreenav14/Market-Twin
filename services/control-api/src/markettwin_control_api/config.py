@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         """Return the async PostgreSQL database URL."""
         return (
-            "Postgresql+asyncpg://"
+            "postgresql+asyncpg://"
             f"{self.postgres_user}:"
             f"{self.postgres_password}@"
             f"{self.postgres_host}:"

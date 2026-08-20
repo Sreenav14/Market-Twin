@@ -34,12 +34,6 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    @application.get(
-        "/health",
-        response_model=HealthResponse,
-        tags=["System"],
-        summary="Check API process health",
-    )
     async def health() -> HealthResponse:
         """Confirm that the Control API process is running."""
 
@@ -49,6 +43,15 @@ def create_app() -> FastAPI:
             version=APP_VERSION,
             environment=settings.app_env,
         )
+
+    application.add_api_route(
+        "/health",
+        health,
+        methods=["GET"],
+        response_model=HealthResponse,
+        tags=["System"],
+        summary="Check API process health",
+    )
 
     return application
 
