@@ -8,10 +8,12 @@ version = "0.1.0"
 description = "MarketTwin evaluation and report-generation worker"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "markettwin-database",
     "markettwin-shared-python",
 ]
 
 [tool.uv.sources]
+markettwin-database = { workspace = true }
 markettwin-shared-python = { workspace = true }
 
 [tool.hatch.build.targets.wheel]

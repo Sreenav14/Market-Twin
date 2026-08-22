@@ -816,11 +816,15 @@ name = "markettwin-evaluation-worker"
 version = "0.1.0"
 source = { editable = "services/evaluation-worker" }
 dependencies = [
+    { name = "markettwin-database" },
     { name = "markettwin-shared-python" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "markettwin-shared-python", editable = "packages/shared-python" }]
+requires-dist = [
+    { name = "markettwin-database", editable = "packages/database-python" },
+    { name = "markettwin-shared-python", editable = "packages/shared-python" },
+]
 
 [[package]]
 name = "markettwin-execution-orchestrator"
@@ -829,6 +833,7 @@ source = { editable = "services/execution-orchestrator" }
 dependencies = [
     { name = "google-adk", extra = ["mcp"] },
     { name = "litellm" },
+    { name = "markettwin-database" },
     { name = "markettwin-shared-python" },
 ]
 
@@ -836,6 +841,7 @@ dependencies = [
 requires-dist = [
     { name = "google-adk", extras = ["mcp"], specifier = "==2.5.0" },
     { name = "litellm", specifier = "==1.93.0" },
+    { name = "markettwin-database", editable = "packages/database-python" },
     { name = "markettwin-shared-python", editable = "packages/shared-python" },
 ]
 
