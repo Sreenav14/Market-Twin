@@ -1,11 +1,15 @@
 """MarketTwin Control API application."""
 
-from typing import Final, Literal
+
+from contextlib import asynccontextmanager
+from typing import Final, Literal, AsyncGenerator
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from markettwin_control_api.api.auth import router as auth_router
 from markettwin_control_api.config import get_settings
+from markettwin_control_api.database import DatabaseRuntime
 
 APP_NAME: Final[str] = "MarketTwin Control API"
 APP_VERSION: Final[str] = "0.1.0"
@@ -25,6 +29,21 @@ def create_app() -> FastAPI:
 
     settings = get_settings()
 
+    @asynccontextmanager
+    async def lifespan(
+        application: FastAPI,
+    ) -> AsyncGenerator[None, None]:
+        """Own long-lived application resources."""
+
+        database = DatabaseRuntime(settings)
+
+        application.state.database = database
+
+        try:
+            yield
+        finally:
+            await database.close()
+
     application = FastAPI(
         title=APP_NAME,
         version=APP_VERSION,
@@ -32,6 +51,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        lifespan=lifespan,
     )
 
     async def health() -> HealthResponse:
@@ -52,6 +72,8 @@ def create_app() -> FastAPI:
         tags=["System"],
         summary="Check API process health",
     )
+
+    application.include_router(auth_router)
 
     return application
 

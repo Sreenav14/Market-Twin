@@ -16,6 +16,17 @@ class Settings(BaseSettings):
     
     control_api_host: str = "127.0.0.1"
     control_api_port: int = Field(default=8000, ge=1, le=65535)
+    session_idle_timeout_minutes: int = Field(
+    default = 30,
+    ge=1,
+    le=1440,
+    )
+
+    session_absolute_timeout_hours: int = Field(
+    default = 8,
+    ge=1,
+    le=168,
+    )
     
     postgres_host: str = "localhost"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
@@ -46,8 +57,11 @@ class Settings(BaseSettings):
             f"{self.postgres_port}/"
             f"{self.postgres_db}"
         )
+        
+    
 
 @lru_cache
 def get_settings() -> Settings:
     "Get the settings for the Control API."
     return Settings()
+
