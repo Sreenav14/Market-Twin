@@ -1,13 +1,17 @@
 """MarketTwin Control API application."""
 
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Final, Literal, AsyncGenerator
+from typing import Final, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.auth import router as auth_router
+from markettwin_control_api.api.targets import router as targets_router
+from markettwin_control_api.api.workspaces import router as workspaces_router
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.database import DatabaseRuntime
 
@@ -74,7 +78,9 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(auth_router)
-
+    application.include_router(workspaces_router)
+    application.include_router(applications_router)
+    application.include_router(targets_router)
     return application
 
 
