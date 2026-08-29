@@ -4,18 +4,23 @@
   "private": true,
   "description": "MarketTwin React and TypeScript frontend",
   "scripts": {
-    "dev": "esbuild src/main.tsx --bundle --outfile=dist/app.js --format=esm --target=es2022 --servedir=. --serve=5173",
-    "build": "esbuild src/main.tsx --bundle --outfile=dist/app.js --format=esm --target=es2022",
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "react-router-dom": "7.18.2"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.7",
-    "esbuild": "0.28.1",
-    "typescript": "7.0.2"
+    "@vitejs/plugin-react": "6.1.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }
