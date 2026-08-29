@@ -3,8 +3,6 @@ import { createRoot } from "react-dom/client";
 
 import "./styles.css";
 
-type NavigationItem = "Home" | "Runs" | "Settings";
-
 function MarkIcon() {
   return (
     <svg viewBox="0 0 28 28" aria-hidden="true" className="mark-icon">
@@ -31,7 +29,6 @@ function ChevronIcon() {
 }
 
 function App() {
-  const [activeNavigation, setActiveNavigation] = useState<NavigationItem>("Home");
   const [website, setWebsite] = useState("http://localhost:3000/");
   const [studyBrief, setStudyBrief] = useState("");
   const [showDetails, setShowDetails] = useState(false);
@@ -54,23 +51,16 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar" aria-label="Primary navigation">
+      <aside className="sidebar" aria-label="MarketTwin">
         <div className="brand-row">
           <MarkIcon />
           <span className="brand-name">MarketTwin</span>
         </div>
 
-        <nav className="nav-list">
-          {(["Home", "Runs", "Settings"] as const).map((item) => (
-            <button
-              className={`nav-item ${activeNavigation === item ? "is-active" : ""}`}
-              key={item}
-              onClick={() => setActiveNavigation(item)}
-              type="button"
-            >
-              <span>{item}</span>
-            </button>
-          ))}
+        <nav className="nav-list" aria-label="Current area">
+          <span className="nav-item is-active" aria-current="page">
+            <span>New study</span>
+          </span>
         </nav>
 
         <div className="sidebar-footer">
@@ -86,9 +76,7 @@ function App() {
 
       <main className="main-content">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">New study</p>
-          </div>
+          <p className="eyebrow">New study</p>
           <div className="status-pill">
             <span className="status-dot" />
             Local environment
@@ -121,7 +109,7 @@ function App() {
                 spellCheck={false}
                 aria-describedby="website-hint"
               />
-              <span className="verified-label">Authorized</span>
+              <span className="verified-label">Current target</span>
             </div>
             <span id="website-hint" className="sr-only">
               Enter the authorized website you want MarketTwin to evaluate.
@@ -181,7 +169,7 @@ function App() {
           <div className="card-footer">
             <div className="privacy-note">
               <span className="privacy-symbol" aria-hidden="true">✓</span>
-              <span>MarketTwin only tests the website you authorize.</span>
+              <span>MarketTwin only tests websites you authorize.</span>
             </div>
             <button className="primary-button" type="submit" disabled={!canRun}>
               <span>Run study</span>
@@ -194,9 +182,9 @@ function App() {
           <section className="confirmation-card" aria-live="polite">
             <div className="confirmation-icon" aria-hidden="true">✓</div>
             <div>
-              <p className="confirmation-title">Study is ready to start</p>
+              <p className="confirmation-title">Study input is ready</p>
               <p className="confirmation-copy">
-                The interface is prepared. Backend planning will be connected in the next implementation step.
+                This branch contains the product UI only. Planning and execution are not simulated here.
               </p>
             </div>
           </section>
@@ -218,7 +206,7 @@ function App() {
             </div>
             <p className="empty-title">Your studies will appear here.</p>
             <p className="empty-copy">
-              Run your first study above to start building a history of product insights.
+              Once the UI is connected to the existing Test Run API, run history can populate this area.
             </p>
           </div>
         </section>
