@@ -2,7 +2,7 @@ export interface AllowedOrigin {
   scheme: "http" | "https";
   hostname: string;
   port: number | null;
-  includeSubdomains: boolean;
+  include_subdomains: boolean;
 }
 
 export type NetworkPolicy =
