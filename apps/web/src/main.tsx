@@ -3,18 +3,18 @@ import { createRoot } from "react-dom/client";
 
 import "./styles.css";
 
-function MarkIcon() {
+function BrandMark() {
   return (
-    <svg viewBox="0 0 28 28" aria-hidden="true" className="mark-icon">
-      <rect x="2" y="2" width="24" height="24" rx="8" />
-      <path d="M8 17.5 12.1 9l3.2 6 2.3-4.5L20 17.5" />
+    <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2" y="2" width="28" height="28" rx="9" />
+      <path d="M9 20 13.1 11l3.4 6.4 2.5-4.7L23 20" />
     </svg>
   );
 }
 
 function ArrowIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="button-icon">
+    <svg className="button-icon" viewBox="0 0 20 20" aria-hidden="true">
       <path d="M4 10h11M11 6l4 4-4 4" />
     </svg>
   );
@@ -22,8 +22,16 @@ function ArrowIcon() {
 
 function ChevronIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="chevron-icon">
+    <svg className="chevron-icon" viewBox="0 0 20 20" aria-hidden="true">
       <path d="m7.5 5 5 5-5 5" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="check-icon" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="m5 10.2 3.1 3.1L15 6.8" />
     </svg>
   );
 }
@@ -51,74 +59,62 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar" aria-label="MarketTwin">
-        <div className="brand-row">
-          <MarkIcon />
-          <span className="brand-name">MarketTwin</span>
-        </div>
+      <header className="app-header">
+        <div className="header-inner">
+          <a className="brand" href="#main" aria-label="MarketTwin home">
+            <BrandMark />
+            <span>MarketTwin</span>
+          </a>
 
-        <nav className="nav-list" aria-label="Current area">
-          <span className="nav-item is-active" aria-current="page">
-            <span>New study</span>
-          </span>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="account-avatar" aria-hidden="true">
-            S
-          </div>
-          <div className="account-copy">
-            <span className="account-name">Local workspace</span>
-            <span className="account-detail">Development</span>
+          <div className="header-context" aria-label="Current environment">
+            <span className="environment-dot" />
+            <span>Local workspace</span>
           </div>
         </div>
-      </aside>
+      </header>
 
-      <main className="main-content">
-        <header className="topbar">
+      <main id="main" className="main-content">
+        <section className="intro" aria-labelledby="page-title">
           <p className="eyebrow">New study</p>
-          <div className="status-pill">
-            <span className="status-dot" />
-            Local environment
-          </div>
-        </header>
-
-        <section className="hero-section">
-          <p className="hero-kicker">See your product through different users.</p>
-          <h1>What do you want to learn?</h1>
-          <p className="hero-copy">
-            Give MarketTwin one goal. It will prepare relevant user perspectives,
-            test the experience independently, and surface where the experience breaks down.
+          <h1 id="page-title">What do you want to learn?</h1>
+          <p className="intro-copy">
+            Give MarketTwin a product goal. It prepares relevant user perspectives,
+            tests the experience independently, and surfaces where people may struggle.
           </p>
         </section>
 
-        <form className="study-card" onSubmit={submitStudy}>
-          <div className="field-group compact-field">
-            <label htmlFor="website">Website</label>
-            <div className="input-shell">
-              <span className="site-indicator" aria-hidden="true" />
-              <input
-                id="website"
-                value={website}
-                onChange={(event) => {
-                  setWebsite(event.target.value);
-                  setSubmitted(false);
-                }}
-                inputMode="url"
-                autoComplete="url"
-                spellCheck={false}
-                aria-describedby="website-hint"
-              />
-              <span className="verified-label">Current target</span>
+        <form className="study-card" onSubmit={submitStudy} noValidate>
+          <div className="card-section">
+            <div className="section-label-row">
+              <label htmlFor="website">Website</label>
+              <span className="field-status">
+                <span className="field-status-dot" />
+                Local target
+              </span>
             </div>
-            <span id="website-hint" className="sr-only">
-              Enter the authorized website you want MarketTwin to evaluate.
-            </span>
+
+            <input
+              id="website"
+              className="url-input"
+              type="url"
+              value={website}
+              onChange={(event) => {
+                setWebsite(event.target.value);
+                setSubmitted(false);
+              }}
+              autoComplete="url"
+              inputMode="url"
+              spellCheck={false}
+              aria-describedby="website-help"
+            />
+            <p id="website-help" className="field-help">
+              Choose a website you own or are authorized to test.
+            </p>
           </div>
 
-          <div className="divider" />
+          <div className="card-divider" />
 
-          <div className="field-group">
+          <div className="card-section goal-section">
             <label htmlFor="study-brief">Testing goal</label>
             <textarea
               id="study-brief"
@@ -130,47 +126,59 @@ function App() {
               placeholder="For example: Check whether first-time customers can understand our pricing and confidently choose the right plan."
               rows={5}
               maxLength={4000}
+              aria-describedby="study-help study-count"
             />
             <div className="field-meta">
-              <span>Describe the outcome you care about, not the test steps.</span>
-              <span>{studyBrief.length}/4000</span>
+              <span id="study-help">Describe the outcome you care about, not the test steps.</span>
+              <span id="study-count" aria-live="polite">
+                {studyBrief.length}/4000
+              </span>
             </div>
           </div>
 
           <button
             type="button"
-            className="disclosure-button"
+            className="details-trigger"
             aria-expanded={showDetails}
+            aria-controls="study-details"
             onClick={() => setShowDetails((current) => !current)}
           >
-            <span>Study details</span>
-            <span className={showDetails ? "chevron-rotate" : ""}>
+            <span>How this study will run</span>
+            <span className={showDetails ? "chevron-wrapper is-open" : "chevron-wrapper"}>
               <ChevronIcon />
             </span>
           </button>
 
           {showDetails && (
-            <div className="details-panel">
-              <div>
-                <span className="detail-label">Environment</span>
-                <strong>Local development</strong>
+            <div id="study-details" className="details-panel">
+              <div className="detail-item">
+                <span className="detail-icon"><CheckIcon /></span>
+                <div>
+                  <strong>Relevant perspectives</strong>
+                  <p>Generated dynamically from your goal and target.</p>
+                </div>
               </div>
-              <div>
-                <span className="detail-label">User perspectives</span>
-                <strong>Generated dynamically</strong>
+              <div className="detail-item">
+                <span className="detail-icon"><CheckIcon /></span>
+                <div>
+                  <strong>Independent journeys</strong>
+                  <p>Each perspective evaluates the experience separately.</p>
+                </div>
               </div>
-              <div>
-                <span className="detail-label">Browser</span>
-                <strong>Isolated Chromium sessions</strong>
+              <div className="detail-item">
+                <span className="detail-icon"><CheckIcon /></span>
+                <div>
+                  <strong>Evidence-backed findings</strong>
+                  <p>Results are tied to observable browser evidence.</p>
+                </div>
               </div>
             </div>
           )}
 
-          <div className="card-footer">
-            <div className="privacy-note">
-              <span className="privacy-symbol" aria-hidden="true">✓</span>
-              <span>MarketTwin only tests websites you authorize.</span>
-            </div>
+          <div className="card-actions">
+            <p className="authorization-note">
+              MarketTwin tests only targets you authorize.
+            </p>
             <button className="primary-button" type="submit" disabled={!canRun}>
               <span>Run study</span>
               <ArrowIcon />
@@ -179,35 +187,33 @@ function App() {
         </form>
 
         {submitted && (
-          <section className="confirmation-card" aria-live="polite">
-            <div className="confirmation-icon" aria-hidden="true">✓</div>
+          <section className="prototype-notice" aria-live="polite">
+            <span className="notice-icon"><CheckIcon /></span>
             <div>
-              <p className="confirmation-title">Study input is ready</p>
-              <p className="confirmation-copy">
-                This branch contains the product UI only. Planning and execution are not simulated here.
-              </p>
+              <strong>Study input is ready.</strong>
+              <p>This branch is the product interface only; planning and execution are not simulated.</p>
             </div>
           </section>
         )}
 
-        <section className="recent-section">
-          <div className="section-heading">
+        <section className="recent" aria-labelledby="recent-title">
+          <div className="recent-heading">
             <div>
               <p className="eyebrow">History</p>
-              <h2>Recent studies</h2>
+              <h2 id="recent-title">Recent studies</h2>
             </div>
           </div>
 
           <div className="empty-state">
-            <div className="empty-art" aria-hidden="true">
+            <div className="empty-symbol" aria-hidden="true">
               <span />
               <span />
               <span />
             </div>
-            <p className="empty-title">Your studies will appear here.</p>
-            <p className="empty-copy">
-              Once the UI is connected to the existing Test Run API, run history can populate this area.
-            </p>
+            <div>
+              <strong>No studies yet</strong>
+              <p>Your completed and in-progress studies will appear here.</p>
+            </div>
           </div>
         </section>
       </main>
