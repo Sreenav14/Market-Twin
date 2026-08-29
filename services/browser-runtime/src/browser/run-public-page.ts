@@ -76,18 +76,22 @@ export async function runPublicPage(
     });
 
     await context.route("**/*", async (route) => {
-      const interceptedUrl = validateTargetUrl(
-        route.request().url(),
-        request.allowedOrigins,
-        request.networkPolicy,
-      );
+      try {
+        const interceptedUrl = validateTargetUrl(
+          route.request().url(),
+          request.allowedOrigins,
+          request.networkPolicy,
+        );
 
-      await resolveAndValidateHost(
-        interceptedUrl.hostname,
-        request.networkPolicy,
-      );
+        await resolveAndValidateHost(
+          interceptedUrl.hostname,
+          request.networkPolicy,
+        );
 
-      await route.continue();
+        await route.continue();
+      } catch {
+        await route.abort("blockedbyclient");
+      }
     });
 
     await context.tracing.start({
