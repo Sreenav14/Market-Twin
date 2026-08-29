@@ -13,7 +13,7 @@ const exactExampleOrigin: AllowedOrigin[] = [
     scheme: "https",
     hostname: "example.com",
     port: null,
-    includeSubdomains: false,
+    include_subdomains: false,
   },
 ];
 
@@ -27,7 +27,7 @@ test("allows an exact approved origin", () => {
   assert.equal(result.hostname, "example.com");
 });
 
-test("blocks subdomains when includeSubdomains is false", () => {
+test("blocks subdomains when include_subdomains is false", () => {
   assert.throws(
     () =>
       validateTargetUrl(
@@ -39,13 +39,13 @@ test("blocks subdomains when includeSubdomains is false", () => {
   );
 });
 
-test("allows subdomains when includeSubdomains is true", () => {
+test("allows subdomains when include_subdomains is true", () => {
   const result = validateTargetUrl(
     "https://www.example.com",
     [
       {
         ...exactExampleOrigin[0]!,
-        includeSubdomains: true,
+        include_subdomains: true,
       },
     ],
     "public_only",
@@ -62,7 +62,7 @@ test("blocks domain suffix attacks", () => {
         [
           {
             ...exactExampleOrigin[0]!,
-            includeSubdomains: true,
+            include_subdomains: true,
           },
         ],
         "public_only",
@@ -103,7 +103,7 @@ test("allows an explicitly approved non-default port", () => {
         scheme: "https",
         hostname: "example.com",
         port: 8443,
-        includeSubdomains: false,
+        include_subdomains: false,
       },
     ],
     "public_only",
@@ -158,7 +158,7 @@ test("blocks localhost in public-only mode", () => {
             scheme: "http",
             hostname: "localhost",
             port: 3000,
-            includeSubdomains: false,
+            include_subdomains: false,
           },
         ],
         "public_only",
@@ -175,7 +175,7 @@ test("allows localhost in explicit local-development mode", () => {
         scheme: "http",
         hostname: "localhost",
         port: 3000,
-        includeSubdomains: false,
+        include_subdomains: false,
       },
     ],
     "local_development",
@@ -193,7 +193,7 @@ test("allows IPv4 loopback in explicit local-development mode", () => {
         scheme: "http",
         hostname: "127.0.0.1",
         port: 8000,
-        includeSubdomains: false,
+        include_subdomains: false,
       },
     ],
     "local_development",
@@ -212,7 +212,7 @@ test("blocks private IPv4 even in local-development mode", () => {
             scheme: "http",
             hostname: "192.168.1.5",
             port: null,
-            includeSubdomains: false,
+            include_subdomains: false,
           },
         ],
         "local_development",
@@ -231,7 +231,7 @@ test("blocks link-local and cloud metadata addresses", () => {
             scheme: "http",
             hostname: "169.254.169.254",
             port: null,
-            includeSubdomains: false,
+            include_subdomains: false,
           },
         ],
         "local_development",
@@ -248,7 +248,7 @@ test("allows IPv6 loopback only in local-development mode", () => {
         scheme: "http",
         hostname: "::1",
         port: 8000,
-        includeSubdomains: false,
+        include_subdomains: false,
       },
     ],
     "local_development",
@@ -267,7 +267,7 @@ test("blocks directly entered public IPv6 addresses", () => {
             scheme: "https",
             hostname: "2606:4700:4700::1111",
             port: null,
-            includeSubdomains: false,
+            include_subdomains: false,
           },
         ],
         "public_only",
