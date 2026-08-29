@@ -10,7 +10,7 @@ async function main(): Promise<void> {
         scheme: "https",
         hostname: "example.com",
         port: null,
-        includeSubdomains: false,
+        include_subdomains: false,
       },
     ],
     networkPolicy: "public_only",
