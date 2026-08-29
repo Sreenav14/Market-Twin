@@ -6,33 +6,52 @@ import {
   validateTargetUrl,
 } from "../src/security/validate-url.js";
 
-test("allows an exact approved domain", () => {
+import type { AllowedOrigin } from "../src/browser/types.js";
+
+const exactExampleOrigin: AllowedOrigin[] = [
+  {
+    scheme: "https",
+    hostname: "example.com",
+    port: null,
+    includeSubdomains: false,
+  },
+];
+
+test("allows an exact approved origin", () => {
   const result = validateTargetUrl(
-    "https://example.com",
-    ["example.com"],
+    "https://example.com/path",
+    exactExampleOrigin,
+    "public_only",
   );
 
   assert.equal(result.hostname, "example.com");
 });
 
-test("allows a subdomain of an approved domain", () => {
-  const result = validateTargetUrl(
-    "https://www.example.com",
-    ["example.com"],
-  );
-
-  assert.equal(result.hostname, "www.example.com");
-});
-
-test("blocks a domain outside the allowlist", () => {
+test("blocks subdomains when includeSubdomains is false", () => {
   assert.throws(
     () =>
       validateTargetUrl(
-        "https://example.org",
-        ["example.com"],
+        "https://www.example.com",
+        exactExampleOrigin,
+        "public_only",
       ),
     TargetUrlValidationError,
   );
+});
+
+test("allows subdomains when includeSubdomains is true", () => {
+  const result = validateTargetUrl(
+    "https://www.example.com",
+    [
+      {
+        ...exactExampleOrigin[0]!,
+        includeSubdomains: true,
+      },
+    ],
+    "public_only",
+  );
+
+  assert.equal(result.hostname, "www.example.com");
 });
 
 test("blocks domain suffix attacks", () => {
@@ -40,7 +59,66 @@ test("blocks domain suffix attacks", () => {
     () =>
       validateTargetUrl(
         "https://evil-example.com",
-        ["example.com"],
+        [
+          {
+            ...exactExampleOrigin[0]!,
+            includeSubdomains: true,
+          },
+        ],
+        "public_only",
+      ),
+    TargetUrlValidationError,
+  );
+});
+
+test("blocks a different scheme", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "http://example.com",
+        exactExampleOrigin,
+        "public_only",
+      ),
+    /origin .* is not allowed/,
+  );
+});
+
+test("blocks a different non-default port", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "https://example.com:8443",
+        exactExampleOrigin,
+        "public_only",
+      ),
+    /origin .* is not allowed/,
+  );
+});
+
+test("allows an explicitly approved non-default port", () => {
+  const result = validateTargetUrl(
+    "https://example.com:8443",
+    [
+      {
+        scheme: "https",
+        hostname: "example.com",
+        port: 8443,
+        includeSubdomains: false,
+      },
+    ],
+    "public_only",
+  );
+
+  assert.equal(result.port, "8443");
+});
+
+test("blocks a domain outside the allowlist", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "https://example.org",
+        exactExampleOrigin,
+        "public_only",
       ),
     TargetUrlValidationError,
   );
@@ -51,7 +129,8 @@ test("blocks unsupported URL protocols", () => {
     () =>
       validateTargetUrl(
         "file:///secret.txt",
-        ["example.com"],
+        exactExampleOrigin,
+        "public_only",
       ),
     TargetUrlValidationError,
   );
@@ -62,106 +141,137 @@ test("blocks credentials embedded in a URL", () => {
     () =>
       validateTargetUrl(
         "https://user:password@example.com",
-        ["example.com"],
+        exactExampleOrigin,
+        "public_only",
       ),
     TargetUrlValidationError,
   );
 });
 
-test("blocks localhost targets", () => {
-    assert.throws(
-        () => 
-            validateTargetUrl(
-                "http://localhost",
-                ["localhost"],
-            ),
-        TargetUrlValidationError,
-    );
+test("blocks localhost in public-only mode", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "http://localhost:3000",
+        [
+          {
+            scheme: "http",
+            hostname: "localhost",
+            port: 3000,
+            includeSubdomains: false,
+          },
+        ],
+        "public_only",
+      ),
+    /only allowed in local development mode/,
+  );
 });
 
-test("blocks localhost subdomain", () => {
-    assert.throws(
-        () => 
-            validateTargetUrl(
-                "https://api.localhost",
-                ["api.localhost"],
-            ),
-        TargetUrlValidationError,
-    );
-})
+test("allows localhost in explicit local-development mode", () => {
+  const result = validateTargetUrl(
+    "http://localhost:3000",
+    [
+      {
+        scheme: "http",
+        hostname: "localhost",
+        port: 3000,
+        includeSubdomains: false,
+      },
+    ],
+    "local_development",
+  );
 
-test("blocks IPv4 loopback addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "http://127.0.0.1:8000",
-          ["127.0.0.1"],
-        ),
-      TargetUrlValidationError,
-    );
-  });
-  
-  test("blocks 10.x private addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "http://10.0.0.5",
-          ["10.0.0.5"],
-        ),
-      TargetUrlValidationError,
-    );
-  });
-  
-  test("blocks 172.16 private addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "http://172.16.0.5",
-          ["172.16.0.5"],
-        ),
-      TargetUrlValidationError,
-    );
-  });
-  
-  test("blocks 192.168 private addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "http://192.168.1.5",
-          ["192.168.1.5"],
-        ),
-      TargetUrlValidationError,
-    );
-  });
-  
-  test("blocks link-local and cloud metadata addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "http://169.254.169.254/latest/meta-data",
-          ["169.254.169.254"],
-        ),
-      TargetUrlValidationError,
-    );
-  });
-  test("blocks IPv6 loopback addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "http://[::1]:8000",
-          ["[::1]"],
-        ),
-      /Direct IPv6 targets are not allowed/,
-    );
-  });
-  
-  test("blocks directly entered public IPv6 addresses", () => {
-    assert.throws(
-      () =>
-        validateTargetUrl(
-          "https://[2606:4700:4700::1111]",
-          ["[2606:4700:4700::1111]"],
-        ),
-      /Direct IPv6 targets are not allowed/,
-    );
-  });
+  assert.equal(result.hostname, "localhost");
+  assert.equal(result.port, "3000");
+});
+
+test("allows IPv4 loopback in explicit local-development mode", () => {
+  const result = validateTargetUrl(
+    "http://127.0.0.1:8000",
+    [
+      {
+        scheme: "http",
+        hostname: "127.0.0.1",
+        port: 8000,
+        includeSubdomains: false,
+      },
+    ],
+    "local_development",
+  );
+
+  assert.equal(result.hostname, "127.0.0.1");
+});
+
+test("blocks private IPv4 even in local-development mode", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "http://192.168.1.5",
+        [
+          {
+            scheme: "http",
+            hostname: "192.168.1.5",
+            port: null,
+            includeSubdomains: false,
+          },
+        ],
+        "local_development",
+      ),
+    /Private, link-local, and reserved IPv4 targets are not allowed/,
+  );
+});
+
+test("blocks link-local and cloud metadata addresses", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "http://169.254.169.254/latest/meta-data",
+        [
+          {
+            scheme: "http",
+            hostname: "169.254.169.254",
+            port: null,
+            includeSubdomains: false,
+          },
+        ],
+        "local_development",
+      ),
+    TargetUrlValidationError,
+  );
+});
+
+test("allows IPv6 loopback only in local-development mode", () => {
+  const result = validateTargetUrl(
+    "http://[::1]:8000",
+    [
+      {
+        scheme: "http",
+        hostname: "::1",
+        port: 8000,
+        includeSubdomains: false,
+      },
+    ],
+    "local_development",
+  );
+
+  assert.equal(result.hostname, "[::1]");
+});
+
+test("blocks directly entered public IPv6 addresses", () => {
+  assert.throws(
+    () =>
+      validateTargetUrl(
+        "https://[2606:4700:4700::1111]",
+        [
+          {
+            scheme: "https",
+            hostname: "2606:4700:4700::1111",
+            port: null,
+            includeSubdomains: false,
+          },
+        ],
+        "public_only",
+      ),
+    /Direct IPv6 targets are not allowed/,
+  );
+});
