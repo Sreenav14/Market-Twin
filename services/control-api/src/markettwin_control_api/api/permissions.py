@@ -8,3 +8,10 @@ WORKSPACE_WRITE_ROLES = frozenset(
         "member",
     }
 )
+
+TARGET_AUTHORIZATION_ROLES = frozenset(
+    {
+        "owner",
+        "admin",
+    }
+)

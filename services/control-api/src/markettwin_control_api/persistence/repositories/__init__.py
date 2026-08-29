@@ -1,6 +1,7 @@
 """ control API persistence repositories """
 
 from .application_repository import ApplicationRecord, ApplicationRepository
+from .authorization_repository import TargetAuthorizationRecord, TargetAuthorizationRepository
 from .identity_repository import IdentityRepository, ResolvedIdentity
 from .target_repository import AllowedOriginRecord, TargetRecord, TargetRepository
 from .workspace_repository import WorkspaceAccess, WorkspaceRepository
@@ -15,4 +16,6 @@ __all__ = (
     "TargetRepository",
     "TargetRecord",
     "AllowedOriginRecord",
+    "TargetAuthorizationRepository",
+    "TargetAuthorizationRecord",
 )
