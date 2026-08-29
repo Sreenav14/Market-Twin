@@ -64,7 +64,7 @@ export interface TestRun {
 }
 
 export class ApiError extends Error {
-  status: number;
+  readonly status: number;
 
   constructor(message: string, status: number) {
     super(message);
@@ -90,7 +90,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = (await response.json()) as { detail?: string };
       if (body.detail) message = body.detail;
     } catch {
-      // Keep the fallback message when the response is not JSON.
+      // Preserve the safe fallback when the response is not JSON.
     }
 
     throw new ApiError(message, response.status);
@@ -105,60 +105,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => request<CurrentUser>("/api/v1/me"),
-  login: (email: string) =>
-    request<CurrentUser>("/api/v1/auth/local/login", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
+  login: (email: string) => request<CurrentUser>("/api/v1/auth/local/login", { method: "POST", body: JSON.stringify({ email }) }),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
-
   listWorkspaces: () => request<Workspace[]>("/api/v1/workspaces"),
-  getWorkspace: (workspaceId: string) =>
-    request<Workspace>(`/api/v1/workspaces/${workspaceId}`),
-
-  listApplications: (workspaceId: string) =>
-    request<Application[]>(`/api/v1/workspaces/${workspaceId}/applications`),
-  getApplication: (applicationId: string) =>
-    request<Application>(`/api/v1/applications/${applicationId}`),
-  createApplication: (workspaceId: string, name: string, description: string) =>
-    request<Application>(`/api/v1/workspaces/${workspaceId}/applications`, {
-      method: "POST",
-      body: JSON.stringify({ name, description: description || null }),
-    }),
-
-  listTargets: (applicationId: string) =>
-    request<Target[]>(`/api/v1/applications/${applicationId}/targets`),
+  getWorkspace: (workspaceId: string) => request<Workspace>(`/api/v1/workspaces/${workspaceId}`),
+  listApplications: (workspaceId: string) => request<Application[]>(`/api/v1/workspaces/${workspaceId}/applications`),
+  getApplication: (applicationId: string) => request<Application>(`/api/v1/applications/${applicationId}`),
+  createApplication: (workspaceId: string, name: string, description: string) => request<Application>(`/api/v1/workspaces/${workspaceId}/applications`, { method: "POST", body: JSON.stringify({ name, description: description || null }) }),
+  listTargets: (applicationId: string) => request<Target[]>(`/api/v1/applications/${applicationId}/targets`),
   getTarget: (targetId: string) => request<Target>(`/api/v1/targets/${targetId}`),
-  createTarget: (
-    applicationId: string,
-    payload: { name: string; environment: string; base_url: string; requires_auth: boolean },
-  ) =>
-    request<Target>(`/api/v1/applications/${applicationId}/targets`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-
-  getAuthorization: (targetId: string) =>
-    request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`),
-  authorizeTarget: (targetId: string, authorizationBasis: string) =>
-    request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`, {
-      method: "POST",
-      body: JSON.stringify({
-        confirm_authorized: true,
-        authorization_basis: authorizationBasis,
-      }),
-    }),
-  revokeAuthorization: (targetId: string) =>
-    request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization/revoke`, {
-      method: "POST",
-    }),
-
-  listRuns: (applicationId: string) =>
-    request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
+  createTarget: (applicationId: string, payload: { name: string; environment: string; base_url: string; requires_auth: boolean }) => request<Target>(`/api/v1/applications/${applicationId}/targets`, { method: "POST", body: JSON.stringify(payload) }),
+  getAuthorization: (targetId: string) => request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`),
+  authorizeTarget: (targetId: string, authorizationBasis: string) => request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`, { method: "POST", body: JSON.stringify({ confirm_authorized: true, authorization_basis: authorizationBasis }) }),
+  revokeAuthorization: (targetId: string) => request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization/revoke`, { method: "POST" }),
+  listRuns: (applicationId: string) => request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
   getRun: (runId: string) => request<TestRun>(`/api/v1/test-runs/${runId}`),
-  createRun: (applicationId: string, targetId: string, studyBrief: string) =>
-    request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
-      method: "POST",
-      body: JSON.stringify({ target_id: targetId, study_brief: studyBrief }),
-    }),
+  createRun: (applicationId: string, targetId: string, studyBrief: string) => request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, { method: "POST", body: JSON.stringify({ target_id: targetId, study_brief: studyBrief }) }),
 };

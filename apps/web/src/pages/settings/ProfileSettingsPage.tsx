@@ -1,0 +1,3 @@
+import { useOutletContext } from "react-router-dom";
+import { AppShellContext } from "../../layouts/AppShell";
+export function ProfileSettingsPage() { const { user }=useOutletContext<AppShellContext>(); return <section className="panel settings-panel"><div className="section-heading compact-heading"><div><p className="eyebrow">Account</p><h2>Profile</h2></div></div><dl className="definition-list"><div><dt>Name</dt><dd>{user.display_name||"Not set"}</dd></div><div><dt>Email</dt><dd>{user.email}</dd></div><div><dt>User ID</dt><dd className="monospace">{user.id}</dd></div></dl><p className="panel-note">Profile editing will appear only after the Control API exposes a supported update contract.</p></section>; }
