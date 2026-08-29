@@ -149,8 +149,11 @@ def patch_common_dependencies(
 ) -> None:
     """Patch endpoint dependencies with deterministic repository fakes."""
 
+    def session_factory() -> AsyncContext:
+        return AsyncContext(FakeDatabaseSession())
+
     database = SimpleNamespace(
-        session_factory=lambda: AsyncContext(FakeDatabaseSession())
+        session_factory=session_factory,
     )
 
     async def authenticated_user_id(
@@ -158,6 +161,31 @@ def patch_common_dependencies(
         request: Request,
     ) -> UUID:
         return user_id
+
+    def database_runtime(
+        request: Request,
+    ) -> DatabaseRuntime:
+        return cast(DatabaseRuntime, database)
+
+    def application_repository(
+        session: object,
+    ) -> FakeApplicationRepository:
+        return FakeApplicationRepository(application)
+
+    def workspace_repository(
+        session: object,
+    ) -> FakeWorkspaceRepository:
+        return FakeWorkspaceRepository(workspace)
+
+    def target_repository(
+        session: object,
+    ) -> FakeTargetRepository:
+        return FakeTargetRepository(target)
+
+    def authorization_repository(
+        session: object,
+    ) -> FakeAuthorizationRepository:
+        return FakeAuthorizationRepository(authorization)
 
     monkeypatch.setattr(
         test_run_api,
@@ -167,34 +195,39 @@ def patch_common_dependencies(
     monkeypatch.setattr(
         test_run_api,
         "get_database_runtime",
-        lambda request: cast(DatabaseRuntime, database),
+        database_runtime,
     )
     monkeypatch.setattr(
         test_run_api,
         "ApplicationRepository",
-        lambda session: FakeApplicationRepository(application),
+        application_repository,
     )
     monkeypatch.setattr(
         test_run_api,
         "WorkspaceRepository",
-        lambda session: FakeWorkspaceRepository(workspace),
+        workspace_repository,
     )
     monkeypatch.setattr(
         test_run_api,
         "TargetRepository",
-        lambda session: FakeTargetRepository(target),
+        target_repository,
     )
     monkeypatch.setattr(
         test_run_api,
         "TargetAuthorizationRepository",
-        lambda session: FakeAuthorizationRepository(authorization),
+        authorization_repository,
     )
 
     if test_run_repository is not None:
+        def run_repository(
+            session: object,
+        ) -> FakeTestRunRepository:
+            return test_run_repository
+
         monkeypatch.setattr(
             test_run_api,
             "TestRunRepository",
-            lambda session: test_run_repository,
+            run_repository,
         )
 
 
@@ -309,7 +342,7 @@ async def test_create_test_run_snapshots_active_authorization(
         expires_at=None,
     )
 
-    expected_configuration = {
+    expected_configuration: dict[str, object] = {
         "study_brief": (
             "Evaluate the shopping and checkout experience."
         ),
