@@ -2,6 +2,8 @@ import { lookup } from "node:dns/promises";
 
 import ipaddr from "ipaddr.js";
 
+import type { NetworkPolicy } from "../browser/types.js";
+
 export interface ResolvedAddress {
   address: string;
   family: 4 | 6;
@@ -40,16 +42,29 @@ async function systemHostLookup(
   });
 }
 
-function isPublicAddress(address: string): boolean {
+function isAddressAllowed(
+  address: string,
+  networkPolicy: NetworkPolicy,
+): boolean {
   try {
-    return ipaddr.parse(address).range() === "unicast";
+    const range = ipaddr.parse(address).range();
+
+    if (range === "unicast") {
+      return true;
+    }
+
+    return (
+      networkPolicy === "local_development" &&
+      range === "loopback"
+    );
   } catch {
     return false;
   }
 }
 
-export async function resolveAndValidatePublicHost(
+export async function resolveAndValidateHost(
   hostname: string,
+  networkPolicy: NetworkPolicy,
   hostLookup: HostLookup = systemHostLookup,
 ): Promise<ResolvedAddress[]> {
   let addresses: ResolvedAddress[];
@@ -69,7 +84,8 @@ export async function resolveAndValidatePublicHost(
   }
 
   const blockedAddress = addresses.find(
-    ({ address }) => !isPublicAddress(address),
+    ({ address }) =>
+      !isAddressAllowed(address, networkPolicy),
   );
 
   if (blockedAddress) {

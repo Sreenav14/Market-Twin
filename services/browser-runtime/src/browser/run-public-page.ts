@@ -1,8 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { validateTargetUrl } from "../security/validate-url.js";
+
 import { chromium } from "playwright";
-import { resolveAndValidatePublicHost } from "../security/resolve-host.js";
+
+import { resolveAndValidateHost } from "../security/resolve-host.js";
+import { validateTargetUrl } from "../security/validate-url.js";
 
 import type {
   FailedRequest,
@@ -10,16 +12,18 @@ import type {
   PublicPageRunResult,
 } from "./types.js";
 
-export async function runPublicPage(request: PublicPageRunRequest): Promise<PublicPageRunResult> {
-    
-  
+export async function runPublicPage(
+  request: PublicPageRunRequest,
+): Promise<PublicPageRunResult> {
   const validatedUrl = validateTargetUrl(
     request.url,
-    request.allowedDomains,
+    request.allowedOrigins,
+    request.networkPolicy,
   );
 
-  await resolveAndValidatePublicHost(
+  await resolveAndValidateHost(
     validatedUrl.hostname,
+    request.networkPolicy,
   );
 
   const artifactDirectory = resolve(
@@ -28,11 +32,9 @@ export async function runPublicPage(request: PublicPageRunRequest): Promise<Publ
     request.runId,
   );
 
-
   await mkdir(artifactDirectory, {
     recursive: true,
   });
-
 
   const screenshotPath = resolve(
     artifactDirectory,
@@ -69,7 +71,28 @@ export async function runPublicPage(request: PublicPageRunRequest): Promise<Publ
   });
 
   try {
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      serviceWorkers: "block",
+    });
+
+    await context.route("**/*", async (route) => {
+      try {
+        const interceptedUrl = validateTargetUrl(
+          route.request().url(),
+          request.allowedOrigins,
+          request.networkPolicy,
+        );
+
+        await resolveAndValidateHost(
+          interceptedUrl.hostname,
+          request.networkPolicy,
+        );
+
+        await route.continue();
+      } catch {
+        await route.abort("blockedbyclient");
+      }
+    });
 
     await context.tracing.start({
       screenshots: true,
@@ -94,13 +117,13 @@ export async function runPublicPage(request: PublicPageRunRequest): Promise<Publ
         pageErrors.push(error.message);
       });
 
-      page.on("requestfailed", (request) => {
+      page.on("requestfailed", (failedRequest) => {
         failedRequests.push({
-          url: request.url(),
-          method: request.method(),
-          resourceType: request.resourceType(),
+          url: failedRequest.url(),
+          method: failedRequest.method(),
+          resourceType: failedRequest.resourceType(),
           errorText:
-            request.failure()?.errorText ??
+            failedRequest.failure()?.errorText ??
             "Unknown network error",
         });
       });
@@ -109,6 +132,17 @@ export async function runPublicPage(request: PublicPageRunRequest): Promise<Publ
         waitUntil: "domcontentloaded",
         timeout: request.timeoutMs,
       });
+
+      const finalUrl = validateTargetUrl(
+        page.url(),
+        request.allowedOrigins,
+        request.networkPolicy,
+      );
+
+      await resolveAndValidateHost(
+        finalUrl.hostname,
+        request.networkPolicy,
+      );
 
       await page.screenshot({
         path: screenshotPath,
@@ -147,7 +181,7 @@ export async function runPublicPage(request: PublicPageRunRequest): Promise<Publ
         requestedUrl: request.url,
         status: "completed",
         title: await page.title(),
-        finalUrl: page.url(),
+        finalUrl: finalUrl.href,
         screenshotPath,
         tracePath,
         accessibilitySnapshotPath,
