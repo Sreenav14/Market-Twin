@@ -37,14 +37,7 @@ type AsyncState<T> =
 function BrandMark() {
   return (
     <svg className="h-8 w-8" viewBox="0 0 32 32" aria-hidden="true">
-      <defs>
-        <linearGradient id="brand-gradient" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#6d5dfc" />
-          <stop offset="55%" stopColor="#4f8cff" />
-          <stop offset="100%" stopColor="#33c6a6" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="10" fill="url(#brand-gradient)" />
+      <rect width="32" height="32" rx="9" fill="#5b67f1" />
       <path
         d="M8.5 20.5 12.8 11l3.6 6.4 2.5-4.7 4.6 7.8"
         fill="none"
@@ -178,36 +171,57 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: (user: CurrentUser) =
 
   return (
     <div className="auth-layout">
-      <div className="auth-ambient auth-ambient-one" />
-      <div className="auth-ambient auth-ambient-two" />
-      <div className="auth-brand">
-        <BrandMark />
-        <span>MarketTwin</span>
-      </div>
-      <main className="auth-card">
-        <div className="auth-copy">
-          <p className="eyebrow text-indigo-500">Local development</p>
-          <h1>See your product through different users.</h1>
-          <p>Sign in with a pre-approved local identity to continue to your workspace.</p>
+      <header className="auth-header">
+        <div className="auth-brand">
+          <BrandMark />
+          <span>MarketTwin</span>
         </div>
-        <form onSubmit={submit} className="grid gap-4">
-          <label className="field-label" htmlFor="email">Email</label>
-          <input
-            id="email"
-            className="text-input"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@company.com"
-            autoComplete="email"
-            required
-          />
-          {error ? <p className="form-error">{error}</p> : null}
-          <button className="primary-button w-full" type="submit" disabled={busy || !email.trim()}>
-            {busy ? <><Spinner /> Signing in</> : "Continue"}
-          </button>
-        </form>
+        <span className="auth-environment">Local development</span>
+      </header>
+
+      <main className="auth-main">
+        <section className="auth-intro" aria-labelledby="auth-title">
+          <p className="eyebrow">Product preflight</p>
+          <h1 id="auth-title">Test the experience before customers do.</h1>
+          <p>
+            Run authorized browser studies from independent user perspectives and keep the
+            resulting evidence in one workspace.
+          </p>
+          <div className="auth-flow" aria-label="MarketTwin workflow">
+            <span>Target</span>
+            <b>→</b>
+            <span>Study</span>
+            <b>→</b>
+            <span>Evidence</span>
+          </div>
+        </section>
+
+        <section className="auth-card" aria-label="Sign in">
+          <div className="auth-copy">
+            <h2>Sign in</h2>
+            <p>Use a pre-approved local identity to open your workspace.</p>
+          </div>
+          <form onSubmit={submit} className="grid gap-4">
+            <label className="field-label" htmlFor="email">Email</label>
+            <input
+              id="email"
+              className="text-input"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@company.com"
+              autoComplete="email"
+              required
+            />
+            {error ? <p className="form-error">{error}</p> : null}
+            <button className="primary-button w-full" type="submit" disabled={busy || !email.trim()}>
+              {busy ? <><Spinner /> Signing in</> : "Continue"}
+            </button>
+          </form>
+        </section>
       </main>
+
+      <footer className="auth-footer">Authorized targets · Independent journeys · Evidence-backed findings</footer>
     </div>
   );
 }
@@ -222,7 +236,7 @@ function AppShell({ user, onLogout }: { user: CurrentUser; onLogout: () => void 
       <aside className="sidebar">
         <div className="sidebar-brand">
           <BrandMark />
-          <div><strong>MarketTwin</strong><span>Product intelligence</span></div>
+          <div><strong>MarketTwin</strong><span>Product testing</span></div>
         </div>
 
         <div className="workspace-switcher">
@@ -303,16 +317,16 @@ function OverviewPage({ workspace }: { workspace?: Workspace }) {
   return (
     <>
       <PageHeader
-        eyebrow="Workspace overview"
-        title="Good product decisions start before release."
-        description="Configure an authorized product target, describe what you want to learn, and let MarketTwin evaluate the experience from dynamically generated user perspectives."
+        eyebrow="Workspace"
+        title="Overview"
+        description="Configure authorized product targets, create studies, and review testing activity from one place."
         action={<Link className="primary-button" to="/applications">Start a study</Link>}
       />
 
       <div className="metric-grid">
-        <div className="metric-card accent-indigo"><span>Applications</span><strong>{applications.length}</strong><small>Product surfaces in this workspace</small></div>
+        <div className="metric-card accent-indigo"><span>Applications</span><strong>{applications.length}</strong><small>Products in this workspace</small></div>
         <div className="metric-card accent-cyan"><span>Workspace</span><strong>{workspace?.status ?? "—"}</strong><small>{workspace?.role ? `${workspace.role} access` : "Loading access"}</small></div>
-        <div className="metric-card accent-emerald"><span>Testing model</span><strong>Dynamic</strong><small>Perspectives generated per study</small></div>
+        <div className="metric-card accent-emerald"><span>Perspectives</span><strong>Dynamic</strong><small>Generated for each study</small></div>
       </div>
 
       <section className="section-block">
@@ -361,7 +375,7 @@ function ApplicationsPage({ workspace }: { workspace?: Workspace }) {
 
   return (
     <>
-      <PageHeader eyebrow="Product portfolio" title="Applications" description="Organize the products and environments your team is authorized to evaluate." action={<button className="primary-button" type="button" onClick={() => setShowForm(true)}>+ Add application</button>} />
+      <PageHeader eyebrow="Products" title="Applications" description="Organize the products and environments your team is authorized to evaluate." action={<button className="primary-button" type="button" onClick={() => setShowForm(true)}>+ Add application</button>} />
       {showForm ? (
         <div className="panel mb-6">
           <form className="form-grid" onSubmit={create}>
@@ -440,7 +454,7 @@ function NewTargetPage() {
           {error ? <p className="form-error">{error}</p> : null}
           <div className="form-actions"><button className="secondary-button" type="button" onClick={() => navigate(-1)}>Cancel</button><button className="primary-button" disabled={busy || !name.trim() || !baseUrl.trim()}>{busy ? <><Spinner /> Saving</> : "Save target"}</button></div>
         </form>
-        <aside className="insight-card"><span className="insight-icon">✦</span><h3>Safe by default</h3><p>MarketTwin stores the target origin separately and the browser runtime enforces deterministic network policy before navigation and requests.</p></aside>
+        <aside className="insight-card"><span className="insight-icon">◎</span><h3>Network policy</h3><p>MarketTwin stores the target origin separately and the browser runtime enforces deterministic network policy before navigation and requests.</p></aside>
       </div>
     </>
   );
@@ -519,13 +533,13 @@ function NewRunPage() {
 
   return (
     <>
-      <PageHeader eyebrow="New study" title="What do you want to learn?" description="Describe the product outcome you care about. MarketTwin will later generate the relevant perspectives and missions dynamically from this brief." />
+      <PageHeader eyebrow="New study" title="What do you want to learn?" description="Describe the product outcome you care about. MarketTwin will generate relevant perspectives and missions dynamically when planning is connected." />
       <div className="study-composer">
         <form onSubmit={submit}>
           <div className="composer-target"><label htmlFor="study-target">Target</label><select id="study-target" value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={targetsState.data.length === 0}>{targetsState.data.length === 0 ? <option>No targets available</option> : targetsState.data.map((target) => <option value={target.id} key={target.id}>{target.name} · {target.environment}</option>)}</select></div>
           <div className="composer-body"><textarea value={brief} onChange={(event) => setBrief(event.target.value)} placeholder="Check whether first-time customers can understand our pricing and confidently choose the right plan." maxLength={4000} rows={7} aria-label="Testing goal" /><div className="composer-meta"><span>Focus on the decision or outcome, not step-by-step instructions.</span><span>{brief.length}/4000</span></div></div>
           {error ? <div className="composer-error">{error}</div> : null}
-          <div className="composer-footer"><div className="dynamic-note"><span className="spark">✦</span><span>Perspectives and missions are generated dynamically for this study.</span></div><button className="primary-button" disabled={busy || !targetId || brief.trim().length < 10}>{busy ? <><Spinner /> Creating</> : "Create study →"}</button></div>
+          <div className="composer-footer"><div className="dynamic-note"><span className="spark">•</span><span>Perspectives and missions are generated dynamically for this study.</span></div><button className="primary-button" disabled={busy || !targetId || brief.trim().length < 10}>{busy ? <><Spinner /> Creating</> : "Create study →"}</button></div>
         </form>
       </div>
     </>
@@ -549,7 +563,7 @@ function RunsPage({ workspace }: { workspace?: Workspace }) {
 
   return (
     <>
-      <PageHeader eyebrow="Testing activity" title="Runs" description="Track every study created across the workspace and drill into its exact target snapshot and configuration." />
+      <PageHeader eyebrow="Testing activity" title="Runs" description="Track studies across the workspace and open the exact target snapshot and configuration used for each one." />
       {applicationsState.status === "loading" || loadingRuns ? <LoadingPanel /> : applicationsState.status === "error" ? <ErrorPanel message={applicationsState.error} /> : runs.length === 0 ? <EmptyState title="No runs yet" copy="Open an application and create your first study." action={<Link className="primary-button" to="/applications">Choose application</Link>} /> : <div className="data-list">{runs.map((run) => <Link className="data-row" to={`/runs/${run.id}`} key={run.id}><span className="run-icon">▶</span><div className="row-primary"><strong>{String(run.configuration_snapshot.study_brief ?? "Untitled study")}</strong><span>{String(run.target_snapshot.name ?? run.target_snapshot.base_url ?? "Target")}</span></div><StatusBadge status={run.status} /><span className="card-arrow">→</span></Link>)}</div>}
     </>
   );
@@ -569,7 +583,7 @@ function RunDetailPage() {
       <div className="run-hero"><div className="run-progress-line"><span className="complete" /><span /><span /><span /></div><div className="run-stage-grid"><div><strong>Created</strong><span>Study saved</span></div><div><strong>Planning</strong><span>Not connected yet</span></div><div><strong>Execution</strong><span>Waiting</span></div><div><strong>Findings</strong><span>Waiting</span></div></div></div>
       <div className="two-column-layout mt-6">
         <section className="panel"><div className="section-heading"><div><p className="eyebrow">Configuration</p><h2>Study details</h2></div></div><dl className="definition-list"><div><dt>Status</dt><dd><StatusBadge status={run.status} /></dd></div><div><dt>Target</dt><dd>{String(run.target_snapshot.name ?? "Target")}</dd></div><div><dt>Environment</dt><dd>{String(run.target_snapshot.environment ?? "—")}</dd></div><div><dt>Authentication</dt><dd>{run.target_snapshot.requires_auth ? "Protected" : "Public"}</dd></div></dl></section>
-        <aside className="insight-card"><span className="insight-icon">✦</span><h3>Planning is the next backend milestone</h3><p>This run is persisted by the current Control API. Dynamic personas, missions, journeys, browser execution, and evidence will populate this page as those backend stages are connected.</p></aside>
+        <aside className="insight-card"><span className="insight-icon">i</span><h3>Planning is the next backend milestone</h3><p>This run is persisted by the current Control API. Dynamic personas, missions, journeys, browser execution, and evidence will populate this page as those backend stages are connected.</p></aside>
       </div>
     </>
   );
