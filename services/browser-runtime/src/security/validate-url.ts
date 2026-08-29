@@ -81,7 +81,7 @@ function matchesAllowedOrigin(
   const urlHostname = normalizeHostname(url.hostname);
   const allowedHostname = normalizeHostname(origin.hostname);
 
-  const hostnameMatches = origin.includeSubdomains
+  const hostnameMatches = origin.include_subdomains
     ? urlHostname === allowedHostname ||
       urlHostname.endsWith(`.${allowedHostname}`)
     : urlHostname === allowedHostname;
