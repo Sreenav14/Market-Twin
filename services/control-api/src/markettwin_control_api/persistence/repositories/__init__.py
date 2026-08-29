@@ -4,6 +4,7 @@ from .application_repository import ApplicationRecord, ApplicationRepository
 from .authorization_repository import TargetAuthorizationRecord, TargetAuthorizationRepository
 from .identity_repository import IdentityRepository, ResolvedIdentity
 from .target_repository import AllowedOriginRecord, TargetRecord, TargetRepository
+from .test_run_repository import TestRunRecord, TestRunRepository
 from .workspace_repository import WorkspaceAccess, WorkspaceRepository
 
 __all__ = (
@@ -18,4 +19,6 @@ __all__ = (
     "AllowedOriginRecord",
     "TargetAuthorizationRepository",
     "TargetAuthorizationRecord",
+    "TestRunRepository",
+    "TestRunRecord",
 )
