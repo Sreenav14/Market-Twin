@@ -44,6 +44,7 @@ export function AuthenticatedRouter({ user, onLogout }: { user: CurrentUser; onL
       <Route element={<AppShell user={user} onLogout={onLogout} />}>
         <Route index element={<Navigate to="/overview" replace />} />
         <Route path="/login" element={<Navigate to="/overview" replace />} />
+        <Route path="/signup" element={<Navigate to="/overview" replace />} />
         <Route path="/auth/callback" element={<Navigate to="/overview" replace />} />
         <Route path="/overview" element={<OverviewPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
