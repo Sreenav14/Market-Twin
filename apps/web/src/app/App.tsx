@@ -6,7 +6,6 @@ import { ErrorPanel, Spinner } from "../components/ui/StateViews";
 import { ApiError, CurrentUser, api } from "../lib/api";
 import { AsyncState } from "../lib/useAsync";
 import { LoginPage } from "../pages/auth/LoginPage";
-import { SignupPage } from "../pages/auth/SignupPage";
 import { AuthCallbackPage } from "../pages/auth/AuthCallbackPage";
 import { AuthenticatedRouter } from "./router";
 
@@ -45,7 +44,6 @@ function AppRoot() {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage onAuthenticated={(user) => setSession({ status: "ready", data: user, error: null })} />} />
-        <Route path="/signup" element={<SignupPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
