@@ -2,6 +2,7 @@
   "name": "@markettwin/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "MarketTwin React and TypeScript frontend",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
@@ -19,7 +20,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "7.0.1",
