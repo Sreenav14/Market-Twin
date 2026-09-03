@@ -1,23 +1,35 @@
-﻿# MarketTwin Web
+# MarketTwin Web
 
-The React and TypeScript frontend for MarketTwin.
+Enterprise React + TypeScript frontend for MarketTwin V1.
 
-This component will provide:
+## Stack
 
-- Authentication
-- Dashboard
-- Product Blueprints
-- Source uploads
-- Knowledge review
-- Skills
-- Agent Blueprints
-- Mission Templates
-- Application Targets
-- Test Plans
-- Live Test Runs
-- Human-assisted browser control
-- Evidence viewer
-- Reports
-- Profile and settings
+- React
+- TypeScript
+- Vite
+- React Router
+- Tailwind CSS
+- Vitest + React Testing Library
+- Playwright + axe for E2E/accessibility
 
-The complete Vite application will be generated in a later step.
+## Local development
+
+From the repository root:
+
+```powershell
+npm install
+npm run dev --workspace=@markettwin/web
+```
+
+The web app runs at `http://localhost:5173` and proxies `/api` requests to the Control API at `http://localhost:8000`.
+
+## Quality commands
+
+```powershell
+npm run typecheck --workspace=@markettwin/web
+npm run test --workspace=@markettwin/web
+npm run build --workspace=@markettwin/web
+npm run test:e2e --workspace=@markettwin/web
+```
+
+The frontend must not simulate backend capabilities. Planning, journey execution, human-assisted browser control, findings, evidence, report generation, lifecycle deletion, and member administration activate only when their corresponding backend contracts exist.
