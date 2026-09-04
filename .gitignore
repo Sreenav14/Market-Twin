@@ -55,6 +55,7 @@ videos/
 keyframes/
 tmp/
 temp/
+.playwright-mcp/
 
 # Local infrastructure data
 infra/compose/data/

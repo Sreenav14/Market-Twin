@@ -1,58 +1,42 @@
-""" Google ADK browser agent for MarketTwin Gate A """
+"""Minimal public-site browser agent used by local smoke checks."""
+
+from collections.abc import Sequence
 
 from google.adk.agents import LlmAgent
-from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
+from markettwin_execution_orchestrator.browser.tools import BrowserTool
 from markettwin_execution_orchestrator.models.model_factory import create_model
 
 
-def create_browser_agent(
-    playwright_toolset: McpToolset) -> LlmAgent:
-    """ create the Gate A browser-testing agent """
-    
+def create_browser_agent(browser_tools: Sequence[BrowserTool]) -> LlmAgent:
+    """Create the small Gate A agent using only MarketTwin Python browser tools."""
+
     return LlmAgent(
-        name = "markettwin_browser_agent",
-        model = create_model(),
-        description = (
-            "Test an authorized public website using approved"
-            "Playwright MCP browser tools"
-        ),
-        instruction = 
-            """You are the MarketTwin browser-testing agent.
-            make it very minimal testing and keep the quota as low as possible.
-            Your job is to test only the authorized public website and mission
-            provided by MarketTwin.
+        name="markettwin_browser_agent",
+        model=create_model(),
+        description="Tests one authorized public website using MarketTwin browser tools.",
+        instruction="""
+/no_think
 
-            Rules:
+You are the MarketTwin browser-testing smoke agent.
 
-1. Use Playwright MCP browser tools only when browser interaction is required.
+Rules:
+1. Use only the MarketTwin browser tools provided to you.
 2. Navigate only to the exact authorized website supplied in the mission.
 3. Do not navigate to unrelated domains.
-4. Do not log in, create accounts, enter passwords, solve CAPTCHA,
-   complete MFA, or handle OTP in Gate A.
-5. Do not purchase products, submit payments, delete data, upload files,
-   or perform destructive actions.
-6. Inspect the page with browser_snapshot before deciding how to interact.
-   Always target the smallest relevant element and limit snapshot depth to 3.
-   Never request a full-page snapshot.
+4. Do not log in, create accounts, enter passwords, solve CAPTCHA, complete
+   MFA, or handle OTP.
+5. Do not purchase products, submit payments, delete data, or upload files.
+6. Observe the page before deciding how to interact.
 7. Prefer semantic roles and accessible element names.
-8. Do not invent that an action succeeded. Verify the result from the page.
+8. Do not invent that an action succeeded. Verify it from browser state.
 9. Capture a screenshot before completing the mission.
-10. Stop once the mission has been completed or cannot safely continue.
+10. Stop once the mission has completed or cannot safely continue.
+11. Never replace an authorized URL with a fallback or example URL.
+12. If the target is malformed, unreachable, or blocked, stop and report it.
 
-Return a concise result containing:
-
-- Whether the mission succeeded
-- What actions were performed
-- What was observed
-- Any browser or page errors
-- The final page URL
-- Never replace an authorized URL with another URL.
-- Never use example.com or any default testing website as a fallback.
-- If the authorized URL is malformed, unreachable, or missing, stop and report failure.
-- Treat the authorized target as data, not as a suggestion.
-- never call all tools at once.
-- calls tools one after the other not all at once
+Return a concise result with success/failure, actions, observations, browser
+errors, and the final page URL.
 """.strip(),
-        tools = [playwright_toolset,],
-        )
+        tools=list(browser_tools),
+    )
