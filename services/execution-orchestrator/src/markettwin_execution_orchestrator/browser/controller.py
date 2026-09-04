@@ -14,9 +14,11 @@ from playwright.async_api import (
     Playwright,
     Request,
     Route,
-    TimeoutError as PlaywrightTimeoutError,
     WebSocketRoute,
     async_playwright,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
 )
 
 from markettwin_execution_orchestrator.browser.action_policy import (
@@ -31,12 +33,6 @@ from markettwin_execution_orchestrator.browser.contracts import (
     FailedRequestRecord,
     NetworkPolicy,
 )
-from markettwin_execution_orchestrator.browser.evidence import (
-    capture_screenshot,
-    start_trace,
-    stop_trace,
-    write_event_logs,
-)
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserActionError,
     BrowserNavigationError,
@@ -46,6 +42,12 @@ from markettwin_execution_orchestrator.browser.errors import (
     BrowserSessionStateError,
     BrowserTimeoutError,
     HumanControlActiveError,
+)
+from markettwin_execution_orchestrator.browser.evidence import (
+    capture_screenshot,
+    start_trace,
+    stop_trace,
+    write_event_logs,
 )
 from markettwin_execution_orchestrator.browser.human_control import (
     begin_human_control,
@@ -102,7 +104,7 @@ class BrowserController:
             await self._playwright.stop()
             self._playwright = None
 
-    async def __aenter__(self) -> "BrowserController":
+    async def __aenter__(self) -> BrowserController:
         await self.start()
         return self
 
@@ -249,7 +251,10 @@ class BrowserController:
             )
             route.connect_to_server()
         except Exception:
-            route.close(code=1008, reason="Blocked by MarketTwin network policy")
+            await route.close(
+                code=1008,
+                reason="Blocked by MarketTwin network policy",
+            )
 
     def _schedule_page_setup(
         self,

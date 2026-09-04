@@ -79,16 +79,28 @@ class BrowserActionResult:
         }
 
 
+def _string_list() -> list[str]:
+    return []
+
+
+def _failed_request_list() -> list[FailedRequestRecord]:
+    return []
+
+
 @dataclass(slots=True)
 class BrowserEventBuffer:
     """Per-session event buffers with incremental and cumulative views."""
 
-    console_errors: list[str] = field(default_factory=list)
-    page_errors: list[str] = field(default_factory=list)
-    failed_requests: list[FailedRequestRecord] = field(default_factory=list)
-    all_console_errors: list[str] = field(default_factory=list)
-    all_page_errors: list[str] = field(default_factory=list)
-    all_failed_requests: list[FailedRequestRecord] = field(default_factory=list)
+    console_errors: list[str] = field(default_factory=_string_list)
+    page_errors: list[str] = field(default_factory=_string_list)
+    failed_requests: list[FailedRequestRecord] = field(
+        default_factory=_failed_request_list
+    )
+    all_console_errors: list[str] = field(default_factory=_string_list)
+    all_page_errors: list[str] = field(default_factory=_string_list)
+    all_failed_requests: list[FailedRequestRecord] = field(
+        default_factory=_failed_request_list
+    )
 
     def record_console_error(self, message: str) -> None:
         self.console_errors.append(message)

@@ -67,7 +67,11 @@ async def resolve_and_validate_host(
         raise HostResolutionError(f'Target hostname "{hostname}" returned no addresses.')
 
     blocked = next(
-        (address for address in addresses if not _is_address_allowed(address.address, network_policy)),
+        (
+            address
+            for address in addresses
+            if not _is_address_allowed(address.address, network_policy)
+        ),
         None,
     )
     if blocked is not None:

@@ -12,7 +12,6 @@ from google.genai import types
 from markettwin_execution_orchestrator.agents.meta_agent import create_meta_agent
 from markettwin_execution_orchestrator.agents.schemas.plan import MetaAgentPlan
 
-
 PLANNING_APP_NAME: Final[str] = "markettwin_planning"
 
 

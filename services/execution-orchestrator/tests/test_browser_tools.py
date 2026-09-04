@@ -4,7 +4,6 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-
 from markettwin_execution_orchestrator.browser.contracts import (
     BrowserActionResult,
     BrowserObservation,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from markettwin_execution_orchestrator.browser.contracts import ResolvedAddress
 from markettwin_execution_orchestrator.browser.errors import HostResolutionError
 from markettwin_execution_orchestrator.browser.network import resolve_and_validate_host

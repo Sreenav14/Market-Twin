@@ -6,8 +6,8 @@ interactive viewer must attach to this exact context and must not create a
 replacement browser session.
 """
 
-from markettwin_execution_orchestrator.browser.evidence import start_trace, stop_trace
 from markettwin_execution_orchestrator.browser.errors import BrowserSessionStateError
+from markettwin_execution_orchestrator.browser.evidence import start_trace, stop_trace
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 

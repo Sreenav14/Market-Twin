@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from markettwin_execution_orchestrator.browser.contracts import AllowedOrigin
 from markettwin_execution_orchestrator.browser.errors import TargetUrlValidationError
 from markettwin_execution_orchestrator.browser.policy import (

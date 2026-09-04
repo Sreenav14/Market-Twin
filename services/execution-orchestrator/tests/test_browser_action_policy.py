@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from markettwin_execution_orchestrator.browser.action_policy import (
     ensure_low_risk_click_target,
     ensure_non_sensitive_fill,

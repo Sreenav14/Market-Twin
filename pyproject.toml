@@ -10,6 +10,7 @@ dependencies = [
     "markettwin-execution-orchestrator",
     "markettwin-knowledge-worker",
     "markettwin-shared-python",
+    "playwright>=1.61.0",
 ]
 
 [dependency-groups]

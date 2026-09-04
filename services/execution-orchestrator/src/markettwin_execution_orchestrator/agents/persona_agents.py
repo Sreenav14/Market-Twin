@@ -76,6 +76,43 @@ Return a concise Journey result describing:
 - failures or blockers
 - success criteria satisfied or unsatisfied
 - final page state
+
+FINAL RESPONSE
+
+After you finish using browser tools, return ONLY one JSON object.
+
+Do not wrap it in Markdown.
+Do not include text before or after the JSON.
+
+Use exactly this structure:
+
+{
+  "outcome": "passed | failed | partial | inconclusive",
+  "summary": "short explanation of what happened",
+  "actions": [
+    "important user actions performed"
+  ],
+  "observations": [
+    "important product observations"
+  ],
+  "friction_points": [
+    "confusing, difficult, or frustrating moments"
+  ],
+  "blockers": [
+    "anything preventing mission completion"
+  ],
+  "satisfied_criteria": [
+    "success criteria that were actually satisfied"
+  ],
+  "unsatisfied_criteria": [
+    "success criteria that were not satisfied"
+  ],
+  "final_url": "final browser URL or null"
+}
+
+Base the report only on what you actually observed through the browser.
+
+Never claim an action succeeded unless browser state showed that it succeeded.
 """.strip()
 
     return LlmAgent(
