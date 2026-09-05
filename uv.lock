@@ -837,6 +837,7 @@ dependencies = [
     { name = "markettwin-database" },
     { name = "markettwin-shared-python" },
     { name = "playwright" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
@@ -846,6 +847,7 @@ requires-dist = [
     { name = "markettwin-database", editable = "packages/database-python" },
     { name = "markettwin-shared-python", editable = "packages/shared-python" },
     { name = "playwright", specifier = "==1.61.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
 ]
 
 [[package]]

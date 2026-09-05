@@ -12,6 +12,7 @@ dependencies = [
     "litellm==1.93.0",
     "playwright==1.61.0",
     "markettwin-database",
+    "sqlalchemy[asyncio]>=2.0,<3",
     "markettwin-shared-python",
 ]
 
