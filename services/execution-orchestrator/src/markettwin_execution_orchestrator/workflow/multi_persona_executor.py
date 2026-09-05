@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -97,7 +96,3 @@ async def execute_multi_persona_plan(
         journeys=tuple(results),
     )
     
-JourneyExecutor = Callable[
-    ...,
-    Awaitable[PersonaJourneyResult],
-]
