@@ -1,6 +1,6 @@
-"""Compatibility exports for shared MarketTwin testing models."""
+"""Shared MarketTwin SQLAlchemy models."""
 
-from markettwin_database.models.testing import (
+from .testing import (
     Application,
     ApplicationTarget,
     PersonaJourney,
