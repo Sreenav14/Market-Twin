@@ -29,7 +29,10 @@ from markettwin_execution_orchestrator.browser.contracts import NetworkPolicy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserPolicyError,
 )
-from markettwin_execution_orchestrator.persistence import ExecutionRepository
+from markettwin_execution_orchestrator.persistence import (
+    ExecutionRepository,
+    ExecutionStepRecorder,
+)
 from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyExecutionStatus,
     JourneyOutcome,
@@ -131,10 +134,16 @@ async def execute_persona_journey(
         
         browser_session_persisted = True
 
+        step_recorder = ExecutionStepRecorder(
+            session=session,
+            execution_id=request.execution_id,
+        )
+
         runtime = runtime_factory.create_persona_runtime(
             journey=request.journey,
             browser_controller=browser_controller,
             browser_session=browser_session,
+            step_recorder=step_recorder,
         )
 
         runner = InMemoryRunner(

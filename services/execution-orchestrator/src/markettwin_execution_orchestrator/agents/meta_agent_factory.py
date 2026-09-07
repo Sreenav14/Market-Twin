@@ -13,6 +13,7 @@ from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJour
 from markettwin_execution_orchestrator.browser import (
     BrowserController,
     BrowserSessionHandle,
+    BrowserStepRecorder,
     create_browser_tools,
 )
 
@@ -43,12 +44,14 @@ class MetaAgentFactory:
         journey: PersonaJourneySpec,
         browser_controller: BrowserController,
         browser_session: BrowserSessionHandle,
+        step_recorder: BrowserStepRecorder | None = None,
     ) -> PersonaJourneyRuntime:
         """Bind one Persona Agent to one Python Playwright Journey session."""
 
         browser_tools = create_browser_tools(
             controller=browser_controller,
             handle=browser_session,
+            step_recorder=step_recorder,
         )
         builder = self._registry.get(AgentRole.PERSONA_BROWSER)
         agent = builder(

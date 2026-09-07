@@ -9,6 +9,7 @@ from .plan_repository import (
     PlanRepository,
 )
 from .run_state_repository import RunStateRepository
+from .step_recorder import ExecutionStepRecorder
 
 __all__ = [
     "PersistedJourneyRecord",
@@ -18,4 +19,5 @@ __all__ = [
     "PlanRepository",
     "RunStateRepository",
     "ExecutionRepository",
+    "ExecutionStepRecorder",
 ]

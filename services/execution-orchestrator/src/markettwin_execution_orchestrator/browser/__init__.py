@@ -8,7 +8,11 @@ from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
 )
 from markettwin_execution_orchestrator.browser.controller import BrowserController
-from markettwin_execution_orchestrator.browser.tools import BrowserTool, create_browser_tools
+from markettwin_execution_orchestrator.browser.tools import (
+    BrowserStepRecorder,
+    BrowserTool,
+    create_browser_tools,
+)
 
 __all__ = [
     "AllowedOrigin",
@@ -19,4 +23,5 @@ __all__ = [
     "BrowserTool",
     "NetworkPolicy",
     "create_browser_tools",
+    "BrowserStepRecorder",
 ]

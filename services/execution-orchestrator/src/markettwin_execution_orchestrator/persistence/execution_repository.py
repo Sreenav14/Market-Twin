@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from markettwin_execution_orchestrator.persistence.models import (
     AgentExecution,
     BrowserSession,
+    ExecutionStep,
 )
 
 
@@ -129,3 +130,54 @@ class ExecutionRepository:
             )
 
         return browser_session
+    
+    async def create_execution_step(
+        self,
+        *,
+        execution_id: UUID,
+        step_number: int,
+        action_type: str,
+        action_summary: str,
+    ) -> int:
+        """Create one authoritative browser/tool execution step."""
+        
+        step = ExecutionStep(
+            execution_id=execution_id,
+            step_number=step_number,
+            action_type=action_type,
+            status="running",
+            started_at=_utc_now(),
+        )
+        
+        self._session.add(step)
+        await self._session.flush()
+        
+        return step.id
+
+    async def finish_execuiton_step(
+        self,
+        *,
+        execution_id: UUID,
+        step_id: int,
+        status: str,
+        observation_summary: str | None = None,
+    ) -> None:
+        """Finish one execution step."""
+        
+        step = await self._session.get(
+            ExecutionStep,
+            step_id,
+        )
+        
+        if step is None or step.execution_id != execution_id:
+            raise ValueError(
+                f'ExecutionStep "{step_id}" does not belong to'
+                f'AgentExecution "{execution_id}".'
+            )
+            
+        
+        step.status = status
+        step.observation_summary = observation_summary
+        step.completed_at = _utc_now()
+        
+        await self._session.flush()

@@ -10,7 +10,11 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionHandle,
 )
 from markettwin_execution_orchestrator.browser.controller import BrowserController
-from markettwin_execution_orchestrator.browser.tools import create_browser_tools
+from markettwin_execution_orchestrator.browser.errors import BrowserPolicyError
+from markettwin_execution_orchestrator.browser.tools import (
+    BrowserStepRecorder,
+    create_browser_tools,
+)
 
 
 class FakeController:
@@ -56,6 +60,35 @@ class FakeController:
         return await self._call("take_screenshot", **kwargs)
 
 
+class FakeRecorder:
+    def __init__(self) -> None:
+        self.started: list[tuple[str, str]] = []
+        self.finished: list[tuple[int, str, str | None]] = []
+
+    async def start_step(
+        self,
+        *,
+        action_type: str,
+        action_summary: str,
+    ) -> int:
+        self.started.append((action_type, action_summary))
+        return len(self.started)
+
+    async def finish_step(
+        self,
+        *,
+        step_id: int,
+        status: str,
+        observation_summary: str | None = None,
+    ) -> None:
+        self.finished.append((step_id, status, observation_summary))
+
+
+class PolicyBlockedController(FakeController):
+    async def navigate(self, **kwargs: object) -> BrowserActionResult:
+        raise BrowserPolicyError("Target is outside the allowlist.")
+
+
 @pytest.mark.asyncio
 async def test_tools_are_bound_to_one_session_and_journey() -> None:
     controller = FakeController()
@@ -98,3 +131,53 @@ def test_tool_surface_is_least_privilege() -> None:
     }
     assert "page_evaluate" not in names
     assert "browser_context_new" not in names
+
+
+@pytest.mark.asyncio
+async def test_tools_record_safe_action_summaries_and_results() -> None:
+    controller = FakeController()
+    recorder = FakeRecorder()
+    handle = BrowserSessionHandle(uuid4(), uuid4(), uuid4())
+    tools = create_browser_tools(
+        controller=cast(BrowserController, controller),
+        handle=handle,
+        step_recorder=cast(BrowserStepRecorder, recorder),
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+
+    await by_name["browser_navigate"](
+        "https://example.com/path?token=secret#fragment"
+    )
+    await by_name["browser_fill"]("Password", "do-not-log-this")
+
+    assert recorder.started == [
+        ("navigate", "Navigate to https://example.com/path."),
+        ("fill", "Fill an approved non-secret text field."),
+    ]
+    assert all(
+        "token=secret" not in summary and "do-not-log-this" not in summary
+        for _, summary in recorder.started
+    )
+    assert [status for _, status, _ in recorder.finished] == [
+        "completed",
+        "completed",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_policy_errors_are_recorded_before_being_raised() -> None:
+    recorder = FakeRecorder()
+    handle = BrowserSessionHandle(uuid4(), uuid4(), uuid4())
+    tools = create_browser_tools(
+        controller=cast(BrowserController, PolicyBlockedController()),
+        handle=handle,
+        step_recorder=cast(BrowserStepRecorder, recorder),
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+
+    with pytest.raises(BrowserPolicyError):
+        await by_name["browser_navigate"]("https://blocked.example")
+
+    assert recorder.finished == [
+        (1, "policy_blocked", "Target is outside the allowlist.")
+    ]
