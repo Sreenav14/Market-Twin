@@ -1,5 +1,6 @@
 """Persistence adapters for the MarketTwin execution orchestrator."""
 
+from .execution_repository import ExecutionRepository
 from .plan_repository import (
     PersistedJourneyRecord,
     PersistedMissionRecord,
@@ -16,4 +17,5 @@ __all__ = [
     "PersistedPlanRecord",
     "PlanRepository",
     "RunStateRepository",
+    "ExecutionRepository",
 ]

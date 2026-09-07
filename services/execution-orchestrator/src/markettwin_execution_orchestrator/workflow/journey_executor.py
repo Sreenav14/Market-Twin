@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.agents.meta_agent_factory import (
     MetaAgentFactory,
@@ -27,6 +29,7 @@ from markettwin_execution_orchestrator.browser.contracts import NetworkPolicy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserPolicyError,
 )
+from markettwin_execution_orchestrator.persistence import ExecutionRepository
 from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyExecutionStatus,
     JourneyOutcome,
@@ -96,6 +99,7 @@ async def execute_persona_journey(
     *,
     request: PersonaJourneyExecutionRequest,
     browser_controller: BrowserController,
+    session: AsyncSession,
     factory: MetaAgentFactory | None = None,
 ) -> PersonaJourneyResult:
     """Execute one Persona Journey from browser creation through cleanup."""
@@ -104,6 +108,8 @@ async def execute_persona_journey(
         raise ValueError("max_duration_seconds must be positive")
 
     runtime_factory = factory or MetaAgentFactory()
+    execution_repository = ExecutionRepository(session)
+    browser_session_persisted = False
 
     browser_session = None
     runner: InMemoryRunner | None = None
@@ -115,6 +121,15 @@ async def execute_persona_journey(
             allowed_origins=request.allowed_origins,
             network_policy=request.network_policy,
         )
+        
+        await execution_repository.create_browser_session(
+            browser_session_id = browser_session.session_id,
+            execution_id = request.execution_id,
+        )
+        
+        await session.commit()
+        
+        browser_session_persisted = True
 
         runtime = runtime_factory.create_persona_runtime(
             journey=request.journey,
@@ -186,6 +201,11 @@ async def execute_persona_journey(
             unsatisfied_criteria=report.unsatisfied_criteria,
             final_url=report.final_url,
         )
+        
+    except SQLAlchemyError:
+        await session.rollback()
+        raise
+        
 
     except BrowserPolicyError as exc:
         return PersonaJourneyResult(
@@ -226,8 +246,28 @@ async def execute_persona_journey(
             await runner.close()
 
         if browser_session is not None:
-            await browser_controller.close_session(
-                session_id=browser_session.session_id,
-                execution_id=request.execution_id,
-                journey_id=request.journey_id,
-            )
+            try:
+                await browser_controller.close_session(
+                    session_id=browser_session.session_id,
+                    execution_id=request.execution_id,
+                    journey_id = request.journey_id,
+                )
+                
+            except Exception:
+                if browser_session_persisted:
+                    await session.rollback()
+                    
+                    await execution_repository.mark_browser_session_failed(
+                        browser_session_id = browser_session.session_id,
+                    )
+                    
+                    await session.commit()
+                    raise
+                
+            else:
+                if browser_session_persisted:
+                    await execution_repository.mark_browser_session_closed(
+                        browser_session_id = browser_session.session_id,
+                    )
+                    
+                    await session.commit()

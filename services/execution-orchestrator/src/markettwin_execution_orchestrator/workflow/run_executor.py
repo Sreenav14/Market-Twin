@@ -1,4 +1,4 @@
-"""Top-level in-memory MarketTwin test-run orchestration."""
+"""Top-level persisted MarketTwin test-run orchestration."""
 
 from __future__ import annotations
 
@@ -76,14 +76,6 @@ async def execute_markettwin_run(
         request.network_policy,
     )
 
-    plan = await generate_meta_agent_plan(
-        MetaPlanningRequest(
-            test_run_id=request.run_id,
-            study_brief=study_brief,
-            target_snapshot=request.target_snapshot,
-        )
-    )
-
     run_repository = RunStateRepository(session)
     plan_repository = PlanRepository(session)
 
@@ -133,6 +125,7 @@ async def execute_markettwin_run(
                     ),
                 ),
                 browser_controller=browser_controller,
+                session=session,
             )
 
         await run_repository.mark_completed(
