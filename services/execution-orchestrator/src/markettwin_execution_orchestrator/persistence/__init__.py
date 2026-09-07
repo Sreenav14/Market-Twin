@@ -7,6 +7,7 @@ from .plan_repository import (
     PersistedPlanRecord,
     PlanRepository,
 )
+from .run_state_repository import RunStateRepository
 
 __all__ = [
     "PersistedJourneyRecord",
@@ -14,4 +15,5 @@ __all__ = [
     "PersistedPersonaRecord",
     "PersistedPlanRecord",
     "PlanRepository",
+    "RunStateRepository",
 ]

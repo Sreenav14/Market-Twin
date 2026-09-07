@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -39,6 +40,8 @@ class MultiPersonaExecutionRequest:
 
     run_id: UUID
     plan: MetaAgentPlan
+    
+    journey_ids_by_key: Mapping[str, UUID]
 
     start_url: str
     allowed_origins: tuple[AllowedOrigin, ...]
@@ -71,7 +74,16 @@ async def execute_multi_persona_plan(
 
     for journey in journeys:
         execution_id = uuid4()
-        journey_id = uuid4()
+        
+        journey_id = request.journey_ids_by_key.get(
+            journey.journey_key
+        )
+        
+        if journey_id is None:
+            raise RuntimeError(
+                "No persisted PersonaJourney exists for"
+                f'"{journey.journey_key}".'
+            )
 
         result = await execute_persona_journey(
             request=PersonaJourneyExecutionRequest(

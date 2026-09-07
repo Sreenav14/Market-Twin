@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from markettwin_execution_orchestrator.browser import (
     AllowedOrigin,
     BrowserController,
@@ -14,6 +16,10 @@ from markettwin_execution_orchestrator.browser.contracts import (
 )
 from markettwin_execution_orchestrator.browser.policy import (
     validate_target_url,
+)
+from markettwin_execution_orchestrator.persistence import (
+    PlanRepository,
+    RunStateRepository,
 )
 from markettwin_execution_orchestrator.workflow.multi_persona_executor import (
     MultiPersonaExecutionRequest,
@@ -46,6 +52,8 @@ class MarketTwinRunRequest:
 
 async def execute_markettwin_run(
     request: MarketTwinRunRequest,
+    *,
+    session: AsyncSession,
 ) -> MultiPersonaExecutionResult:
     """Plan and execute one complete MarketTwin test run."""
 
@@ -76,17 +84,74 @@ async def execute_markettwin_run(
         )
     )
 
-    async with BrowserController() as browser_controller:
-        return await execute_multi_persona_plan(
-            request=MultiPersonaExecutionRequest(
-                run_id=request.run_id,
-                plan=plan,
-                start_url=validated_start_url.href,
-                allowed_origins=request.allowed_origins,
-                network_policy=request.network_policy,
-                max_duration_seconds_per_journey=(
-                    request.max_duration_seconds_per_journey
-                ),
-            ),
-            browser_controller=browser_controller,
+    run_repository = RunStateRepository(session)
+    plan_repository = PlanRepository(session)
+
+    await run_repository.mark_planning(
+        test_run_id=request.run_id,
+    )
+    await session.commit()
+
+    try:
+        plan = await generate_meta_agent_plan(
+            MetaPlanningRequest(
+                test_run_id=request.run_id,
+                study_brief=study_brief,
+                target_snapshot=request.target_snapshot,
+            )
         )
+
+        persisted_plan = await plan_repository.create_from_plan(
+            test_run_id=request.run_id,
+            plan=plan,
+        )
+
+        await session.commit()
+
+        await run_repository.mark_running(
+            test_run_id=request.run_id,
+        )
+
+        await session.commit()
+
+        journey_ids_by_key = {
+            journey.journey_key: journey.journey_id
+            for journey in persisted_plan.journeys
+        }
+
+        async with BrowserController() as browser_controller:
+            result = await execute_multi_persona_plan(
+                request=MultiPersonaExecutionRequest(
+                    run_id=request.run_id,
+                    plan=plan,
+                    journey_ids_by_key=journey_ids_by_key,
+                    start_url=validated_start_url.href,
+                    allowed_origins=request.allowed_origins,
+                    network_policy=request.network_policy,
+                    max_duration_seconds_per_journey=(
+                        request.max_duration_seconds_per_journey
+                    ),
+                ),
+                browser_controller=browser_controller,
+            )
+
+        await run_repository.mark_completed(
+            test_run_id=request.run_id,
+        )
+
+        await session.commit()
+
+        return result
+
+    except Exception:
+        await session.rollback()
+
+        try:
+            await run_repository.mark_failed(
+                test_run_id=request.run_id,
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+
+        raise
