@@ -32,6 +32,7 @@ from markettwin_execution_orchestrator.browser.errors import (
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     ExecutionStepRecorder,
+    S3ArtifactStorage,
 )
 from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyExecutionStatus,
@@ -133,10 +134,13 @@ async def execute_persona_journey(
         await session.commit()
         
         browser_session_persisted = True
+        
+        artifact_storage = S3ArtifactStorage.from_environment()
 
         step_recorder = ExecutionStepRecorder(
             session=session,
             execution_id=request.execution_id,
+            storage=artifact_storage,
         )
 
         runtime = runtime_factory.create_persona_runtime(

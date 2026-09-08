@@ -145,6 +145,7 @@ class ExecutionRepository:
             execution_id=execution_id,
             step_number=step_number,
             action_type=action_type,
+            action_summary=action_summary,
             status="running",
             started_at=_utc_now(),
         )
@@ -154,7 +155,7 @@ class ExecutionRepository:
         
         return step.id
 
-    async def finish_execuiton_step(
+    async def finish_execution_step(
         self,
         *,
         execution_id: UUID,

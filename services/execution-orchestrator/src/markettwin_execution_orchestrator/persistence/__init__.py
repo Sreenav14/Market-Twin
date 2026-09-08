@@ -1,5 +1,7 @@
 """Persistence adapters for the MarketTwin execution orchestrator."""
 
+from .artifact_repository import ArtifactRepository
+from .artifact_storage import S3ArtifactStorage
 from .execution_repository import ExecutionRepository
 from .plan_repository import (
     PersistedJourneyRecord,
@@ -20,4 +22,6 @@ __all__ = [
     "RunStateRepository",
     "ExecutionRepository",
     "ExecutionStepRecorder",
+    "ArtifactRepository",   
+    "S3ArtifactStorage",
 ]
