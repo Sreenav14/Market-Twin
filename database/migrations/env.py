@@ -5,6 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 from markettwin_control_api.persistence import models as control_api_models
 from markettwin_database import Base
+from markettwin_database import models as shared_database_models
 from markettwin_evaluation_worker.persistence import models as evaluation_worker_models
 from markettwin_execution_orchestrator.persistence import models as execution_orchestrator_models
 from sqlalchemy import pool
@@ -39,6 +40,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 
 model_registries = (
+    shared_database_models,
     control_api_models,
     evaluation_worker_models,
     execution_orchestrator_models,
