@@ -24,7 +24,7 @@ class ArtifactRepository:
         self,
         *,
         execution_id: UUID,
-        step_id: int,
+        step_id: int | None,
         artifact_type: str,
         stored: StoredArtifact,
         metadata: dict[str, object] | None = None,

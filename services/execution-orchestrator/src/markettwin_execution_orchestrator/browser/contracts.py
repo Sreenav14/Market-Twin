@@ -1,6 +1,7 @@
 """Internal browser execution contracts for MarketTwin."""
 
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -13,7 +14,25 @@ BrowserSessionState = Literal[
     "failed",
 ]
 
+@dataclass(frozen=True, slots=True)
+class BrowserSessionArtifacts:
+    """Local evidence produced when one browser session closes."""
+    
+    trace_paths: tuple[Path, ...] = ()
+    console_log_path: Path | None = None
+    page_log_path: Path | None = None
+    network_log_path: Path | None = None
 
+class StoredArtifact:
+    """A stored artifact from a browser session."""
+
+    storage_provider: str
+    bucket: str
+    object_key: str
+    content_type: str
+    size_bytes: int
+    
+    
 @dataclass(frozen=True, slots=True)
 class AllowedOrigin:
     """One exact origin MarketTwin is authorized to access."""

@@ -33,6 +33,7 @@ from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     ExecutionStepRecorder,
     S3ArtifactStorage,
+    SessionArtifactRecorder,
 )
 from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyExecutionStatus,
@@ -117,6 +118,7 @@ async def execute_persona_journey(
 
     browser_session = None
     runner: InMemoryRunner | None = None
+    artifact_storage: S3ArtifactStorage | None = None
 
     try:
         browser_session = await browser_controller.create_session(
@@ -125,17 +127,17 @@ async def execute_persona_journey(
             allowed_origins=request.allowed_origins,
             network_policy=request.network_policy,
         )
-        
+
         await execution_repository.create_browser_session(
-            browser_session_id = browser_session.session_id,
-            execution_id = request.execution_id,
+            browser_session_id=browser_session.session_id,
+            execution_id=request.execution_id,
         )
-        
+
         await session.commit()
-        
+
         browser_session_persisted = True
-        
-        artifact_storage = S3ArtifactStorage.from_environment()
+
+        artifact_storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
 
         step_recorder = ExecutionStepRecorder(
             session=session,
@@ -181,25 +183,15 @@ async def execute_persona_journey(
                 session_id=session_id,
                 new_message=message,
             ):
-                if (
-                    event.is_final_response()
-                    and event.content
-                    and event.content.parts
-                ):
+                if event.is_final_response() and event.content and event.content.parts:
                     final_response_parts.extend(
-                        part.text
-                        for part in event.content.parts
-                        if part.text
+                        part.text for part in event.content.parts if part.text
                     )
 
         if not final_response_parts:
-            raise RuntimeError(
-                "Persona Agent returned no final Journey response."
-            )
+            raise RuntimeError("Persona Agent returned no final Journey response.")
 
-        report = _parse_persona_report(
-            "\n".join(final_response_parts)
-        )
+        report = _parse_persona_report("\n".join(final_response_parts))
 
         return PersonaJourneyResult(
             journey=request.journey,
@@ -214,11 +206,10 @@ async def execute_persona_journey(
             unsatisfied_criteria=report.unsatisfied_criteria,
             final_url=report.final_url,
         )
-        
+
     except SQLAlchemyError:
         await session.rollback()
         raise
-        
 
     except BrowserPolicyError as exc:
         return PersonaJourneyResult(
@@ -232,9 +223,7 @@ async def execute_persona_journey(
         return PersonaJourneyResult(
             journey=request.journey,
             status=JourneyExecutionStatus.TIMED_OUT,
-            summary=(
-                "Persona Journey exceeded the configured execution time."
-            ),
+            summary=("Persona Journey exceeded the configured execution time."),
             blockers=("Journey execution timed out.",),
         )
 
@@ -260,27 +249,35 @@ async def execute_persona_journey(
 
         if browser_session is not None:
             try:
-                await browser_controller.close_session(
+                session_artifacts = await browser_controller.close_session(
                     session_id=browser_session.session_id,
                     execution_id=request.execution_id,
-                    journey_id = request.journey_id,
+                    journey_id=request.journey_id,
                 )
-                
+
             except Exception:
                 if browser_session_persisted:
                     await session.rollback()
-                    
+
                     await execution_repository.mark_browser_session_failed(
-                        browser_session_id = browser_session.session_id,
+                        browser_session_id=browser_session.session_id,
                     )
-                    
+
                     await session.commit()
-                    raise
-                
+                raise
+
             else:
                 if browser_session_persisted:
                     await execution_repository.mark_browser_session_closed(
-                        browser_session_id = browser_session.session_id,
+                        browser_session_id=browser_session.session_id,
                     )
-                    
+
                     await session.commit()
+
+                if artifact_storage is not None:
+                    session_artifact_recorder = SessionArtifactRecorder(
+                        session=session,
+                        execution_id=request.execution_id,
+                        storage=artifact_storage,
+                    )
+                    await session_artifact_recorder.record(session_artifacts)

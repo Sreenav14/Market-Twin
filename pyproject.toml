@@ -20,6 +20,7 @@ dev = [
     "ruff>=0.11,<1.0",
     "pyright>=1.1,<2.0",
     "alembic>=1.19.1",
+    "boto3-stubs[s3]>=1.35,<2",
 ]
 
 [tool.uv]

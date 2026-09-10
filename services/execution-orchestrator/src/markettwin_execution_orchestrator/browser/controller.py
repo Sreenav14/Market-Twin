@@ -29,6 +29,7 @@ from markettwin_execution_orchestrator.browser.actions import semantic_locator
 from markettwin_execution_orchestrator.browser.contracts import (
     AllowedOrigin,
     BrowserActionResult,
+    BrowserSessionArtifacts,
     BrowserSessionHandle,
     FailedRequestRecord,
     NetworkPolicy,
@@ -666,7 +667,7 @@ class BrowserController:
         session_id: UUID,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
-    ) -> None:
+    ) -> BrowserSessionArtifacts:
         """Finalize local evidence and close the Journey browser."""
 
         session = self._get_session(
@@ -674,15 +675,38 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
+        
+        console_log_path: Path | None = None
+        page_log_path: Path | None = None
+        network_log_path: Path | None = None
+        
         async with session.lock:
             try:
                 if session.state not in {"closed", "failed"}:
                     await stop_trace(session)
-                    await write_event_logs(session)
+                    (
+                        console_log_path,
+                        page_log_path,
+                        network_log_path,
+                    ) = await write_event_logs(session)
+                    
                     session.state = "closed"
+                    
+                trace_paths = tuple(
+                    sorted(session.artifact_directory.glob("trace-*.zip"))
+                )
+                
+            
             finally:
                 try:
                     await session.context.close()
                 finally:
                     await session.browser.close()
                     self._sessions.pop(session_id, None)
+                    
+        return BrowserSessionArtifacts(
+            trace_paths=trace_paths,
+            console_log_path = console_log_path,
+            page_log_path = page_log_path,
+            network_log_path = network_log_path,
+        )

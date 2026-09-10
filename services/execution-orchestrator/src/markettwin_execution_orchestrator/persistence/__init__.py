@@ -10,7 +10,9 @@ from .plan_repository import (
     PersistedPlanRecord,
     PlanRepository,
 )
+from .run_event_repository import RunEventRepository
 from .run_state_repository import RunStateRepository
+from .session_artifact_recorder import SessionArtifactRecorder
 from .step_recorder import ExecutionStepRecorder
 
 __all__ = [
@@ -22,6 +24,8 @@ __all__ = [
     "RunStateRepository",
     "ExecutionRepository",
     "ExecutionStepRecorder",
-    "ArtifactRepository",   
+    "ArtifactRepository",
     "S3ArtifactStorage",
+    "RunEventRepository",
+    "SessionArtifactRecorder",
 ]
