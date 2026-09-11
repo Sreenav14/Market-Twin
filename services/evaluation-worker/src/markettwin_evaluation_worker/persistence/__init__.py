@@ -5,9 +5,15 @@ from .evaluation_repository import (
     EvidenceReference,
     JourneyResultRecord,
 )
+from .report_repository import (
+    ReportFindingRecord,
+    ReportRepository,
+)
 
 __all__ = [
     "EvaluationRepository",
     "EvidenceReference",
     "JourneyResultRecord",
+    "ReportRepository",
+    "ReportFindingRecord",
 ]
