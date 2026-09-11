@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from markettwin_database.models import AgentExecution, PersonaJourney, Report
+from markettwin_database.models import AgentExecution, Artifact, PersonaJourney, Report
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,12 +23,13 @@ DELETABLE_RUN_STATUSES = frozenset({"draft", "completed", "failed", "cancelled"}
 
 
 async def check_dependencies(session: AsyncSession, entity: object) -> None:
-    """Reject deletion while work or parent dependencies still exist."""
+    """Reject deletion while work, durable evidence, or parent dependencies exist."""
     if isinstance(entity, TestRun):
         if entity.status not in DELETABLE_RUN_STATUSES:
             raise HTTPException(
                 409, "This test is active. Wait until it has finished before deleting it."
             )
+
         active_execution = await session.scalar(
             select(AgentExecution.id)
             .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
@@ -42,6 +43,20 @@ async def check_dependencies(session: AsyncSession, entity: object) -> None:
             raise HTTPException(
                 409, "This test still has active journeys. Try again after they finish."
             )
+
+        stored_artifact = await session.scalar(
+            select(Artifact.id)
+            .join(AgentExecution, AgentExecution.id == Artifact.execution_id)
+            .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
+            .where(PersonaJourney.test_run_id == entity.id)
+            .limit(1)
+        )
+        if stored_artifact is not None:
+            raise HTTPException(
+                409,
+                "This test has stored evidence and cannot be deleted until evidence retention cleanup is available.",
+            )
+
         reports = list(
             (
                 await session.scalars(select(Report.status).where(Report.test_run_id == entity.id))
@@ -51,9 +66,11 @@ async def check_dependencies(session: AsyncSession, entity: object) -> None:
             raise HTTPException(
                 409, "Evaluation is not finished yet. Wait before deleting this test."
             )
+
     elif isinstance(entity, ApplicationTarget):
         if await session.scalar(select(TestRun.id).where(TestRun.target_id == entity.id).limit(1)):
             raise HTTPException(409, "Delete this target's tests first, then delete the target.")
+
     elif isinstance(entity, Application):
         if await session.scalar(
             select(TestRun.id).where(TestRun.application_id == entity.id).limit(1)
@@ -115,7 +132,7 @@ async def delete_resource(
 
 @router.delete("/api/v1/test-runs/{test_run_id}", status_code=204)
 async def delete_test_run(test_run_id: UUID, request: Request) -> Response:
-    """Delete test metadata and cascading results; object storage has separate retention."""
+    """Delete a test only when no active work or durable evidence remains."""
     return await delete_resource(request, test_run_id, TestRun)
 
 
