@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import cast
 from uuid import UUID
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
+    EvidenceReference,
+    JourneyResultRecord,
 )
 
 
@@ -36,6 +39,20 @@ class DeterministicEvaluationResult:
         return len(self.finding_ids)
 
 
+@dataclass(frozen=True, slots=True)
+class CrossJourneyFindingDraft:
+    """Deterministic issue reproduced across multiple personas."""
+
+    severity: str
+    category: str
+    title: str
+    summary: str
+    recommendation: str
+
+    journey_ids: tuple[UUID, ...]
+    execution_ids: tuple[UUID, ...]
+
+
 def _text(
     payload: dict[str, object],
     key: str,
@@ -48,6 +65,16 @@ def _text(
     value = value.strip()
 
     return value or None
+
+
+def _normalize_issue_text(
+    value: str,
+) -> str:
+    """Normalize text without applying semantic interpretation."""
+
+    return " ".join(
+        value.split()
+    ).casefold()
 
 
 def _strings(
@@ -242,6 +269,161 @@ def build_deterministic_finding(
     )
 
 
+def build_cross_journey_findings(
+    journey_results: tuple[
+        JourneyResultRecord,
+        ...,
+    ],
+) -> tuple[CrossJourneyFindingDraft, ...]:
+    """Find the same unmet criterion across personas."""
+
+    total_by_mission: dict[UUID, int] = defaultdict(
+        int
+    )
+
+    grouped: dict[
+        tuple[UUID, str],
+        list[JourneyResultRecord],
+    ] = defaultdict(list)
+
+    display_text: dict[
+        tuple[UUID, str],
+        str,
+    ] = {}
+
+    for result in journey_results:
+        total_by_mission[result.mission_id] += 1
+
+        status = _text(
+            result.payload,
+            "status",
+        )
+
+        outcome = _text(
+            result.payload,
+            "outcome",
+        )
+
+        # Infrastructure problems and inconclusive
+        # Journeys must not become product-pattern
+        # findings.
+        if (
+            status != "completed"
+            or outcome not in {
+                "failed",
+                "partial",
+            }
+        ):
+            continue
+
+        criteria = _strings(
+            result.payload,
+            "unsatisfied_criteria",
+        )
+
+        # Prevent one malformed result from counting the
+        # same criterion twice for one Persona.
+        seen_in_journey: set[str] = set()
+
+        for criterion in criteria:
+            normalized = _normalize_issue_text(
+                criterion
+            )
+
+            if (
+                not normalized
+                or normalized in seen_in_journey
+            ):
+                continue
+
+            seen_in_journey.add(normalized)
+
+            key = (
+                result.mission_id,
+                normalized,
+            )
+
+            grouped[key].append(result)
+
+            display_text.setdefault(
+                key,
+                criterion,
+            )
+
+    findings: list[
+        CrossJourneyFindingDraft
+    ] = []
+
+    for key, affected_results in grouped.items():
+        mission_id, _ = key
+
+        affected_count = len(
+            affected_results
+        )
+
+        if affected_count < 2:
+            continue
+
+        total_count = total_by_mission[
+            mission_id
+        ]
+
+        criterion = display_text[key]
+
+        severity = (
+            "high"
+            if affected_count == total_count
+            else "medium"
+        )
+
+        title_criterion = criterion
+
+        if len(title_criterion) > 180:
+            title_criterion = (
+                title_criterion[:177]
+                + "..."
+            )
+
+        findings.append(
+            CrossJourneyFindingDraft(
+                severity=severity,
+                category="cross_persona_pattern",
+                title=(
+                    "Repeated unmet criterion: "
+                    f"{title_criterion}"
+                ),
+                summary=(
+                    f"{affected_count} of "
+                    f"{total_count} personas testing "
+                    "this mission reported the same "
+                    "unmet success criterion: "
+                    f'"{criterion}"'
+                ),
+                recommendation=(
+                    "Review the linked Journeys and "
+                    "their evidence together. Because "
+                    "the same criterion was unmet by "
+                    "multiple personas, prioritize "
+                    "investigating the shared product "
+                    "flow before treating it as an "
+                    "isolated Persona-specific issue."
+                ),
+                journey_ids=tuple(
+                    result.journey_id
+                    for result
+                    in affected_results
+                ),
+                execution_ids=tuple(
+                    result.execution_id
+                    for result
+                    in affected_results
+                ),
+            )
+        )
+
+    return tuple(findings)
+
+
 async def evaluate_completed_run(
     *,
     test_run_id: UUID,
@@ -288,6 +470,57 @@ async def evaluate_completed_run(
             summary=draft.summary,
             recommendation=draft.recommendation,
             evidence=evidence,
+        )
+
+        finding_ids.append(finding_id)
+
+    cross_journey_findings = (
+        build_cross_journey_findings(
+            journey_results
+        )
+    )
+
+    for draft in cross_journey_findings:
+        evidence_references: list[
+            EvidenceReference
+        ] = []
+
+        for execution_id in draft.execution_ids:
+            evidence = (
+                await repository.find_preferred_evidence(
+                    execution_id=execution_id,
+                )
+            )
+
+            if (
+                evidence.step_id is None
+                and evidence.artifact_id is None
+            ):
+                raise RuntimeError(
+                    "Cross-persona Finding is missing "
+                    "evidence for execution "
+                    f'"{execution_id}".'
+                )
+
+            evidence_references.append(
+                evidence
+            )
+
+        finding_id = (
+            await repository.create_linked_finding(
+                test_run_id=test_run_id,
+                journey_ids=draft.journey_ids,
+                severity=draft.severity,
+                category=draft.category,
+                title=draft.title,
+                summary=draft.summary,
+                recommendation=(
+                    draft.recommendation
+                ),
+                evidence=tuple(
+                    evidence_references
+                ),
+            )
         )
 
         finding_ids.append(finding_id)

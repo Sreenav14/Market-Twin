@@ -24,6 +24,8 @@ class JourneyResultRecord:
     """Latest persisted result for one Persona Journey."""
 
     journey_id: UUID
+    persona_id: UUID
+    mission_id: UUID
     execution_id: UUID
     payload: dict[str, object]
 
@@ -82,10 +84,10 @@ class EvaluationRepository:
         *,
         test_run_id: UUID,
     ) -> tuple[JourneyResultRecord, ...]:
-        journey_ids = tuple(
+        journeys = tuple(
             (
                 await self._session.scalars(
-                    select(PersonaJourney.id)
+                    select(PersonaJourney)
                     .where(
                         PersonaJourney.test_run_id
                         == test_run_id
@@ -114,7 +116,7 @@ class EvaluationRepository:
 
         latest_by_journey: dict[
             UUID,
-            JourneyResultRecord,
+            tuple[UUID, dict[str, object]],
         ] = {}
 
         for event in events:
@@ -125,17 +127,14 @@ class EvaluationRepository:
                 continue
 
             latest_by_journey[event.journey_id] = (
-                JourneyResultRecord(
-                    journey_id=event.journey_id,
-                    execution_id=event.execution_id,
-                    payload=event.payload,
-                )
+                event.execution_id,
+                event.payload,
             )
 
         missing = [
-            journey_id
-            for journey_id in journey_ids
-            if journey_id not in latest_by_journey
+            journey.id
+            for journey in journeys
+            if journey.id not in latest_by_journey
         ]
 
         if missing:
@@ -144,10 +143,24 @@ class EvaluationRepository:
                 f"{len(missing)} journey.result event(s)."
             )
 
-        return tuple(
-            latest_by_journey[journey_id]
-            for journey_id in journey_ids
-        )
+        results: list[JourneyResultRecord] = []
+
+        for journey in journeys:
+            execution_id, payload = (
+                latest_by_journey[journey.id]
+            )
+            
+            results.append(
+                JourneyResultRecord(
+                    journey_id=journey.id,
+                    persona_id=journey.persona_id,
+                    mission_id=journey.mission_id,
+                    execution_id=execution_id,
+                    payload=payload,
+                )
+            )
+
+        return tuple(results)
 
     async def find_preferred_evidence(
         self,
@@ -214,10 +227,50 @@ class EvaluationRepository:
         recommendation: str,
         evidence: EvidenceReference,
     ) -> UUID:
-        if (
-            evidence.step_id is None
-            and evidence.artifact_id is None
-        ):
+        return await self.create_linked_finding(
+            test_run_id=test_run_id,
+            journey_ids=(journey_id,),
+            severity=severity,
+            category=category,
+            title=title,
+            summary=summary,
+            recommendation=recommendation,
+            evidence=(evidence,),
+        )
+
+    async def create_linked_finding(
+        self,
+        *,
+        test_run_id: UUID,
+        journey_ids: tuple[UUID, ...],
+        severity: str,
+        category: str,
+        title: str,
+        summary: str,
+        recommendation: str,
+        evidence: tuple[EvidenceReference, ...],
+    ) -> UUID:
+        """Create one Finding linked to one or more Journeys."""
+
+        unique_journey_ids = tuple(
+            dict.fromkeys(journey_ids)
+        )
+
+        if not unique_journey_ids:
+            raise ValueError(
+                "A Finding must reference at least one Journey."
+            )
+
+        valid_evidence = tuple(
+            reference
+            for reference in evidence
+            if (
+                reference.step_id is not None
+                or reference.artifact_id is not None
+            )
+        )
+
+        if not valid_evidence:
             raise RuntimeError(
                 "Cannot create an authoritative Finding "
                 "without execution evidence."
@@ -234,34 +287,53 @@ class EvaluationRepository:
         )
 
         self._session.add(finding)
-
-        # We need the UUID before creating relationship rows.
         await self._session.flush()
 
-        self._session.add(
-            FindingJourney(
-                finding_id=finding.id,
-                journey_id=journey_id,
-            )
-        )
-
-        if evidence.step_id is not None:
+        for journey_id in unique_journey_ids:
             self._session.add(
-                FindingEvidence(
+                FindingJourney(
                     finding_id=finding.id,
-                    step_id=evidence.step_id,
-                    artifact_id=None,
+                    journey_id=journey_id,
                 )
             )
 
-        if evidence.artifact_id is not None:
-            self._session.add(
-                FindingEvidence(
-                    finding_id=finding.id,
-                    step_id=None,
-                    artifact_id=evidence.artifact_id,
+        seen_step_ids: set[int] = set()
+        seen_artifact_ids: set[UUID] = set()
+
+        for reference in valid_evidence:
+            if (
+                reference.step_id is not None
+                and reference.step_id
+                not in seen_step_ids
+            ):
+                seen_step_ids.add(reference.step_id)
+
+                self._session.add(
+                    FindingEvidence(
+                        finding_id=finding.id,
+                        step_id=reference.step_id,
+                        artifact_id=None,
+                    )
                 )
-            )
+
+            if (
+                reference.artifact_id is not None
+                and reference.artifact_id
+                not in seen_artifact_ids
+            ):
+                seen_artifact_ids.add(
+                    reference.artifact_id
+                )
+
+                self._session.add(
+                    FindingEvidence(
+                        finding_id=finding.id,
+                        step_id=None,
+                        artifact_id=(
+                            reference.artifact_id
+                        ),
+                    )
+                )
 
         await self._session.flush()
 
