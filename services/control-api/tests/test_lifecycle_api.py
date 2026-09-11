@@ -25,7 +25,6 @@ def setup(
     *,
     absent=False,
     scalar_values=(),
-    reports=(),
 ):
     session = SimpleNamespace(
         begin=lambda: context(),
@@ -33,7 +32,6 @@ def setup(
             return_value=SimpleNamespace(one_or_none=lambda: None if absent else (entity, role))
         ),
         scalar=AsyncMock(side_effect=list(scalar_values)),
-        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: list(reports))),
         delete=AsyncMock(),
         flush=AsyncMock(),
     )
@@ -75,24 +73,25 @@ async def test_foreign_workspace_item_is_not_found(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["planning", "queued", "running"])
-async def test_active_test_cannot_be_deleted(monkeypatch, state):
+@pytest.mark.parametrize("state", ["planning", "queued", "running", "completed", "failed", "cancelled"])
+async def test_started_or_finished_test_cannot_be_deleted(monkeypatch, state):
     entity = TestRun(id=uuid4(), status=state)
     session = setup(monkeypatch, entity)
     with pytest.raises(HTTPException) as error:
         await lifecycle.delete_resource(request(), entity.id, TestRun)
     assert error.value.status_code == 409
+    assert "Only draft tests" in error.value.detail
     session.delete.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_test_with_stored_evidence_cannot_be_deleted(monkeypatch):
-    entity = TestRun(id=uuid4(), status="completed")
-    session = setup(monkeypatch, entity, scalar_values=(None, uuid4()), reports=("completed",))
+async def test_draft_test_with_persisted_journey_cannot_be_deleted(monkeypatch):
+    entity = TestRun(id=uuid4(), status="draft")
+    session = setup(monkeypatch, entity, scalar_values=(uuid4(),))
     with pytest.raises(HTTPException) as error:
         await lifecycle.delete_resource(request(), entity.id, TestRun)
     assert error.value.status_code == 409
-    assert "stored evidence" in error.value.detail
+    assert "already started" in error.value.detail
     session.delete.assert_not_awaited()
 
 
@@ -108,41 +107,17 @@ async def test_parent_with_tests_cannot_be_deleted(monkeypatch, model):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reports", [(), ("generating",)])
-async def test_pending_evaluation_cannot_be_deleted(monkeypatch, reports):
-    entity = TestRun(id=uuid4(), status="completed")
-    session = setup(monkeypatch, entity, scalar_values=(None, None), reports=reports)
-    with pytest.raises(HTTPException) as error:
-        await lifecycle.delete_resource(request(), entity.id, TestRun)
-    assert error.value.status_code == 409
-    session.delete.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_active_journey_blocks_deletion(monkeypatch):
-    entity = TestRun(id=uuid4(), status="failed")
-    session = setup(monkeypatch, entity, scalar_values=(uuid4(),))
-    with pytest.raises(HTTPException) as error:
-        await lifecycle.delete_resource(request(), entity.id, TestRun)
-    assert error.value.status_code == 409
-    session.delete.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "model,state,scalar_values",
     [
-        (TestRun, "draft", (None, None)),
-        (TestRun, "completed", (None, None)),
-        (TestRun, "failed", (None, None)),
-        (TestRun, "cancelled", (None, None)),
+        (TestRun, "draft", (None,)),
         (ApplicationTarget, "active", (None,)),
         (Application, "active", (None, None)),
     ],
 )
 async def test_authorized_delete_removes_database_entity(monkeypatch, model, state, scalar_values):
     entity = model(id=uuid4(), status=state)
-    session = setup(monkeypatch, entity, scalar_values=scalar_values, reports=("completed",))
+    session = setup(monkeypatch, entity, scalar_values=scalar_values)
     response = await lifecycle.delete_resource(request(), entity.id, model)
     assert response.status_code == 204
     session.delete.assert_awaited_once_with(entity)
