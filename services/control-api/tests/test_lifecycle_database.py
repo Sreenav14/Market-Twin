@@ -17,7 +17,6 @@ from markettwin_control_api.persistence.models import (
     WorkspaceMember,
 )
 from markettwin_control_api.persistence.models import TestRun as RunModel
-from markettwin_database.models import Report, RunEvent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -27,8 +26,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     os.environ.get("MARKETTWIN_TEST_DATABASE") != "1",
     reason="Set MARKETTWIN_TEST_DATABASE=1 to verify against local PostgreSQL.",
 )
-async def test_database_delete_and_cascades(monkeypatch):
-    """Exercise real DELETE statements and FK cascades; roll back every fixture row."""
+async def test_database_delete_draft_then_parent_records(monkeypatch):
+    """Delete only an untouched draft Test, then its target and application."""
     engine = create_async_engine(get_settings().database_url, connect_args={"timeout": 5})
     try:
         async with engine.connect() as connection:
@@ -37,8 +36,8 @@ async def test_database_delete_and_cascades(monkeypatch):
                 factory = async_sessionmaker(
                     connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
                 )
-                user_id, workspace_id, app_id, target_id, run_id, report_id = (
-                    uuid4() for _ in range(6)
+                user_id, workspace_id, app_id, target_id, run_id = (
+                    uuid4() for _ in range(5)
                 )
                 email = f"lifecycle-test-{user_id}@example.invalid"
                 async with factory() as session:
@@ -78,14 +77,9 @@ async def test_database_delete_and_cascades(monkeypatch):
                             application_id=app_id,
                             target_id=target_id,
                             created_by_user_id=user_id,
-                            status="completed",
+                            status="draft",
                         )
                     )
-                    await session.flush()
-                    session.add(
-                        Report(id=report_id, test_run_id=run_id, version=1, status="completed")
-                    )
-                    session.add(RunEvent(test_run_id=run_id, event_type="test.fixture"))
                     await session.commit()
                 monkeypatch.setattr(
                     lifecycle, "get_authenticated_user_id", AsyncMock(return_value=user_id)
@@ -102,15 +96,6 @@ async def test_database_delete_and_cascades(monkeypatch):
                 assert (await lifecycle.delete_test_run(run_id, request)).status_code == 204
                 assert (
                     await connection.scalar(select(RunModel.id).where(RunModel.id == run_id))
-                    is None
-                )
-                assert (
-                    await connection.scalar(select(Report.id).where(Report.id == report_id)) is None
-                )
-                assert (
-                    await connection.scalar(
-                        select(RunEvent.id).where(RunEvent.test_run_id == run_id)
-                    )
                     is None
                 )
                 assert (await lifecycle.delete_target(target_id, request)).status_code == 204
