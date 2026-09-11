@@ -1,9 +1,9 @@
-"""Authorized deletion of tests and unused target/application records."""
+"""Authorized deletion of draft tests and unused target/application records."""
 
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from markettwin_database.models import AgentExecution, Artifact, PersonaJourney, Report
+from markettwin_database.models import PersonaJourney
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,63 +19,37 @@ from markettwin_control_api.persistence.models import (
 )
 
 router = APIRouter(tags=["Lifecycle"])
-DELETABLE_RUN_STATUSES = frozenset({"draft", "completed", "failed", "cancelled"})
 
 
 async def check_dependencies(session: AsyncSession, entity: object) -> None:
-    """Reject deletion while work, durable evidence, or parent dependencies exist."""
+    """Reject deletion once a test has started or while parent dependencies exist."""
     if isinstance(entity, TestRun):
-        if entity.status not in DELETABLE_RUN_STATUSES:
+        if entity.status != "draft":
             raise HTTPException(
-                409, "This test is active. Wait until it has finished before deleting it."
+                409,
+                "Only draft tests can be deleted. Started and completed tests are retained to preserve their results and evidence.",
             )
 
-        active_execution = await session.scalar(
-            select(AgentExecution.id)
-            .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
-            .where(
-                PersonaJourney.test_run_id == entity.id,
-                AgentExecution.status.in_(["pending", "queued", "running"]),
-            )
-            .limit(1)
-        )
-        if active_execution is not None:
-            raise HTTPException(
-                409, "This test still has active journeys. Try again after they finish."
-            )
-
-        stored_artifact = await session.scalar(
-            select(Artifact.id)
-            .join(AgentExecution, AgentExecution.id == Artifact.execution_id)
-            .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
+        persisted_journey = await session.scalar(
+            select(PersonaJourney.id)
             .where(PersonaJourney.test_run_id == entity.id)
             .limit(1)
         )
-        if stored_artifact is not None:
+        if persisted_journey is not None:
             raise HTTPException(
                 409,
-                "This test has stored evidence and cannot be deleted until evidence retention cleanup is available.",
-            )
-
-        reports = list(
-            (
-                await session.scalars(select(Report.status).where(Report.test_run_id == entity.id))
-            ).all()
-        )
-        if "generating" in reports or (entity.status == "completed" and not reports):
-            raise HTTPException(
-                409, "Evaluation is not finished yet. Wait before deleting this test."
+                "This test has already started and cannot be deleted. Refresh to see its latest status.",
             )
 
     elif isinstance(entity, ApplicationTarget):
         if await session.scalar(select(TestRun.id).where(TestRun.target_id == entity.id).limit(1)):
-            raise HTTPException(409, "Delete this target's tests first, then delete the target.")
+            raise HTTPException(409, "Delete this target's draft tests first, then delete the target.")
 
     elif isinstance(entity, Application):
         if await session.scalar(
             select(TestRun.id).where(TestRun.application_id == entity.id).limit(1)
         ):
-            raise HTTPException(409, "Delete this application's tests first.")
+            raise HTTPException(409, "Delete this application's draft tests first.")
         if await session.scalar(
             select(ApplicationTarget.id)
             .where(ApplicationTarget.application_id == entity.id)
@@ -132,7 +106,7 @@ async def delete_resource(
 
 @router.delete("/api/v1/test-runs/{test_run_id}", status_code=204)
 async def delete_test_run(test_run_id: UUID, request: Request) -> Response:
-    """Delete a test only when no active work or durable evidence remains."""
+    """Delete a test only while it is still an unused draft."""
     return await delete_resource(request, test_run_id, TestRun)
 
 
