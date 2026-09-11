@@ -5,6 +5,12 @@ from .authorization_repository import TargetAuthorizationRecord, TargetAuthoriza
 from .identity_repository import IdentityRepository, ResolvedIdentity
 from .target_repository import AllowedOriginRecord, TargetRecord, TargetRepository
 from .test_run_repository import TestRunRecord, TestRunRepository
+from .test_run_results_repository import (
+    FindingResultRecord,
+    ReportResultRecord,
+    TestRunResultsRecord,
+    TestRunResultsRepository,
+)
 from .workspace_repository import WorkspaceAccess, WorkspaceRepository
 
 __all__ = (
@@ -21,4 +27,8 @@ __all__ = (
     "TargetAuthorizationRecord",
     "TestRunRepository",
     "TestRunRecord",
+    "TestRunResultsRepository",
+    "TestRunResultsRecord",
+    "FindingResultRecord",
+    "ReportResultRecord",
 )
