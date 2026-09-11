@@ -11,7 +11,7 @@ const run = { id: runId, workspace_id: "workspace", application_id: appId, targe
 const finding = { id: findingId, severity: "high", category: "journey_failure", title: "The checkout journey could not be completed", summary: "A simulated shopper reached checkout but could not complete the purchase.", recommendation: "Review the checkout step and its supporting evidence before repeating the test.", status: "open", journey_ids: ["journey-one"], evidence: { step_ids: [12], artifact_ids: ["artifact-one"] } };
 const results = { test_run_id: runId, report: { id: "report", version: 1, status: "completed", executive_summary: "Three journeys were evaluated. One high-priority finding needs review before the next release.", payload: { generator: "deterministic_evaluation_v1", schema_version: 1, journeys: { total: 3, outcome_counts: { passed: 2, failed: 1 } } }, generated_at: "2026-09-10T10:00:00Z" }, findings: [finding, { ...finding, id: "finding-two", severity: "low", title: "A console error was recorded", category: "console_error" }] };
 
-async function mockApi(page: Page, options: { resultsStatus?: number; targetError?: boolean; role?: string; empty?: boolean; runStatus?: string } = {}) {
+async function mockApi(page: Page, options: { resultsStatus?: number; targetError?: boolean; role?: string; empty?: boolean; runStatus?: string; listRunStatus?: string } = {}) {
   await page.route("**/api/v1/**", async route => {
     const path = new URL(route.request().url()).pathname;
     let data: unknown;
@@ -25,7 +25,7 @@ async function mockApi(page: Page, options: { resultsStatus?: number; targetErro
       else data = [{ id: targetId, application_id: appId, name: "Storefront", environment: "staging", base_url: "https://shop.example.com", requires_auth: false, status: "active", allowed_origins: [] }];
     }
     else if (path === `/api/v1/targets/${targetId}/authorization`) data = { id: "authorization", target_id: targetId, status: "authorized", expires_at: null };
-    else if (path === `/api/v1/applications/${appId}/test-runs`) data = route.request().method() === "POST" ? { ...run, status: "created" } : [run];
+    else if (path === `/api/v1/applications/${appId}/test-runs`) data = route.request().method() === "POST" ? { ...run, status: "draft" } : [{ ...run, status: options.listRunStatus || "completed" }];
     else if (path === `/api/v1/test-runs/${runId}`) data = { ...run, status: options.runStatus || "completed" };
     else if (path === `/api/v1/test-runs/${runId}/results`) {
       status = options.resultsStatus || 200;
@@ -107,7 +107,7 @@ test("test creation sends a real request with the chosen brief", async ({ page }
   await checkLayoutAndAccessibility(page);
   await mkdir("../../docs/ui-review", { recursive: true });
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  await page.screenshot({ path: `../../docs/ui-review/new-study-${testInfo.project.name}.png`, fullPage: true });
+  await page.screenshot({ path: `../../docs/ui-review/new-test-${testInfo.project.name}.png`, fullPage: true });
   const request = page.waitForRequest(req => req.method() === "POST" && req.url().includes("/test-runs"));
   await page.getByRole("button", { name: "Create test", exact: true }).click();
   expect((await request).postDataJSON()).toEqual({ target_id: targetId, study_brief: "Can a first-time customer understand our pricing and confidently choose the right plan?" });
@@ -149,7 +149,7 @@ for (const item of [
   { kind: "application", id: appId, page: "/applications", endpoint: `/api/v1/applications/${appId}`, list: "/api/v1/workspaces/workspace/applications" },
 ]) {
   test(`delete ${item.kind} requires confirmation and removes the row after success`, async ({ page }) => {
-    await mockApi(page);
+    await mockApi(page, item.kind === "test" ? { listRunStatus: "draft" } : {});
     let deleted = false;
     await page.route("**/api/v1/**", async route => {
       const path = new URL(route.request().url()).pathname;
@@ -186,7 +186,7 @@ test("delete conflict preserves the target and shows the server message", async 
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("link", { name: /Storefront/ })).toBeVisible();
 });
-test("viewers have no delete actions and running tests cannot be deleted", async ({ page }) => {
+test("viewers have no delete actions and started tests cannot be deleted", async ({ page }) => {
   await mockApi(page, { role: "viewer" });
   await page.goto("/runs");
   await expect(page.getByRole("heading", { name: "Tests", exact: true })).toBeVisible();
