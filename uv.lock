@@ -883,12 +883,14 @@ source = { editable = "services/evaluation-worker" }
 dependencies = [
     { name = "markettwin-database" },
     { name = "markettwin-shared-python" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "markettwin-database", editable = "packages/database-python" },
     { name = "markettwin-shared-python", editable = "packages/shared-python" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
 ]
 
 [[package]]

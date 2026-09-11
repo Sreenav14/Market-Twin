@@ -9,6 +9,7 @@ description = "MarketTwin evaluation and report-generation worker"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "markettwin-database",
+    "sqlalchemy[asyncio]>=2.0,<3",
     "markettwin-shared-python",
 ]
 
