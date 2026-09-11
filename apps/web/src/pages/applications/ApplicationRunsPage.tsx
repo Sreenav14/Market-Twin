@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 
 import { Icon } from "../../components/ui/Icon";
@@ -6,15 +8,16 @@ import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateV
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { api } from "../../lib/api";
 import { studyBrief, textValue } from "../../lib/format";
-import { canWriteWorkspace } from "../../lib/permissions";
+import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
 import { AppShellContext } from "../../layouts/AppShell";
 
 export function ApplicationRunsPage() {
+  const [revision, setRevision] = useState(0);
   const { applicationId = "" } = useParams();
   const { workspace } = useOutletContext<AppShellContext>();
   const appState = useAsync(() => api.getApplication(applicationId), [applicationId]);
-  const runsState = useAsync(() => api.listRuns(applicationId), [applicationId]);
+  const runsState = useAsync(() => api.listRuns(applicationId), [applicationId, revision]);
 
   if (appState.status === "loading") return <LoadingPanel label="Loading application" />;
   if (appState.status === "error") return <ErrorPanel message={appState.error} />;
@@ -23,8 +26,8 @@ export function ApplicationRunsPage() {
 
   return (
     <>
-      <PageHeader eyebrow={appState.data.name} title="Runs" description="Studies created for this application, each with its persisted target and configuration snapshot." action={canWrite ? <Link className="primary-button" to={`/applications/${applicationId}/runs/new`}><Icon name="plus" size={16} /> New study</Link> : undefined} />
-      {runsState.status === "loading" ? <LoadingPanel label="Loading runs" /> : runsState.status === "error" ? <ErrorPanel message={runsState.error} /> : runsState.data.length === 0 ? <EmptyState title="No studies yet" copy="Create a study when an authorized target is ready." action={canWrite ? <Link className="primary-button" to={`/applications/${applicationId}/runs/new`}>New study</Link> : undefined} /> : <div className="data-list">{runsState.data.map((run) => <Link className="data-row" to={`/runs/${run.id}/overview`} key={run.id}><span className="row-icon"><Icon name="runs" size={16} /></span><div className="row-primary"><strong>{studyBrief(run.configuration_snapshot)}</strong><span>{textValue(run.target_snapshot.name, textValue(run.target_snapshot.base_url, "Target"))}</span></div><StatusBadge status={run.status} /><Icon name="arrow" size={16} /></Link>)}</div>}
+      <PageHeader eyebrow={appState.data.name} title="Runs" description="Tests created for this application, each with its persisted target and configuration snapshot." action={canWrite ? <Link className="primary-button" to={`/applications/${applicationId}/runs/new`}><Icon name="plus" size={16} /> New test</Link> : undefined} />
+      {runsState.status === "loading" ? <LoadingPanel label="Loading runs" /> : runsState.status === "error" ? <ErrorPanel message={runsState.error} /> : runsState.data.length === 0 ? <EmptyState title="No tests yet" copy="Create a test when an authorized target is ready." action={canWrite ? <Link className="primary-button" to={`/applications/${applicationId}/runs/new`}>New test</Link> : undefined} /> : <div className="data-list">{runsState.data.map((run) => <div className="deletable-row" key={run.id}><Link className="data-row" to={`/runs/${run.id}/overview`}><span className="row-icon"><Icon name="runs" size={16} /></span><div className="row-primary"><strong>{studyBrief(run.configuration_snapshot)}</strong><span>{textValue(run.target_snapshot.name, textValue(run.target_snapshot.base_url, "Target"))}</span></div><StatusBadge status={run.status} /><Icon name="arrow" size={16} /></Link>{canManageLifecycle(workspace.role) ? <DeleteAction kind="test" id={run.id} name={studyBrief(run.configuration_snapshot)} disabled={!["draft", "completed", "failed", "cancelled"].includes(run.status)} onDeleted={() => { setRevision(value => value + 1); }} /> : null}</div>)}</div>}
     </>
   );
 }

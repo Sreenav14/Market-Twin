@@ -35,7 +35,7 @@ export function NewApplicationPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Applications" title="Add application" description="Create a product container. Targets and studies remain scoped to this application." />
+      <PageHeader eyebrow="Applications" title="Add application" description="Create a product container. Targets and tests remain scoped to this application." />
       <form className="panel form-grid form-card" onSubmit={submit}>
         <label className="field-label" htmlFor="app-name">Name</label>
         <input id="app-name" className="text-input" value={name} onChange={(event) => { setName(event.target.value); setError(null); }} placeholder="Acme Checkout" required maxLength={200} autoFocus />

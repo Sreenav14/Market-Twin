@@ -8,6 +8,7 @@ import { AsyncState } from "../lib/useAsync";
 import { LoginPage } from "../pages/auth/LoginPage";
 import { AuthCallbackPage } from "../pages/auth/AuthCallbackPage";
 import { AuthenticatedRouter } from "./router";
+import { queryClient } from "../lib/query";
 
 function AppRoot() {
   const [session, setSession] = useState<AsyncState<CurrentUser>>({ status: "loading", data: null, error: null });
@@ -29,6 +30,7 @@ function AppRoot() {
 
   async function logout() {
     await api.logout();
+    queryClient.clear();
     setSession({ status: "error", data: null, error: "unauthenticated" });
   }
 

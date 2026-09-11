@@ -1,18 +1,28 @@
 import { Link, useOutletContext } from "react-router-dom";
-import { Icon } from "../../components/ui/Icon";
+import { ArrowUpRight, Plus, FlaskConical } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
-import { Application, api } from "../../lib/api";
-import { canWriteWorkspace, roleLabel } from "../../lib/permissions";
-import { useAsync } from "../../lib/useAsync";
+import { StatusBadge } from "../../components/ui/StatusBadge";
+import { Button } from "../../components/ui/button";
+import { canWriteWorkspace } from "../../lib/permissions";
+import { useWorkspaceStudies } from "../../lib/useWorkspaceStudies";
+import { studyBrief, textValue } from "../../lib/format";
 import { AppShellContext } from "../../layouts/AppShell";
 
 export function OverviewPage() {
-  const { workspace } = useOutletContext<AppShellContext>();
-  const applicationsState = useAsync(() => api.listApplications(workspace.id), [workspace.id]);
+  const { workspace, user } = useOutletContext<AppShellContext>();
+  const state = useWorkspaceStudies(user.id, workspace.id);
   const canWrite = canWriteWorkspace(workspace.role);
-  if (applicationsState.status === "loading") return <LoadingPanel label="Loading overview" />;
-  if (applicationsState.status === "error") return <ErrorPanel message={applicationsState.error} />;
-  const applications: Application[] = applicationsState.data;
-  return <><PageHeader eyebrow="Workspace" title="Overview" description="Configure authorized product targets, create studies, and review testing activity from one place." action={canWrite ? <Link className="primary-button" to={applications.length === 0 ? "/applications/new" : "/applications"}><Icon name="plus" size={16} /> Start a study</Link> : undefined} /><div className="metric-grid"><article className="metric-card"><span>Applications</span><strong>{applications.length}</strong><small>Products in this workspace</small></article><article className="metric-card"><span>Workspace</span><strong>{workspace.status}</strong><small>{roleLabel(workspace.role)}</small></article><article className="metric-card"><span>Perspectives</span><strong>Dynamic</strong><small>Generated for each study</small></article></div><section className="section-block" aria-labelledby="overview-applications"><div className="section-heading"><div><p className="eyebrow">Products</p><h2 id="overview-applications">Applications</h2></div><Link className="text-link" to="/applications">View all</Link></div>{applications.length === 0 ? <EmptyState title="Add your first application" copy="Applications group the product targets and studies your team evaluates." action={canWrite ? <Link className="primary-button" to="/applications/new">Add application</Link> : undefined} /> : <div className="card-grid">{applications.slice(0,4).map((application) => <Link className="product-card" to={`/applications/${application.id}`} key={application.id}><span className="product-icon">{application.name.slice(0,2).toUpperCase()}</span><div><strong>{application.name}</strong><p>{application.description || "No description yet."}</p></div><Icon name="arrow" size={16} /></Link>)}</div>}</section></>;
+  if (state.isPending) return <LoadingPanel label="Loading workspace" />;
+  if (state.isError) return <ErrorPanel message={state.error.message} action={<Button variant="secondary" onClick={() => void state.refetch()}>Try again</Button>} />;
+  const { applications, runs } = state.data;
+  const completed = runs.filter(run => run.status === "completed");
+  const active = runs.filter(run => ["planning", "queued", "running", "evaluating"].includes(run.status));
+  return <><PageHeader title="Workspace overview" description="See how your app performs and what stands between users and its value." action={canWrite ? <Link className="primary-button" to={applications.length === 1 ? `/applications/${applications[0].id}/runs/new` : applications.length ? "/applications" : "/applications/new"}><Plus size={17} aria-hidden="true" />New test</Link> : undefined} />
+    {applications.length === 0 ? <EmptyState title="Bring your first product into focus" copy="Add your app, connect a target, and test a real user task." action={canWrite ? <Link className="primary-button" to="/applications/new">Add application</Link> : undefined} /> : <>
+      <dl className="workspace-metrics"><div><dt>Applications</dt><dd>{applications.length}</dd></div><div><dt>Tests created</dt><dd>{runs.length}</dd></div><div><dt>In progress</dt><dd>{active.length}<span className="metric-signal" aria-hidden="true" /></dd></div><div><dt>Completed</dt><dd>{completed.length}</dd></div></dl>
+      <div className="overview-layout"><section><div className="section-heading"><h2>Test activity</h2><Link className="text-link" to="/runs">All tests</Link></div>{runs.length === 0 ? <div className="first-study"><FlaskConical size={30} aria-hidden="true" /><h3>Which experience should we test next?</h3><p>Test a key user task, find the friction, and review the evidence in one place.</p><Link className="secondary-button" to={applications.length === 1 ? `/applications/${applications[0].id}/runs/new` : "/applications"}>Create your first test</Link></div> : <div className="study-table">{runs.slice(0, 6).map(run => <Link className="study-row" to={`/runs/${run.id}/overview`} key={run.id}><span className="study-row-copy"><strong>{studyBrief(run.configuration_snapshot)}</strong><span>{textValue(run.target_snapshot.name, "Target")}</span></span><StatusBadge status={run.status} /><ArrowUpRight size={18} aria-hidden="true" /></Link>)}</div>}</section>
+      <aside className="application-index"><div className="section-heading"><h2>Applications</h2><Link className="text-link" to="/applications">View all</Link></div>{applications.slice(0, 6).map(application => <Link to={`/applications/${application.id}`} className="application-index-row" key={application.id}><span className="product-icon small">{application.name.slice(0, 2).toUpperCase()}</span><span><strong>{application.name}</strong><small>{application.status}</small></span><ArrowUpRight size={16} aria-hidden="true" /></Link>)}<p className="application-hint">Each application groups its targets, tests, and findings.</p></aside></div>
+    </>}
+  </>;
 }

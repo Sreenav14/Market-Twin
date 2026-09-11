@@ -1,0 +1,53 @@
+.signin-page { min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: #fff; }
+.signin-story { display: flex; flex-direction: column; padding: 36px clamp(28px, 4.4vw, 72px) 28px; background: #18202d; color: #f5f7fc; }
+.signin-brand { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 650; letter-spacing: -.5px; }
+.signin-brand .brand-mark { width: 34px; height: 34px; color: #7189e5; }
+.signin-story-content { margin: auto 0; padding: 48px 0; max-width: 490px; }
+.signin-kicker { margin: 0 0 18px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
+.signin-story .signin-kicker { color: #b7c5e4; }
+.signin-story h1 { margin: 0; font-size: clamp(32px, 3.2vw, 48px); line-height: 1.15; letter-spacing: -.045em; color: #f5f7fc; font-weight: 600; }
+.signin-story h1 span { color: #b0c1ff; }
+.signin-description { margin: 22px 0 0; max-width: 43ch; font-size: 15px; line-height: 1.75; color: #bdc7d8; }
+.signin-workflow { list-style: none; margin: 32px 0 0; padding: 0; display: grid; }
+.signin-workflow li { position: relative; display: flex; gap: 16px; padding-bottom: 22px; }
+.signin-workflow li:last-child { padding-bottom: 0; }
+.signin-workflow li:not(:last-child)::before { content: ""; position: absolute; width: 1px; background: #43506a; top: 40px; bottom: 0; left: 19px; }
+.signin-step-icon { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; color: #c0d0ff; background: #263247; border: 1px solid #43506a; border-radius: 9px; }
+.signin-workflow strong { display: block; margin-top: 1px; font-size: 14px; font-weight: 550; }
+.signin-workflow p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: #bdc7d8; }
+.signin-story-footer { margin: 0; font-size: 12px; color: #b0bdd1; }
+.signin-access { display: flex; flex-direction: column; padding: 36px clamp(28px, 4.4vw, 72px) 28px; min-width: 0; }
+.signin-mode { align-self: flex-end; display: inline-flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px; }
+.signin-mode span { width: 6px; height: 6px; background: var(--text-3); border-radius: 50%; }
+.signin-form-wrap { width: 100%; max-width: 390px; margin: auto; padding: 48px 0; }
+.signin-form-wrap .signin-kicker { margin-bottom: 12px; color: var(--evidence); font-size: 11px; }
+.signin-form-wrap h2 { margin: 0; font-size: clamp(26px, 2.5vw, 32px); letter-spacing: -.035em; line-height: 1.2; }
+.signin-form-description { margin: 16px 0 30px; color: var(--text-2); line-height: 1.7; font-size: 15px; }
+.signin-form { display: grid; gap: 10px; }
+.signin-form label { color: var(--text); font-size: 14px; font-weight: 600; }
+.signin-form .text-input { width: 100%; min-height: 50px; padding: 12px 14px; font-size: 16px; border-radius: 7px; }
+.signin-help { margin: 0; font-size: 12px; color: var(--text-3); }
+.signin-form .ui-button { margin-top: 14px; min-height: 48px; justify-content: space-between; padding: 12px 16px; }
+.signin-form .form-error { margin: 4px 0 0; }
+.signin-access-note { margin: 26px 0 0; border-top: 1px solid var(--border); padding-top: 22px; font-size: 13px; color: var(--text-3); line-height: 1.7; }
+.signin-access-footer { margin-top: auto; text-align: center; font-size: 11px; color: var(--text-3); }
+@media (min-width: 761px) and (max-height: 760px) {
+  .signin-story-content { padding: 28px 0; }
+  .signin-workflow { margin-top: 24px; }
+  .signin-workflow li { padding-bottom: 16px; }
+  .signin-form-wrap { padding: 32px 0; }
+}
+@media (max-width: 760px) {
+  .signin-page { grid-template-columns: minmax(0, 1fr); }
+  .signin-story { padding: 24px; }
+  .signin-brand { font-size: 18px; }
+  .signin-story-content { padding: 30px 0 6px; max-width: none; }
+  .signin-story .signin-kicker, .signin-workflow, .signin-story-footer { display: none; }
+  .signin-story h1 { font-size: clamp(29px, 7vw, 38px); }
+  .signin-description { font-size: 14px; margin-top: 16px; }
+  .signin-access { padding: 20px 24px 24px; }
+  .signin-form-wrap { padding: 30px 0; }
+  .signin-form-wrap .signin-kicker { display: none; }
+  .signin-form-description { margin-bottom: 24px; }
+  .signin-access-footer { line-height: 1.7; }
+}

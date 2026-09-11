@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.auth import router as auth_router
+from markettwin_control_api.api.lifecycle import router as lifecycle_router
 from markettwin_control_api.api.target_authorizations import router as target_authorizations_router
 from markettwin_control_api.api.targets import router as targets_router
 from markettwin_control_api.api.test_run import router as test_run_router
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(auth_router)
+    application.include_router(lifecycle_router)
     application.include_router(workspaces_router)
     application.include_router(applications_router)
     application.include_router(targets_router)
