@@ -26,7 +26,7 @@ export function NewRunPage() {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const canWrite = canWriteWorkspace(workspace.role);
   const state = useQuery({
-    queryKey: ["study-targets", user.id, applicationId], enabled: canWrite,
+    queryKey: ["test-targets", user.id, applicationId], enabled: canWrite,
     queryFn: async () => {
       const [application, targets] = await Promise.all([api.getApplication(applicationId), api.listTargets(applicationId)]);
       const authorized = await Promise.all(targets.map(async target => {
@@ -64,8 +64,8 @@ export function NewRunPage() {
   if (state.data.targets.length === 0) return <>{header}<EmptyState title="Add a target first" copy="Connect an environment for this application before creating a test." action={<Link className="primary-button" to={`/applications/${applicationId}/targets/new`}>Add target</Link>} /></>;
   if (targets.length === 0) return <>{header}<section className="panel"><h2>Authorize a target to continue</h2><p className="muted">A test needs an active target with current authorization.</p><div className="data-list">{state.data.targets.map(({ target }) => <div className="data-row" key={target.id}><ShieldCheck size={20} aria-hidden="true" /><div className="row-primary"><strong>{target.name}</strong><span>{target.environment}</span></div><Link className="text-link" to={`/targets/${target.id}/authorization`}>Review authorization</Link></div>)}</div></section></>;
   return <>{header}<div className="study-create-layout"><form className="study-composer" onSubmit={submit}>
-    <div className="composer-target"><label htmlFor="study-target">Application target</label><select id="study-target" name="target" value={target?.id || ""} onChange={event => setTargetId(event.target.value)}>{targets.map(item => <option value={item.id} key={item.id}>{item.name} · {item.environment}</option>)}</select><span className="authorized-label"><ShieldCheck size={15} aria-hidden="true" />Authorized</span></div>
-    <div className="composer-body"><label className="composer-label" htmlFor="study-brief">Your testing goal</label><textarea ref={textarea} id="study-brief" name="study-brief" value={brief} onChange={event => { setBrief(event.target.value); setError(null); }} placeholder="Can a first-time customer understand our pricing and choose the right plan?…" maxLength={4000} rows={6} aria-describedby="brief-help brief-count" aria-invalid={Boolean(error)} />
+    <div className="composer-target"><label htmlFor="test-target">Application target</label><select id="test-target" name="target" value={target?.id || ""} onChange={event => setTargetId(event.target.value)}>{targets.map(item => <option value={item.id} key={item.id}>{item.name} · {item.environment}</option>)}</select><span className="authorized-label"><ShieldCheck size={15} aria-hidden="true" />Authorized</span></div>
+    <div className="composer-body"><label className="composer-label" htmlFor="test-brief">Your testing goal</label><textarea ref={textarea} id="test-brief" name="test-brief" value={brief} onChange={event => { setBrief(event.target.value); setError(null); }} placeholder="Can a first-time customer understand our pricing and choose the right plan?…" maxLength={4000} rows={6} aria-describedby="brief-help brief-count" aria-invalid={Boolean(error)} />
       <div className="composer-meta"><span id="brief-help">Describe an outcome, rather than a script of clicks.</span><span id="brief-count">{brief.length.toLocaleString()} / 4,000</span></div>
       <div className="brief-examples"><span>Try a starting point</span>{examples.map(example => <button key={example.title} type="button" onClick={() => { setBrief(example.brief); textarea.current?.focus(); }}>{example.title}</button>)}</div>
     </div>

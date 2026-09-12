@@ -6,7 +6,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { api } from "../../lib/api";
-import { studyBrief, textValue } from "../../lib/format";
+import { testBrief, textValue } from "../../lib/format";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
 import { AppShellContext } from "../../layouts/AppShell";
@@ -28,7 +28,7 @@ export function ApplicationOverviewPage() {
   return (
     <>
       <PageHeader eyebrow="Application" title={application.name} description={application.description || "Configure authorized targets and run product tests against this application."} action={canWrite ? <Link className="primary-button" to={`/applications/${application.id}/runs/new`}><Icon name="plus" size={16} /> New test</Link> : undefined} />
-      <div className="tab-strip" aria-label="Application sections"><span className="tab-link active">Overview</span><Link className="tab-link" to={`/applications/${application.id}/targets`}>Targets</Link><Link className="tab-link" to={`/applications/${application.id}/runs`}>Runs</Link></div>
+      <div className="tab-strip" aria-label="Application sections"><span className="tab-link active">Overview</span><Link className="tab-link" to={`/applications/${application.id}/targets`}>Targets</Link><Link className="tab-link" to={`/applications/${application.id}/runs`}>Tests</Link></div>
 
       <section className="section-block" aria-labelledby="app-targets-heading">
         <div className="section-heading"><div><p className="eyebrow">Environments</p><h2 id="app-targets-heading">Targets</h2></div>{canWrite ? <Link className="secondary-button compact" to={`/applications/${application.id}/targets/new`}><Icon name="plus" size={14} /> Add target</Link> : null}</div>
@@ -37,10 +37,10 @@ export function ApplicationOverviewPage() {
         )}
       </section>
 
-      <section className="section-block" aria-labelledby="recent-runs-heading">
-        <div className="section-heading"><div><p className="eyebrow">Activity</p><h2 id="recent-runs-heading">Recent runs</h2></div><Link className="text-link" to="/runs">View all</Link></div>
-        {runsState.status === "loading" ? <LoadingPanel label="Loading runs" /> : runsState.status === "error" ? <ErrorPanel message={runsState.error} /> : runsState.data.length === 0 ? <EmptyState title="No tests for this application" copy="Create a test after an authorized target is ready." /> : (
-          <div className="data-list">{runsState.data.slice(0, 5).map((run) => <Link className="data-row" to={`/runs/${run.id}/overview`} key={run.id}><span className="row-icon"><Icon name="runs" size={16} /></span><div className="row-primary"><strong>{studyBrief(run.configuration_snapshot)}</strong><span>{textValue(run.target_snapshot.name, textValue(run.target_snapshot.base_url, "Target"))}</span></div><StatusBadge status={run.status} /><Icon name="arrow" size={16} /></Link>)}</div>
+      <section className="section-block" aria-labelledby="recent-tests-heading">
+        <div className="section-heading"><div><p className="eyebrow">Activity</p><h2 id="recent-tests-heading">Recent tests</h2></div><Link className="text-link" to="/runs">View all</Link></div>
+        {runsState.status === "loading" ? <LoadingPanel label="Loading tests" /> : runsState.status === "error" ? <ErrorPanel message={runsState.error} /> : runsState.data.length === 0 ? <EmptyState title="No tests for this application" copy="Create a test after an authorized target is ready." /> : (
+          <div className="data-list">{runsState.data.slice(0, 5).map((run) => <Link className="data-row" to={`/runs/${run.id}/overview`} key={run.id}><span className="row-icon"><Icon name="runs" size={16} /></span><div className="row-primary"><strong>{testBrief(run.configuration_snapshot)}</strong><span>{textValue(run.target_snapshot.name, textValue(run.target_snapshot.base_url, "Target"))}</span></div><StatusBadge status={run.status} /><Icon name="arrow" size={16} /></Link>)}</div>
         )}
       </section>
 

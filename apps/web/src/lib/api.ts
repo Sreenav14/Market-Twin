@@ -1,3 +1,15 @@
+export type TestRunStatus =
+  | "draft"
+  | "planning"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type JourneyOutcome = "passed" | "failed" | "partial" | "inconclusive";
+export type FindingSeverity = "critical" | "high" | "medium" | "low" | "info";
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -58,14 +70,14 @@ export interface TestRun {
   application_id: string;
   target_id: string;
   created_by_user_id: string;
-  status: string;
+  status: TestRunStatus;
   target_snapshot: Record<string, unknown>;
   configuration_snapshot: Record<string, unknown>;
 }
 
 export interface Finding {
   id: string;
-  severity: string;
+  severity: FindingSeverity;
   category: string;
   title: string;
   summary: string;
@@ -150,5 +162,5 @@ export const api = {
   listRuns: (applicationId: string) => request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
   getRun: (runId: string, signal?: AbortSignal) => request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
   getRunResults: (runId: string, signal?: AbortSignal) => request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
-  createRun: (applicationId: string, targetId: string, studyBrief: string) => request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, { method: "POST", body: JSON.stringify({ target_id: targetId, study_brief: studyBrief }) }),
+  createRun: (applicationId: string, targetId: string, testBrief: string) => request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, { method: "POST", body: JSON.stringify({ target_id: targetId, study_brief: testBrief }) }),
 };
