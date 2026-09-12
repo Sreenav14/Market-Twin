@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
+MAX_MODEL_ARIA_SNAPSHOT_CHARS = 2_000
+
 NetworkPolicy = Literal["public_only", "local_development"]
 BrowserSessionState = Literal[
     "starting",
@@ -78,8 +80,13 @@ class BrowserObservation:
 
     def to_dict(self) -> dict[str, object]:
         """Return an ADK/tool-safe dictionary."""
-
-        return asdict(self)
+        result = asdict(self)
+        if len(self.aria_snapshot) > MAX_MODEL_ARIA_SNAPSHOT_CHARS:
+            result["aria_snapshot"] = (
+                self.aria_snapshot[:MAX_MODEL_ARIA_SNAPSHOT_CHARS]
+                + "\n# Snapshot truncated for model context; full snapshot is stored as evidence."
+            )
+        return result
 
 
 @dataclass(frozen=True, slots=True)

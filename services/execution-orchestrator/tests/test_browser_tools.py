@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from markettwin_execution_orchestrator.browser.contracts import (
+    MAX_MODEL_ARIA_SNAPSHOT_CHARS,
     BrowserActionResult,
     BrowserObservation,
     BrowserSessionHandle,
@@ -131,6 +132,25 @@ def test_tool_surface_is_least_privilege() -> None:
     }
     assert "page_evaluate" not in names
     assert "browser_context_new" not in names
+
+
+def test_observation_limits_snapshot_only_in_model_payload() -> None:
+    full_snapshot = "x" * (MAX_MODEL_ARIA_SNAPSHOT_CHARS + 10)
+    observation = BrowserObservation(
+        url="https://example.com",
+        title="Example",
+        aria_snapshot=full_snapshot,
+        accessibility_snapshot_path="full-snapshot.yml",
+    )
+
+    payload = observation.to_dict()
+    model_snapshot = payload["aria_snapshot"]
+
+    assert observation.aria_snapshot == full_snapshot
+    assert isinstance(model_snapshot, str)
+    assert model_snapshot.startswith("x" * MAX_MODEL_ARIA_SNAPSHOT_CHARS)
+    assert "Snapshot truncated for model context" in model_snapshot
+    assert payload["accessibility_snapshot_path"] == "full-snapshot.yml"
 
 
 @pytest.mark.asyncio

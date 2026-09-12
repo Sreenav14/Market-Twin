@@ -34,10 +34,19 @@ async def main() -> None:
             ),
             network_policy="public_only",
         )
-        browser_tools = create_browser_tools(
-            controller=browser_controller,
-            handle=browser_session,
-        )
+        browser_tools = [
+            tool
+            for tool in create_browser_tools(
+                controller=browser_controller,
+                handle=browser_session,
+            )
+            if tool.__name__
+            in {
+                "browser_navigate",
+                "browser_get_state",
+                "browser_take_screenshot",
+            }
+        ]
         agent = create_browser_agent(browser_tools)
         runner = InMemoryRunner(agent=agent, app_name=APP_NAME)
         session_id = f"gate-a-{uuid4()}"
@@ -65,22 +74,43 @@ Never navigate more than once and never use another target.
 """.strip()
         message = types.Content(role="user", parts=[types.Part(text=mission)])
         final_response_parts: list[str] = []
+        selected_tools: list[str] = []
+        completed_tools: list[str] = []
 
         try:
-            async for event in runner.run_async(
-                user_id=USER_ID,
-                session_id=session_id,
-                new_message=message,
-            ):
-                for function_call in event.get_function_calls():
-                    print(f"Tool selected: {function_call.name}")
+            try:
+                async for event in runner.run_async(
+                    user_id=USER_ID,
+                    session_id=session_id,
+                    new_message=message,
+                ):
+                    for function_call in event.get_function_calls():
+                        selected_tools.append(function_call.name or "")
+                        print(f"Tool selected: {function_call.name}")
 
-                if event.is_final_response() and event.content and event.content.parts:
-                    for part in event.content.parts:
-                        if part.text:
-                            final_response_parts.append(part.text)
+                    for function_response in event.get_function_responses():
+                        response = function_response.response
+                        if not isinstance(response, dict) or "error" not in response:
+                            completed_tools.append(function_response.name or "")
+
+                    if (
+                        event.content
+                        and event.content.parts
+                        and not event.get_function_calls()
+                        and not event.partial
+                    ):
+                        for part in event.content.parts:
+                            if part.text:
+                                final_response_parts.append(part.text)
+            finally:
+                await runner.close()
+
+            final_state = await browser_controller.get_state(
+                session_id=browser_session.session_id,
+                execution_id=execution_id,
+                journey_id=journey_id,
+            )
         finally:
-            await runner.close()
             await browser_controller.close_session(
                 session_id=browser_session.session_id,
                 execution_id=execution_id,
@@ -88,10 +118,45 @@ Never navigate more than once and never use another target.
             )
 
         if not final_response_parts:
-            raise RuntimeError("The browser agent did not return a final response.")
+            raise RuntimeError(
+                "The browser agent did not return a final response. "
+                f"tools_selected={selected_tools}; "
+                f"tools_completed={completed_tools}."
+            )
 
+        final_response = "\n".join(final_response_parts).strip()
         print("\nFinal agent response:")
-        print("\n".join(final_response_parts))
+        print(final_response)
+
+        navigate_completed = (
+            selected_tools.count("browser_navigate") == 1
+            and completed_tools.count("browser_navigate") == 1
+        )
+        screenshot_completed = (
+            selected_tools.count("browser_take_screenshot") == 1
+            and completed_tools.count("browser_take_screenshot") == 1
+        )
+        expected_heading_present = (
+            f'heading "{EXPECTED_HEADING}"'.casefold()
+            in final_state.observation.aria_snapshot.casefold()
+        )
+
+        smoke_result = (
+            "SUCCESS"
+            if navigate_completed
+            and screenshot_completed
+            and expected_heading_present
+            else "FAILURE"
+        )
+        print(f"\nSmoke result: {smoke_result}")
+
+        if smoke_result == "FAILURE":
+            raise RuntimeError(
+                "Browser smoke agent failed its deterministic contract: "
+                f"navigate_once={navigate_completed}, "
+                f"screenshot_once={screenshot_completed}, "
+                f"expected_heading_present={expected_heading_present}"
+            )
 
 
 if __name__ == "__main__":

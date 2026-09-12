@@ -134,6 +134,20 @@ The execution and evaluation work already present in this local tree includes:
 
 The shared-model move did not require an Alembic migration because it changes Python ownership of existing ORM mappings, not the PostgreSQL schema.
 
+### Browser smoke-agent contract fix
+
+The local browser smoke script previously depended on the small Ollama model writing the literal word `SUCCESS` or `FAILURE`. On a large Wikipedia accessibility snapshot, the model returned page-summary text instead, causing a contract error even after it had used the browser. The response was also printed incorrectly in one working-tree revision, producing one character per line.
+
+The smoke path now:
+
+- limits the accessibility snapshot included in model tool output to 6,000 characters while retaining the complete snapshot in evidence storage;
+- tells the smoke agent to put `RESULT: SUCCESS` or `RESULT: FAILURE` on its first line;
+- prints the assembled response normally;
+- determines pass/fail from completed browser tool calls and the actual final accessibility state;
+- requires exactly one successful navigation, exactly one successful screenshot, and the expected heading in the browser state.
+
+The focused browser/model tests, Ruff, and Pyright pass. An end-to-end attempt in the Codex sandbox reached Ollama and Playwright but external Wikipedia navigation was denied by the sandbox (`net::ERR_NETWORK_ACCESS_DENIED`). This environmental restriction is separate from the original result-format failure; rerun the script in the normal local terminal to exercise the external site.
+
 ## Features intentionally still incomplete
 
 These routes exist but are placeholders because the browser-facing backend contracts are not implemented yet:
