@@ -73,15 +73,25 @@ async def test_foreign_workspace_item_is_not_found(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["planning", "queued", "running", "completed", "failed", "cancelled"])
-async def test_started_or_finished_test_cannot_be_deleted(monkeypatch, state):
+@pytest.mark.parametrize("state", ["planning", "queued", "running", "completed"])
+async def test_started_or_completed_test_cannot_be_deleted(monkeypatch, state):
     entity = TestRun(id=uuid4(), status=state)
     session = setup(monkeypatch, entity)
     with pytest.raises(HTTPException) as error:
         await lifecycle.delete_resource(request(), entity.id, TestRun)
     assert error.value.status_code == 409
-    assert "Only draft tests" in error.value.detail
+    assert "retained" in error.value.detail
     session.delete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["failed", "cancelled"])
+async def test_aborted_test_can_be_deleted(monkeypatch, state):
+    entity = TestRun(id=uuid4(), status=state)
+    session = setup(monkeypatch, entity)
+    response = await lifecycle.delete_resource(request(), entity.id, TestRun)
+    assert response.status_code == 204
+    session.delete.assert_awaited_once_with(entity)
 
 
 @pytest.mark.asyncio

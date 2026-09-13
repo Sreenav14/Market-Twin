@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol
 from urllib.parse import urlsplit, urlunsplit
@@ -11,7 +12,10 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionHandle,
 )
 from markettwin_execution_orchestrator.browser.controller import BrowserController
-from markettwin_execution_orchestrator.browser.errors import BrowserPolicyError
+from markettwin_execution_orchestrator.browser.errors import (
+    BrowserActionError,
+    BrowserPolicyError,
+)
 
 BrowserTool = Callable[..., Awaitable[dict[str, object]]]
 
@@ -23,8 +27,24 @@ def create_browser_tools(
     step_recorder: BrowserStepRecorder | None = None,
 ) -> list[BrowserTool]:
     """Create a least-privilege tool set permanently bound to one Journey."""
-    
+    # ADK may dispatch several tool calls concurrently. Serialize the complete
+    # action, including database writes outside the controller's browser lock.
+    action_lock = asyncio.Lock()
+
     async def run_recorded_action(
+        *,
+        action_type: str,
+        action_summary: str,
+        operation: Callable[[], Awaitable[BrowserActionResult]],
+    ) -> dict[str, object]:
+        async with action_lock:
+            return await execute_recorded_action(
+                action_type=action_type,
+                action_summary=action_summary,
+                operation=operation,
+            )
+
+    async def execute_recorded_action(
         *,
         action_type: str,
         action_summary: str,
@@ -53,6 +73,25 @@ def create_browser_tools(
                 )
             raise
 
+        except BrowserActionError as exc:
+            if step_recorder is not None and step_id is not None:
+                await step_recorder.finish_step(
+                    step_id=step_id,
+                    status="failed",
+                    observation_summary=str(exc),
+                )
+            return {
+                "action": action_type,
+                "status": "failed",
+                "error": str(exc),
+                "recovery": (
+                    "The action did not complete successfully. Call browser_get_state "
+                    "to inspect the current page before choosing another action. "
+                    "Use the observed role and accessible name or field label; "
+                    "do not repeat an unchanged failing locator or assume success."
+                ),
+            }
+
         except Exception as exc:
             if step_recorder is not None and step_id is not None:
                 await step_recorder.finish_step(
@@ -63,6 +102,11 @@ def create_browser_tools(
             raise
 
         if step_recorder is not None and step_id is not None:
+            await step_recorder.record_evidence(
+                step_id=step_id,
+                result=result,
+            )
+
             await step_recorder.finish_step(
                 step_id=step_id,
                 status="completed",
@@ -232,7 +276,13 @@ class BrowserStepRecorder(Protocol):
         ],
         observation_summary: str | None = None,
     ) -> None: ...
-
+    
+    async def record_evidence(
+        self,
+        *,
+        step_id: int,
+        result: BrowserActionResult,
+    ) -> None: ...
 
 def _safe_url_summary(url: str) -> str:
     """Remove query strings and fragments from a logged URL."""

@@ -1,5 +1,6 @@
 """Shared MarketTwin SQLAlchemy models."""
 
+from .core import User, Workspace, WorkspaceMember
 from .evaluation import (
     Finding,
     FindingEvidence,
@@ -28,6 +29,9 @@ from .testing import (
 )
 
 __all__ = [
+    "User",
+    "Workspace",
+    "WorkspaceMember",
     "AgentExecution",
     "Application",
     "ApplicationTarget",

@@ -50,7 +50,7 @@ export function DeleteAction({ kind, id, name, onDeleted, disabled = false }: {
 
   if (disabled) {
     const message = kind === "test"
-      ? "Only draft tests can be deleted. Started and completed tests are retained to preserve results and evidence."
+      ? "In-progress and completed tests are retained to preserve results and evidence."
       : `This ${kind} cannot be deleted while it still has dependent records.`;
     return <Tooltip text={message}><span className="disabled-control" tabIndex={0} aria-label={message}>{trigger}</span></Tooltip>;
   }
@@ -60,7 +60,7 @@ export function DeleteAction({ kind, id, name, onDeleted, disabled = false }: {
     <Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="delete-dialog" onOpenAutoFocus={event => { event.preventDefault(); cancel.current?.focus(); }}>
       <Dialog.Title>Delete {kind}?</Dialog.Title>
       <Dialog.Description className="delete-description">{kind === "test"
-        ? "This permanently removes the draft test before execution begins. Started and completed tests are retained to preserve their results and evidence."
+        ? "This permanently removes the test. In-progress and completed tests stay in the workspace so their results and evidence are preserved."
         : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its draft tests first." : "Delete its draft tests and targets first."}`} This cannot be undone.</Dialog.Description>
       <p className="delete-item-name">{name}</p>
       {error ? <p role="alert" className="form-error">{error}</p> : null}

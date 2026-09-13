@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import cast
 from uuid import uuid4
 
@@ -11,7 +12,12 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionHandle,
 )
 from markettwin_execution_orchestrator.browser.controller import BrowserController
-from markettwin_execution_orchestrator.browser.errors import BrowserPolicyError
+from markettwin_execution_orchestrator.browser.errors import (
+    BrowserActionError,
+    BrowserPolicyError,
+    BrowserSessionStateError,
+    BrowserTimeoutError,
+)
 from markettwin_execution_orchestrator.browser.tools import (
     BrowserStepRecorder,
     create_browser_tools,
@@ -21,8 +27,8 @@ from markettwin_execution_orchestrator.browser.tools import (
 class FakeController:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
-
-    async def _call(self, name: str, **kwargs: object) -> BrowserActionResult:
+        
+    async def _call(self, name: str, /, **kwargs: object) -> BrowserActionResult:
         self.calls.append((name, kwargs))
         return BrowserActionResult(
             action=name,
@@ -65,6 +71,7 @@ class FakeRecorder:
     def __init__(self) -> None:
         self.started: list[tuple[str, str]] = []
         self.finished: list[tuple[int, str, str | None]] = []
+        self.evidence: list[tuple[int, BrowserActionResult]] = []
 
     async def start_step(
         self,
@@ -84,10 +91,137 @@ class FakeRecorder:
     ) -> None:
         self.finished.append((step_id, status, observation_summary))
 
+    async def record_evidence(
+        self,
+        *,
+        step_id: int,
+        result: BrowserActionResult,
+    ) -> None:
+        self.evidence.append((step_id, result))
+
+
+@pytest.mark.asyncio
+async def test_concurrent_tools_serialize_recording_and_browser_actions() -> None:
+    events: list[str] = []
+
+    class YieldingRecorder(FakeRecorder):
+        async def start_step(self, *, action_type: str, action_summary: str) -> int:
+            events.append(f"start:{action_type}")
+            await asyncio.sleep(0)  # Simulate an in-flight database flush.
+            return await super().start_step(
+                action_type=action_type, action_summary=action_summary
+            )
+
+        async def finish_step(
+            self, *, step_id: int, status: str, observation_summary: str | None = None
+        ) -> None:
+            await asyncio.sleep(0)  # Simulate a commit that must finish first.
+            events.append(f"finish:{step_id}")
+            await super().finish_step(
+                step_id=step_id, status=status, observation_summary=observation_summary
+            )
+
+    class YieldingController(FakeController):
+        async def _call(self, name: str, /, **kwargs: object) -> BrowserActionResult:
+            events.append(f"browser:{name}")
+            await asyncio.sleep(0)
+            return await super()._call(name, **kwargs)
+
+    recorder = YieldingRecorder()
+    tools = create_browser_tools(
+        controller=cast(BrowserController, YieldingController()),
+        handle=BrowserSessionHandle(uuid4(), uuid4(), uuid4()),
+        step_recorder=cast(BrowserStepRecorder, recorder),
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+    await asyncio.gather(
+        by_name["browser_navigate"]("https://example.com"),
+        by_name["browser_click"](role="button", name="Continue"),
+        by_name["browser_take_screenshot"](),
+    )
+
+    assert events == [
+        "start:navigate", "browser:navigate", "finish:1",
+        "start:click", "browser:click", "finish:2",
+        "start:take_screenshot", "browser:take_screenshot", "finish:3",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_action_lock_is_released_after_tool_error() -> None:
+    tools = create_browser_tools(
+        controller=cast(BrowserController, PolicyBlockedController()),
+        handle=BrowserSessionHandle(uuid4(), uuid4(), uuid4()),
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+    with pytest.raises(BrowserPolicyError):
+        await by_name["browser_navigate"]("https://blocked.example")
+    result = await asyncio.wait_for(by_name["browser_get_state"](), timeout=1)
+    assert result["action"] == "get_state"
+
 
 class PolicyBlockedController(FakeController):
     async def navigate(self, **kwargs: object) -> BrowserActionResult:
         raise BrowserPolicyError("Target is outside the allowlist.")
+
+
+class FailingClickController(FakeController):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    async def click(self, **kwargs: object) -> BrowserActionResult:
+        raise self.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    BrowserTimeoutError("Click timed out."),
+    BrowserActionError("Click could not be completed."),
+])
+@pytest.mark.parametrize("record_steps", [False, True])
+async def test_action_failure_returns_feedback_and_allows_observation(
+    error: Exception, record_steps: bool,
+) -> None:
+    controller = FailingClickController(error)
+    recorder = FakeRecorder()
+    tools = create_browser_tools(
+        controller=cast(BrowserController, controller),
+        handle=BrowserSessionHandle(uuid4(), uuid4(), uuid4()),
+        step_recorder=cast(BrowserStepRecorder, recorder) if record_steps else None,
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+
+    result = await by_name["browser_click"](role="link", name="Search Wikipedia")
+
+    assert result["action"] == "click"
+    assert result["status"] == "failed"
+    assert result["error"] == str(error)
+    assert "browser_get_state" in str(result["recovery"])
+    if record_steps:
+        assert recorder.finished == [(1, "failed", str(error))]
+    state = await by_name["browser_get_state"]()
+    assert state["action"] == "get_state"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    BrowserSessionStateError("Session is closed."),
+    RuntimeError("Unexpected failure."),
+])
+async def test_non_action_failures_still_propagate(error: Exception) -> None:
+    recorder = FakeRecorder()
+    tools = create_browser_tools(
+        controller=cast(BrowserController, FailingClickController(error)),
+        handle=BrowserSessionHandle(uuid4(), uuid4(), uuid4()),
+        step_recorder=cast(BrowserStepRecorder, recorder),
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+
+    with pytest.raises(type(error)):
+        await by_name["browser_click"](role="button", name="Search")
+
+    assert recorder.finished == [(1, "failed", str(error))]
 
 
 @pytest.mark.asyncio
@@ -182,6 +316,7 @@ async def test_tools_record_safe_action_summaries_and_results() -> None:
         "completed",
         "completed",
     ]
+    assert [step_id for step_id, _ in recorder.evidence] == [1, 2]
 
 
 @pytest.mark.asyncio

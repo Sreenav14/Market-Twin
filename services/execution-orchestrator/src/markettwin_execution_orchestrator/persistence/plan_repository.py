@@ -203,13 +203,18 @@ class PlanRepository:
 
                 journey_ordinal += 1
 
+        # Persist the parent records first so the composite foreign keys
+        # referenced by PersonaJourney exist before journey insertion.
         self._session.add_all(
             [
                 *persona_rows,
                 *mission_rows,
-                *journey_rows,
             ]
         )
+
+        await self._session.flush()
+
+        self._session.add_all(journey_rows)
 
         await self._session.flush()
 

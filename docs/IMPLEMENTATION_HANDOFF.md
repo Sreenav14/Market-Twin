@@ -221,6 +221,12 @@ Remove-Item Env:MARKETTWIN_TEST_DATABASE
 
 ## Important local-state notes
 
+### Concurrent browser-tool recording fix (2026-09-12)
+
+ADK can dispatch multiple tool calls concurrently within one journey. Previously, those calls entered `ExecutionStepRecorder.start_step()` together and flushed the same SQLAlchemy session, raising `Session is already flushing`. The controller's browser lock did not cover these earlier database writes.
+
+`browser/tools.py` now serializes the complete recorded action using a lock shared by that journey's tools: start-step persistence, browser operation, and finish-step persistence. Journeys currently execute sequentially; this fix does not introduce parallel journeys or shared sessions across them. Regression tests cover overlapping navigation/click/screenshot calls and releasing the lock after an error. The browser-tool and evidence-workflow suites passed with 32 tests. The full live model run was not rerun for this fix.
+
 - The working tree contains uncommitted changes. Review and commit them when ready.
 - `image.png` in the repository root is the screenshot supplied during the review; it is untracked.
 - `MARKETTWIN_UI_UX_IMPLEMENTATION_SPEC.md` is also currently untracked.

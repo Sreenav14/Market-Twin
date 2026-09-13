@@ -20,30 +20,39 @@ from markettwin_control_api.persistence.models import (
 
 router = APIRouter(tags=["Lifecycle"])
 
+DELETABLE_TEST_STATUSES = frozenset({"draft", "failed", "cancelled"})
+
 
 async def check_dependencies(session: AsyncSession, entity: object) -> None:
     """Reject deletion once a test has started or while parent dependencies exist."""
     if isinstance(entity, TestRun):
-        if entity.status != "draft":
+        if entity.status not in DELETABLE_TEST_STATUSES:
             raise HTTPException(
                 409,
-                "Only draft tests can be deleted. Started and completed tests are retained to preserve their results and evidence.",
+                "In-progress and completed tests are retained "
+                "to preserve their results and evidence.",
             )
 
-        persisted_journey = await session.scalar(
-            select(PersonaJourney.id)
-            .where(PersonaJourney.test_run_id == entity.id)
-            .limit(1)
-        )
-        if persisted_journey is not None:
-            raise HTTPException(
-                409,
-                "This test has already started and cannot be deleted. Refresh to see its latest status.",
+        if entity.status == "draft":
+            persisted_journey = await session.scalar(
+                select(PersonaJourney.id)
+                .where(PersonaJourney.test_run_id == entity.id)
+                .limit(1)
             )
+            if persisted_journey is not None:
+                raise HTTPException(
+                    409,
+                    "This test has already started and cannot be "
+                    "deleted. Refresh to see its latest status.",
+                )
 
     elif isinstance(entity, ApplicationTarget):
         if await session.scalar(select(TestRun.id).where(TestRun.target_id == entity.id).limit(1)):
-            raise HTTPException(409, "Delete this target's draft tests first, then delete the target.")
+            raise HTTPException(
+                409,
+                "Delete this target's draft tests first, "
+                "then delete the target.",
+            )
 
     elif isinstance(entity, Application):
         if await session.scalar(
@@ -106,7 +115,7 @@ async def delete_resource(
 
 @router.delete("/api/v1/test-runs/{test_run_id}", status_code=204)
 async def delete_test_run(test_run_id: UUID, request: Request) -> Response:
-    """Delete a test only while it is still an unused draft."""
+    """Delete a draft, failed, or cancelled test."""
     return await delete_resource(request, test_run_id, TestRun)
 
 

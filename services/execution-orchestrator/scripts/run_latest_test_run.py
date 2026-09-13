@@ -1,4 +1,4 @@
-"""Inspect the latest persisted MarketTwin TestRun."""
+"""Execute the latest draft MarketTwin TestRun."""
 
 import asyncio
 import os
@@ -8,17 +8,13 @@ from markettwin_database import (
     create_database_engine,
     create_session_factory,
 )
-from markettwin_database.models.testing import (
-    PersonaJourney,
-    RunMission,
-    RunPersona,
-    TestRun,
-)
+from markettwin_database.models.testing import TestRun
 from markettwin_execution_orchestrator.browser import AllowedOrigin
 from markettwin_execution_orchestrator.workflow.run_executor import (
     MarketTwinRunRequest,
+    execute_markettwin_run,
 )
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 
 def database_url() -> str:
@@ -42,6 +38,7 @@ async def main() -> None:
         async with session_factory() as session:
             statement = (
                 select(TestRun)
+                .where(TestRun.status == "draft")
                 .order_by(TestRun.created_at.desc())
                 .limit(1)
             )
@@ -49,7 +46,7 @@ async def main() -> None:
             test_run = await session.scalar(statement)
 
             if test_run is None:
-                print("No TestRun records found.")
+                print("No draft TestRun found.")
                 return
 
             target_snapshot = test_run.target_snapshot
@@ -92,62 +89,31 @@ async def main() -> None:
                 for origin in raw_origins
             )
 
-            run_request = MarketTwinRunRequest(
+            request = MarketTwinRunRequest(
                 run_id=test_run.id,
                 study_brief=study_brief,
                 target_snapshot=target_snapshot,
                 start_url=start_url,
                 allowed_origins=allowed_origins,
+                max_duration_seconds_per_journey=90,
             )
 
-            print("MarketTwinRunRequest:")
-            print(f"  run_id: {run_request.run_id}")
-            print(f"  study_brief: {run_request.study_brief}")
-            print(f"  start_url: {run_request.start_url}")
-            print(f"  network_policy: {run_request.network_policy}")
+            print(f"Executing TestRun: {request.run_id}")
+            print(f"Goal: {request.study_brief}")
+            print(f"Target: {request.start_url}")
 
-            for origin in run_request.allowed_origins:
-                print(
-                    "  allowed_origin: "
-                    f"{origin.scheme}://{origin.hostname}"
-                )
-
-            print("\nLatest TestRun:")
-            print(f"  id: {test_run.id}")
-            print(f"  status: {test_run.status}")
-            print(f"  started_at: {test_run.started_at}")
-            print(f"  completed_at: {test_run.completed_at}")
-            print(f"  application_id: {test_run.application_id}")
-            print(f"  target_id: {test_run.target_id}")
-
-            persona_count = await session.scalar(
-                select(func.count())
-                .select_from(RunPersona)
-                .where(
-                    RunPersona.test_run_id == test_run.id
-                )
+            result = await execute_markettwin_run(
+                request,
+                session=session,
             )
 
-            mission_count = await session.scalar(
-                select(func.count())
-                .select_from(RunMission)
-                .where(
-                    RunMission.test_run_id == test_run.id
-                )
+            print("\nMarketTwin execution finished.")
+            print(f"Journeys: {len(result.journeys)}")
+            print(f"Completed: {result.completed_count}")
+            print(
+                "Failed/non-completed: "
+                f"{result.failed_count}"
             )
-
-            journey_count = await session.scalar(
-                select(func.count())
-                .select_from(PersonaJourney)
-                .where(
-                    PersonaJourney.test_run_id == test_run.id
-                )
-            )
-
-            print("\nPersisted planning records:")
-            print(f"  personas: {persona_count}")
-            print(f"  missions: {mission_count}")
-            print(f"  journeys: {journey_count}")
 
     finally:
         await engine.dispose()

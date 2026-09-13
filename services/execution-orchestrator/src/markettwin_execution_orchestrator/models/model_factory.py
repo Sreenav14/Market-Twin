@@ -7,10 +7,11 @@ from google.adk.models.lite_llm import LiteLlm
 
 DEFAULT_MODEL_PROVIDER: Final[str] = "openai"
 DEFAULT_OPENAI_MODEL_NAME: Final[str] = "openai/gpt-4o-mini"
+DEFAULT_OPENAI_NUM_RETRIES: Final[int] = 2
 DEFAULT_OLLAMA_MODEL_NAME: Final[str] = "ollama_chat/qwen3:1.7b"
 DEFAULT_OLLAMA_API_BASE: Final[str] = "http://localhost:11434"
 DEFAULT_OLLAMA_NUM_CTX: Final[int] = 8_192
-DEFAULT_MAX_TOKENS: Final[int] = 256
+DEFAULT_MAX_TOKENS: Final[int] = 512
 
 
 def create_model(
@@ -43,11 +44,13 @@ def create_model(
                 model=model_name,
                 api_key=api_key,
                 max_tokens=max_tokens,
+                num_retries=DEFAULT_OPENAI_NUM_RETRIES,
             )
 
         return LiteLlm(
             model=model_name,
             max_tokens=max_tokens,
+            num_retries=DEFAULT_OPENAI_NUM_RETRIES,
         )
 
     if provider == "ollama":

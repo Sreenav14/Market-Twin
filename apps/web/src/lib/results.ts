@@ -2,6 +2,11 @@ import type { Finding, FindingSeverity, RunResults, TestRunStatus } from "./api"
 
 export const severityOrder: readonly FindingSeverity[] = ["critical", "high", "medium", "low", "info"];
 export const terminalTestStatuses = new Set<TestRunStatus>(["completed", "failed", "cancelled"]);
+export const deletableTestStatuses = new Set<TestRunStatus>(["draft", "failed", "cancelled"]);
+
+export function canDeleteTest(status: TestRunStatus) {
+  return deletableTestStatuses.has(status);
+}
 
 export function severityRank(value: string) {
   const rank = severityOrder.indexOf(value as FindingSeverity);

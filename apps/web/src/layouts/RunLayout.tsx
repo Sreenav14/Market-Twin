@@ -9,7 +9,7 @@ import { canManageLifecycle } from "../lib/permissions";
 import { Button } from "../components/ui/button";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
 import { testBrief, textValue } from "../lib/format";
-import { terminalTestStatuses } from "../lib/results";
+import { canDeleteTest, terminalTestStatuses } from "../lib/results";
 import { AppShellContext } from "./AppShell";
 
 export type ResultsState =
@@ -60,7 +60,7 @@ export function RunLayout() {
 
   return <>
     <div className="study-utility"><Link className="back-link" to="/runs"><ArrowLeft size={15} aria-hidden="true" />All tests</Link><span className="monospace">{run.id.slice(0, 8)}</span></div>
-    <PageHeader eyebrow="Test" title={testBrief(run.configuration_snapshot)} description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")}`} action={<div className="header-actions"><TestStatusBadge status={run.status} />{canManageLifecycle(appContext.workspace.role) ? <DeleteAction kind="test" id={run.id} name={testBrief(run.configuration_snapshot)} disabled={run.status !== "draft"} onDeleted={() => navigate("/runs")} /> : null}<Button variant="ghost" size="icon" aria-label="Refresh test" onClick={refresh} disabled={runQuery.isFetching || resultsQuery.isFetching}><RefreshCw size={17} aria-hidden="true" /></Button></div>} />
+    <PageHeader eyebrow="Test" title={testBrief(run.configuration_snapshot)} description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")}`} action={<div className="header-actions"><TestStatusBadge status={run.status} />{canManageLifecycle(appContext.workspace.role) ? <DeleteAction kind="test" id={run.id} name={testBrief(run.configuration_snapshot)} disabled={!canDeleteTest(run.status)} onDeleted={() => navigate("/runs")} /> : null}<Button variant="ghost" size="icon" aria-label="Refresh test" onClick={refresh} disabled={runQuery.isFetching || resultsQuery.isFetching}><RefreshCw size={17} aria-hidden="true" /></Button></div>} />
     <nav className="tab-strip" aria-label="Test sections">{["overview", "findings", "report"].map(tab => <NavLink key={tab} to={`/runs/${run.id}/${tab}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>{tab[0].toUpperCase() + tab.slice(1)}{tab === "findings" && results.status === "ready" ? <span className="tab-count">{results.data.findings.length}</span> : null}</NavLink>)}</nav>
     <Outlet context={{ ...appContext, run, results, refresh } satisfies RunContext} />
   </>;

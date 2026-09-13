@@ -8,6 +8,7 @@ from markettwin_execution_orchestrator.models.model_factory import (
     DEFAULT_OLLAMA_MODEL_NAME,
     DEFAULT_OLLAMA_NUM_CTX,
     DEFAULT_OPENAI_MODEL_NAME,
+    DEFAULT_OPENAI_NUM_RETRIES,
     create_model,
 )
 
@@ -30,6 +31,7 @@ def test_create_model_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> Non
     assert captured == {
         "model": DEFAULT_OPENAI_MODEL_NAME,
         "max_tokens": DEFAULT_MAX_TOKENS,
+        "num_retries": DEFAULT_OPENAI_NUM_RETRIES,
     }
 
 
