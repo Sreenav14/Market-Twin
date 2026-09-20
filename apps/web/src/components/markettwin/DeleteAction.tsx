@@ -6,7 +6,13 @@ import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { api } from "../../lib/api";
 
-export function DeleteAction({ kind, id, name, onDeleted, disabled = false }: {
+export function DeleteAction({
+  kind,
+  id,
+  name,
+  onDeleted,
+  disabled = false,
+}: {
   kind: "test" | "target" | "application";
   id: string;
   name: string;
@@ -26,19 +32,32 @@ export function DeleteAction({ kind, id, name, onDeleted, disabled = false }: {
     setBusy(true);
     setError(null);
     try {
-      await ({ test: api.deleteRun, target: api.deleteTarget, application: api.deleteApplication })[kind](id);
+      await {
+        test: api.deleteRun,
+        target: api.deleteTarget,
+        application: api.deleteApplication,
+      }[kind](id);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Unable to delete. Please try again.");
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Unable to delete. Please try again.",
+      );
       pending.current = false;
       setBusy(false);
       return;
     }
 
     if (kind === "test") {
-      queryClient.removeQueries({ predicate: query => ["run", "results"].includes(String(query.queryKey[0])) && query.queryKey.includes(id) });
+      queryClient.removeQueries({
+        predicate: (query) =>
+          ["run", "results"].includes(String(query.queryKey[0])) &&
+          query.queryKey.includes(id),
+      });
     }
     await queryClient.invalidateQueries({ queryKey: ["workspace-tests"] });
-    if (kind === "target") await queryClient.invalidateQueries({ queryKey: ["test-targets"] });
+    if (kind === "target")
+      await queryClient.invalidateQueries({ queryKey: ["test-targets"] });
 
     setOpen(false);
     setBusy(false);
@@ -46,25 +65,86 @@ export function DeleteAction({ kind, id, name, onDeleted, disabled = false }: {
     onDeleted();
   }
 
-  const trigger = <Button variant="ghost" className="delete-trigger" disabled={disabled} aria-label={`Delete ${kind}: ${name}`}><Trash2 size={16} aria-hidden="true" /><span>Delete</span></Button>;
+  const trigger = (
+    <Button
+      variant="ghost"
+      className="delete-trigger"
+      disabled={disabled}
+      aria-label={`Delete ${kind}: ${name}`}
+    >
+      <Trash2 size={16} aria-hidden="true" />
+      <span>Delete</span>
+    </Button>
+  );
 
   if (disabled) {
-    const message = kind === "test"
-      ? "In-progress and completed tests are retained to preserve results and evidence."
-      : `This ${kind} cannot be deleted while it still has dependent records.`;
-    return <Tooltip text={message}><span className="disabled-control" tabIndex={0} aria-label={message}>{trigger}</span></Tooltip>;
+    const message =
+      kind === "test"
+        ? "In-progress and completed tests are retained to preserve results and evidence."
+        : `This ${kind} cannot be deleted while it still has dependent records.`;
+    return (
+      <Tooltip text={message}>
+        <span className="disabled-control" tabIndex={0} aria-label={message}>
+          {trigger}
+        </span>
+      </Tooltip>
+    );
   }
 
-  return <Dialog.Root open={open} onOpenChange={value => { if (!pending.current) { setOpen(value); setError(null); } }}>
-    <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
-    <Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="delete-dialog" onOpenAutoFocus={event => { event.preventDefault(); cancel.current?.focus(); }}>
-      <Dialog.Title>Delete {kind}?</Dialog.Title>
-      <Dialog.Description className="delete-description">{kind === "test"
-        ? "This permanently removes the test. In-progress and completed tests stay in the workspace so their results and evidence are preserved."
-        : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its draft tests first." : "Delete its draft tests and targets first."}`} This cannot be undone.</Dialog.Description>
-      <p className="delete-item-name">{name}</p>
-      {error ? <p role="alert" className="form-error">{error}</p> : null}
-      <div className="delete-dialog-actions"><Dialog.Close asChild><button ref={cancel} type="button" className="secondary-button" disabled={busy}>Cancel</button></Dialog.Close><Button variant="destructive" onClick={() => void remove()} disabled={busy}>{busy ? "Deleting…" : `Delete ${kind}`}</Button></div>
-    </Dialog.Content></Dialog.Portal>
-  </Dialog.Root>;
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(value) => {
+        if (!pending.current) {
+          setOpen(value);
+          setError(null);
+        }
+      }}
+    >
+      <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content
+          className="delete-dialog"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            cancel.current?.focus();
+          }}
+        >
+          <Dialog.Title>Delete {kind}?</Dialog.Title>
+          <Dialog.Description className="delete-description">
+            {kind === "test"
+              ? "This permanently removes the test. In-progress and completed tests stay in the workspace so their results and evidence are preserved."
+              : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its draft tests first." : "Delete its draft tests and targets first."}`}{" "}
+            This cannot be undone.
+          </Dialog.Description>
+          <p className="delete-item-name">{name}</p>
+          {error ? (
+            <p role="alert" className="form-error">
+              {error}
+            </p>
+          ) : null}
+          <div className="delete-dialog-actions">
+            <Dialog.Close asChild>
+              <button
+                ref={cancel}
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+              >
+                Cancel
+              </button>
+            </Dialog.Close>
+            <Button
+              variant="destructive"
+              onClick={() => void remove()}
+              disabled={busy}
+            >
+              {busy ? "Deleting…" : `Delete ${kind}`}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }

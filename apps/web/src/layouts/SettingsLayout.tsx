@@ -8,7 +8,11 @@ export function SettingsLayout() {
 
   return (
     <>
-      <PageHeader eyebrow="Workspace" title="Settings" description="Account, workspace, membership, and security settings are separated so permissions and backend support remain explicit." />
+      <PageHeader
+        eyebrow="Workspace"
+        title="Settings"
+        description="Account, workspace, membership, and security settings are separated so permissions and backend support remain explicit."
+      />
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings sections">
           <NavLink to="/settings/profile">Profile</NavLink>
@@ -16,7 +20,9 @@ export function SettingsLayout() {
           <NavLink to="/settings/members">Members</NavLink>
           <NavLink to="/settings/security">Security</NavLink>
         </nav>
-        <div className="settings-content"><Outlet context={appContext} /></div>
+        <div className="settings-content">
+          <Outlet context={appContext} />
+        </div>
       </div>
     </>
   );

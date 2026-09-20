@@ -9,6 +9,9 @@ from markettwin_database import (
     create_session_factory,
 )
 from markettwin_database.models.testing import TestRun
+from markettwin_evaluation_worker.workflow import (
+    evaluate_and_generate_report,
+)
 from markettwin_execution_orchestrator.browser import AllowedOrigin
 from markettwin_execution_orchestrator.workflow.run_executor import (
     MarketTwinRunRequest,
@@ -114,6 +117,20 @@ async def main() -> None:
                 "Failed/non-completed: "
                 f"{result.failed_count}"
             )
+
+            print("\nGenerating evaluation findings and report...")
+            evaluation = await evaluate_and_generate_report(
+                test_run_id=request.run_id,
+                session=session,
+            )
+
+            print("MarketTwin evaluation finished.")
+            print(f"Findings: {len(evaluation.finding_ids)}")
+            print(
+                "Visual checks: "
+                f"{evaluation.visual_evaluation_count}"
+            )
+            print(f"Report: {evaluation.report_id}")
 
     finally:
         await engine.dispose()

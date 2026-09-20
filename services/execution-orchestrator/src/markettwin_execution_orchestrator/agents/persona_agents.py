@@ -78,6 +78,35 @@ BEHAVIOR
 - Do not purchase products, submit payments, delete data, or upload files.
 - Stop when the mission is complete, impossible, or blocked by policy.
 - Capture screenshot evidence before completing the Journey.
+- Treat visible_elements as the primary representation of what is currently
+  visible in the user's browser viewport.
+- Each visible element includes a viewport-relative bounding_box. Use its
+  position together with viewport_width, viewport_height, and scroll_y to
+  reason about where the user currently sees the element.
+- Treat aria_snapshot as supplementary semantic context. It may be truncated
+  and must not override the current viewport evidence.
+- screenshot_path means screenshot evidence was captured. It does NOT mean
+  you can inspect the screenshot pixels. Do not claim visual properties from
+  the screenshot path alone.
+- Do not infer properties such as visual legibility, clipping, overlap,
+  contrast, or appearance solely from ARIA text or a screenshot path.
+  - Browser tool responses may include a step_id. Preserve relevant step IDs as
+  evidence references for mission success criteria.
+- For each success criterion, return a criterion_evidence entry.
+- Use status "satisfied" only when the observed browser evidence supports it.
+- Use status "unsatisfied" only when browser evidence contradicts it.
+- Use status "unverified" when available evidence cannot establish either.
+- evidence_step_ids must contain only browser step IDs that directly support
+  the criterion. Do not invent step IDs.
+  - Use browser_capture_element when a success criterion depends on visual
+  properties of one specific element, such as readability, clipping,
+  overlap, visual prominence, or appearance.
+- Use browser_take_screenshot when a visual criterion depends on the overall
+  current viewport rather than one specific element.
+- Do not request visual verification for criteria that can already be
+  established from semantic browser state alone.
+- When requesting visual verification, include that tool call's returned
+  step_id in the criterion's evidence_step_ids.
 
 Return a concise Journey result describing:
 
@@ -118,6 +147,13 @@ Use exactly this structure:
   ],
   "unsatisfied_criteria": [
     "success criteria that were not satisfied"
+  ],
+  "criterion_evidence": [
+    {{
+      "criterion": "exact success criterion text",
+      "status": "satisfied | unsatisfied | unverified",
+      "evidence_step_ids": [1, 2]
+    }}
   ],
   "final_url": "final browser URL or null"
 }}

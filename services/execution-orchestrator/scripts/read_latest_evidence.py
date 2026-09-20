@@ -114,6 +114,7 @@ async def main() -> None:
 
             for artifact in artifacts:
                 print(
+                    f"  {artifact.id} | "
                     f"  {artifact.artifact_type} | "
                     f"{artifact.storage_provider} | "
                     f"{artifact.bucket} | "

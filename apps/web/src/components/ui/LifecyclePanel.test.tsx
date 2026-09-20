@@ -8,10 +8,25 @@ import { api } from "../../lib/api";
 
 describe("LifecyclePanel", () => {
   it("requires confirmation and preserves the item when cancelled", async () => {
-    const remove = vi.spyOn(api, "deleteApplication").mockResolvedValue(undefined);
+    const remove = vi
+      .spyOn(api, "deleteApplication")
+      .mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<MemoryRouter><QueryClientProvider client={new QueryClient()}><LifecyclePanel entityType="application" entityName="Acme Checkout" entityId="app" returnTo="/applications" /></QueryClientProvider></MemoryRouter>);
-    await user.click(screen.getByRole("button", { name: "Delete application: Acme Checkout" }));
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <LifecyclePanel
+            entityType="application"
+            entityName="Acme Checkout"
+            entityId="app"
+            returnTo="/applications"
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete application: Acme Checkout" }),
+    );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Cancel" }));

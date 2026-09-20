@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { asRecord, canDeleteTest, countValue, reportMetrics, severityRank } from "./results";
+import {
+  asRecord,
+  canDeleteTest,
+  countValue,
+  reportMetrics,
+  severityRank,
+} from "./results";
 import type { RunResults } from "./api";
 
 describe("report data boundaries", () => {
@@ -13,8 +19,26 @@ describe("report data boundaries", () => {
     expect(asRecord([])).toEqual({});
   });
   it("accepts sparse report payloads without inventing coverage", () => {
-    const results: RunResults = { test_run_id: "run", findings: [], report: { id: "report", version: 1, status: "completed", executive_summary: null, generated_at: null, payload: {} } };
-    expect(reportMetrics(results)).toEqual({ journeyTotal: null, outcomes: [], statuses: [], criticalCount: 0, artifactCount: 0, deterministic: false });
+    const results: RunResults = {
+      test_run_id: "run",
+      findings: [],
+      report: {
+        id: "report",
+        version: 1,
+        status: "completed",
+        executive_summary: null,
+        generated_at: null,
+        payload: {},
+      },
+    };
+    expect(reportMetrics(results)).toEqual({
+      journeyTotal: null,
+      outcomes: [],
+      statuses: [],
+      criticalCount: 0,
+      artifactCount: 0,
+      deterministic: false,
+    });
   });
   it("allows draft, failed, and cancelled tests to be deleted", () => {
     expect(canDeleteTest("draft")).toBe(true);

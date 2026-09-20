@@ -31,6 +31,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserActionResult,
     BrowserSessionArtifacts,
     BrowserSessionHandle,
+    ElementBoundingBox,
     FailedRequestRecord,
     NetworkPolicy,
 )
@@ -45,7 +46,9 @@ from markettwin_execution_orchestrator.browser.errors import (
     HumanControlActiveError,
 )
 from markettwin_execution_orchestrator.browser.evidence import (
+    bounding_box_intersects_viewport,
     capture_screenshot,
+    crop_viewport_screenshot,
     start_trace,
     stop_trace,
     write_event_logs,
@@ -139,6 +142,11 @@ class BrowserController:
         try:
             browser = await self._playwright.chromium.launch(headless=self._headless)
             context = await browser.new_context(
+                viewport={
+                    "width": 1280,
+                    "height": 900
+                },
+                device_scale_factor=1,
                 accept_downloads=False,
                 service_workers="block",
             )
@@ -333,9 +341,14 @@ class BrowserController:
         )
         self._ensure_agent_control(session)
         async with session.lock:
+            session.next_action_number()
+            screenshot = await capture_screenshot(
+                session,
+                label="state",
+            )
             return BrowserActionResult(
                 action="get_state",
-                observation=await build_observation(session),
+                observation=await build_observation(session, screenshot_path=screenshot),
             )
 
     async def navigate(
@@ -533,9 +546,10 @@ class BrowserController:
             delta = amount if direction == "down" else -amount
             await session.page.mouse.wheel(0, delta)
             await session.page.wait_for_timeout(150)
+            screenshot = await capture_screenshot(session, label="scroll")
             return BrowserActionResult(
                 action="scroll",
-                observation=await build_observation(session),
+                observation=await build_observation(session, screenshot_path=screenshot),
             )
 
     async def go_back(
@@ -599,15 +613,110 @@ class BrowserController:
         async with session.lock:
             session.next_action_number()
             await session.page.wait_for_timeout(milliseconds)
+            screenshot = await capture_screenshot(session, label="wait")
             return BrowserActionResult(
                 action="wait",
-                observation=await build_observation(session),
+                observation=await build_observation(session, screenshot_path=screenshot),
+            )
+
+    async def capture_element(
+        self,
+        *,
+        session_id: UUID,
+        role: str | None = None,
+        name: str | None = None,
+        label: str | None = None,
+        text: str | None = None,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
+    ) -> BrowserActionResult:
+        """Capture viewport and focused evidence for one visible element."""
+        session = self._get_session(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        self._ensure_agent_control(session)
+
+        async with session.lock:
+            locator = semantic_locator(
+                session.page,
+                role=role,
+                name=name,
+                label=label,
+                text=text,
+            )
+            if not await locator.is_visible():
+                raise BrowserActionError(
+                    "Element is not visible in the current viewport."
+                )
+
+            raw_box = await locator.bounding_box()
+            if raw_box is None:
+                raise BrowserActionError("Element has no visible bounding box.")
+
+            bounding_box = ElementBoundingBox(
+                x=round(raw_box["x"]),
+                y=round(raw_box["y"]),
+                width=round(raw_box["width"]),
+                height=round(raw_box["height"]),
+            )
+            viewport_size = session.page.viewport_size
+            if viewport_size is None:
+                raw_viewport_size = await session.page.evaluate(
+                    "() => ({ width: window.innerWidth, height: window.innerHeight })"
+                )
+                viewport_width = int(raw_viewport_size["width"])
+                viewport_height = int(raw_viewport_size["height"])
+            else:
+                viewport_width = viewport_size["width"]
+                viewport_height = viewport_size["height"]
+
+            if not bounding_box_intersects_viewport(
+                bounding_box=bounding_box,
+                viewport_width=viewport_width,
+                viewport_height=viewport_height,
+            ):
+                raise BrowserActionError(
+                    "Element is rendered but does not intersect the current viewport."
+                )
+
+            session.next_action_number()
+            viewport_path = await capture_screenshot(session, label="focus")
+            if viewport_path is None:
+                raise BrowserActionError("Screenshot capture is disabled.")
+
+            focused_path = session.artifact_directory / (
+                f"action-{session.action_number:04d}-element.png"
+            )
+            try:
+                crop_viewport_screenshot(
+                    viewport_path=viewport_path,
+                    bounding_box=bounding_box,
+                    output_path=focused_path,
+                )
+            except ValueError as exc:
+                raise BrowserActionError(
+                    "Element moved outside the viewport before evidence capture."
+                ) from exc
+
+            return BrowserActionResult(
+                action="capture_element",
+                observation=await build_observation(
+                    session,
+                    screenshot_path=viewport_path,
+                    focused_screenshot_path=focused_path,
+                ),
             )
 
     async def take_screenshot(
         self,
         *,
         session_id: UUID,
+        role: str | None = None,
+        name: str | None = None,
+        label: str | None = None,
+        text: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
     ) -> BrowserActionResult:

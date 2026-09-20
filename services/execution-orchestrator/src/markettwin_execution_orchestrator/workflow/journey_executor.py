@@ -203,6 +203,7 @@ async def execute_persona_journey(
             friction_points=report.friction_points,
             blockers=report.blockers,
             satisfied_criteria=report.satisfied_criteria,
+            criterion_evidence=report.criterion_evidence,
             unsatisfied_criteria=report.unsatisfied_criteria,
             final_url=report.final_url,
         )

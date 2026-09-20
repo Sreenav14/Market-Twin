@@ -37,6 +37,35 @@ class EvidenceReference:
     step_id: int | None = None
     artifact_id: UUID | None = None
 
+@dataclass(frozen=True, slots=True)
+class VisualArtifactRecord:
+    """Stored screenshot metadata needed by the visual verifier."""
+    
+    artifact_id: UUID
+    step_id: int
+    kind: str
+    
+    storage_provider: str
+    bucket: str
+    object_key: str
+    content_type: str
+    
+    
+@dataclass(frozen=True, slots=True)
+class VisualEvidenceSet:
+    """Viewport and optional focused crop from one browser step."""
+    
+    step_id: int
+    action_type: str | None = None
+    viewport: VisualArtifactRecord | None = None
+    element_crop: VisualArtifactRecord | None = None
+    
+    @property
+    def explicitly_requests_visual_verification(self,) -> bool:
+        return self.action_type in {
+            "capture_element",
+            "take_screenshot",
+        }
 
 class EvaluationRepository:
     """Read execution truth and persist evaluation findings."""
@@ -161,6 +190,107 @@ class EvaluationRepository:
             )
 
         return tuple(results)
+    
+    
+    async def list_visual_evidence(
+        self,
+        *,
+        execution_id: UUID,
+        step_ids: tuple[int, ...],
+    ) -> tuple[VisualEvidenceSet, ...]:
+        """Return viewport/crop evidence for the requested execution steps."""
+
+        if not step_ids:
+            return ()
+
+        artifacts = tuple(
+            (
+                await self._session.scalars(
+                    select(Artifact)
+                    .where(
+                        Artifact.execution_id
+                        == execution_id,
+                        Artifact.artifact_type
+                        == "screenshot",
+                        Artifact.step_id.in_(step_ids),
+                    )
+                    .order_by(
+                        Artifact.step_id,
+                        Artifact.created_at,
+                    )
+                )
+            ).all()
+        )
+
+        grouped: dict[
+            int,
+            dict[str, VisualArtifactRecord],
+        ] = {}
+
+        steps = tuple(
+            (
+                await self._session.scalars(
+                    select(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == execution_id,
+                        ExecutionStep.id.in_(step_ids),
+                    )
+                )
+            ).all()
+        )
+        action_by_step = {
+            step.id: step.action_type
+            for step in steps
+        }
+        
+        for artifact in artifacts:
+            if artifact.step_id is None:
+                continue
+
+            raw_kind = artifact.metadata_json.get(
+                "kind"
+            )
+
+            if not isinstance(raw_kind, str) or raw_kind not in {
+                "viewport",
+                "element_crop",
+            }:
+                continue
+
+            record = VisualArtifactRecord(
+                artifact_id=artifact.id,
+                step_id=artifact.step_id,
+                kind=raw_kind,
+                storage_provider=(
+                    artifact.storage_provider
+                ),
+                bucket=artifact.bucket,
+                object_key=artifact.object_key,
+                content_type=artifact.content_type,
+            )
+
+            grouped.setdefault(
+                artifact.step_id,
+                {},
+            )[raw_kind] = record
+
+        return tuple(
+            VisualEvidenceSet(
+                step_id=step_id,
+                action_type=action_by_step.get(
+                    step_id
+                ),
+                viewport=grouped.get(
+                    step_id,
+                    {},
+                ).get("viewport"),
+                element_crop=grouped.get(
+                    step_id,
+                    {},
+                ).get("element_crop"),
+            )
+            for step_id in step_ids
+        )
 
     async def find_preferred_evidence(
         self,

@@ -66,8 +66,8 @@ async def main() -> None:
             ).all()
 
             # One screenshot + one trace is enough for this proof.
-            selected = []
-            seen_types = set()
+            selected: list[Artifact] = []
+            seen_types: set[str] = set()
 
             for artifact in artifacts:
                 if artifact.artifact_type not in seen_types:

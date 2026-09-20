@@ -62,6 +62,25 @@ class FailedRequestRecord:
     resource_type: str
     error_text: str
 
+@dataclass(frozen=True, slots=True)
+class ElementBoundingBox:
+    """Viewport-relative position of one visible browser element."""
+    
+    x:int
+    y:int
+    width:int
+    height:int
+
+@dataclass(frozen=True, slots=True)
+class VisibleElement:
+    """Compact semantic description of one element visible to the persona."""
+    
+    role: str
+    name: str
+    tag: str
+    enabled: bool
+    bounding_box: ElementBoundingBox
+    level: int | None = None
 
 @dataclass(frozen=True, slots=True)
 class BrowserObservation:
@@ -70,6 +89,11 @@ class BrowserObservation:
     url: str
     title: str
     aria_snapshot: str
+    viewport_width: int 
+    viewport_height: int
+    scroll_y: int
+    document_height: int
+    visible_elements: tuple[VisibleElement, ...] = ()
     console_errors_since_last_action: tuple[str, ...] = ()
     page_errors_since_last_action: tuple[str, ...] = ()
     failed_requests_since_last_action: tuple[FailedRequestRecord, ...] = ()
@@ -77,6 +101,8 @@ class BrowserObservation:
     page_count: int = 1
     action_number: int = 0
     screenshot_path: str | None = None
+    focused_screenshot_path: str | None = None
+
 
     def to_dict(self) -> dict[str, object]:
         """Return an ADK/tool-safe dictionary."""

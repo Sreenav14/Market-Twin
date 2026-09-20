@@ -56,10 +56,10 @@ def test_persona_agent_builds_json_response_instruction(
     assert '"final_url": "final browser URL or null"' in (
         instruction
     )
-    
+
     assert (
-    "Do not mark a success criterion as unsatisfied merely because"
-    in instruction
+        "Do not mark a success criterion as unsatisfied merely because"
+        in instruction
     )
 
     assert (
@@ -69,5 +69,50 @@ def test_persona_agent_builds_json_response_instruction(
 
     assert (
         "Only place a criterion in unsatisfied_criteria when browser evidence"
+        in instruction
+    )
+    assert (
+        "Treat visible_elements as the primary representation"
+        in instruction
+    )
+
+    assert (
+        "Treat aria_snapshot as supplementary semantic context"
+        in instruction
+    )
+
+    assert (
+        "screenshot_path means screenshot evidence was captured"
+        in instruction
+    )
+
+    assert (
+        "Do not infer properties such as visual legibility"
+        in instruction
+    )
+    assert '"criterion_evidence": [' in instruction
+
+    assert (
+        '"status": "satisfied | unsatisfied | unverified"'
+        in instruction
+    )
+
+    assert (
+        "evidence_step_ids must contain only browser step IDs"
+        in instruction
+    )
+
+    assert (
+        "Do not invent step IDs."
+        in instruction
+    )
+
+    assert (
+        "Use browser_capture_element when a success criterion"
+        in instruction
+    )
+
+    assert (
+        "Use browser_take_screenshot when a visual criterion"
         in instruction
     )

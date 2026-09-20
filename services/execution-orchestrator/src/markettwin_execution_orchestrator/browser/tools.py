@@ -80,7 +80,8 @@ def create_browser_tools(
                     status="failed",
                     observation_summary=str(exc),
                 )
-            return {
+
+            payload: dict[str, object] = {
                 "action": action_type,
                 "status": "failed",
                 "error": str(exc),
@@ -91,6 +92,11 @@ def create_browser_tools(
                     "do not repeat an unchanged failing locator or assume success."
                 ),
             }
+
+            if step_id is not None:
+                payload["step_id"] = step_id
+
+            return payload
 
         except Exception as exc:
             if step_recorder is not None and step_id is not None:
@@ -113,7 +119,12 @@ def create_browser_tools(
                 observation_summary=_observation_summary(result),
             )
 
-        return result.to_dict()
+        payload = result.to_dict()
+        
+        if step_id is not None:
+            payload["step_id"] = step_id
+            
+        return payload
 
     async def browser_get_state() -> dict[str, object]:
         """Observe the current page without changing it."""
@@ -231,6 +242,27 @@ def create_browser_tools(
             ),
         )
 
+    async def browser_capture_element(
+        role: str | None = None,
+        name: str | None = None,
+        label: str | None = None,
+        text: str | None = None,
+    ) -> dict[str, object]:
+        """Capture focused evidence for one currently visible element."""
+        return await run_recorded_action(
+            action_type="capture_element",
+            action_summary="Capture focused evidence for a visible element.",
+            operation=lambda: controller.capture_element(
+                session_id=handle.session_id,
+                execution_id=handle.execution_id,
+                journey_id=handle.journey_id,
+                role=role,
+                name=name,
+                label=label,
+                text=text,
+            ),
+        )
+
     async def browser_take_screenshot() -> dict[str, object]:
         """Capture explicit screenshot evidence and return the current page state."""
         return await run_recorded_action(
@@ -252,6 +284,7 @@ def create_browser_tools(
         browser_scroll,
         browser_go_back,
         browser_wait,
+        browser_capture_element,
         browser_take_screenshot,
     ]
 

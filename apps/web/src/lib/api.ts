@@ -74,7 +74,13 @@ export interface TestRun {
   target_snapshot: Record<string, unknown>;
   configuration_snapshot: Record<string, unknown>;
 }
-
+export interface ArtifactAccess {
+  artifact_id: string;
+  artifact_type: string;
+  content_type: string;
+  url: string;
+  expires_in_seconds: number;
+}
 export interface Finding {
   id: string;
   severity: FindingSeverity;
@@ -126,7 +132,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const body = (await response.json()) as { detail?: unknown };
       if (typeof body.detail === "string") message = body.detail;
-      else if (Array.isArray(body.detail)) message = "Check the form fields and try again.";
+      else if (Array.isArray(body.detail))
+        message = "Check the form fields and try again.";
     } catch {
       // Preserve the safe fallback when the response is not JSON.
     }
@@ -140,27 +147,82 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   return (await response.json()) as T;
 }
-
 export const api = {
-  deleteRun: (id: string) => request<void>(`/api/v1/test-runs/${id}`, { method: "DELETE" }),
-  deleteTarget: (id: string) => request<void>(`/api/v1/targets/${id}`, { method: "DELETE" }),
-  deleteApplication: (id: string) => request<void>(`/api/v1/applications/${id}`, { method: "DELETE" }),
+  getArtifactAccess: (
+    runId: string,
+    artifactId: string,
+    signal?: AbortSignal,
+  ) =>
+    request<ArtifactAccess>(
+      `/api/v1/test-runs/${runId}/artifacts/${artifactId}/access`,
+      { signal },
+    ),
+  deleteRun: (id: string) =>
+    request<void>(`/api/v1/test-runs/${id}`, { method: "DELETE" }),
+  deleteTarget: (id: string) =>
+    request<void>(`/api/v1/targets/${id}`, { method: "DELETE" }),
+  deleteApplication: (id: string) =>
+    request<void>(`/api/v1/applications/${id}`, { method: "DELETE" }),
   me: () => request<CurrentUser>("/api/v1/me"),
-  login: (email: string) => request<CurrentUser>("/api/v1/auth/local/login", { method: "POST", body: JSON.stringify({ email }) }),
+  login: (email: string) =>
+    request<CurrentUser>("/api/v1/auth/local/login", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   listWorkspaces: () => request<Workspace[]>("/api/v1/workspaces"),
-  getWorkspace: (workspaceId: string) => request<Workspace>(`/api/v1/workspaces/${workspaceId}`),
-  listApplications: (workspaceId: string) => request<Application[]>(`/api/v1/workspaces/${workspaceId}/applications`),
-  getApplication: (applicationId: string) => request<Application>(`/api/v1/applications/${applicationId}`),
-  createApplication: (workspaceId: string, name: string, description: string) => request<Application>(`/api/v1/workspaces/${workspaceId}/applications`, { method: "POST", body: JSON.stringify({ name, description: description || null }) }),
-  listTargets: (applicationId: string) => request<Target[]>(`/api/v1/applications/${applicationId}/targets`),
-  getTarget: (targetId: string) => request<Target>(`/api/v1/targets/${targetId}`),
-  createTarget: (applicationId: string, payload: { name: string; environment: string; base_url: string; requires_auth: boolean }) => request<Target>(`/api/v1/applications/${applicationId}/targets`, { method: "POST", body: JSON.stringify(payload) }),
-  getAuthorization: (targetId: string) => request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`),
-  authorizeTarget: (targetId: string, authorizationBasis: string) => request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`, { method: "POST", body: JSON.stringify({ confirm_authorized: true, authorization_basis: authorizationBasis }) }),
-  revokeAuthorization: (targetId: string) => request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization/revoke`, { method: "POST" }),
-  listRuns: (applicationId: string) => request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
-  getRun: (runId: string, signal?: AbortSignal) => request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
-  getRunResults: (runId: string, signal?: AbortSignal) => request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
-  createRun: (applicationId: string, targetId: string, testBrief: string) => request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, { method: "POST", body: JSON.stringify({ target_id: targetId, study_brief: testBrief }) }),
+  getWorkspace: (workspaceId: string) =>
+    request<Workspace>(`/api/v1/workspaces/${workspaceId}`),
+  listApplications: (workspaceId: string) =>
+    request<Application[]>(`/api/v1/workspaces/${workspaceId}/applications`),
+  getApplication: (applicationId: string) =>
+    request<Application>(`/api/v1/applications/${applicationId}`),
+  createApplication: (workspaceId: string, name: string, description: string) =>
+    request<Application>(`/api/v1/workspaces/${workspaceId}/applications`, {
+      method: "POST",
+      body: JSON.stringify({ name, description: description || null }),
+    }),
+  listTargets: (applicationId: string) =>
+    request<Target[]>(`/api/v1/applications/${applicationId}/targets`),
+  getTarget: (targetId: string) =>
+    request<Target>(`/api/v1/targets/${targetId}`),
+  createTarget: (
+    applicationId: string,
+    payload: {
+      name: string;
+      environment: string;
+      base_url: string;
+      requires_auth: boolean;
+    },
+  ) =>
+    request<Target>(`/api/v1/applications/${applicationId}/targets`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getAuthorization: (targetId: string) =>
+    request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`),
+  authorizeTarget: (targetId: string, authorizationBasis: string) =>
+    request<TargetAuthorization>(`/api/v1/targets/${targetId}/authorization`, {
+      method: "POST",
+      body: JSON.stringify({
+        confirm_authorized: true,
+        authorization_basis: authorizationBasis,
+      }),
+    }),
+  revokeAuthorization: (targetId: string) =>
+    request<TargetAuthorization>(
+      `/api/v1/targets/${targetId}/authorization/revoke`,
+      { method: "POST" },
+    ),
+  listRuns: (applicationId: string) =>
+    request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
+  getRun: (runId: string, signal?: AbortSignal) =>
+    request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
+  getRunResults: (runId: string, signal?: AbortSignal) =>
+    request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
+  createRun: (applicationId: string, targetId: string, testBrief: string) =>
+    request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
+      method: "POST",
+      body: JSON.stringify({ target_id: targetId, study_brief: testBrief }),
+    }),
 };

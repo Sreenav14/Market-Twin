@@ -153,6 +153,16 @@ async def execute_multi_persona_plan(
                 "blockers": list(result.blockers),
                 "satisfied_criteria": list(result.satisfied_criteria),
                 "unsatisfied_criteria": list(result.unsatisfied_criteria),
+                "criterion_evidence":[
+                    {
+                        "criterion": item.criterion,
+                        "status": item.status,
+                        "evidence_step_ids": list(
+                            item.evidence_step_ids
+                        ),
+                    }
+                    for item in result.criterion_evidence
+                ],
                 "final_url": _safe_final_url(result.final_url),
             },
         )

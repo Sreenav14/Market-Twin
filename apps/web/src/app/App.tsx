@@ -11,17 +11,27 @@ import { AuthenticatedRouter } from "./router";
 import { queryClient } from "../lib/query";
 
 function AppRoot() {
-  const [session, setSession] = useState<AsyncState<CurrentUser>>({ status: "loading", data: null, error: null });
+  const [session, setSession] = useState<AsyncState<CurrentUser>>({
+    status: "loading",
+    data: null,
+    error: null,
+  });
 
   const resolveSession = useCallback(() => {
     setSession({ status: "loading", data: null, error: null });
-    api.me()
+    api
+      .me()
       .then((user) => setSession({ status: "ready", data: user, error: null }))
       .catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 401) {
           setSession({ status: "error", data: null, error: "unauthenticated" });
         } else {
-          setSession({ status: "error", data: null, error: error instanceof Error ? error.message : "Unable to connect." });
+          setSession({
+            status: "error",
+            data: null,
+            error:
+              error instanceof Error ? error.message : "Unable to connect.",
+          });
         }
       });
   }, []);
@@ -35,17 +45,44 @@ function AppRoot() {
   }
 
   if (session.status === "loading") {
-    return <div className="boot-screen"><BrandMark /><Spinner /><span>Opening MarketTwin…</span></div>;
+    return (
+      <div className="boot-screen">
+        <BrandMark />
+        <Spinner />
+        <span>Opening MarketTwin…</span>
+      </div>
+    );
   }
 
   if (session.status === "error") {
     if (session.error !== "unauthenticated") {
-      return <div className="boot-screen"><BrandMark /><ErrorPanel message={session.error} action={<button className="secondary-button" onClick={resolveSession}>Try again</button>} /></div>;
+      return (
+        <div className="boot-screen">
+          <BrandMark />
+          <ErrorPanel
+            message={session.error}
+            action={
+              <button className="secondary-button" onClick={resolveSession}>
+                Try again
+              </button>
+            }
+          />
+        </div>
+      );
     }
 
     return (
       <Routes>
-        <Route path="/login" element={<LoginPage onAuthenticated={(user) => setSession({ status: "ready", data: user, error: null })} />} />
+        <Route
+          path="/login"
+          element={
+            <LoginPage
+              onAuthenticated={(user) =>
+                setSession({ status: "ready", data: user, error: null })
+              }
+            />
+          }
+        />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -56,5 +93,9 @@ function AppRoot() {
 }
 
 export function App() {
-  return <BrowserRouter><AppRoot /></BrowserRouter>;
+  return (
+    <BrowserRouter>
+      <AppRoot />
+    </BrowserRouter>
+  );
 }

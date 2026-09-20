@@ -12,6 +12,7 @@ dependencies = [
     "markettwin-shared-python",
     "markettwin-database",
     "sqlalchemy[asyncio]>=2.0,<3",
+    "boto3>=1.35,<2",
     "pydantic-settings>=2.14.2",
 ]
 

@@ -1,6 +1,16 @@
 import { ReactNode, useEffect } from "react";
 
-export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: ReactNode }) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
   useEffect(() => {
     document.title = `${title} · MarketTwin`;
   }, [title]);

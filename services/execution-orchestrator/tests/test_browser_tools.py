@@ -36,6 +36,10 @@ class FakeController:
                 url="https://example.com",
                 title="Example",
                 aria_snapshot='- heading "Example"',
+                viewport_width=1280,
+                viewport_height=720,
+                scroll_y=0,
+                document_height=720,
             ),
         )
 
@@ -65,6 +69,9 @@ class FakeController:
 
     async def take_screenshot(self, **kwargs: object) -> BrowserActionResult:
         return await self._call("take_screenshot", **kwargs)
+
+    async def capture_element(self, **kwargs: object) -> BrowserActionResult:
+        return await self._call("capture_element", **kwargs)
 
 
 class FakeRecorder:
@@ -197,9 +204,17 @@ async def test_action_failure_returns_feedback_and_allows_observation(
     assert result["action"] == "click"
     assert result["status"] == "failed"
     assert result["error"] == str(error)
+    
+    if record_steps:
+        assert result["step_id"] == 1
+    else:
+        assert "step_id" not in result
     assert "browser_get_state" in str(result["recovery"])
     if record_steps:
+        assert result["step_id"] == 1
         assert recorder.finished == [(1, "failed", str(error))]
+    else:
+        assert "step_id" not in result
     state = await by_name["browser_get_state"]()
     assert state["action"] == "get_state"
 
@@ -262,6 +277,7 @@ def test_tool_surface_is_least_privilege() -> None:
         "browser_scroll",
         "browser_go_back",
         "browser_wait",
+        "browser_capture_element",
         "browser_take_screenshot",
     }
     assert "page_evaluate" not in names
@@ -275,6 +291,10 @@ def test_observation_limits_snapshot_only_in_model_payload() -> None:
         title="Example",
         aria_snapshot=full_snapshot,
         accessibility_snapshot_path="full-snapshot.yml",
+        viewport_width=1280,
+        viewport_height=720,
+        scroll_y=0,
+        document_height=720,
     )
 
     payload = observation.to_dict()
@@ -299,11 +319,13 @@ async def test_tools_record_safe_action_summaries_and_results() -> None:
     )
     by_name = {tool.__name__: tool for tool in tools}
 
-    await by_name["browser_navigate"](
+    navigate_result = await by_name["browser_navigate"](
         "https://example.com/path?token=secret#fragment"
     )
-    await by_name["browser_fill"]("Password", "do-not-log-this")
-
+    fill_result = await by_name["browser_fill"](
+        "password",
+        "do-not-log-this",
+    )
     assert recorder.started == [
         ("navigate", "Navigate to https://example.com/path."),
         ("fill", "Fill an approved non-secret text field."),
@@ -317,6 +339,8 @@ async def test_tools_record_safe_action_summaries_and_results() -> None:
         "completed",
     ]
     assert [step_id for step_id, _ in recorder.evidence] == [1, 2]
+    assert navigate_result["step_id"] == 1
+    assert fill_result["step_id"] == 2
 
 
 @pytest.mark.asyncio

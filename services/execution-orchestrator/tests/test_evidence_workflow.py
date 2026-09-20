@@ -179,6 +179,7 @@ async def test_result_event_shares_final_execution_commit(
             "blockers": ["Example blocker"],
             "satisfied_criteria": ["Order confirmed"],
             "unsatisfied_criteria": ["Fast response"],
+            "criterion_evidence": [],
             "final_url": "https://example.com/cart",
         }
 

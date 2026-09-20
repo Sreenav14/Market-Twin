@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from markettwin_execution_orchestrator.agents.schemas.journey import (
     PersonaJourneySpec,
 )
+from markettwin_execution_orchestrator.agents.schemas.persona_report import (
+    CriterionEvidence,
+)
 
 
 class JourneyExecutionStatus(StrEnum):
@@ -40,7 +43,7 @@ class PersonaJourneyResult(BaseModel):
     )
 
     journey: PersonaJourneySpec
-
+    criterion_evidence: tuple[CriterionEvidence, ...] = ()
     status: JourneyExecutionStatus
     outcome: JourneyOutcome | None = None
 

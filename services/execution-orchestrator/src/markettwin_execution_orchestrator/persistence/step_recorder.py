@@ -94,7 +94,31 @@ class ExecutionStepRecorder:
                 step_id=step_id,
                 artifact_type="screenshot",
                 stored=stored,
-                metadata={"browser_action": result.action},
+                metadata={
+                    "kind": "viewport",
+                    "browser_action": result.action,
+                },
+            )
+
+        if observation.focused_screenshot_path:
+            focused_path = Path(observation.focused_screenshot_path)
+            object_key = (
+                f"executions/{self.execution_id}/steps/{step_id}/{focused_path.name}"
+            )
+            stored = await self.storage.upload(
+                local_path=focused_path,
+                object_key=object_key,
+                content_type="image/png",
+            )
+            await repository.create(
+                execution_id=self.execution_id,
+                step_id=step_id,
+                artifact_type="screenshot",
+                stored=stored,
+                metadata={
+                    "kind": "element_crop",
+                    "browser_action": result.action,
+                },
             )
 
         if observation.accessibility_snapshot_path:

@@ -39,6 +39,9 @@ async def main(test_run_id: UUID) -> None:
             print("MarketTwin evaluation finished.")
             print(f"TestRun: {result.test_run_id}")
             print(f"Findings: {len(result.finding_ids)}")
+            print(f"Visual checks:"
+                  f"{result.visual_evaluation_count}"
+                  )
             print(f"Report: {result.report_id}")
 
     finally:
