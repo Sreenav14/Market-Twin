@@ -2,6 +2,8 @@
 
 from markettwin_database.models.execution import (
     AgentExecution,
+    AgentRuntimeSnapshot,
+    ModelInvocation,
     BrowserSession,
     ExecutionStep,
     HumanActionRequest,
@@ -12,6 +14,8 @@ from markettwin_database.models.execution import (
 
 __all__ = [
     "AgentExecution",
+    "AgentRuntimeSnapshot",
+    "ModelInvocation",
     "BrowserSession",
     "ExecutionStep",
     "HumanActionRequest",

@@ -93,6 +93,227 @@ class AgentExecution(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AgentRuntimeSnapshot(Base):
+    """Immutable historical configuration of one model-backed runtime role."""
+
+    __tablename__ = "agent_runtime_snapshots"
+    __table_args__ = (
+        CheckConstraint(
+            "agent_role IN ('meta', 'persona', 'visual_verifier')",
+            name="ck_agent_runtime_snapshots_role_allowed",
+        ),
+        CheckConstraint(
+            "snapshot_schema_version >= 1",
+            name="ck_agent_runtime_snapshots_schema_version_positive",
+        ),
+        {"schema": "execution"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+
+    test_run_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    journey_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.persona_journeys.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    execution_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.agent_executions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    agent_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    runtime_agent_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    runtime_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    template_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    template_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    model_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    model_configuration: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+    base_instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    runtime_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    persona_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    mission_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    success_criteria: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
+    tools: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
+    policy_references: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ModelInvocation(Base):
+    """One observed attempt to invoke a model."""
+
+    __tablename__ = "model_invocations"
+    __table_args__ = (
+        CheckConstraint(
+            "agent_role IN ('meta', 'persona', 'visual_verifier')",
+            name="ck_model_invocations_role_allowed",
+        ),
+        CheckConstraint(
+            "status IN ('started', 'completed', 'failed', 'rate_limited', 'cancelled')",
+            name="ck_model_invocations_status_allowed",
+        ),
+        CheckConstraint(
+            "usage_status IN ('reported', 'partial', 'unavailable')",
+            name="ck_model_invocations_usage_status_allowed",
+        ),
+        CheckConstraint(
+            "invocation_sequence IS NULL OR invocation_sequence >= 1",
+            name="ck_model_invocations_sequence_positive",
+        ),
+        CheckConstraint(
+            "attempt_number >= 1",
+            name="ck_model_invocations_attempt_positive",
+        ),
+        CheckConstraint(
+            "input_tokens IS NULL OR input_tokens >= 0",
+            name="ck_model_invocations_input_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "cached_input_tokens IS NULL OR cached_input_tokens >= 0",
+            name="ck_model_invocations_cached_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "output_tokens IS NULL OR output_tokens >= 0",
+            name="ck_model_invocations_output_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "reasoning_tokens IS NULL OR reasoning_tokens >= 0",
+            name="ck_model_invocations_reasoning_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "tool_input_tokens IS NULL OR tool_input_tokens >= 0",
+            name="ck_model_invocations_tool_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "provider_total_tokens IS NULL OR provider_total_tokens >= 0",
+            name="ck_model_invocations_total_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "request_size_estimate IS NULL OR request_size_estimate >= 0",
+            name="ck_model_invocations_request_size_nonnegative",
+        ),
+        CheckConstraint(
+            "latency_ms IS NULL OR latency_ms >= 0",
+            name="ck_model_invocations_latency_nonnegative",
+        ),
+        {"schema": "execution"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+
+    test_run_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    journey_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.persona_journeys.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    execution_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.agent_executions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    agent_snapshot_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.agent_runtime_snapshots.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    agent_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    runtime_agent_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    runtime_invocation_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    invocation_sequence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
+    )
+
+    model_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    model_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    provider_request_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    usage_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="unavailable",
+        server_default=text("'unavailable'"),
+    )
+
+    input_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    cached_input_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reasoning_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    tool_input_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    provider_total_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    request_size_estimate: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+
 class BrowserSession(Base):
     __tablename__ = "browser_sessions"
     __table_args__ = (
