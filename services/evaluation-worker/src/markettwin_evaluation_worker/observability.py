@@ -99,9 +99,6 @@ class VisualInvocationRecorder:
             usage=model_token_usage_from_litellm(
                 response
             ),
-            model_version=_optional_string(
-                getattr(response, "model", None)
-            ),
         )
 
     async def failed(
@@ -168,9 +165,3 @@ def build_visual_runtime_snapshot(
             "invocation_scope": "one criterion per call",
         },
     )
-
-
-def _optional_string(
-    value: object,
-) -> str | None:
-    return value if isinstance(value, str) and value else None

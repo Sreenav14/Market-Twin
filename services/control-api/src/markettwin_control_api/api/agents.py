@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -17,7 +18,6 @@ from markettwin_control_api.api.dependencies import (
 from markettwin_control_api.persistence.repositories import (
     AgentObservabilityRepository,
     AgentSnapshotRecord,
-    ModelInvocationRecord,
     TestRunRepository,
     UsageSummaryRecord,
 )
@@ -184,8 +184,9 @@ def _yaml_lines(
     prefix = " " * indent
 
     if isinstance(value, dict):
+        mapping = cast(dict[object, object], value)
         lines: list[str] = []
-        for key, item in value.items():
+        for key, item in mapping.items():
             if isinstance(item, (dict, list)) and item:
                 lines.append(f"{prefix}{key}:")
                 lines.extend(
@@ -205,8 +206,9 @@ def _yaml_lines(
         return lines
 
     if isinstance(value, list):
+        items = cast(list[object], value)
         lines = []
-        for item in value:
+        for item in items:
             if isinstance(item, (dict, list)) and item:
                 lines.append(f"{prefix}-")
                 lines.extend(

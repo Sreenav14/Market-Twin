@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast
 
 
 UsageStatus = Literal["reported", "partial", "unavailable"]
@@ -216,7 +216,8 @@ def _field(
     name: str,
 ) -> object | None:
     if isinstance(value, Mapping):
-        return value.get(name)
+        mapping = cast(Mapping[object, object], value)
+        return mapping.get(name)
 
     return getattr(
         value,

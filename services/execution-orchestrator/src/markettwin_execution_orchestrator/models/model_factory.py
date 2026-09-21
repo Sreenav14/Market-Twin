@@ -144,6 +144,10 @@ def create_model(
         )
 
     if config.provider == "ollama":
+        assert config.api_base is not None
+        assert config.num_ctx is not None
+        assert config.reasoning_effort is not None
+
         return LiteLlm(
             model=config.model_name,
             api_base=config.api_base,
