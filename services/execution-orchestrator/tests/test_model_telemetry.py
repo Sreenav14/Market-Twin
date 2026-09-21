@@ -9,6 +9,8 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
+from markettwin_shared.observability import ModelTokenUsage
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.models import telemetry
 from markettwin_execution_orchestrator.models.model_factory import (
@@ -62,7 +64,7 @@ async def test_adk_observer_records_one_completed_model_turn(
 
     session = FakeSession()
     observer = telemetry.AdkModelInvocationObserver(
-        session=cast(object, session),
+        session=cast(AsyncSession, session),
         test_run_id=uuid4(),
         agent_snapshot_id=uuid4(),
         agent_role="persona",
@@ -102,8 +104,10 @@ async def test_adk_observer_records_one_completed_model_turn(
     assert len(repository.finished) == 1
     assert repository.started[0]["agent_role"] == "persona"
 
-    usage = repository.finished[0]["usage"]
-    assert usage is not None
+    usage = cast(
+        ModelTokenUsage,
+        repository.finished[0]["usage"],
+    )
     assert usage.input_tokens == 100
     assert usage.output_tokens == 20
     assert usage.total_tokens == 120
