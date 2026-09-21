@@ -124,7 +124,7 @@ export function RunLayout() {
         }
       />
       <nav className="tab-strip" aria-label="Test sections">
-        {["overview", "findings", "report"].map((tab) => (
+        {["overview", "agents", "findings", "report"].map((tab) => (
           <NavLink
             key={tab}
             to={`/runs/${run.id}/${tab}`}

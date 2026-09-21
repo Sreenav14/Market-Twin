@@ -19,6 +19,7 @@ import { TargetNetworkPolicyPage } from "../pages/targets/TargetNetworkPolicyPag
 import { RunsPage } from "../pages/runs/RunsPage";
 import { NewRunPage } from "../pages/runs/NewRunPage";
 import { RunOverviewPage } from "../pages/runs/RunOverviewPage";
+import { RunAgentsPage } from "../pages/runs/RunAgentsPage";
 import { RunPerspectivesPage } from "../pages/runs/RunPerspectivesPage";
 import { RunMissionsPage } from "../pages/runs/RunMissionsPage";
 import { RunJourneysPage } from "../pages/runs/RunJourneysPage";
@@ -95,6 +96,7 @@ export function AuthenticatedRouter({
         <Route path="/runs/:runId" element={<RunLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<RunOverviewPage />} />
+          <Route path="agents" element={<RunAgentsPage />} />
           <Route path="perspectives" element={<RunPerspectivesPage />} />
           <Route path="missions" element={<RunMissionsPage />} />
           <Route path="journeys" element={<RunJourneysPage />} />

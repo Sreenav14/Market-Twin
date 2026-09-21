@@ -106,6 +106,84 @@ export interface RunResults {
   findings: Finding[];
 }
 
+
+export interface ModelUsageSummary {
+  attempts: number;
+  completed: number;
+  failed: number;
+  rate_limited: number;
+  unknown_usage_attempts: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  tool_input_tokens: number;
+  provider_total_tokens: number;
+  latency_ms: number;
+}
+
+export interface AgentSummary {
+  id: string;
+  role: "meta" | "persona" | "visual_verifier" | string;
+  name: string;
+  runtime: string;
+  model_provider: string | null;
+  model_name: string | null;
+  journey_id: string | null;
+  execution_id: string | null;
+  persona_name: string | null;
+  mission_name: string | null;
+  created_at: string;
+  usage: ModelUsageSummary;
+}
+
+export interface ModelInvocation {
+  id: string;
+  status: string;
+  usage_status: string;
+  invocation_sequence: number | null;
+  attempt_number: number;
+  model_provider: string | null;
+  model_name: string | null;
+  model_version: string | null;
+  input_tokens: number | null;
+  cached_input_tokens: number | null;
+  output_tokens: number | null;
+  reasoning_tokens: number | null;
+  tool_input_tokens: number | null;
+  provider_total_tokens: number | null;
+  latency_ms: number | null;
+  started_at: string;
+  completed_at: string | null;
+  error_code: string | null;
+}
+
+export interface AgentDetail extends AgentSummary {
+  agent_version: string;
+  snapshot_schema_version: number;
+  template_id: string | null;
+  template_version: string | null;
+  model_configuration: Record<string, unknown>;
+  base_instruction: string | null;
+  effective_instruction: string | null;
+  runtime_prompt: string | null;
+  persona: Record<string, unknown> | null;
+  mission: Record<string, unknown> | null;
+  success_criteria: string[];
+  tools: string[];
+  policy_references: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  snapshot_sha256: string;
+  yaml: string;
+  invocations: ModelInvocation[];
+}
+
+export interface TestRunUsage {
+  test_run_id: string;
+  usage: ModelUsageSummary;
+  by_role: Record<string, ModelUsageSummary>;
+}
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -148,6 +226,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 export const api = {
+  listRunAgents: (runId: string, signal?: AbortSignal) =>
+    request<AgentSummary[]>("/api/v1/test-runs/" + runId + "/agents", { signal }),
+  getRunAgent: (runId: string, snapshotId: string, signal?: AbortSignal) =>
+    request<AgentDetail>(
+      "/api/v1/test-runs/" + runId + "/agents/" + snapshotId,
+      { signal },
+    ),
+  getRunUsage: (runId: string, signal?: AbortSignal) =>
+    request<TestRunUsage>("/api/v1/test-runs/" + runId + "/usage", { signal }),
   getArtifactAccess: (
     runId: string,
     artifactId: string,
