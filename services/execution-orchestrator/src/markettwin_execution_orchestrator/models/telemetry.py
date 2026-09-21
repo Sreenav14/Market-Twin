@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
@@ -178,7 +179,7 @@ class AdkModelInvocationObserver:
         )
 
         error_name = type(error).__name__
-        error_text = str(error)
+        error_text = _safe_error_summary(error)
         rate_limited = (
             "ratelimit" in error_name.casefold()
             or "rate limit" in error_text.casefold()
@@ -194,7 +195,7 @@ class AdkModelInvocationObserver:
             completed_at=completed_at,
             latency_ms=latency_ms,
             error_code=error_name[:100],
-            error_summary=error_text[:4000],
+            error_summary=error_text,
         )
         await self._session.commit()
 
@@ -222,3 +223,25 @@ class AdkModelInvocationObserver:
             )
 
         return pending
+
+
+
+def _safe_error_summary(
+    error: Exception,
+) -> str:
+    """Return a bounded provider error summary with configured API keys redacted."""
+
+    value = str(error)
+
+    for variable in (
+        "MODEL_API_KEY",
+        "OPENAI_API_KEY",
+    ):
+        secret = os.getenv(variable)
+        if secret:
+            value = value.replace(
+                secret,
+                "[REDACTED]",
+            )
+
+    return value[:4000]

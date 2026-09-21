@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
@@ -118,7 +119,7 @@ class VisualInvocationRecorder:
             completed_at=datetime.now(UTC),
             latency_ms=self._latency_ms(invocation_id),
             error_code=type(error).__name__[:100],
-            error_summary=str(error)[:4000],
+            error_summary=_safe_error_summary(error),
         )
 
     def _latency_ms(
@@ -165,3 +166,25 @@ def build_visual_runtime_snapshot(
             "invocation_scope": "one criterion per call",
         },
     )
+
+
+
+def _safe_error_summary(
+    error: Exception,
+) -> str:
+    """Return a bounded provider error summary with configured API keys redacted."""
+
+    value = str(error)
+
+    for variable in (
+        "MODEL_API_KEY",
+        "OPENAI_API_KEY",
+    ):
+        secret = os.getenv(variable)
+        if secret:
+            value = value.replace(
+                secret,
+                "[REDACTED]",
+            )
+
+    return value[:4000]

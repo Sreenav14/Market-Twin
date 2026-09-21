@@ -78,6 +78,39 @@ class ObservabilityRepository:
 
         return row.id
 
+    async def _validate_snapshot_scope(
+        self,
+        *,
+        snapshot_id: UUID,
+        test_run_id: UUID,
+        journey_id: UUID | None,
+        execution_id: UUID | None,
+    ) -> None:
+        snapshot = await self._session.get(
+            AgentRuntimeSnapshot,
+            snapshot_id,
+        )
+
+        if snapshot is None:
+            raise ValueError(
+                f'AgentRuntimeSnapshot "{snapshot_id}" does not exist.'
+            )
+
+        if snapshot.test_run_id != test_run_id:
+            raise ValueError(
+                "Model invocation snapshot does not belong to the TestRun."
+            )
+
+        if snapshot.journey_id != journey_id:
+            raise ValueError(
+                "Model invocation Journey scope does not match its snapshot."
+            )
+
+        if snapshot.execution_id != execution_id:
+            raise ValueError(
+                "Model invocation execution scope does not match its snapshot."
+            )
+
     async def start_model_invocation(
         self,
         *,
@@ -96,6 +129,14 @@ class ObservabilityRepository:
         started_at: datetime,
         metadata: dict[str, object] | None = None,
     ) -> UUID:
+        if agent_snapshot_id is not None:
+            await self._validate_snapshot_scope(
+                snapshot_id=agent_snapshot_id,
+                test_run_id=test_run_id,
+                journey_id=journey_id,
+                execution_id=execution_id,
+            )
+
         row = ModelInvocation(
             id=invocation_id,
             test_run_id=test_run_id,

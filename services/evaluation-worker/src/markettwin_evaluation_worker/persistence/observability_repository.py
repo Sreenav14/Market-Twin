@@ -87,6 +87,19 @@ class EvaluationObservabilityRepository:
         started_at: datetime,
         metadata: dict[str, object],
     ) -> None:
+        snapshot = await self._session.get(
+            AgentRuntimeSnapshot,
+            agent_snapshot_id,
+        )
+        if (
+            snapshot is None
+            or snapshot.test_run_id != test_run_id
+            or snapshot.agent_role != "visual_verifier"
+        ):
+            raise ValueError(
+                "Visual model invocation snapshot is outside the TestRun scope."
+            )
+
         self._session.add(
             ModelInvocation(
                 id=invocation_id,
