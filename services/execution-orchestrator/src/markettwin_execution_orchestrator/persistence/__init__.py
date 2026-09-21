@@ -3,6 +3,7 @@
 from .artifact_repository import ArtifactRepository
 from .artifact_storage import S3ArtifactStorage
 from .execution_repository import ExecutionRepository
+from .observability_repository import ObservabilityRepository
 from .plan_repository import (
     PersistedJourneyRecord,
     PersistedMissionRecord,
@@ -23,6 +24,7 @@ __all__ = [
     "PlanRepository",
     "RunStateRepository",
     "ExecutionRepository",
+    "ObservabilityRepository",
     "ExecutionStepRecorder",
     "ArtifactRepository",
     "S3ArtifactStorage",
