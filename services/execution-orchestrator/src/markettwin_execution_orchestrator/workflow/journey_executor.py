@@ -15,6 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from markettwin_execution_orchestrator.agents.meta_agent_factory import (
     MetaAgentFactory,
 )
+from markettwin_execution_orchestrator.agents.runtime_snapshot import (
+    build_persona_runtime_snapshot,
+)
 from markettwin_execution_orchestrator.agents.schemas.journey import (
     PersonaJourneySpec,
 )
@@ -29,8 +32,15 @@ from markettwin_execution_orchestrator.browser.contracts import NetworkPolicy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserPolicyError,
 )
+from markettwin_execution_orchestrator.models.model_factory import (
+    resolve_model_runtime_config,
+)
+from markettwin_execution_orchestrator.models.telemetry import (
+    AdkModelInvocationObserver,
+)
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
+    ObservabilityRepository,
     ExecutionStepRecorder,
     S3ArtifactStorage,
     SessionArtifactRecorder,
@@ -48,6 +58,7 @@ JOURNEY_APP_NAME = "markettwin_persona_journey"
 class PersonaJourneyExecutionRequest:
     """Everything required to execute one already-planned Journey."""
 
+    test_run_id: UUID
     execution_id: UUID
     journey_id: UUID
 
@@ -152,6 +163,51 @@ async def execute_persona_journey(
             step_recorder=step_recorder,
         )
 
+        model_config = resolve_model_runtime_config()
+        runtime_prompt = _build_journey_prompt(request)
+        snapshot_id = uuid4()
+
+        snapshot = build_persona_runtime_snapshot(
+            test_run_id=request.test_run_id,
+            journey_id=request.journey_id,
+            execution_id=request.execution_id,
+            journey=request.journey,
+            runtime_agent_name=runtime.agent.name,
+            model_config=model_config,
+            effective_instruction=str(runtime.agent.instruction),
+            runtime_prompt=runtime_prompt,
+            tools=runtime.agent.tools,
+        )
+
+        observability_repository = ObservabilityRepository(
+            session
+        )
+        await observability_repository.create_agent_snapshot(
+            snapshot_id=snapshot_id,
+            snapshot=snapshot,
+        )
+        await session.commit()
+
+        observer = AdkModelInvocationObserver(
+            session=session,
+            test_run_id=request.test_run_id,
+            journey_id=request.journey_id,
+            execution_id=request.execution_id,
+            agent_snapshot_id=snapshot_id,
+            agent_role="persona",
+            runtime_agent_name=runtime.agent.name,
+            model_config=model_config,
+        )
+        runtime.agent.before_model_callback = (
+            observer.before_model_callback
+        )
+        runtime.agent.after_model_callback = (
+            observer.after_model_callback
+        )
+        runtime.agent.on_model_error_callback = (
+            observer.on_model_error_callback
+        )
+
         runner = InMemoryRunner(
             agent=runtime.agent,
             app_name=JOURNEY_APP_NAME,
@@ -170,7 +226,7 @@ async def execute_persona_journey(
             role="user",
             parts=[
                 types.Part(
-                    text=_build_journey_prompt(request),
+                    text=runtime_prompt,
                 )
             ],
         )
