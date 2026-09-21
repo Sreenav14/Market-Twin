@@ -139,6 +139,8 @@ export interface AgentSummary {
 
 export interface ModelInvocation {
   id: string;
+  journey_id: string | null;
+  execution_id: string | null;
   status: string;
   usage_status: string;
   invocation_sequence: number | null;

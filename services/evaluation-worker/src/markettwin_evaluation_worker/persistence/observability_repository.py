@@ -85,6 +85,8 @@ class EvaluationObservabilityRepository:
         model_provider: str | None,
         model_name: str | None,
         started_at: datetime,
+        journey_id: UUID | None = None,
+        execution_id: UUID | None = None,
         metadata: dict[str, object],
     ) -> None:
         snapshot = await self._session.get(
@@ -104,6 +106,8 @@ class EvaluationObservabilityRepository:
             ModelInvocation(
                 id=invocation_id,
                 test_run_id=test_run_id,
+                journey_id=journey_id,
+                execution_id=execution_id,
                 agent_snapshot_id=agent_snapshot_id,
                 agent_role="visual_verifier",
                 runtime_agent_name="markettwin_visual_verifier",

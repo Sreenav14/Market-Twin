@@ -209,12 +209,16 @@ async def evaluate_visual_criteria_for_run(
                     )
                 )
             else:
+                scoped_recorder = invocation_recorder.scoped(
+                    journey_id=journey.journey_id,
+                    execution_id=journey.execution_id,
+                )
                 evaluation = (
                     await evaluate_visual_criterion_from_evidence(
                         criterion=reference.criterion,
                         evidence=explicit_visual_evidence,
                         storage=storage,
-                        invocation_recorder=invocation_recorder,
+                        invocation_recorder=scoped_recorder,
                     )
                 )
 

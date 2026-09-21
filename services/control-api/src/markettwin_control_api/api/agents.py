@@ -57,6 +57,8 @@ class AgentSummaryResponse(BaseModel):
 
 class ModelInvocationResponse(BaseModel):
     id: UUID
+    journey_id: UUID | None
+    execution_id: UUID | None
     status: str
     usage_status: str
     invocation_sequence: int | None
@@ -277,6 +279,8 @@ def _invocation_response(
 ) -> ModelInvocationResponse:
     return ModelInvocationResponse(
         id=item.invocation_id,
+        journey_id=item.journey_id,
+        execution_id=item.execution_id,
         status=item.status,
         usage_status=item.usage_status,
         invocation_sequence=item.invocation_sequence,

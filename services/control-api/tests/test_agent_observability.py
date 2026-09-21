@@ -15,6 +15,8 @@ def test_usage_summary_preserves_unknown_attempt_count() -> None:
     invocations = (
         ModelInvocationRecord(
             invocation_id=uuid4(),
+            journey_id=None,
+            execution_id=None,
             status="completed",
             usage_status="reported",
             invocation_sequence=1,
@@ -35,6 +37,8 @@ def test_usage_summary_preserves_unknown_attempt_count() -> None:
         ),
         ModelInvocationRecord(
             invocation_id=uuid4(),
+            journey_id=None,
+            execution_id=None,
             status="rate_limited",
             usage_status="unavailable",
             invocation_sequence=2,

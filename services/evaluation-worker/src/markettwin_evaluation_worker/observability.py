@@ -55,12 +55,33 @@ class VisualInvocationRecorder:
         test_run_id: UUID,
         agent_snapshot_id: UUID,
         config: VisualModelConfig,
+        journey_id: UUID | None = None,
+        execution_id: UUID | None = None,
     ) -> None:
         self._repository = repository
         self._test_run_id = test_run_id
         self._agent_snapshot_id = agent_snapshot_id
         self._config = config
+        self._journey_id = journey_id
+        self._execution_id = execution_id
         self._pending: dict[UUID, float] = {}
+
+    def scoped(
+        self,
+        *,
+        journey_id: UUID,
+        execution_id: UUID,
+    ) -> "VisualInvocationRecorder":
+        """Return a recorder that attributes calls to one Persona Journey."""
+
+        return VisualInvocationRecorder(
+            repository=self._repository,
+            test_run_id=self._test_run_id,
+            agent_snapshot_id=self._agent_snapshot_id,
+            config=self._config,
+            journey_id=journey_id,
+            execution_id=execution_id,
+        )
 
     async def start(
         self,
@@ -79,6 +100,8 @@ class VisualInvocationRecorder:
             model_provider=self._config.provider,
             model_name=self._config.model_name,
             started_at=datetime.now(UTC),
+            journey_id=self._journey_id,
+            execution_id=self._execution_id,
             metadata={
                 "criterion": criterion,
             },

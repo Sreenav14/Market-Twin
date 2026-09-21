@@ -38,6 +38,8 @@ class ModelInvocationRecord:
     """One historical model invocation attempt."""
 
     invocation_id: UUID
+    journey_id: UUID | None
+    execution_id: UUID | None
     status: str
     usage_status: str
     invocation_sequence: int | None
@@ -292,6 +294,8 @@ def _invocation_record(
 ) -> ModelInvocationRecord:
     return ModelInvocationRecord(
         invocation_id=row.id,
+        journey_id=row.journey_id,
+        execution_id=row.execution_id,
         status=row.status,
         usage_status=row.usage_status,
         invocation_sequence=row.invocation_sequence,
