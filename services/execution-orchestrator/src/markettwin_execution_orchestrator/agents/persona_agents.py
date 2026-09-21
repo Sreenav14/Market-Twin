@@ -9,15 +9,12 @@ from markettwin_execution_orchestrator.browser.tools import BrowserTool
 from markettwin_execution_orchestrator.models.model_factory import create_model
 
 
-def create_persona_agent(
-    *,
+def build_persona_instruction(
     journey: PersonaJourneySpec,
-    browser_tools: Sequence[BrowserTool],
-) -> LlmAgent:
-    """Create one simulated-user agent with Journey-bound Python browser tools."""
+) -> str:
+    """Build the exact effective instruction supplied to one Persona Agent."""
 
-    persona_name = f"markettwin_{journey.journey_key}"
-    instruction = f"""
+    return f"""
 /no_think
 
 You are a MarketTwin simulated user.
@@ -165,6 +162,16 @@ showed that the criterion was not satisfied.
 Never claim an action succeeded unless browser state showed that it succeeded.
 """.strip()
 
+
+def create_persona_agent(
+    *,
+    journey: PersonaJourneySpec,
+    browser_tools: Sequence[BrowserTool],
+) -> LlmAgent:
+    """Create one simulated-user agent with Journey-bound Python browser tools."""
+
+    persona_name = f"markettwin_{journey.journey_key}"
+
     return LlmAgent(
         name=persona_name,
         model=create_model(),
@@ -172,6 +179,6 @@ Never claim an action succeeded unless browser state showed that it succeeded.
             f"Simulates the MarketTwin user perspective '{journey.persona.name}' "
             "while testing one authorized Journey."
         ),
-        instruction=instruction,
+        instruction=build_persona_instruction(journey),
         tools=list(browser_tools),
     )

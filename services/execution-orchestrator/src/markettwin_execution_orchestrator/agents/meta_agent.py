@@ -1,4 +1,4 @@
-""" MarketTwin Meta Agent for multi-perspective test planning"""
+"""MarketTwin Meta Agent for multi-perspective test planning."""
 
 from google.adk.agents import LlmAgent
 
@@ -11,19 +11,7 @@ from markettwin_execution_orchestrator.models.model_factory import (
 
 META_AGENT_MAX_TOKENS = 1024
 
-def create_meta_agent() -> LlmAgent:
-    """ Create the MarketTwin Meta Agent."""
-    
-    return LlmAgent(
-        name = "markettwin_meta_agent",
-        model = create_model(
-            max_tokens = META_AGENT_MAX_TOKENS,
-        ),
-        description = (
-            "Create diverse realistic user perspectives for "
-            "testing an authorized application."
-        ),
-        instruction="""
+META_AGENT_INSTRUCTION = """
 /no_think
 
 You are the MarketTwin Meta Agent.
@@ -86,6 +74,21 @@ Missions:
 - begin signup
 
 Do not copy these examples unless they actually fit the application.
-""".strip(),
+""".strip()
+
+
+def create_meta_agent() -> LlmAgent:
+    """Create the MarketTwin Meta Agent."""
+
+    return LlmAgent(
+        name="markettwin_meta_agent",
+        model=create_model(
+            max_tokens=META_AGENT_MAX_TOKENS,
+        ),
+        description=(
+            "Create diverse realistic user perspectives for "
+            "testing an authorized application."
+        ),
+        instruction=META_AGENT_INSTRUCTION,
         output_schema=MetaAgentPlan,
     )

@@ -22,6 +22,9 @@ from markettwin_execution_orchestrator.browser import (
 from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
 )
+from markettwin_execution_orchestrator.models.model_factory import (
+    resolve_model_runtime_config,
+)
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     RunEventRepository,
@@ -79,6 +82,7 @@ async def execute_multi_persona_plan(
     execution_repository = ExecutionRepository(session)
     run_event_repository = RunEventRepository(session)
     results: list[PersonaJourneyResult] = []
+    persona_model_config = resolve_model_runtime_config()
 
     for journey in journeys:
         execution_id = uuid4()
@@ -91,12 +95,14 @@ async def execute_multi_persona_plan(
         await execution_repository.create_agent_execution(
             execution_id=execution_id,
             journey_id=journey_id,
+            model_name=persona_model_config.model_name,
         )
         await session.commit()
 
         try:
             result = await execute_persona_journey(
                 request=PersonaJourneyExecutionRequest(
+                    test_run_id=request.run_id,
                     execution_id=execution_id,
                     journey_id=journey_id,
                     journey=journey,

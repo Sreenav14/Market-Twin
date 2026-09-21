@@ -90,7 +90,8 @@ async def execute_markettwin_run(
                 test_run_id=request.run_id,
                 study_brief=study_brief,
                 target_snapshot=request.target_snapshot,
-            )
+            ),
+            session=session,
         )
 
         persisted_plan = await plan_repository.create_from_plan(
