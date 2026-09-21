@@ -37,7 +37,7 @@ from markettwin_evaluation_worker.visual_verifier import (
     VISUAL_MAX_TOKENS,
     VISUAL_RATE_LIMIT_MAX_ATTEMPTS,
     VISUAL_TEMPERATURE,
-    VISUAL_VERIFIER_INSTRUCTION,
+    build_visual_prompt,
     visual_model_name,
 )
 
@@ -92,8 +92,8 @@ async def evaluate_and_generate_report(
             snapshot=build_visual_runtime_snapshot(
                 test_run_id=test_run_id,
                 config=visual_config,
-                effective_instruction=(
-                    VISUAL_VERIFIER_INSTRUCTION
+                effective_instruction=build_visual_prompt(
+                    "{{criterion}}"
                 ),
             ),
         )
