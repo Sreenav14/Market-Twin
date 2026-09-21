@@ -1,5 +1,11 @@
 """ control API persistence repositories """
 
+from .agent_observability_repository import (
+    AgentObservabilityRepository,
+    AgentSnapshotRecord,
+    ModelInvocationRecord,
+    UsageSummaryRecord,
+)
 from .application_repository import ApplicationRecord, ApplicationRepository
 from .authorization_repository import TargetAuthorizationRecord, TargetAuthorizationRepository
 from .identity_repository import IdentityRepository, ResolvedIdentity
@@ -14,6 +20,10 @@ from .test_run_results_repository import (
 from .workspace_repository import WorkspaceAccess, WorkspaceRepository
 
 __all__ = (
+    "AgentObservabilityRepository",
+    "AgentSnapshotRecord",
+    "ModelInvocationRecord",
+    "UsageSummaryRecord",
     "IdentityRepository",
     "ResolvedIdentity",
     "WorkspaceRepository",

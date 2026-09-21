@@ -8,6 +8,7 @@ from typing import Final, Literal
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from markettwin_control_api.api.agents import router as agents_router
 from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.artifacts import router as artifacts_router
 from markettwin_control_api.api.auth import router as auth_router
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(auth_router)
+    application.include_router(agents_router)
     application.include_router(lifecycle_router)
     application.include_router(workspaces_router)
     application.include_router(applications_router)

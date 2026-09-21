@@ -1,0 +1,490 @@
+"""Historical agent configuration and model usage endpoints."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
+
+import yaml
+from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel
+
+from markettwin_control_api.api.auth import get_database_runtime
+from markettwin_control_api.api.dependencies import (
+    get_authenticated_user_id,
+)
+from markettwin_control_api.persistence.repositories import (
+    AgentObservabilityRepository,
+    AgentSnapshotRecord,
+    ModelInvocationRecord,
+    TestRunRepository,
+    UsageSummaryRecord,
+)
+
+router = APIRouter(tags=["Agents"])
+
+
+class UsageSummaryResponse(BaseModel):
+    attempts: int
+    completed: int
+    failed: int
+    rate_limited: int
+    unknown_usage_attempts: int
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    tool_input_tokens: int
+    provider_total_tokens: int
+    latency_ms: int
+
+
+class AgentSummaryResponse(BaseModel):
+    id: UUID
+    role: str
+    name: str
+    runtime: str
+    model_provider: str | None
+    model_name: str | None
+    journey_id: UUID | None
+    execution_id: UUID | None
+    persona_name: str | None
+    mission_name: str | None
+    created_at: datetime
+    usage: UsageSummaryResponse
+
+
+class ModelInvocationResponse(BaseModel):
+    id: UUID
+    status: str
+    usage_status: str
+    invocation_sequence: int | None
+    attempt_number: int
+    model_provider: str | None
+    model_name: str | None
+    model_version: str | None
+    input_tokens: int | None
+    cached_input_tokens: int | None
+    output_tokens: int | None
+    reasoning_tokens: int | None
+    tool_input_tokens: int | None
+    provider_total_tokens: int | None
+    latency_ms: int | None
+    started_at: datetime
+    completed_at: datetime | None
+    error_code: str | None
+
+
+class AgentDetailResponse(AgentSummaryResponse):
+    agent_version: str
+    snapshot_schema_version: int
+    template_id: str | None
+    template_version: str | None
+    model_configuration: dict[str, object]
+    base_instruction: str | None
+    effective_instruction: str | None
+    runtime_prompt: str | None
+    persona: dict[str, object] | None
+    mission: dict[str, object] | None
+    success_criteria: list[str]
+    tools: list[str]
+    policy_references: dict[str, object]
+    metadata: dict[str, object]
+    snapshot_sha256: str
+    yaml: str
+    invocations: list[ModelInvocationResponse]
+
+
+class TestRunUsageResponse(BaseModel):
+    test_run_id: UUID
+    usage: UsageSummaryResponse
+    by_role: dict[str, UsageSummaryResponse]
+
+
+def _usage_response(
+    usage: UsageSummaryRecord,
+) -> UsageSummaryResponse:
+    return UsageSummaryResponse(
+        attempts=usage.attempts,
+        completed=usage.completed,
+        failed=usage.failed,
+        rate_limited=usage.rate_limited,
+        unknown_usage_attempts=usage.unknown_usage_attempts,
+        input_tokens=usage.input_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        output_tokens=usage.output_tokens,
+        reasoning_tokens=usage.reasoning_tokens,
+        tool_input_tokens=usage.tool_input_tokens,
+        provider_total_tokens=usage.provider_total_tokens,
+        latency_ms=usage.latency_ms,
+    )
+
+
+def _optional_name(
+    payload: dict[str, object] | None,
+) -> str | None:
+    if payload is None:
+        return None
+    value = payload.get("name")
+    return value if isinstance(value, str) else None
+
+
+def _yaml_payload(
+    snapshot: AgentSnapshotRecord,
+) -> dict[str, object]:
+    return {
+        "schema_version": snapshot.snapshot_schema_version,
+        "agent": {
+            "role": snapshot.agent_role,
+            "name": snapshot.runtime_agent_name,
+            "version": snapshot.agent_version,
+            "runtime": snapshot.runtime_kind,
+            "template_id": snapshot.template_id,
+            "template_version": snapshot.template_version,
+        },
+        "model": {
+            "provider": snapshot.model_provider,
+            "name": snapshot.model_name,
+            "configuration": snapshot.model_configuration,
+        },
+        "persona": snapshot.persona_snapshot,
+        "mission": snapshot.mission_snapshot,
+        "success_criteria": list(snapshot.success_criteria),
+        "tools": list(snapshot.tools),
+        "instructions": {
+            "base": snapshot.base_instruction,
+            "effective": snapshot.effective_instruction,
+        },
+        "runtime_prompt": snapshot.runtime_prompt,
+        "policy_references": snapshot.policy_references,
+        "metadata": snapshot.metadata,
+        "snapshot_sha256": snapshot.snapshot_sha256,
+    }
+
+
+def _invocation_response(
+    item: ModelInvocationRecord,
+) -> ModelInvocationResponse:
+    return ModelInvocationResponse(
+        id=item.invocation_id,
+        status=item.status,
+        usage_status=item.usage_status,
+        invocation_sequence=item.invocation_sequence,
+        attempt_number=item.attempt_number,
+        model_provider=item.model_provider,
+        model_name=item.model_name,
+        model_version=item.model_version,
+        input_tokens=item.input_tokens,
+        cached_input_tokens=item.cached_input_tokens,
+        output_tokens=item.output_tokens,
+        reasoning_tokens=item.reasoning_tokens,
+        tool_input_tokens=item.tool_input_tokens,
+        provider_total_tokens=item.provider_total_tokens,
+        latency_ms=item.latency_ms,
+        started_at=item.started_at,
+        completed_at=item.completed_at,
+        error_code=item.error_code,
+    )
+
+
+async def _authorized_repositories(
+    *,
+    test_run_id: UUID,
+    request: Request,
+) -> tuple[AgentObservabilityRepository, object]:
+    user_id = await get_authenticated_user_id(
+        request=request
+    )
+    database = get_database_runtime(request)
+    database_session = database.session_factory()
+
+    session = await database_session.__aenter__()
+
+    try:
+        run_repository = TestRunRepository(session)
+        run = await run_repository.get_for_user(
+            test_run_id=test_run_id,
+            user_id=user_id,
+        )
+
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Test run not found.",
+            )
+
+        return (
+            AgentObservabilityRepository(session),
+            database_session,
+        )
+    except Exception:
+        await database_session.__aexit__(
+            None,
+            None,
+            None,
+        )
+        raise
+
+
+@router.get(
+    "/api/v1/test-runs/{test_run_id}/agents",
+    response_model=list[AgentSummaryResponse],
+)
+async def list_test_run_agents(
+    test_run_id: UUID,
+    request: Request,
+) -> list[AgentSummaryResponse]:
+    repository, context = await _authorized_repositories(
+        test_run_id=test_run_id,
+        request=request,
+    )
+
+    try:
+        snapshots = await repository.list_snapshots(
+            test_run_id=test_run_id
+        )
+        responses: list[AgentSummaryResponse] = []
+
+        for snapshot in snapshots:
+            usage = await repository.usage_summary(
+                test_run_id=test_run_id,
+                snapshot_id=snapshot.snapshot_id,
+            )
+            responses.append(
+                AgentSummaryResponse(
+                    id=snapshot.snapshot_id,
+                    role=snapshot.agent_role,
+                    name=snapshot.runtime_agent_name,
+                    runtime=snapshot.runtime_kind,
+                    model_provider=snapshot.model_provider,
+                    model_name=snapshot.model_name,
+                    journey_id=snapshot.journey_id,
+                    execution_id=snapshot.execution_id,
+                    persona_name=_optional_name(
+                        snapshot.persona_snapshot
+                    ),
+                    mission_name=_optional_name(
+                        snapshot.mission_snapshot
+                    ),
+                    created_at=snapshot.created_at,
+                    usage=_usage_response(usage),
+                )
+            )
+
+        return responses
+    finally:
+        await context.__aexit__(None, None, None)
+
+
+@router.get(
+    "/api/v1/test-runs/{test_run_id}/agents/{snapshot_id}",
+    response_model=AgentDetailResponse,
+)
+async def get_test_run_agent(
+    test_run_id: UUID,
+    snapshot_id: UUID,
+    request: Request,
+) -> AgentDetailResponse:
+    repository, context = await _authorized_repositories(
+        test_run_id=test_run_id,
+        request=request,
+    )
+
+    try:
+        snapshot = await repository.get_snapshot(
+            test_run_id=test_run_id,
+            snapshot_id=snapshot_id,
+        )
+        if snapshot is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent snapshot not found.",
+            )
+
+        usage = await repository.usage_summary(
+            test_run_id=test_run_id,
+            snapshot_id=snapshot_id,
+        )
+        invocations = await repository.list_invocations(
+            test_run_id=test_run_id,
+            snapshot_id=snapshot_id,
+        )
+
+        return AgentDetailResponse(
+            id=snapshot.snapshot_id,
+            role=snapshot.agent_role,
+            name=snapshot.runtime_agent_name,
+            runtime=snapshot.runtime_kind,
+            model_provider=snapshot.model_provider,
+            model_name=snapshot.model_name,
+            journey_id=snapshot.journey_id,
+            execution_id=snapshot.execution_id,
+            persona_name=_optional_name(
+                snapshot.persona_snapshot
+            ),
+            mission_name=_optional_name(
+                snapshot.mission_snapshot
+            ),
+            created_at=snapshot.created_at,
+            usage=_usage_response(usage),
+            agent_version=snapshot.agent_version,
+            snapshot_schema_version=(
+                snapshot.snapshot_schema_version
+            ),
+            template_id=snapshot.template_id,
+            template_version=snapshot.template_version,
+            model_configuration=(
+                snapshot.model_configuration
+            ),
+            base_instruction=snapshot.base_instruction,
+            effective_instruction=(
+                snapshot.effective_instruction
+            ),
+            runtime_prompt=snapshot.runtime_prompt,
+            persona=snapshot.persona_snapshot,
+            mission=snapshot.mission_snapshot,
+            success_criteria=list(
+                snapshot.success_criteria
+            ),
+            tools=list(snapshot.tools),
+            policy_references=(
+                snapshot.policy_references
+            ),
+            metadata=snapshot.metadata,
+            snapshot_sha256=snapshot.snapshot_sha256,
+            yaml=yaml.safe_dump(
+                _yaml_payload(snapshot),
+                sort_keys=False,
+                allow_unicode=True,
+            ),
+            invocations=[
+                _invocation_response(item)
+                for item in invocations
+            ],
+        )
+    finally:
+        await context.__aexit__(None, None, None)
+
+
+@router.get(
+    "/api/v1/test-runs/{test_run_id}/usage",
+    response_model=TestRunUsageResponse,
+)
+async def get_test_run_usage(
+    test_run_id: UUID,
+    request: Request,
+) -> TestRunUsageResponse:
+    repository, context = await _authorized_repositories(
+        test_run_id=test_run_id,
+        request=request,
+    )
+
+    try:
+        snapshots = await repository.list_snapshots(
+            test_run_id=test_run_id
+        )
+        invocations = await repository.list_invocations(
+            test_run_id=test_run_id
+        )
+
+        role_groups: dict[
+            str,
+            list[ModelInvocationRecord],
+        ] = {}
+
+        role_by_snapshot = {
+            snapshot.snapshot_id: snapshot.agent_role
+            for snapshot in snapshots
+        }
+
+        for item in invocations:
+            role = role_by_snapshot.get(
+                next(
+                    (
+                        snapshot.snapshot_id
+                        for snapshot in snapshots
+                        if snapshot.snapshot_id
+                        in role_by_snapshot
+                        and snapshot.agent_role
+                    ),
+                    None,
+                ),
+                "unknown",
+            )
+            role_groups.setdefault(role, []).append(
+                item
+            )
+
+        # Invocation records currently do not expose snapshot_id in the read
+        # DTO, so derive role totals with per-snapshot queries. This keeps the
+        # API correct now and can be collapsed into one SQL aggregate later.
+        by_role: dict[str, UsageSummaryResponse] = {}
+        role_accumulator: dict[str, list[UsageSummaryRecord]] = {}
+
+        for snapshot in snapshots:
+            role_accumulator.setdefault(
+                snapshot.agent_role,
+                [],
+            ).append(
+                await repository.usage_summary(
+                    test_run_id=test_run_id,
+                    snapshot_id=snapshot.snapshot_id,
+                )
+            )
+
+        for role, summaries in role_accumulator.items():
+            by_role[role] = _usage_response(
+                _merge_summaries(summaries)
+            )
+
+        return TestRunUsageResponse(
+            test_run_id=test_run_id,
+            usage=_usage_response(
+                await repository.usage_summary(
+                    test_run_id=test_run_id
+                )
+            ),
+            by_role=by_role,
+        )
+    finally:
+        await context.__aexit__(None, None, None)
+
+
+def _merge_summaries(
+    values: list[UsageSummaryRecord],
+) -> UsageSummaryRecord:
+    return UsageSummaryRecord(
+        attempts=sum(item.attempts for item in values),
+        completed=sum(item.completed for item in values),
+        failed=sum(item.failed for item in values),
+        rate_limited=sum(
+            item.rate_limited for item in values
+        ),
+        unknown_usage_attempts=sum(
+            item.unknown_usage_attempts
+            for item in values
+        ),
+        input_tokens=sum(
+            item.input_tokens for item in values
+        ),
+        cached_input_tokens=sum(
+            item.cached_input_tokens
+            for item in values
+        ),
+        output_tokens=sum(
+            item.output_tokens for item in values
+        ),
+        reasoning_tokens=sum(
+            item.reasoning_tokens for item in values
+        ),
+        tool_input_tokens=sum(
+            item.tool_input_tokens for item in values
+        ),
+        provider_total_tokens=sum(
+            item.provider_total_tokens
+            for item in values
+        ),
+        latency_ms=sum(
+            item.latency_ms for item in values
+        ),
+    )
