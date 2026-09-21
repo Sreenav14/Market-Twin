@@ -283,7 +283,7 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
     class FakeRecorder:
         def __init__(self) -> None:
             self.started: list[int] = []
-            self.failed: list[bool] = []
+            self.failed_flags: list[bool] = []
             self.completed = 0
 
         async def start(
@@ -305,7 +305,7 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
         ) -> None:
             assert invocation_id == 1
             assert isinstance(error, RateLimitError)
-            self.failed.append(rate_limited)
+            self.failed_flags.append(rate_limited)
 
         async def completed(
             self,
@@ -344,5 +344,5 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
 
     assert result.status == "satisfied"
     assert recorder.started == [1, 2]
-    assert recorder.failed == [True]
+    assert recorder.failed_flags == [True]
     assert recorder.completed == 1

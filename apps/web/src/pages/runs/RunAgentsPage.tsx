@@ -127,6 +127,13 @@ export function RunAgentsPage() {
                   <dd>{formatNumber(detailQuery.data.usage.cached_input_tokens)}</dd>
                 </div>
               </dl>
+              {detailQuery.data.usage.unknown_usage_attempts > 0 ? (
+                <p className="muted">
+                  {detailQuery.data.usage.unknown_usage_attempts} model attempt(s)
+                  did not expose token usage. Known token totals do not assume
+                  those attempts consumed zero tokens.
+                </p>
+              ) : null}
 
               <section className="agent-section">
                 <h4>Runtime</h4>
