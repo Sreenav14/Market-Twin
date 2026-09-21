@@ -69,7 +69,7 @@ def _image_data_url(
     )
 
 
-def _visual_model_name() -> str:
+def visual_model_name() -> str:
     """Return the model reserved for visual verification."""
 
     model = os.getenv(
@@ -196,7 +196,7 @@ async def verify_visual_criterion(
         )
 
     request: dict[str, object] = {
-        "model": _visual_model_name(),
+        "model": visual_model_name(),
         "messages": [
             {
                 "role": "user",

@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID
 
-import yaml
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -162,6 +161,113 @@ def _yaml_payload(
         "metadata": snapshot.metadata,
         "snapshot_sha256": snapshot.snapshot_sha256,
     }
+
+
+def _render_yaml(
+    payload: dict[str, object],
+) -> str:
+    """Render snapshot data as deterministic human-readable YAML."""
+
+    return "\n".join(
+        _yaml_lines(
+            payload,
+            indent=0,
+        )
+    ) + "\n"
+
+
+def _yaml_lines(
+    value: object,
+    *,
+    indent: int,
+) -> list[str]:
+    prefix = " " * indent
+
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, item in value.items():
+            if isinstance(item, (dict, list)) and item:
+                lines.append(f"{prefix}{key}:")
+                lines.extend(
+                    _yaml_lines(
+                        item,
+                        indent=indent + 2,
+                    )
+                )
+            else:
+                lines.extend(
+                    _yaml_scalar_field(
+                        key=str(key),
+                        value=item,
+                        indent=indent,
+                    )
+                )
+        return lines
+
+    if isinstance(value, list):
+        lines = []
+        for item in value:
+            if isinstance(item, (dict, list)) and item:
+                lines.append(f"{prefix}-")
+                lines.extend(
+                    _yaml_lines(
+                        item,
+                        indent=indent + 2,
+                    )
+                )
+            else:
+                lines.append(
+                    f"{prefix}- {_yaml_scalar(item)}"
+                )
+        return lines
+
+    return [
+        f"{prefix}{_yaml_scalar(value)}"
+    ]
+
+
+def _yaml_scalar_field(
+    *,
+    key: str,
+    value: object,
+    indent: int,
+) -> list[str]:
+    prefix = " " * indent
+
+    if isinstance(value, str) and "\n" in value:
+        return [
+            f"{prefix}{key}: |",
+            *[
+                f"{prefix}  {line}"
+                for line in value.splitlines()
+            ],
+        ]
+
+    return [
+        f"{prefix}{key}: {_yaml_scalar(value)}"
+    ]
+
+
+def _yaml_scalar(
+    value: object,
+) -> str:
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        escaped = (
+            value
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+        )
+        return f'"{escaped}"'
+    return f'"{str(value)}"'
 
 
 def _invocation_response(
@@ -342,10 +448,8 @@ async def get_test_run_agent(
             ),
             metadata=snapshot.metadata,
             snapshot_sha256=snapshot.snapshot_sha256,
-            yaml=yaml.safe_dump(
-                _yaml_payload(snapshot),
-                sort_keys=False,
-                allow_unicode=True,
+            yaml=_render_yaml(
+                _yaml_payload(snapshot)
             ),
             invocations=[
                 _invocation_response(item)

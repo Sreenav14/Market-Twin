@@ -38,7 +38,7 @@ from markettwin_evaluation_worker.visual_verifier import (
     VISUAL_RATE_LIMIT_MAX_ATTEMPTS,
     VISUAL_TEMPERATURE,
     VISUAL_VERIFIER_INSTRUCTION,
-    _visual_model_name,
+    visual_model_name,
 )
 
 
@@ -76,7 +76,7 @@ async def evaluate_and_generate_report(
         )
 
         visual_config = VisualModelConfig(
-            model_name=_visual_model_name(),
+            model_name=visual_model_name(),
             max_tokens=VISUAL_MAX_TOKENS,
             temperature=VISUAL_TEMPERATURE,
             max_attempts=VISUAL_RATE_LIMIT_MAX_ATTEMPTS,

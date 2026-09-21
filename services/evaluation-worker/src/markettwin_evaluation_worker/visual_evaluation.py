@@ -104,12 +104,19 @@ async def evaluate_visual_criterion_from_evidence(
                 directory=directory,
             )
 
-        verification = await verify_visual_criterion(
-            criterion=criterion,
-            viewport_path=viewport_path,
-            focused_path=focused_path,
-            invocation_recorder=invocation_recorder,
-        )
+        if invocation_recorder is None:
+            verification = await verify_visual_criterion(
+                criterion=criterion,
+                viewport_path=viewport_path,
+                focused_path=focused_path,
+            )
+        else:
+            verification = await verify_visual_criterion(
+                criterion=criterion,
+                viewport_path=viewport_path,
+                focused_path=focused_path,
+                invocation_recorder=invocation_recorder,
+            )
 
     artifact_ids = [
         selected.viewport.artifact_id,

@@ -200,14 +200,23 @@ async def evaluate_visual_criteria_for_run(
             if not explicit_visual_evidence:
                 continue
 
-            evaluation = (
-                await evaluate_visual_criterion_from_evidence(
-                    criterion=reference.criterion,
-                    evidence=explicit_visual_evidence,
-                    storage=storage,
-                    invocation_recorder=invocation_recorder,
+            if invocation_recorder is None:
+                evaluation = (
+                    await evaluate_visual_criterion_from_evidence(
+                        criterion=reference.criterion,
+                        evidence=explicit_visual_evidence,
+                        storage=storage,
+                    )
                 )
-            )
+            else:
+                evaluation = (
+                    await evaluate_visual_criterion_from_evidence(
+                        criterion=reference.criterion,
+                        evidence=explicit_visual_evidence,
+                        storage=storage,
+                        invocation_recorder=invocation_recorder,
+                    )
+                )
 
             evaluations.append(
                 JourneyVisualEvaluation(
