@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID
 
@@ -187,21 +189,23 @@ def _invocation_response(
     )
 
 
-async def _authorized_repositories(
+@asynccontextmanager
+async def _authorized_repository(
     *,
     test_run_id: UUID,
     request: Request,
-) -> tuple[AgentObservabilityRepository, object]:
+) -> AsyncIterator[AgentObservabilityRepository]:
+    """Yield an observability reader only after TestRun access is verified."""
+
     user_id = await get_authenticated_user_id(
         request=request
     )
     database = get_database_runtime(request)
-    database_session = database.session_factory()
 
-    session = await database_session.__aenter__()
-
-    try:
-        run_repository = TestRunRepository(session)
+    async with database.session_factory() as database_session:
+        run_repository = TestRunRepository(
+            database_session
+        )
         run = await run_repository.get_for_user(
             test_run_id=test_run_id,
             user_id=user_id,
@@ -213,17 +217,9 @@ async def _authorized_repositories(
                 detail="Test run not found.",
             )
 
-        return (
-            AgentObservabilityRepository(session),
-            database_session,
+        yield AgentObservabilityRepository(
+            database_session
         )
-    except Exception:
-        await database_session.__aexit__(
-            None,
-            None,
-            None,
-        )
-        raise
 
 
 @router.get(
@@ -234,12 +230,10 @@ async def list_test_run_agents(
     test_run_id: UUID,
     request: Request,
 ) -> list[AgentSummaryResponse]:
-    repository, context = await _authorized_repositories(
+    async with _authorized_repository(
         test_run_id=test_run_id,
         request=request,
-    )
-
-    try:
+    ) as repository:
         snapshots = await repository.list_snapshots(
             test_run_id=test_run_id
         )
@@ -272,8 +266,6 @@ async def list_test_run_agents(
             )
 
         return responses
-    finally:
-        await context.__aexit__(None, None, None)
 
 
 @router.get(
@@ -285,12 +277,10 @@ async def get_test_run_agent(
     snapshot_id: UUID,
     request: Request,
 ) -> AgentDetailResponse:
-    repository, context = await _authorized_repositories(
+    async with _authorized_repository(
         test_run_id=test_run_id,
         request=request,
-    )
-
-    try:
+    ) as repository:
         snapshot = await repository.get_snapshot(
             test_run_id=test_run_id,
             snapshot_id=snapshot_id,
@@ -362,8 +352,6 @@ async def get_test_run_agent(
                 for item in invocations
             ],
         )
-    finally:
-        await context.__aexit__(None, None, None)
 
 
 @router.get(
@@ -374,50 +362,15 @@ async def get_test_run_usage(
     test_run_id: UUID,
     request: Request,
 ) -> TestRunUsageResponse:
-    repository, context = await _authorized_repositories(
+    async with _authorized_repository(
         test_run_id=test_run_id,
         request=request,
-    )
-
-    try:
+    ) as repository:
         snapshots = await repository.list_snapshots(
             test_run_id=test_run_id
         )
-        invocations = await repository.list_invocations(
-            test_run_id=test_run_id
-        )
-
-        role_groups: dict[
-            str,
-            list[ModelInvocationRecord],
-        ] = {}
-
-        role_by_snapshot = {
-            snapshot.snapshot_id: snapshot.agent_role
-            for snapshot in snapshots
-        }
-
-        for item in invocations:
-            role = role_by_snapshot.get(
-                next(
-                    (
-                        snapshot.snapshot_id
-                        for snapshot in snapshots
-                        if snapshot.snapshot_id
-                        in role_by_snapshot
-                        and snapshot.agent_role
-                    ),
-                    None,
-                ),
-                "unknown",
-            )
-            role_groups.setdefault(role, []).append(
-                item
-            )
-
-        # Invocation records currently do not expose snapshot_id in the read
-        # DTO, so derive role totals with per-snapshot queries. This keeps the
-        # API correct now and can be collapsed into one SQL aggregate later.
+        # Role totals are derived from per-snapshot summaries so historical
+        # agent roles remain the source of truth.
         by_role: dict[str, UsageSummaryResponse] = {}
         role_accumulator: dict[str, list[UsageSummaryRecord]] = {}
 
@@ -446,8 +399,6 @@ async def get_test_run_usage(
             ),
             by_role=by_role,
         )
-    finally:
-        await context.__aexit__(None, None, None)
 
 
 def _merge_summaries(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -245,7 +246,7 @@ def summarize_usage(
 
 
 def _sum_known(
-    values: object,
+    values: Iterable[int | None],
 ) -> int:
     return sum(
         value

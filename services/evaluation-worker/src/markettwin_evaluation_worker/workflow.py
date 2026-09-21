@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import uuid4
 
 from markettwin_evaluation_worker.deterministic_evaluator import (
     evaluate_completed_run,

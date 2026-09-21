@@ -123,22 +123,24 @@ def create_model(
             os.getenv("MODEL_API_KEY")
             or os.getenv("OPENAI_API_KEY")
         )
-
-        kwargs: dict[str, object] = {
-            "max_tokens": config.max_tokens,
-            "num_retries": (
-                config.num_retries
-                if config.num_retries is not None
-                else DEFAULT_OPENAI_NUM_RETRIES
-            ),
-        }
+        retries = (
+            config.num_retries
+            if config.num_retries is not None
+            else DEFAULT_OPENAI_NUM_RETRIES
+        )
 
         if api_key:
-            kwargs["api_key"] = api_key
+            return LiteLlm(
+                model=config.model_name,
+                api_key=api_key,
+                max_tokens=config.max_tokens,
+                num_retries=retries,
+            )
 
         return LiteLlm(
             model=config.model_name,
-            **kwargs,
+            max_tokens=config.max_tokens,
+            num_retries=retries,
         )
 
     if config.provider == "ollama":

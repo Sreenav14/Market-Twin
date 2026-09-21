@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import UUID, uuid4
 
-from google.adk.agents import CallbackContext
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from markettwin_shared.observability import model_token_usage_from_adk
