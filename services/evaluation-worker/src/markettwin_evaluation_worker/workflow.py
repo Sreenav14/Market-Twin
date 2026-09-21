@@ -6,12 +6,21 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import uuid4
 
 from markettwin_evaluation_worker.deterministic_evaluator import (
     evaluate_completed_run,
 )
+from markettwin_evaluation_worker.observability import (
+    VisualInvocationRecorder,
+    VisualModelConfig,
+    build_visual_runtime_snapshot,
+)
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
+)
+from markettwin_evaluation_worker.persistence.observability_repository import (
+    EvaluationObservabilityRepository,
 )
 from markettwin_evaluation_worker.report_generator import (
     generate_deterministic_report,
@@ -24,6 +33,13 @@ from markettwin_evaluation_worker.visual_batch_evaluator import (
 )
 from markettwin_evaluation_worker.visual_findings import (
     persist_visual_findings,
+)
+from markettwin_evaluation_worker.visual_verifier import (
+    VISUAL_MAX_TOKENS,
+    VISUAL_RATE_LIMIT_MAX_ATTEMPTS,
+    VISUAL_TEMPERATURE,
+    VISUAL_VERIFIER_INSTRUCTION,
+    _visual_model_name,
 )
 
 
@@ -60,11 +76,43 @@ async def evaluate_and_generate_report(
             or VisualArtifactStorage.from_environment()
         )
 
+        visual_config = VisualModelConfig(
+            model_name=_visual_model_name(),
+            max_tokens=VISUAL_MAX_TOKENS,
+            temperature=VISUAL_TEMPERATURE,
+            max_attempts=VISUAL_RATE_LIMIT_MAX_ATTEMPTS,
+        )
+        visual_snapshot_id = uuid4()
+        observability_repository = (
+            EvaluationObservabilityRepository(
+                session
+            )
+        )
+        await observability_repository.create_agent_snapshot(
+            snapshot_id=visual_snapshot_id,
+            snapshot=build_visual_runtime_snapshot(
+                test_run_id=test_run_id,
+                config=visual_config,
+                effective_instruction=(
+                    VISUAL_VERIFIER_INSTRUCTION
+                ),
+            ),
+        )
+        visual_invocation_recorder = VisualInvocationRecorder(
+            repository=observability_repository,
+            test_run_id=test_run_id,
+            agent_snapshot_id=visual_snapshot_id,
+            config=visual_config,
+        )
+
         visual_evaluation = (
             await evaluate_visual_criteria_for_run(
                 test_run_id=test_run_id,
                 repository=repository,
                 storage=storage,
+                invocation_recorder=(
+                    visual_invocation_recorder
+                ),
             )
         )
 

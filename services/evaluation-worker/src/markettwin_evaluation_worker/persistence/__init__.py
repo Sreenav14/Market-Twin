@@ -17,3 +17,6 @@ __all__ = [
     "ReportRepository",
     "ReportFindingRecord",
 ]
+from .observability_repository import EvaluationObservabilityRepository
+
+__all__ = ["EvaluationObservabilityRepository"]

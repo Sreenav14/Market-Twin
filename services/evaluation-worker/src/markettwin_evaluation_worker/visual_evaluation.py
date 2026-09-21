@@ -7,6 +7,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID
 
+from markettwin_evaluation_worker.observability import (
+    VisualInvocationRecorder,
+)
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
     VisualEvidenceSet,
@@ -57,6 +60,7 @@ async def evaluate_visual_criterion_from_evidence(
     criterion: str,
     evidence: tuple[VisualEvidenceSet, ...],
     storage: VisualArtifactStorage,
+    invocation_recorder: VisualInvocationRecorder | None = None,
 ) -> VisualCriterionEvaluation:
     """Verify one criterion from already-selected visual evidence."""
 
@@ -104,6 +108,7 @@ async def evaluate_visual_criterion_from_evidence(
             criterion=criterion,
             viewport_path=viewport_path,
             focused_path=focused_path,
+            invocation_recorder=invocation_recorder,
         )
 
     artifact_ids = [
@@ -135,6 +140,7 @@ async def evaluate_visual_criterion_from_steps(
     step_ids: tuple[int, ...],
     repository: EvaluationRepository,
     storage: VisualArtifactStorage,
+    invocation_recorder: VisualInvocationRecorder | None = None,
 ) -> VisualCriterionEvaluation:
     """Load referenced screenshots and visually verify one criterion."""
 

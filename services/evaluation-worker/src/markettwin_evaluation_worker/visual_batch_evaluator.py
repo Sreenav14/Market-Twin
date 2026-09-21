@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import Literal, cast
 from uuid import UUID
 
+from markettwin_evaluation_worker.observability import (
+    VisualInvocationRecorder,
+)
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
 )
@@ -153,6 +156,7 @@ async def evaluate_visual_criteria_for_run(
     test_run_id: UUID,
     repository: EvaluationRepository,
     storage: VisualArtifactStorage,
+    invocation_recorder: VisualInvocationRecorder | None = None,
 ) -> VisualBatchEvaluationResult:
     """Run vision only where the Journey explicitly requested it."""
 
@@ -201,6 +205,7 @@ async def evaluate_visual_criteria_for_run(
                     criterion=reference.criterion,
                     evidence=explicit_visual_evidence,
                     storage=storage,
+                    invocation_recorder=invocation_recorder,
                 )
             )
 
