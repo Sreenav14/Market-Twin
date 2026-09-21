@@ -241,7 +241,6 @@ async def test_visual_verifier_marks_exhausted_rate_limit_unverified(
     assert delays == [1.0, 2.0, 4.0]
 
 
-
 @pytest.mark.asyncio
 async def test_visual_verifier_records_each_explicit_retry_attempt(
     tmp_path: Path,

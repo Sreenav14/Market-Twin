@@ -122,3 +122,20 @@ def test_runtime_model_snapshot_never_contains_api_key(
     assert "must-not-be-persisted" not in str(
         config.snapshot()
     )
+
+
+
+def test_runtime_model_snapshot_redacts_endpoint_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+    monkeypatch.setenv(
+        "OLLAMA_API_BASE",
+        "http://user:secret@127.0.0.1:11434/v1?token=private",
+    )
+
+    snapshot = resolve_model_runtime_config().snapshot()
+
+    assert snapshot["api_base"] == "http://127.0.0.1:11434/v1"
+    assert "secret" not in str(snapshot)
+    assert "private" not in str(snapshot)

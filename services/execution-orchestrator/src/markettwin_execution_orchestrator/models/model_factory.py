@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Final
+from urllib.parse import urlsplit, urlunsplit
 
 from google.adk.models.lite_llm import LiteLlm
 
@@ -39,7 +40,9 @@ class ModelRuntimeConfig:
         if self.num_retries is not None:
             values["num_retries"] = self.num_retries
         if self.api_base is not None:
-            values["api_base"] = self.api_base
+            values["api_base"] = _safe_endpoint(
+                self.api_base
+            )
         if self.num_ctx is not None:
             values["num_ctx"] = self.num_ctx
         if self.reasoning_effort is not None:
@@ -47,6 +50,46 @@ class ModelRuntimeConfig:
 
         return values
 
+
+
+def _safe_endpoint(
+    value: str,
+) -> str:
+    """Remove URL credentials, query parameters, and fragments from snapshots."""
+
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return "[configured]"
+
+    if not parsed.scheme or not parsed.hostname:
+        return "[configured]"
+
+    hostname = (
+        f"[{parsed.hostname}]"
+        if ":" in parsed.hostname
+        else parsed.hostname
+    )
+    try:
+        port = parsed.port
+    except ValueError:
+        return "[configured]"
+
+    netloc = (
+        f"{hostname}:{port}"
+        if port is not None
+        else hostname
+    )
+
+    return urlunsplit(
+        (
+            parsed.scheme,
+            netloc,
+            parsed.path,
+            "",
+            "",
+        )
+    )
 
 def resolve_model_runtime_config(
     *,

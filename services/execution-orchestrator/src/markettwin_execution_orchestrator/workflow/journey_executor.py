@@ -40,8 +40,8 @@ from markettwin_execution_orchestrator.models.telemetry import (
 )
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
-    ObservabilityRepository,
     ExecutionStepRecorder,
+    ObservabilityRepository,
     S3ArtifactStorage,
     SessionArtifactRecorder,
 )
