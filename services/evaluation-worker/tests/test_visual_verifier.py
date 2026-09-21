@@ -283,7 +283,7 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
         def __init__(self) -> None:
             self.started: list[int] = []
             self.failed_flags: list[bool] = []
-            self.completed = 0
+            self.completed_count = 0
 
         async def start(
             self,
@@ -314,7 +314,7 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
         ) -> None:
             assert invocation_id == 2
             assert response is not None
-            self.completed += 1
+            self.completed_count += 1
 
     async def fake_sleep(_delay: float) -> None:
         return None
@@ -344,4 +344,4 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
     assert result.status == "satisfied"
     assert recorder.started == [1, 2]
     assert recorder.failed_flags == [True]
-    assert recorder.completed == 1
+    assert recorder.completed_count == 1
