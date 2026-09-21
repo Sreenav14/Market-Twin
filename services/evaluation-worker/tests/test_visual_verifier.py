@@ -239,3 +239,110 @@ async def test_visual_verifier_marks_exhausted_rate_limit_unverified(
     assert "rate-limited" in result.rationale
     assert attempts == visual_verifier.VISUAL_RATE_LIMIT_MAX_ATTEMPTS
     assert delays == [1.0, 2.0, 4.0]
+
+
+
+@pytest.mark.asyncio
+async def test_visual_verifier_records_each_explicit_retry_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Visual retry telemetry must preserve the failed and successful attempts."""
+
+    viewport_path = tmp_path / "viewport.png"
+    viewport_path.write_bytes(b"viewport-image-bytes")
+    calls = 0
+
+    async def fake_acompletion(**_kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+
+        if calls == 1:
+            raise RateLimitError(
+                message="Rate limited",
+                llm_provider="openai",
+                model="gpt-4o-mini",
+            )
+
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "status": "satisfied",
+                                "rationale": "Visible.",
+                                "observed_details": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    class FakeRecorder:
+        def __init__(self) -> None:
+            self.started: list[int] = []
+            self.failed: list[bool] = []
+            self.completed = 0
+
+        async def start(
+            self,
+            *,
+            attempt_number: int,
+            criterion: str,
+        ) -> int:
+            assert criterion == "Heading is visible."
+            self.started.append(attempt_number)
+            return attempt_number
+
+        async def failed(
+            self,
+            *,
+            invocation_id: int,
+            error: Exception,
+            rate_limited: bool,
+        ) -> None:
+            assert invocation_id == 1
+            assert isinstance(error, RateLimitError)
+            self.failed.append(rate_limited)
+
+        async def completed(
+            self,
+            *,
+            invocation_id: int,
+            response: object,
+        ) -> None:
+            assert invocation_id == 2
+            assert response is not None
+            self.completed += 1
+
+    async def fake_sleep(_delay: float) -> None:
+        return None
+
+    recorder = FakeRecorder()
+
+    monkeypatch.setattr(
+        visual_verifier,
+        "acompletion",
+        fake_acompletion,
+    )
+    monkeypatch.setattr(
+        visual_verifier.asyncio,
+        "sleep",
+        fake_sleep,
+    )
+
+    result = await visual_verifier.verify_visual_criterion(
+        criterion="Heading is visible.",
+        viewport_path=viewport_path,
+        invocation_recorder=cast(
+            visual_verifier.VisualInvocationRecorder,
+            recorder,
+        ),
+    )
+
+    assert result.status == "satisfied"
+    assert recorder.started == [1, 2]
+    assert recorder.failed == [True]
+    assert recorder.completed == 1
