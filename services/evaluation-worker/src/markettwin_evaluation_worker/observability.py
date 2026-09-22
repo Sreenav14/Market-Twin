@@ -71,7 +71,7 @@ class VisualInvocationRecorder:
         *,
         journey_id: UUID,
         execution_id: UUID,
-    ) -> "VisualInvocationRecorder":
+    ) -> VisualInvocationRecorder:
         """Return a recorder that attributes calls to one Persona Journey."""
 
         return VisualInvocationRecorder(
