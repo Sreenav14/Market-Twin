@@ -191,7 +191,6 @@ def build_visual_runtime_snapshot(
     )
 
 
-
 def _safe_error_summary(
     error: Exception,
 ) -> str:

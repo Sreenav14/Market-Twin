@@ -51,7 +51,6 @@ class ModelRuntimeConfig:
         return values
 
 
-
 def _safe_endpoint(
     value: str,
 ) -> str:
@@ -90,6 +89,7 @@ def _safe_endpoint(
             "",
         )
     )
+
 
 def resolve_model_runtime_config(
     *,

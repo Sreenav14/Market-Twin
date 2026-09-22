@@ -179,7 +179,10 @@ async def execute_persona_journey(
             effective_instruction=str(runtime.agent.instruction),
             runtime_prompt=runtime_prompt,
             # ADK leaves callable return types unspecified; snapshots only read tool names.
-            tools=cast(Sequence[object], runtime.agent.tools),  # pyright: ignore[reportUnknownMemberType]
+            tools=cast(
+                Sequence[object],
+                runtime.agent.tools,  # pyright: ignore[reportUnknownMemberType]
+            ),
         )
 
         observability_repository = ObservabilityRepository(

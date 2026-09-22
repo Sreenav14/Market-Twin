@@ -29,7 +29,6 @@ def _utc_now() -> datetime:
 @dataclass(slots=True)
 class _PendingInvocation:
     invocation_id: UUID
-    started_at: datetime
     started_monotonic: float
 
 
@@ -99,7 +98,6 @@ class AdkModelInvocationObserver:
         ).append(
             _PendingInvocation(
                 invocation_id=invocation_id,
-                started_at=started_at,
                 started_monotonic=perf_counter(),
             )
         )
@@ -223,7 +221,6 @@ class AdkModelInvocationObserver:
             )
 
         return pending
-
 
 
 def _safe_error_summary(

@@ -965,7 +965,6 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "python-dotenv" },
     { name = "ruff" },
 ]
 
@@ -987,7 +986,6 @@ dev = [
     { name = "pyright", specifier = ">=1.1,<2.0" },
     { name = "pytest", specifier = ">=8.0,<9.0" },
     { name = "pytest-asyncio", specifier = ">=0.25,<1.0" },
-    { name = "python-dotenv", specifier = ">=1.2,<2.0" },
     { name = "ruff", specifier = ">=0.11,<1.0" },
 ]
 

@@ -29,11 +29,6 @@ VISUAL_RATE_LIMIT_INITIAL_DELAY_SECONDS = 1.0
 VISUAL_MAX_TOKENS = 300
 VISUAL_TEMPERATURE = 0
 
-VISUAL_VERIFIER_INSTRUCTION = (
-    "You are MarketTwin's visual evidence verifier. "
-    "It performs one targeted screenshot-only criterion judgment."
-)
-
 
 def build_visual_prompt(
     criterion: str,
