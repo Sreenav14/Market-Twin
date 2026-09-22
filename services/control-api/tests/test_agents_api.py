@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, Request
-
 from markettwin_control_api.api import agents
 
 
@@ -57,14 +56,14 @@ async def test_inaccessible_test_run_never_reads_agent_snapshots(
     monkeypatch.setattr(
         agents,
         "get_database_runtime",
-        lambda _request: SimpleNamespace(
+        Mock(return_value=SimpleNamespace(
             session_factory=lambda: AsyncContext(object())
-        ),
+        )),
     )
     monkeypatch.setattr(
         agents,
         "TestRunRepository",
-        lambda _session: test_run_repository,
+        Mock(return_value=test_run_repository),
     )
     monkeypatch.setattr(
         agents,

@@ -2,7 +2,7 @@
 
 import os
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     os.environ.get("MARKETTWIN_TEST_DATABASE") != "1",
     reason="Set MARKETTWIN_TEST_DATABASE=1 to verify against local PostgreSQL.",
 )
-async def test_database_delete_draft_then_parent_records(monkeypatch):
+async def test_database_delete_draft_then_parent_records(monkeypatch: pytest.MonkeyPatch) -> None:
     """Delete only an untouched draft Test, then its target and application."""
     engine = create_async_engine(get_settings().database_url, connect_args={"timeout": 5})
     try:
@@ -87,7 +87,7 @@ async def test_database_delete_draft_then_parent_records(monkeypatch):
                 monkeypatch.setattr(
                     lifecycle,
                     "get_database_runtime",
-                    lambda request: SimpleNamespace(session_factory=factory),
+                    Mock(return_value=SimpleNamespace(session_factory=factory)),
                 )
                 request = Request({"type": "http", "method": "DELETE", "path": "/", "headers": []})
                 with pytest.raises(HTTPException) as error:

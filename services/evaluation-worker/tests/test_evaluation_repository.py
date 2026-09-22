@@ -1,13 +1,14 @@
 """Tests for evaluation evidence repository behavior."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.asyncio
@@ -69,7 +70,8 @@ async def test_visual_evidence_is_grouped_by_step_and_kind() -> None:
         ]
     )
 
-    session = SimpleNamespace(
+    session = MagicMock(
+        spec=AsyncSession,
         scalars=AsyncMock(
             side_effect=[
                 artifact_result,

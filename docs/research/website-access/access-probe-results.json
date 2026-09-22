@@ -1,0 +1,35 @@
+{
+  "kind": "local_synthetic_capability_probe_not_a_payment_provider_test",
+  "policy_checks": {
+    "merchant": "allowed_by_this_check",
+    "external_script": "blocked: TargetUrlValidationError",
+    "external_identity_provider": "blocked: TargetUrlValidationError",
+    "payment_button": "blocked: BrowserActionBlockedError",
+    "generic_button": "allowed_by_this_check",
+    "payment_field": "blocked: BrowserActionBlockedError"
+  },
+  "browser_samples": {
+    "iframe": {
+      "frame_locator_finds_button": true,
+      "top_level_role_locator_finds_button": false,
+      "collector_lists_button": false,
+      "model_aria_contains_total": false
+    },
+    "open_shadow_root": {
+      "role_locator_finds_button": true,
+      "collector_lists_button": false,
+      "model_aria_contains_button": true
+    },
+    "canvas_only_total": {
+      "canvas_has_drawn_pixels": true,
+      "model_text_contains_total": false
+    }
+  },
+  "console_error_recorded_while_capture_disabled": true,
+  "limitations": [
+    "No external website reachability was tested.",
+    "The iframe is local srcdoc, not a Stripe integration or cross-origin payment test.",
+    "A generic allowed label does not prove that an actual transaction would succeed.",
+    "The pause probe uses a synthetic event, not a real secret exposure."
+  ]
+}

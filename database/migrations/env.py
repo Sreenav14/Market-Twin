@@ -1,8 +1,10 @@
 import asyncio
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from markettwin_control_api.persistence import models as control_api_models
 from markettwin_database import Base
 from markettwin_database import models as shared_database_models
@@ -15,6 +17,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Resolve against this file so migrations also work outside the repository root.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 
 def get_database_url() -> URL:

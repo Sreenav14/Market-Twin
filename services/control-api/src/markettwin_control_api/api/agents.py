@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import cast
@@ -18,6 +18,7 @@ from markettwin_control_api.api.dependencies import (
 from markettwin_control_api.persistence.repositories import (
     AgentObservabilityRepository,
     AgentSnapshotRecord,
+    ModelInvocationRecord,
     TestRunRepository,
     UsageSummaryRecord,
 )
@@ -178,6 +179,10 @@ def _render_yaml(
     ) + "\n"
 
 
+def _is_nonempty_container(value: object) -> bool:
+    return isinstance(value, (dict, list)) and bool(cast(object, value))
+
+
 def _yaml_lines(
     value: object,
     *,
@@ -189,7 +194,7 @@ def _yaml_lines(
         mapping = cast(dict[object, object], value)
         lines: list[str] = []
         for key, item in mapping.items():
-            if isinstance(item, (dict, list)) and item:
+            if _is_nonempty_container(item):
                 lines.append(f"{prefix}{key}:")
                 lines.extend(
                     _yaml_lines(
@@ -211,7 +216,7 @@ def _yaml_lines(
         items = cast(list[object], value)
         lines = []
         for item in items:
-            if isinstance(item, (dict, list)) and item:
+            if _is_nonempty_container(item):
                 lines.append(f"{prefix}-")
                 lines.extend(
                     _yaml_lines(
@@ -306,7 +311,7 @@ async def _authorized_repository(
     *,
     test_run_id: UUID,
     request: Request,
-) -> AsyncIterator[AgentObservabilityRepository]:
+) -> AsyncGenerator[AgentObservabilityRepository]:
     """Yield an observability reader only after TestRun access is verified."""
 
     user_id = await get_authenticated_user_id(

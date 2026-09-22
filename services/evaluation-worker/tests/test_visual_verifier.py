@@ -1,5 +1,6 @@
 """Tests for MarketTwin visual evidence verification."""
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from typing import cast
 import pytest
 from litellm.exceptions import RateLimitError
 from markettwin_evaluation_worker import visual_verifier
+from markettwin_evaluation_worker.observability import VisualInvocationRecorder
 
 
 @pytest.mark.asyncio
@@ -180,7 +182,7 @@ async def test_visual_verifier_retries_rate_limits(
         fake_acompletion,
     )
     monkeypatch.setattr(
-        visual_verifier.asyncio,
+        asyncio,
         "sleep",
         fake_sleep,
     )
@@ -225,7 +227,7 @@ async def test_visual_verifier_marks_exhausted_rate_limit_unverified(
         always_rate_limited,
     )
     monkeypatch.setattr(
-        visual_verifier.asyncio,
+        asyncio,
         "sleep",
         fake_sleep,
     )
@@ -327,7 +329,7 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
         fake_acompletion,
     )
     monkeypatch.setattr(
-        visual_verifier.asyncio,
+        asyncio,
         "sleep",
         fake_sleep,
     )
@@ -336,7 +338,7 @@ async def test_visual_verifier_records_each_explicit_retry_attempt(
         criterion="Heading is visible.",
         viewport_path=viewport_path,
         invocation_recorder=cast(
-            visual_verifier.VisualInvocationRecorder,
+            VisualInvocationRecorder,
             recorder,
         ),
     )

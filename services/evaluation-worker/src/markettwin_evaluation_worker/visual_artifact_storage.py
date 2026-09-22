@@ -42,7 +42,7 @@ class VisualArtifactStorage:
 
         self._client = cast(
             S3DownloadClient,
-            Session().client(
+            Session().client(  # pyright: ignore[reportUnknownMemberType]
                 "s3",
                 region_name=region,
                 endpoint_url=endpoint_url,

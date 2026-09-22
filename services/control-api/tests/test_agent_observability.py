@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from markettwin_control_api.api.agents import _render_yaml
+from markettwin_control_api.api.agents import _render_yaml  # pyright: ignore[reportPrivateUsage]
 from markettwin_control_api.persistence.repositories.agent_observability_repository import (
     ModelInvocationRecord,
     summarize_usage,

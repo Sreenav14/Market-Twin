@@ -1,0 +1,29 @@
+{
+  "kind": "offline_handoff_protocol_and_local_browser_demo",
+  "current_controller_race": {
+    "method": "actual_controller_with_fake_session_and_observation",
+    "agent_observation_executed_in_state": [
+      "human_control"
+    ],
+    "race_reproduced": true,
+    "production_fix_applied": false
+  },
+  "proposed_protocol_browser_demo": {
+    "same_page_object": true,
+    "same_context_cookie_retained": true,
+    "state_after_done_before_verification": "verifying",
+    "verified_identity": true,
+    "verified_resume": true,
+    "stale_agent_epoch_rejected": true,
+    "synthetic_secret_absent_from_audit": true,
+    "resumed_page_title": "Local handoff fixture",
+    "audit": [
+      "waiting_for_human",
+      "human_control_acquired",
+      "human_submitted_done",
+      "verified_resume"
+    ],
+    "model_calls": 0,
+    "limitation": "Scripted human input; no viewer, SSO, MFA, or production wiring."
+  }
+}

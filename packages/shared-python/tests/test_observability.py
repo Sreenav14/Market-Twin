@@ -22,6 +22,7 @@ def test_adk_usage_normalizes_complete_metadata() -> None:
 
     usage = model_token_usage_from_adk(metadata)
 
+    assert usage is not None
     assert usage == ModelTokenUsage(
         input_tokens=1200,
         cached_input_tokens=800,

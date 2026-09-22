@@ -1,0 +1,23 @@
+{
+  "kind": "synthetic_fixture_not_a_live_MarketTwin_run",
+  "tokenizer": "o200k_base",
+  "scope": "Tool result text only; excludes tools, prompts, message framing, images and outputs",
+  "fixture": {
+    "elements": 80,
+    "aria_chars": 2009
+  },
+  "tokens": {
+    "current_serializer_80_elements": 5529,
+    "same_data_minified_json": 4140,
+    "same_data_column_table_80_elements": 3081,
+    "lossy_20_element_table_no_aria": 751
+  },
+  "reduction_pct_vs_current": {
+    "current_serializer_80_elements": 0.0,
+    "same_data_minified_json": 25.12,
+    "same_data_column_table_80_elements": 44.28,
+    "lossy_20_element_table_no_aria": 86.42
+  },
+  "round_trip_all_80_element_fields": "passed",
+  "warning": "Fewer tokens does not establish equivalent agent decisions or finding recall."
+}

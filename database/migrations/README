@@ -1,1 +1,8 @@
-Generic single-database configuration with an async dbapi.
+Run PostgreSQL migrations from the repository root:
+
+    uv run alembic -c database/alembic.ini upgrade head
+
+Migrations load the repository root .env file. Existing shell environment
+variables take precedence. Set POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB
+in .env or the environment; POSTGRES_HOST and POSTGRES_PORT default to localhost
+and 5432. Copy .env.example to .env if needed and configure your local database.

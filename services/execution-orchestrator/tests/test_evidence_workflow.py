@@ -17,8 +17,10 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionArtifacts,
     BrowserSessionHandle,
 )
+from markettwin_execution_orchestrator.models.model_factory import ModelRuntimeConfig
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
+    ObservabilityRepository,
     RunEventRepository,
     S3ArtifactStorage,
     SessionArtifactRecorder,
@@ -192,6 +194,7 @@ async def test_session_artifacts_after_browser_close(
     failure: str | None,
 ) -> None:
     request = journey_executor.PersonaJourneyExecutionRequest(
+        test_run_id=uuid4(),
         execution_id=uuid4(),
         journey_id=uuid4(),
         journey=build_persona_journeys(plan)[0],
@@ -208,6 +211,10 @@ async def test_session_artifacts_after_browser_close(
     storage = MagicMock(spec=S3ArtifactStorage)
     recorder = MagicMock(spec=SessionArtifactRecorder)
     factory = MagicMock(spec=MetaAgentFactory)
+    factory.create_persona_runtime.return_value.agent.name = "test_persona"
+    factory.create_persona_runtime.return_value.agent.instruction = "Check checkout."
+    factory.create_persona_runtime.return_value.agent.tools = []
+    observability_repository = MagicMock(spec=ObservabilityRepository)
     runner = MagicMock()
     runner.close = AsyncMock()
     runner.session_service.create_session = AsyncMock()
@@ -236,6 +243,16 @@ async def test_session_artifacts_after_browser_close(
 
     with (
         patch.object(journey_executor, "ExecutionRepository", return_value=repository),
+        patch.object(
+            journey_executor, "ObservabilityRepository", return_value=observability_repository
+        ),
+        patch.object(
+            journey_executor,
+            "resolve_model_runtime_config",
+            return_value=ModelRuntimeConfig(
+                provider="openai", model_name="openai/test-model", max_tokens=512
+            ),
+        ),
         patch.object(journey_executor, "InMemoryRunner", return_value=runner),
         patch.object(
             journey_executor, "SessionArtifactRecorder", return_value=recorder
@@ -264,6 +281,16 @@ async def test_session_artifacts_after_browser_close(
                 if failure == "completed"
                 else JourneyExecutionStatus.FAILED
             )
+
+    if failure == "completed":
+        observability_repository.create_agent_snapshot.assert_awaited_once()
+        snapshot = observability_repository.create_agent_snapshot.call_args.kwargs["snapshot"]
+        assert snapshot.test_run_id == str(request.test_run_id)
+        assert snapshot.journey_id == str(request.journey_id)
+        assert snapshot.execution_id == str(request.execution_id)
+        runner.close.assert_awaited_once()
+    else:
+        observability_repository.create_agent_snapshot.assert_not_awaited()
 
     controller.close_session.assert_awaited_once_with(
         session_id=handle.session_id,

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import cast
 from uuid import UUID, uuid4
 
 from google.adk.runners import InMemoryRunner
@@ -176,7 +178,8 @@ async def execute_persona_journey(
             model_config=model_config,
             effective_instruction=str(runtime.agent.instruction),
             runtime_prompt=runtime_prompt,
-            tools=runtime.agent.tools,
+            # ADK leaves callable return types unspecified; snapshots only read tool names.
+            tools=cast(Sequence[object], runtime.agent.tools),  # pyright: ignore[reportUnknownMemberType]
         )
 
         observability_repository = ObservabilityRepository(

@@ -17,7 +17,7 @@ def test_create_download_url_signs_exact_object() -> None:
     )
 
     signer = ArtifactUrlSigner.__new__(ArtifactUrlSigner)
-    signer._client = client
+    signer._client = client  # pyright: ignore[reportPrivateUsage]
 
     result = signer.create_download_url(
         bucket="markettwin-local",

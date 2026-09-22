@@ -79,7 +79,7 @@ async def delete_resource(
         async with database.session_factory() as session:
             async with session.begin():
                 statement = select(model, WorkspaceMember.role)
-                if model is ApplicationTarget:
+                if issubclass(model, ApplicationTarget):
                     statement = statement.join(Application, Application.id == model.application_id)
                     workspace_id = Application.workspace_id
                 else:

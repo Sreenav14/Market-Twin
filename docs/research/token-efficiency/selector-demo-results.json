@@ -1,0 +1,26 @@
+{
+  "kind": "synthetic_selection_demo_not_an_agent_quality_benchmark",
+  "budget_tokens": 240,
+  "unfiltered_eligible_tokens": 461,
+  "selected_tokens": 138,
+  "selected_ids": [
+    "goal",
+    "state",
+    "alert",
+    "heading",
+    "viewport",
+    "failure"
+  ],
+  "exact_proxy_optimum_ids": [
+    "goal",
+    "state",
+    "alert",
+    "heading",
+    "viewport",
+    "failure"
+  ],
+  "proxy_objective_gap": 0.0,
+  "mandatory_preserved": true,
+  "excluded_stale_and_forbidden": true,
+  "caveat": "Feature weights are supplied by hand. Coverage is not proof or accuracy."
+}

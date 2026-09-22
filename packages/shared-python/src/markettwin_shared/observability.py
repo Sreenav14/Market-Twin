@@ -8,7 +8,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal, cast
 
-
 UsageStatus = Literal["reported", "partial", "unavailable"]
 
 
@@ -77,8 +76,8 @@ class AgentRuntimeSnapshotSpec:
     mission_snapshot: dict[str, object] | None = None
     success_criteria: tuple[str, ...] = ()
     tools: tuple[str, ...] = ()
-    policy_references: dict[str, object] = field(default_factory=dict)
-    metadata: dict[str, object] = field(default_factory=dict)
+    policy_references: dict[str, object] = field(default_factory=dict[str, object])
+    metadata: dict[str, object] = field(default_factory=dict[str, object])
 
     def canonical_payload(self) -> dict[str, object]:
         """Return the stable semantic payload used for storage and hashing."""

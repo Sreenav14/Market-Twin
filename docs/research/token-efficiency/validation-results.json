@@ -1,0 +1,171 @@
+{
+  "kind": "offline_integration_and_adversarial_audit_not_model_quality_evaluation",
+  "selector": {
+    "seed": 20260920,
+    "cases": 250,
+    "invariant_failures": 0,
+    "proxy_optimum_matched": 166,
+    "mean_relative_proxy_gap": 0.016942436377931688,
+    "worst": {
+      "case": 204,
+      "relative_proxy_gap": 0.34959758551307857,
+      "greedy": [
+        "7",
+        "8",
+        "pin"
+      ],
+      "exact": [
+        "1",
+        "8",
+        "pin"
+      ]
+    },
+    "elapsed_seconds": 0.565,
+    "constructed_counterexample": {
+      "greedy_value": 12,
+      "exact_value": 18
+    },
+    "unlabelled_critical_qualifier_retained": false,
+    "quality_conclusion": "Proxy optimization is not a sufficient quality gate."
+  },
+  "browser": {
+    "simple_heading": {
+      "visible_element_count": 1,
+      "heading_in_viewport": true,
+      "heading_in_visible_elements": true,
+      "heading_in_model_payload": true,
+      "qualifier_in_full_aria": false,
+      "qualifier_in_model_payload": false,
+      "alert_in_full_aria": false,
+      "alert_in_model_payload": false,
+      "heading_sample_point_obscured": false,
+      "full_aria_chars": 64,
+      "baseline_tool_text_tokens": 205,
+      "packed_tool_text_tokens": 219,
+      "packed_reduction_pct": -6.83,
+      "all_payload_values_round_trip": true
+    },
+    "dense_heading": {
+      "visible_element_count": 80,
+      "heading_in_viewport": true,
+      "heading_in_visible_elements": false,
+      "heading_in_model_payload": false,
+      "qualifier_in_full_aria": false,
+      "qualifier_in_model_payload": false,
+      "alert_in_full_aria": false,
+      "alert_in_model_payload": false,
+      "heading_sample_point_obscured": false,
+      "full_aria_chars": 7512,
+      "baseline_tool_text_tokens": 5830,
+      "packed_tool_text_tokens": 3395,
+      "packed_reduction_pct": 41.77,
+      "all_payload_values_round_trip": true
+    },
+    "dense_price_qualifier": {
+      "visible_element_count": 80,
+      "heading_in_viewport": true,
+      "heading_in_visible_elements": false,
+      "heading_in_model_payload": false,
+      "qualifier_in_full_aria": true,
+      "qualifier_in_model_payload": false,
+      "alert_in_full_aria": false,
+      "alert_in_model_payload": false,
+      "heading_sample_point_obscured": false,
+      "full_aria_chars": 7574,
+      "baseline_tool_text_tokens": 5830,
+      "packed_tool_text_tokens": 3395,
+      "packed_reduction_pct": 41.77,
+      "all_payload_values_round_trip": true
+    },
+    "dense_overlap": {
+      "visible_element_count": 80,
+      "heading_in_viewport": true,
+      "heading_in_visible_elements": false,
+      "heading_in_model_payload": false,
+      "qualifier_in_full_aria": false,
+      "qualifier_in_model_payload": false,
+      "alert_in_full_aria": true,
+      "alert_in_model_payload": false,
+      "heading_sample_point_obscured": true,
+      "full_aria_chars": 7565,
+      "baseline_tool_text_tokens": 5830,
+      "packed_tool_text_tokens": 3395,
+      "packed_reduction_pct": 41.77,
+      "all_payload_values_round_trip": true
+    }
+  },
+  "adk": {
+    "baseline": {
+      "mode": "baseline",
+      "per_call": [
+        {
+          "serialized_messages_and_tools_tokens": 1396,
+          "tool_result_text_tokens": 0,
+          "tool_result_count": 0
+        },
+        {
+          "serialized_messages_and_tools_tokens": 7583,
+          "tool_result_text_tokens": 5830,
+          "tool_result_count": 1
+        },
+        {
+          "serialized_messages_and_tools_tokens": 13769,
+          "tool_result_text_tokens": 11660,
+          "tool_result_count": 2
+        },
+        {
+          "serialized_messages_and_tools_tokens": 19955,
+          "tool_result_text_tokens": 17490,
+          "tool_result_count": 3
+        }
+      ],
+      "sum_serialized_request_tokens": 42703,
+      "stored_events_unchanged": true,
+      "tool_call_pairing_preserved": true,
+      "all_adapter_tool_values_round_trip": true,
+      "scripted_final": "{\"outcome\":\"inconclusive\",\"scripted\":true}"
+    },
+    "compact": {
+      "mode": "reversible_compaction",
+      "per_call": [
+        {
+          "serialized_messages_and_tools_tokens": 1396,
+          "tool_result_text_tokens": 0,
+          "tool_result_count": 0
+        },
+        {
+          "serialized_messages_and_tools_tokens": 5116,
+          "tool_result_text_tokens": 3395,
+          "tool_result_count": 1
+        },
+        {
+          "serialized_messages_and_tools_tokens": 8790,
+          "tool_result_text_tokens": 6790,
+          "tool_result_count": 2
+        },
+        {
+          "serialized_messages_and_tools_tokens": 12464,
+          "tool_result_text_tokens": 10185,
+          "tool_result_count": 3
+        }
+      ],
+      "sum_serialized_request_tokens": 27766,
+      "stored_events_unchanged": true,
+      "tool_call_pairing_preserved": true,
+      "all_adapter_tool_values_round_trip": true,
+      "scripted_final": "{\"outcome\":\"inconclusive\",\"scripted\":true}"
+    },
+    "reduction_pct": 34.98
+  },
+  "tiny_observation_guard": {
+    "baseline_total": 7291,
+    "guarded_total": 7291,
+    "original_retained_without_expansion": true
+  },
+  "limitations": [
+    "Scripted model decisions cannot validate real model output quality.",
+    "Token counts cover serialized messages/tools, not provider billing or images.",
+    "Browser fixture hit testing is not a general visual correctness oracle.",
+    "Selector features and weights are synthetic; no learned quality predictor."
+  ]
+}

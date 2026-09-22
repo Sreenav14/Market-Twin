@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from markettwin_evaluation_worker import (
@@ -30,8 +30,8 @@ class FakeRepository:
     async def list_journey_results(
         self,
         *,
-        test_run_id,
-    ):
+        test_run_id: UUID,
+    ) -> tuple[JourneyResultRecord, ...]:
         return (
             JourneyResultRecord(
                 journey_id=self.journey_id,
@@ -62,9 +62,9 @@ class FakeRepository:
     async def list_visual_evidence(
         self,
         *,
-        execution_id,
-        step_ids,
-    ):
+        execution_id: UUID,
+        step_ids: tuple[int, ...],
+    ) -> tuple[VisualEvidenceSet, ...]:
         artifact = VisualArtifactRecord(
             artifact_id=uuid4(),
             step_id=step_ids[0],
@@ -97,7 +97,7 @@ class FakeStorage:
     async def download(
         self,
         *,
-        artifact,
+        artifact: VisualArtifactRecord,
         directory: Path,
     ) -> Path:
         raise AssertionError(
@@ -118,15 +118,16 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
 
     async def fake_evaluate(
         *,
-        criterion,
-        evidence,
-        storage,
-    ):
+        criterion: str,
+        evidence: tuple[VisualEvidenceSet, ...],
+        storage: VisualArtifactStorage,
+    ) -> VisualCriterionEvaluation:
         called.append(
             criterion
         )
 
         assert len(evidence) == 1
+        assert evidence[0].viewport is not None
         assert (
             evidence[0].action_type
             == "capture_element"

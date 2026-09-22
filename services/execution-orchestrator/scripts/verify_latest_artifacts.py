@@ -77,7 +77,8 @@ async def main() -> None:
                 if seen_types == {"screenshot", "trace"}:
                     break
 
-            s3 = Session().client(
+            # Only S3 stubs are installed; other service overloads are unknown.
+            s3 = Session().client(  # pyright: ignore[reportUnknownMemberType]
                 "s3",
                 region_name=os.environ.get(
                     "S3_REGION",
