@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from markettwin_evaluation_worker import (
@@ -30,8 +30,8 @@ class FakeRepository:
     async def list_journey_results(
         self,
         *,
-        test_run_id,
-    ):
+        test_run_id: UUID,
+    ) -> tuple[JourneyResultRecord, ...]:
         return (
             JourneyResultRecord(
                 journey_id=self.journey_id,
@@ -62,9 +62,9 @@ class FakeRepository:
     async def list_visual_evidence(
         self,
         *,
-        execution_id,
-        step_ids,
-    ):
+        execution_id: UUID,
+        step_ids: tuple[int, ...],
+    ) -> tuple[VisualEvidenceSet, ...]:
         artifact = VisualArtifactRecord(
             artifact_id=uuid4(),
             step_id=step_ids[0],
@@ -97,7 +97,7 @@ class FakeStorage:
     async def download(
         self,
         *,
-        artifact,
+        artifact: VisualArtifactRecord,
         directory: Path,
     ) -> Path:
         raise AssertionError(
@@ -111,17 +111,27 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
 ) -> None:
     """Semantic evidence must not cause a visual model call."""
 
-    test_run_id = uuid4()
+    expected_test_run_id = uuid4()
+    expected_snapshot_id = uuid4()
     repository = FakeRepository()
 
     called: list[str] = []
 
     async def fake_evaluate(
         *,
-        criterion,
-        evidence,
-        storage,
-    ):
+        test_run_id: UUID,
+        journey_id: UUID,
+        execution_id: UUID,
+        agent_snapshot_id: UUID,
+        criterion: str,
+        evidence: tuple[VisualEvidenceSet, ...],
+        storage: VisualArtifactStorage,
+    ) -> VisualCriterionEvaluation:
+        assert test_run_id == expected_test_run_id
+        assert journey_id == repository.journey_id
+        assert execution_id == repository.execution_id
+        assert agent_snapshot_id == expected_snapshot_id
+
         called.append(
             criterion
         )
@@ -131,6 +141,8 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
             evidence[0].action_type
             == "capture_element"
         )
+        viewport = evidence[0].viewport
+        assert viewport is not None
 
         return VisualCriterionEvaluation(
             criterion=criterion,
@@ -143,9 +155,7 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
             ),
             evidence_step_id=7,
             artifact_ids=(
-                evidence[0]
-                .viewport
-                .artifact_id,
+                viewport.artifact_id,
             ),
         )
 
@@ -158,7 +168,8 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
     result = (
         await visual_batch_evaluator
         .evaluate_visual_criteria_for_run(
-            test_run_id=test_run_id,
+            test_run_id=expected_test_run_id,
+            agent_snapshot_id=expected_snapshot_id,
             repository=cast(
                 EvaluationRepository,
                 repository,

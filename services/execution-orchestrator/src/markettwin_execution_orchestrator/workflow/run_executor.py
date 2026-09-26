@@ -17,6 +17,9 @@ from markettwin_execution_orchestrator.browser.contracts import (
 from markettwin_execution_orchestrator.browser.policy import (
     validate_target_url,
 )
+from markettwin_execution_orchestrator.observability import (
+    initialize_adk_observability,
+)
 from markettwin_execution_orchestrator.persistence import (
     PlanRepository,
     RunStateRepository,
@@ -57,6 +60,8 @@ async def execute_markettwin_run(
 ) -> MultiPersonaExecutionResult:
     """Plan and execute one complete MarketTwin test run."""
 
+    initialize_adk_observability()
+
     study_brief = request.study_brief.strip()
 
     if not study_brief:
@@ -86,11 +91,12 @@ async def execute_markettwin_run(
 
     try:
         plan = await generate_meta_agent_plan(
-            MetaPlanningRequest(
+            request=MetaPlanningRequest(
                 test_run_id=request.run_id,
                 study_brief=study_brief,
                 target_snapshot=request.target_snapshot,
-            )
+            ),
+            session=session,
         )
 
         persisted_plan = await plan_repository.create_from_plan(
@@ -110,6 +116,14 @@ async def execute_markettwin_run(
             journey.journey_key: journey.journey_id
             for journey in persisted_plan.journeys
         }
+        persona_ids_by_key = {
+            persona.persona_key: persona.persona_id
+            for persona in persisted_plan.personas
+        }
+        mission_ids_by_key = {
+            mission.mission_key: mission.mission_id
+            for mission in persisted_plan.missions
+        }
 
         async with BrowserController() as browser_controller:
             result = await execute_multi_persona_plan(
@@ -117,6 +131,8 @@ async def execute_markettwin_run(
                     run_id=request.run_id,
                     plan=plan,
                     journey_ids_by_key=journey_ids_by_key,
+                    persona_ids_by_key=persona_ids_by_key,
+                    mission_ids_by_key=mission_ids_by_key,
                     start_url=validated_start_url.href,
                     allowed_origins=request.allowed_origins,
                     network_policy=request.network_policy,

@@ -14,6 +14,7 @@ from markettwin_execution_orchestrator.browser import (
     BrowserController,
     BrowserSessionHandle,
     BrowserStepRecorder,
+    BrowserTool,
     create_browser_tools,
 )
 
@@ -25,6 +26,7 @@ class PersonaJourneyRuntime:
     journey: PersonaJourneySpec
     agent: LlmAgent
     browser_session: BrowserSessionHandle
+    browser_tools: tuple[BrowserTool, ...]
 
 
 class MetaAgentFactory:
@@ -48,11 +50,11 @@ class MetaAgentFactory:
     ) -> PersonaJourneyRuntime:
         """Bind one Persona Agent to one Python Playwright Journey session."""
 
-        browser_tools = create_browser_tools(
+        browser_tools = tuple(create_browser_tools(
             controller=browser_controller,
             handle=browser_session,
             step_recorder=step_recorder,
-        )
+        ))
         builder = self._registry.get(AgentRole.PERSONA_BROWSER)
         agent = builder(
             journey=journey,
@@ -63,4 +65,5 @@ class MetaAgentFactory:
             journey=journey,
             agent=agent,
             browser_session=browser_session,
+            browser_tools=browser_tools,
         )

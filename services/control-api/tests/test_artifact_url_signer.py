@@ -16,8 +16,11 @@ def test_create_download_url_signs_exact_object() -> None:
         "http://example.invalid/signed-evidence"
     )
 
-    signer = ArtifactUrlSigner.__new__(ArtifactUrlSigner)
-    signer._client = client
+    signer = ArtifactUrlSigner(
+        region="us-east-1",
+        endpoint_url=None,
+        client=client,
+    )
 
     result = signer.create_download_url(
         bucket="markettwin-local",

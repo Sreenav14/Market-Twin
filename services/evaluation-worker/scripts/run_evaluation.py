@@ -26,6 +26,7 @@ def database_url() -> str:
 
 
 async def main(test_run_id: UUID) -> None:
+    
     engine = create_database_engine(database_url())
     session_factory = create_session_factory(engine)
 

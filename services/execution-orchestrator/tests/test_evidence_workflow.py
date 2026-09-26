@@ -117,6 +117,14 @@ async def test_result_event_shares_final_execution_commit(
         run_id=uuid4(),
         plan=plan,
         journey_ids_by_key={journey.journey_key: uuid4() for journey in journeys},
+        persona_ids_by_key={
+            persona.persona_id: uuid4()
+            for persona in plan.personas
+        },
+        mission_ids_by_key={
+            mission.mission_id: uuid4()
+            for mission in plan.missions
+        },
         start_url="https://example.com",
         allowed_origins=(AllowedOrigin("https", "example.com"),),
     )
@@ -192,8 +200,11 @@ async def test_session_artifacts_after_browser_close(
     failure: str | None,
 ) -> None:
     request = journey_executor.PersonaJourneyExecutionRequest(
+        test_run_id=uuid4(),
         execution_id=uuid4(),
         journey_id=uuid4(),
+        persona_id=uuid4(),
+        mission_id=uuid4(),
         journey=build_persona_journeys(plan)[0],
         start_url="https://example.com",
         allowed_origins=(AllowedOrigin("https", "example.com"),),
@@ -211,6 +222,8 @@ async def test_session_artifacts_after_browser_close(
     runner = MagicMock()
     runner.close = AsyncMock()
     runner.session_service.create_session = AsyncMock()
+    snapshot_repository = MagicMock()
+    snapshot_repository.create = AsyncMock()
 
     async def final_events() -> AsyncIterator[MagicMock]:
         event = MagicMock()
@@ -236,6 +249,16 @@ async def test_session_artifacts_after_browser_close(
 
     with (
         patch.object(journey_executor, "ExecutionRepository", return_value=repository),
+        patch.object(
+            journey_executor,
+            "AgentRuntimeSnapshotRepository",
+            return_value=snapshot_repository,
+        ),
+        patch.object(
+            journey_executor,
+            "build_persona_runtime_snapshot_payload",
+            return_value=MagicMock(),
+        ),
         patch.object(journey_executor, "InMemoryRunner", return_value=runner),
         patch.object(
             journey_executor, "SessionArtifactRecorder", return_value=recorder

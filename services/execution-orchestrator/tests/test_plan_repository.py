@@ -4,8 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from markettwin_database.models.testing import (
     PersonaJourney,
     RunMission,
@@ -23,6 +21,7 @@ from markettwin_execution_orchestrator.agents.schemas.plan import (
 from markettwin_execution_orchestrator.persistence.plan_repository import (
     PlanRepository,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.asyncio

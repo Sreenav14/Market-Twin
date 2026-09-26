@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 from boto3.session import Session
 from botocore.config import Config
@@ -26,6 +26,19 @@ class S3DownloadClient(Protocol):
     ) -> None: ...
 
 
+class S3Session(Protocol):
+    """Typed boto session surface used to construct the S3 client."""
+
+    def client(
+        self,
+        service_name: Literal["s3"],
+        *,
+        region_name: str,
+        endpoint_url: str | None,
+        config: Config,
+    ) -> S3DownloadClient: ...
+
+
 class VisualArtifactStorage:
     """Read persisted screenshot evidence for visual verification."""
 
@@ -40,15 +53,13 @@ class VisualArtifactStorage:
             self._client = client
             return
 
-        self._client = cast(
-            S3DownloadClient,
-            Session().client(
-                "s3",
-                region_name=region,
-                endpoint_url=endpoint_url,
-                config=Config(
-                    signature_version="s3v4",
-                ),
+        session = cast(S3Session, Session())
+        self._client = session.client(
+            "s3",
+            region_name=region,
+            endpoint_url=endpoint_url,
+            config=Config(
+                signature_version="s3v4",
             ),
         )
 

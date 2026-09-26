@@ -3,6 +3,7 @@
 from .application_repository import ApplicationRecord, ApplicationRepository
 from .authorization_repository import TargetAuthorizationRecord, TargetAuthorizationRepository
 from .identity_repository import IdentityRepository, ResolvedIdentity
+from .runtime_snapshot_repository import RuntimeSnapshotRecord, RuntimeSnapshotRepository
 from .target_repository import AllowedOriginRecord, TargetRecord, TargetRepository
 from .test_run_repository import TestRunRecord, TestRunRepository
 from .test_run_results_repository import (
@@ -31,4 +32,6 @@ __all__ = (
     "TestRunResultsRecord",
     "FindingResultRecord",
     "ReportResultRecord",
+    "RuntimeSnapshotRepository",
+    "RuntimeSnapshotRecord",
 )

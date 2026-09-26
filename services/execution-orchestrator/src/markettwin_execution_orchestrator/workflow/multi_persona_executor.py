@@ -50,6 +50,8 @@ class MultiPersonaExecutionRequest:
     plan: MetaAgentPlan
 
     journey_ids_by_key: Mapping[str, UUID]
+    persona_ids_by_key: Mapping[str, UUID]
+    mission_ids_by_key: Mapping[str, UUID]
 
     start_url: str
     allowed_origins: tuple[AllowedOrigin, ...]
@@ -88,6 +90,19 @@ async def execute_multi_persona_plan(
         if journey_id is None:
             raise RuntimeError(f'No persisted PersonaJourney exists for"{journey.journey_key}".')
 
+        persona_id = request.persona_ids_by_key.get(
+            journey.persona.persona_id
+        )
+        mission_id = request.mission_ids_by_key.get(
+            journey.mission.mission_id
+        )
+
+        if persona_id is None or mission_id is None:
+            raise RuntimeError(
+                "No persisted persona or mission exists for "
+                f'"{journey.journey_key}".'
+            )
+
         await execution_repository.create_agent_execution(
             execution_id=execution_id,
             journey_id=journey_id,
@@ -97,8 +112,11 @@ async def execute_multi_persona_plan(
         try:
             result = await execute_persona_journey(
                 request=PersonaJourneyExecutionRequest(
+                    test_run_id=request.run_id,
                     execution_id=execution_id,
                     journey_id=journey_id,
+                    persona_id=persona_id,
+                    mission_id=mission_id,
                     journey=journey,
                     start_url=request.start_url,
                     allowed_origins=request.allowed_origins,

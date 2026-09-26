@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 from boto3.session import Session
 from botocore.config import Config
+
 DEFAULT_ARTIFACT_TTL_SECONDS = 300
 
 class S3PresignClient(Protocol):
@@ -17,7 +18,21 @@ class S3PresignClient(Protocol):
         Params: dict[str, str],
         ExpiresIn: int,
     ) -> str: ...
-    
+
+
+class S3Session(Protocol):
+    """Typed boto session surface used to construct the S3 client."""
+
+    def client(
+        self,
+        service_name: Literal["s3"],
+        *,
+        region_name: str,
+        endpoint_url: str | None,
+        config: Config,
+    ) -> S3PresignClient: ...
+
+
 class ArtifactUrlSigner:
     """Generate temporary download URLs for private evidence objects."""
     
@@ -25,17 +40,19 @@ class ArtifactUrlSigner:
         self,
         *,
         region: str,
-        endpoint_url: str|None ,
+        endpoint_url: str | None,
+        client: S3PresignClient | None = None,
     ) -> None:
-        self._client = cast(
-            S3PresignClient,
-            Session().client(
-                "s3",
-                region_name=region,
-                endpoint_url=endpoint_url,
-                config=Config(
-                    signature_version="s3v4"),
-        ),
+        if client is not None:
+            self._client = client
+            return
+
+        session = cast(S3Session, Session())
+        self._client = session.client(
+            "s3",
+            region_name=region,
+            endpoint_url=endpoint_url,
+            config=Config(signature_version="s3v4"),
         )
         
         

@@ -91,7 +91,197 @@ class AgentExecution(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+class AgentRuntimeSnapshot(Base):
+    """Immutable semantic configuration used for an agent execution."""
 
+    __tablename__ = "agent_runtime_snapshots"
+    __table_args__ = (
+        CheckConstraint(
+            "agent_role IN ('meta', 'persona', 'visual_verifier')",
+            name="ck_agent_runtime_snapshots_role_allowed",
+        ),
+        CheckConstraint(
+            "agent_version >= 1",
+            name="ck_agent_runtime_snapshots_agent_version_positive",
+        ),
+        CheckConstraint(
+            "snapshot_schema_version >= 1",
+            name="ck_agent_runtime_snapshots_schema_version_positive",
+        ),
+        CheckConstraint(
+            "execution_id IS NULL OR journey_id IS NOT NULL",
+            name="ck_agent_runtime_snapshots_execution_requires_journey",
+        ),
+        ForeignKeyConstraint(
+            ["test_run_id", "journey_id"],
+            [
+                "testing.persona_journeys.test_run_id",
+                "testing.persona_journeys.id",
+            ],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["execution_id", "journey_id"],
+            [
+                "execution.agent_executions.id",
+                "execution.agent_executions.journey_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        {"schema": "execution"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+
+    test_run_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    journey_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+
+    execution_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+
+    agent_role: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        index=True,
+    )
+
+    runtime_kind: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    runtime_agent_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    agent_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
+    )
+
+    snapshot_schema_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
+    )
+
+    template_id: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    template_version: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    model_provider: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    model_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    model_configuration: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+    base_instruction: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    effective_instruction: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    runtime_prompt: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    persona_snapshot: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    mission_snapshot: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    success_criteria: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
+
+    tools: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
+
+    policy_references: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
+
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+    observability_backend: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    trace_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+
+    snapshot_sha256: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
 
 class BrowserSession(Base):
     __tablename__ = "browser_sessions"

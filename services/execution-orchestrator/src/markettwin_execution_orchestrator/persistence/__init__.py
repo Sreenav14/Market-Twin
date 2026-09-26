@@ -1,5 +1,6 @@
 """Persistence adapters for the MarketTwin execution orchestrator."""
 
+from .agent_runtime_snapshot_repository import AgentRuntimeSnapshotRepository
 from .artifact_repository import ArtifactRepository
 from .artifact_storage import S3ArtifactStorage
 from .execution_repository import ExecutionRepository
@@ -21,6 +22,7 @@ __all__ = [
     "PersistedPersonaRecord",
     "PersistedPlanRecord",
     "PlanRepository",
+    "AgentRuntimeSnapshotRepository",
     "RunStateRepository",
     "ExecutionRepository",
     "ExecutionStepRecorder",

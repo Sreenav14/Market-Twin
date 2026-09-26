@@ -39,7 +39,7 @@ class FakeS3Client:
 
 @pytest.mark.asyncio
 async def test_download_uses_exact_artifact_location(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     """Evaluation must download the exact DB-selected object."""
 

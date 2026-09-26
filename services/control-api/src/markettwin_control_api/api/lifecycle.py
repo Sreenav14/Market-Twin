@@ -80,10 +80,15 @@ async def delete_resource(
             async with session.begin():
                 statement = select(model, WorkspaceMember.role)
                 if model is ApplicationTarget:
-                    statement = statement.join(Application, Application.id == model.application_id)
+                    statement = statement.join(
+                        Application,
+                        Application.id == ApplicationTarget.application_id,
+                    )
+                    workspace_id = Application.workspace_id
+                elif model is Application:
                     workspace_id = Application.workspace_id
                 else:
-                    workspace_id = model.workspace_id
+                    workspace_id = TestRun.workspace_id
                 statement = (
                     statement.join(Workspace, Workspace.id == workspace_id)
                     .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)

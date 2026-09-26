@@ -8,12 +8,18 @@ from uuid import UUID, uuid4
 
 from google.adk.runners import InMemoryRunner
 from google.genai import types
+from markettwin_shared.observability import (
+    use_observability_correlation,
+)
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.agents.meta_agent_factory import (
     MetaAgentFactory,
+)
+from markettwin_execution_orchestrator.agents.persona_agents import (
+    build_persona_runtime_snapshot_payload,
 )
 from markettwin_execution_orchestrator.agents.schemas.journey import (
     PersonaJourneySpec,
@@ -30,6 +36,7 @@ from markettwin_execution_orchestrator.browser.errors import (
     BrowserPolicyError,
 )
 from markettwin_execution_orchestrator.persistence import (
+    AgentRuntimeSnapshotRepository,
     ExecutionRepository,
     ExecutionStepRecorder,
     S3ArtifactStorage,
@@ -48,8 +55,11 @@ JOURNEY_APP_NAME = "markettwin_persona_journey"
 class PersonaJourneyExecutionRequest:
     """Everything required to execute one already-planned Journey."""
 
+    test_run_id: UUID
     execution_id: UUID
     journey_id: UUID
+    persona_id: UUID
+    mission_id: UUID
 
     journey: PersonaJourneySpec
 
@@ -114,6 +124,7 @@ async def execute_persona_journey(
 
     runtime_factory = factory or MetaAgentFactory()
     execution_repository = ExecutionRepository(session)
+    snapshot_repository = AgentRuntimeSnapshotRepository(session)
     browser_session_persisted = False
 
     browser_session = None
@@ -151,6 +162,29 @@ async def execute_persona_journey(
             browser_session=browser_session,
             step_recorder=step_recorder,
         )
+        
+        runtime_prompt = _build_journey_prompt(request)
+        
+        snapshot_payload = (
+            build_persona_runtime_snapshot_payload(
+                journey=request.journey,
+                agent=runtime.agent,
+                browser_tools=runtime.browser_tools,
+                runtime_prompt=runtime_prompt,
+            )
+        )
+        
+        snapshot_id = uuid4()
+
+        await snapshot_repository.create(
+            snapshot_id=snapshot_id,
+            test_run_id=request.test_run_id,
+            journey_id=request.journey_id,
+            execution_id=request.execution_id,
+            payload=snapshot_payload,
+        )
+
+        await session.commit()
 
         runner = InMemoryRunner(
             agent=runtime.agent,
@@ -170,23 +204,40 @@ async def execute_persona_journey(
             role="user",
             parts=[
                 types.Part(
-                    text=_build_journey_prompt(request),
+                    text=runtime_prompt,
                 )
             ],
         )
 
         final_response_parts: list[str] = []
 
-        async with asyncio.timeout(request.max_duration_seconds):
-            async for event in runner.run_async(
-                user_id=user_id,
-                session_id=session_id,
-                new_message=message,
+        with use_observability_correlation(
+            test_run_id=request.test_run_id,
+            journey_id=request.journey_id,
+            execution_id=request.execution_id,
+            agent_snapshot_id=snapshot_id,
+            persona_id=request.persona_id,
+            mission_id=request.mission_id,
+            agent_role="persona",
+        ):
+            async with asyncio.timeout(
+                request.max_duration_seconds
             ):
-                if event.is_final_response() and event.content and event.content.parts:
-                    final_response_parts.extend(
-                        part.text for part in event.content.parts if part.text
-                    )
+                async for event in runner.run_async(
+                    user_id=user_id,
+                    session_id=session_id,
+                    new_message=message,
+                ):
+                    if (
+                        event.is_final_response()
+                        and event.content
+                        and event.content.parts
+                    ):
+                        final_response_parts.extend(
+                            part.text
+                            for part in event.content.parts
+                            if part.text
+                        )
 
         if not final_response_parts:
             raise RuntimeError("Persona Agent returned no final Journey response.")

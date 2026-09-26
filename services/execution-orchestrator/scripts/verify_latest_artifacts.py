@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from typing import Literal, Protocol, TypedDict, cast
 
 from boto3.session import Session
 from markettwin_database import (
@@ -15,6 +16,30 @@ from markettwin_database.models import (
     TestRun,
 )
 from sqlalchemy import select
+
+
+class HeadObjectResult(TypedDict):
+    """Subset of S3 head-object metadata used by this verification script."""
+
+    ContentLength: int
+
+
+class S3HeadClient(Protocol):
+    """Small typed S3 surface needed by artifact verification."""
+
+    def head_object(self, *, Bucket: str, Key: str) -> HeadObjectResult: ...
+
+
+class S3Session(Protocol):
+    """Typed boto session surface used to construct the S3 client."""
+
+    def client(
+        self,
+        service_name: Literal["s3"],
+        *,
+        region_name: str,
+        endpoint_url: str | None,
+    ) -> S3HeadClient: ...
 
 
 def database_url() -> str:
@@ -77,7 +102,8 @@ async def main() -> None:
                 if seen_types == {"screenshot", "trace"}:
                     break
 
-            s3 = Session().client(
+            boto_session = cast(S3Session, Session())
+            s3 = boto_session.client(
                 "s3",
                 region_name=os.environ.get(
                     "S3_REGION",

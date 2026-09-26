@@ -167,10 +167,13 @@ async def test_visual_evaluation_uses_viewport_and_crop(
     result = (
         await visual_evaluation
         .evaluate_visual_criterion_from_steps(
+            test_run_id=uuid4(),
+            journey_id=uuid4(),
             criterion=(
                 "Software testing heading is readable."
             ),
             execution_id=execution_id,
+            agent_snapshot_id=uuid4(),
             step_ids=(7,),
             repository=cast(
                 EvaluationRepository,
@@ -246,10 +249,13 @@ async def test_visual_evaluation_is_unverified_without_viewport(
     result = (
         await visual_evaluation
         .evaluate_visual_criterion_from_steps(
+            test_run_id=uuid4(),
+            journey_id=uuid4(),
             criterion=(
                 "Heading is readable."
             ),
             execution_id=execution_id,
+            agent_snapshot_id=uuid4(),
             step_ids=(7,),
             repository=cast(
                 EvaluationRepository,

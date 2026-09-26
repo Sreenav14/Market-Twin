@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, Request
-
 from markettwin_control_api.api import artifacts
 
 

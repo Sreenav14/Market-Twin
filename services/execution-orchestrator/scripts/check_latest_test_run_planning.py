@@ -62,11 +62,12 @@ async def main() -> None:
             print("\nRunning Meta Agent planning only...\n")
 
             plan = await generate_meta_agent_plan(
-                MetaPlanningRequest(
+                request=MetaPlanningRequest(
                     test_run_id=test_run.id,
                     study_brief=study_brief,
                     target_snapshot=test_run.target_snapshot,
-                )
+                ),
+                session=session,
             )
 
             print("Planning SUCCESS")

@@ -1,9 +1,11 @@
 """Tests for visual Finding persistence."""
 
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
+    EvaluationRepository,
     EvidenceReference,
 )
 from markettwin_evaluation_worker.visual_batch_evaluator import (
@@ -78,7 +80,10 @@ async def test_unsatisfied_visual_result_creates_finding() -> None:
     finding_ids = await persist_visual_findings(
         test_run_id=test_run_id,
         visual_result=visual_result,
-        repository=repository,
+        repository=cast(
+            EvaluationRepository,
+            repository,
+        ),
     )
 
     assert len(finding_ids) == 1
@@ -148,7 +153,10 @@ async def test_satisfied_visual_result_creates_no_finding() -> None:
     finding_ids = await persist_visual_findings(
         test_run_id=test_run_id,
         visual_result=visual_result,
-        repository=repository,
+        repository=cast(
+            EvaluationRepository,
+            repository,
+        ),
     )
 
     assert finding_ids == ()

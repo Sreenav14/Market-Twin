@@ -1,6 +1,7 @@
 from .evidence.models import Artifact
 from .execution.models import (
     AgentExecution,
+    AgentRuntimeSnapshot,
     BrowserSession,
     ExecutionStep,
     HumanActionRequest,
@@ -12,6 +13,7 @@ from .execution.models import (
 __all__ = [
     "Artifact",
     "AgentExecution",
+    "AgentRuntimeSnapshot",
     "BrowserSession",
     "ExecutionStep",
     "HumanActionRequest",

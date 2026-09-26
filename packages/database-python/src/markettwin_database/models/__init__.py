@@ -10,6 +10,7 @@ from .evaluation import (
 from .evidence import Artifact
 from .execution import (
     AgentExecution,
+    AgentRuntimeSnapshot,
     BrowserSession,
     ExecutionStep,
     HumanActionRequest,
@@ -37,6 +38,7 @@ __all__ = [
     "ApplicationTarget",
     "Artifact",
     "BrowserSession",
+    "AgentRuntimeSnapshot",
     "ExecutionStep",
     "Finding",
     "FindingEvidence",

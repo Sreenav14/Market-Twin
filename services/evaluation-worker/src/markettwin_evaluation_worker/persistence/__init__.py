@@ -9,11 +9,15 @@ from .report_repository import (
     ReportFindingRecord,
     ReportRepository,
 )
+from .runtime_snapshot_repository import (
+    EvaluationRuntimeSnapshotRepository,
+)
 
 __all__ = [
     "EvaluationRepository",
     "EvidenceReference",
     "JourneyResultRecord",
-    "ReportRepository",
     "ReportFindingRecord",
+    "ReportRepository",
+    "EvaluationRuntimeSnapshotRepository",
 ]

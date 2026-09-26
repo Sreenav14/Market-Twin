@@ -3,10 +3,14 @@
 from collections.abc import Sequence
 
 from google.adk.agents import LlmAgent
+from markettwin_shared.runtime_snapshot import AgentRuntimeSnapshotPayload
 
 from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
 from markettwin_execution_orchestrator.browser.tools import BrowserTool
-from markettwin_execution_orchestrator.models.model_factory import create_model
+from markettwin_execution_orchestrator.models.model_factory import (
+    create_model,
+    resolve_model_runtime_configuration,
+)
 
 
 def create_persona_agent(
@@ -175,3 +179,65 @@ Never claim an action succeeded unless browser state showed that it succeeded.
         instruction=instruction,
         tools=list(browser_tools),
     )
+def build_persona_runtime_snapshot_payload(
+    *,
+    journey: PersonaJourneySpec,
+    agent: LlmAgent,
+    browser_tools: Sequence[BrowserTool],
+    runtime_prompt: str,
+) -> AgentRuntimeSnapshotPayload:
+    """Build the safe semantic snapshot for one Persona Agent."""
+
+    if not isinstance(agent.instruction, str):
+        raise TypeError(
+            "Persona Agent must use a static string instruction "
+            "for runtime snapshotting."
+        )
+
+    model_configuration = (
+        resolve_model_runtime_configuration()
+    )
+
+    return AgentRuntimeSnapshotPayload(
+        agent_role="persona",
+        runtime_kind="google_adk",
+        runtime_agent_name=agent.name,
+        agent_version=1,
+        snapshot_schema_version=1,
+        model_provider=model_configuration.provider,
+        model_name=model_configuration.model_name,
+        model_configuration=(
+            model_configuration.snapshot_parameters()
+        ),
+        effective_instruction=agent.instruction,
+        runtime_prompt=runtime_prompt,
+        persona_snapshot=journey.persona.model_dump(
+            mode="json",
+        ),
+        mission_snapshot=journey.mission.model_dump(
+            mode="json",
+        ),
+        success_criteria=journey.mission.success_criteria,
+        tools=tuple(
+            _browser_tool_name(tool)
+            for tool in browser_tools
+        ),
+        metadata={
+            "journey_key": journey.journey_key,
+        },
+    )
+
+
+def _browser_tool_name(
+    tool: BrowserTool,
+) -> str:
+    """Return the stable Python function name for a browser tool."""
+
+    name = getattr(tool, "__name__", None)
+
+    if not isinstance(name, str) or not name:
+        raise TypeError(
+            "MarketTwin browser tools must have stable function names."
+        )
+
+    return name

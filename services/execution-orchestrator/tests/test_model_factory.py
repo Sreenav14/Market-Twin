@@ -10,6 +10,7 @@ from markettwin_execution_orchestrator.models.model_factory import (
     DEFAULT_OPENAI_MODEL_NAME,
     DEFAULT_OPENAI_NUM_RETRIES,
     create_model,
+    resolve_model_runtime_configuration,
 )
 
 
@@ -102,3 +103,39 @@ def test_create_model_accepts_ollama_overrides(
     assert captured["model"] == "ollama_chat/test-model"
     assert captured["api_base"] == "http://127.0.0.1:12345"
     assert captured["num_ctx"] == 4096
+
+def test_resolved_openai_configuration_is_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "MODEL_PROVIDER",
+        "openai",
+    )
+    monkeypatch.setenv(
+        "MODEL_NAME",
+        "gpt-4o-mini",
+    )
+    monkeypatch.setenv(
+        "MODEL_API_KEY",
+        "super-secret-key",
+    )
+
+    configuration = (
+        resolve_model_runtime_configuration()
+    )
+
+    assert configuration.provider == "openai"
+
+    assert (
+        configuration.model_name
+        == "openai/gpt-4o-mini"
+    )
+
+    assert configuration.snapshot_parameters() == {
+        "max_tokens": 512,
+        "num_retries": 2,
+    }
+
+    assert "super-secret-key" not in str(
+        configuration.snapshot_parameters()
+    )

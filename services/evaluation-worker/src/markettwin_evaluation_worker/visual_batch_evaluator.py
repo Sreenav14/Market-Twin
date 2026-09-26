@@ -151,6 +151,7 @@ def _criterion_evidence(
 async def evaluate_visual_criteria_for_run(
     *,
     test_run_id: UUID,
+    agent_snapshot_id: UUID,
     repository: EvaluationRepository,
     storage: VisualArtifactStorage,
 ) -> VisualBatchEvaluationResult:
@@ -198,6 +199,10 @@ async def evaluate_visual_criteria_for_run(
 
             evaluation = (
                 await evaluate_visual_criterion_from_evidence(
+                    test_run_id=test_run_id,
+                    journey_id=journey.journey_id,
+                    execution_id=journey.execution_id,
+                    agent_snapshot_id=agent_snapshot_id,
                     criterion=reference.criterion,
                     evidence=explicit_visual_evidence,
                     storage=storage,

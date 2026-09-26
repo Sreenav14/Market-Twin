@@ -1,16 +1,58 @@
 """ MarketTwin Meta Agent for multi-perspective test planning"""
 
 from google.adk.agents import LlmAgent
+from markettwin_shared.runtime_snapshot import AgentRuntimeSnapshotPayload
 
 from markettwin_execution_orchestrator.agents.schemas.plan import (
     MetaAgentPlan,
 )
 from markettwin_execution_orchestrator.models.model_factory import (
     create_model,
+    resolve_model_runtime_configuration,
 )
 
 META_AGENT_MAX_TOKENS = 1024
 
+def build_meta_runtime_snapshot_payload(
+    *,
+    agent: LlmAgent,
+    runtime_prompt: str,
+) -> AgentRuntimeSnapshotPayload:
+    """Build the safe semantic snapshot for the Meta Agent."""
+
+    if not isinstance(agent.instruction, str):
+        raise TypeError(
+            "Meta Agent must use a static string instruction "
+            "for runtime snapshotting."
+        )
+
+    model_configuration = (
+        resolve_model_runtime_configuration(
+            max_tokens=META_AGENT_MAX_TOKENS,
+        )
+    )
+
+    return AgentRuntimeSnapshotPayload(
+        agent_role="meta",
+        runtime_kind="google_adk",
+        runtime_agent_name=agent.name,
+        agent_version=1,
+        snapshot_schema_version=1,
+        model_provider=model_configuration.provider,
+        model_name=model_configuration.model_name,
+        model_configuration=(
+            model_configuration.snapshot_parameters()
+        ),
+        effective_instruction=agent.instruction,
+        runtime_prompt=runtime_prompt,
+        success_criteria=(),
+        tools=(),
+        policy_references=(),
+        metadata={
+            "output_schema": MetaAgentPlan.__name__,
+        },
+    )
+    
 def create_meta_agent() -> LlmAgent:
     """ Create the MarketTwin Meta Agent."""
     

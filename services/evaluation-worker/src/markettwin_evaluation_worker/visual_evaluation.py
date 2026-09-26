@@ -7,6 +7,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID
 
+from markettwin_shared.observability import (
+    use_observability_correlation,
+)
+
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
     VisualEvidenceSet,
@@ -54,6 +58,10 @@ def _select_visual_evidence(
 
 async def evaluate_visual_criterion_from_evidence(
     *,
+    test_run_id: UUID,
+    journey_id: UUID,
+    execution_id: UUID,
+    agent_snapshot_id: UUID,
     criterion: str,
     evidence: tuple[VisualEvidenceSet, ...],
     storage: VisualArtifactStorage,
@@ -100,11 +108,18 @@ async def evaluate_visual_criterion_from_evidence(
                 directory=directory,
             )
 
-        verification = await verify_visual_criterion(
-            criterion=criterion,
-            viewport_path=viewport_path,
-            focused_path=focused_path,
-        )
+        with use_observability_correlation(
+            test_run_id=test_run_id,
+            journey_id=journey_id,
+            execution_id=execution_id,
+            agent_snapshot_id=agent_snapshot_id,
+            agent_role="visual_verifier",
+        ):
+            verification = await verify_visual_criterion(
+                criterion=criterion,
+                viewport_path=viewport_path,
+                focused_path=focused_path,
+            )
 
     artifact_ids = [
         selected.viewport.artifact_id,
@@ -130,8 +145,11 @@ async def evaluate_visual_criterion_from_evidence(
     
 async def evaluate_visual_criterion_from_steps(
     *,
+    test_run_id: UUID,
+    journey_id: UUID,
     criterion: str,
     execution_id: UUID,
+    agent_snapshot_id: UUID,
     step_ids: tuple[int, ...],
     repository: EvaluationRepository,
     storage: VisualArtifactStorage,
@@ -144,6 +162,10 @@ async def evaluate_visual_criterion_from_steps(
     )
 
     return await evaluate_visual_criterion_from_evidence(
+        test_run_id=test_run_id,
+        journey_id=journey_id,
+        execution_id=execution_id,
+        agent_snapshot_id=agent_snapshot_id,
         criterion=criterion,
         evidence=evidence,
         storage=storage,

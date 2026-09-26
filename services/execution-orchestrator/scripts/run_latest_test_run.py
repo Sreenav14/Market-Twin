@@ -34,6 +34,7 @@ def database_url() -> str:
 
 
 async def main() -> None:
+        
     engine = create_database_engine(database_url())
     session_factory = create_session_factory(engine)
 

@@ -1,5 +1,6 @@
 """Tests for MarketTwin visual evidence verification."""
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -180,7 +181,7 @@ async def test_visual_verifier_retries_rate_limits(
         fake_acompletion,
     )
     monkeypatch.setattr(
-        visual_verifier.asyncio,
+        asyncio,
         "sleep",
         fake_sleep,
     )
@@ -225,7 +226,7 @@ async def test_visual_verifier_marks_exhausted_rate_limit_unverified(
         always_rate_limited,
     )
     monkeypatch.setattr(
-        visual_verifier.asyncio,
+        asyncio,
         "sleep",
         fake_sleep,
     )

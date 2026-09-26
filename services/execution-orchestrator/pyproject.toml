@@ -16,6 +16,7 @@ dependencies = [
     "boto3>=1.35,<2",
     "pillow>=11,<13",
     "markettwin-shared-python",
+    "openinference-instrumentation-google-adk==0.1.28",
 ]
 
 [tool.uv.sources]

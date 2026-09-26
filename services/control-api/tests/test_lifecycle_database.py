@@ -2,6 +2,7 @@
 
 import os
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ import pytest
 from fastapi import HTTPException, Request
 from markettwin_control_api.api import lifecycle
 from markettwin_control_api.config import get_settings
+from markettwin_control_api.database import DatabaseRuntime
 from markettwin_control_api.persistence.models import (
     Application,
     ApplicationTarget,
@@ -26,7 +28,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     os.environ.get("MARKETTWIN_TEST_DATABASE") != "1",
     reason="Set MARKETTWIN_TEST_DATABASE=1 to verify against local PostgreSQL.",
 )
-async def test_database_delete_draft_then_parent_records(monkeypatch):
+async def test_database_delete_draft_then_parent_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Delete only an untouched draft Test, then its target and application."""
     engine = create_async_engine(get_settings().database_url, connect_args={"timeout": 5})
     try:
@@ -84,10 +88,15 @@ async def test_database_delete_draft_then_parent_records(monkeypatch):
                 monkeypatch.setattr(
                     lifecycle, "get_authenticated_user_id", AsyncMock(return_value=user_id)
                 )
+
+                def get_database_runtime(_request: Request) -> DatabaseRuntime:
+                    runtime = SimpleNamespace(session_factory=factory)
+                    return cast(DatabaseRuntime, runtime)
+
                 monkeypatch.setattr(
                     lifecycle,
                     "get_database_runtime",
-                    lambda request: SimpleNamespace(session_factory=factory),
+                    get_database_runtime,
                 )
                 request = Request({"type": "http", "method": "DELETE", "path": "/", "headers": []})
                 with pytest.raises(HTTPException) as error:
