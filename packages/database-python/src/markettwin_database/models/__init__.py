@@ -28,7 +28,6 @@ from .testing import (
     TargetAuthorization,
     TestRun,
 )
-from .messaging import OutboxMessage
 
 __all__ = [
     "User",
@@ -55,5 +54,4 @@ __all__ = [
     "TargetAllowedOrigin",
     "TargetAuthorization",
     "TestRun",
-    "OutboxMessage",
 ]
