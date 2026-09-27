@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_control_api.persistence.models import (
@@ -141,6 +141,36 @@ class TestRunRepository:
         )
 
         result = await self._session.execute(statement)
+
+        test_run = result.scalar_one_or_none()
+
+        if test_run is None:
+            return None
+
+        return _to_record(test_run)
+    
+    async def queue_if_draft(
+    self,
+    *,
+    test_run_id: UUID,
+    ) -> TestRunRecord | None:
+        """Atomically move a draft TestRun into the queue."""
+
+        statement = (
+            update(TestRun)
+            .where(
+                TestRun.id == test_run_id,
+                TestRun.status == "draft",
+            )
+            .values(
+                status="queued",
+            )
+            .returning(TestRun)
+        )
+
+        result = await self._session.execute(
+            statement
+        )
 
         test_run = result.scalar_one_or_none()
 

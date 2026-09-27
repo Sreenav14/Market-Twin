@@ -8,6 +8,9 @@ from fastapi import (
     Request,
     status,
 )
+from markettwin_database.repositories import (
+    OutboxRepository,
+)
 from pydantic import (
     BaseModel,
     Field,
@@ -31,6 +34,10 @@ from markettwin_control_api.persistence.repositories import (
     TestRunRecord,
     TestRunRepository,
     WorkspaceRepository,
+)
+from markettwin_control_api.services import (
+    RunDispatchService,
+    RunNotQueueableError,
 )
 
 router = APIRouter(
@@ -332,3 +339,128 @@ async def get_test_run(
         )
 
     return test_run_response(test_run)
+
+
+@router.post(
+    "/api/v1/test-runs/{test_run_id}/start",
+    response_model=TestRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_test_run(
+      test_run_id: UUID,
+    request: Request,
+) -> TestRunResponse:
+    """Queue one authorized draft TestRun for execution."""
+
+    user_id = await get_authenticated_user_id(
+        request=request
+    )
+
+    database = get_database_runtime(request)
+
+    async with database.session_factory() as database_session:
+        async with database_session.begin():
+            test_run_repository = TestRunRepository(
+                database_session
+            )
+
+            test_run = await test_run_repository.get_for_user(
+                test_run_id=test_run_id,
+                user_id=user_id,
+            )
+
+            if test_run is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Test run not found.",
+                )
+
+            if test_run.status != "draft":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Test run has already been started.",
+                )
+
+            workspace_repository = WorkspaceRepository(
+                database_session
+            )
+
+            workspace = await workspace_repository.get_for_user(
+                workspace_id=test_run.workspace_id,
+                user_id=user_id,
+            )
+
+            if workspace is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Test run not found.",
+                )
+
+            if workspace.role not in WORKSPACE_WRITE_ROLES:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Your workspace role cannot "
+                        "start test runs."
+                    ),
+                )
+
+            target_repository = TargetRepository(
+                database_session
+            )
+
+            target = await target_repository.get_for_user(
+                target_id=test_run.target_id,
+                user_id=user_id,
+            )
+
+            if target is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Target is not currently "
+                        "available for testing."
+                    ),
+                )
+
+            authorization_repository = (
+                TargetAuthorizationRepository(
+                    database_session
+                )
+            )
+
+            authorization = (
+                await authorization_repository.get_active(
+                    target_id=target.target_id
+                )
+            )
+
+            if authorization is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Target is not currently authorized "
+                        "for testing."
+                    ),
+                )
+
+            dispatch_service = RunDispatchService(
+                test_run_repository=test_run_repository,
+                outbox_repository=OutboxRepository(
+                    database_session
+                ),
+            )
+
+            try:
+                queued_run = await dispatch_service.queue(
+                    test_run_id=test_run_id
+                )
+            except RunNotQueueableError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Test run has already been started."
+                    ),
+                ) from error
+
+    return test_run_response(queued_run)

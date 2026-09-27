@@ -1,5 +1,8 @@
 """Regression tests for Test Run authorization gating."""
 
+from __future__ import annotations
+
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
@@ -122,6 +125,36 @@ class FakeTestRunRepository:
             "configuration_snapshot": configuration_snapshot,
         }
         return self._test_run
+    
+    async def get_for_user(
+    self,
+    *,
+    test_run_id: UUID,
+    user_id: UUID,
+    ) -> TestRunRecord | None:
+        if self._test_run.test_run_id != test_run_id:
+            return None
+
+        return self._test_run
+
+
+    async def queue_if_draft(
+        self,
+        *,
+        test_run_id: UUID,
+    ) -> TestRunRecord | None:
+        if (
+            self._test_run.test_run_id != test_run_id
+            or self._test_run.status != "draft"
+        ):
+            return None
+
+        self._test_run = replace(
+            self._test_run,
+            status="queued",
+        )
+
+        return self._test_run
 
 
 def make_request() -> Request:
@@ -145,9 +178,23 @@ def patch_common_dependencies(
     workspace: WorkspaceAccess,
     target: TargetRecord,
     authorization: TargetAuthorizationRecord | None,
+    outbox_repository: FakeOutboxRepository | None = None,
     test_run_repository: FakeTestRunRepository | None = None,
 ) -> None:
     """Patch endpoint dependencies with deterministic repository fakes."""
+
+
+    if outbox_repository is not None:
+        def outbox_repository_factory(
+            session: object,
+        ) -> FakeOutboxRepository:
+            return outbox_repository
+
+        monkeypatch.setattr(
+            test_run_api,
+            "OutboxRepository",
+            outbox_repository_factory,
+        )
 
     def session_factory() -> AsyncContext:
         return AsyncContext(FakeDatabaseSession())
@@ -396,3 +443,185 @@ async def test_create_test_run_snapshots_active_authorization(
         ]
         == expected_configuration
     )
+class FakeOutboxRepository:
+    def __init__(self) -> None:
+        self.messages: list[
+            dict[str, object]
+        ] = []
+
+    async def add(
+        self,
+        *,
+        aggregate_type: str,
+        aggregate_id: UUID,
+        event_type: str,
+        topic: str,
+        message_key: str | None,
+        payload: dict[str, object],
+        headers: dict[str, object] | None = None,
+    ) -> object:
+        self.messages.append(
+            {
+                "aggregate_type": aggregate_type,
+                "aggregate_id": aggregate_id,
+                "event_type": event_type,
+                "topic": topic,
+                "message_key": message_key,
+                "payload": payload,
+                "headers": headers,
+            }
+        )
+
+        return object()
+    
+@pytest.mark.asyncio
+async def test_start_test_run_dispatches_only_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Starting the same TestRun twice must create one dispatch only."""
+
+    user_id, application, workspace, target = make_records()
+    now = datetime.now(UTC)
+
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(),
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Owned local application.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+
+    persisted_run = TestRunRecord(
+        test_run_id=uuid4(),
+        workspace_id=application.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="draft",
+        target_snapshot={},
+        configuration_snapshot={
+            "study_brief": "Evaluate the application.",
+        },
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+
+    run_repository = FakeTestRunRepository(
+        persisted_run
+    )
+    outbox_repository = FakeOutboxRepository()
+
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+        test_run_repository=run_repository,
+        outbox_repository=outbox_repository,
+    )
+
+    first_response = await test_run_api.start_test_run(
+        persisted_run.test_run_id,
+        make_request(),
+    )
+
+    assert first_response.status == "queued"
+
+    assert len(
+        outbox_repository.messages
+    ) == 1
+
+    message = outbox_repository.messages[0]
+
+    assert message["aggregate_type"] == "test_run"
+    assert (
+        message["aggregate_id"]
+        == persisted_run.test_run_id
+    )
+    assert message["event_type"] == "run.requested"
+    assert message["topic"] == "markettwin.commands"
+    assert (
+        message["message_key"]
+        == str(persisted_run.test_run_id)
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await test_run_api.start_test_run(
+            persisted_run.test_run_id,
+            make_request(),
+        )
+
+    assert exc_info.value.status_code == 409
+
+    assert len(
+        outbox_repository.messages
+    ) == 1
+    
+@pytest.mark.asyncio
+async def test_start_test_run_rejects_revoked_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run cannot start after target authorization is lost."""
+
+    user_id, application, workspace, target = make_records()
+    now = datetime.now(UTC)
+
+    persisted_run = TestRunRecord(
+        test_run_id=uuid4(),
+        workspace_id=application.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="draft",
+        target_snapshot={},
+        configuration_snapshot={
+            "study_brief": "Evaluate the application.",
+        },
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+
+    run_repository = FakeTestRunRepository(
+        persisted_run
+    )
+    outbox_repository = FakeOutboxRepository()
+
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+
+        # get_active() returns None for revoked/expired auth.
+        authorization=None,
+
+        test_run_repository=run_repository,
+        outbox_repository=outbox_repository,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await test_run_api.start_test_run(
+            persisted_run.test_run_id,
+            make_request(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == (
+        "Target is not currently authorized for testing."
+    )
+
+    assert len(
+        outbox_repository.messages
+    ) == 0
