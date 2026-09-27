@@ -18,6 +18,7 @@ from .execution import (
     PolicyDecision,
     RunEvent,
 )
+from .integration import OutboxEvent, ProcessedMessage
 from .testing import (
     Application,
     ApplicationTarget,
@@ -54,4 +55,6 @@ __all__ = [
     "TargetAllowedOrigin",
     "TargetAuthorization",
     "TestRun",
+    "OutboxEvent",
+    "ProcessedMessage",
 ]

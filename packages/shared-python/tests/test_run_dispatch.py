@@ -1,57 +1,48 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import pytest
 from markettwin_shared.messaging import (
-    RUN_REQUEST_TOPIC,
+    COMMANDS_TOPIC,
+    RUN_REQUESTED_EVENT_TYPE,
+    RUN_REQUESTED_EVENT_VERSION,
     RunRequestedMessage,
 )
 
 
-def test_run_request_round_trip() -> None:
+def test_run_requested_message_builds_envelope() -> None:
     event_id = uuid4()
     test_run_id = uuid4()
+    workspace_id = uuid4()
 
     message = RunRequestedMessage(
         event_id=event_id,
         test_run_id=test_run_id,
+        workspace_id=workspace_id,
         occurred_at=datetime(
             2026,
             9,
             27,
-            12,
-            30,
+            18,
+            0,
             tzinfo=UTC,
         ),
     )
 
-    restored = RunRequestedMessage.from_json(
-        message.to_json()
+    envelope = message.to_envelope()
+
+    assert COMMANDS_TOPIC == "markettwin.commands"
+
+    assert envelope.event_id == event_id
+    assert envelope.event_type == RUN_REQUESTED_EVENT_TYPE
+    assert envelope.event_version == RUN_REQUESTED_EVENT_VERSION
+
+    assert envelope.workspace_id == workspace_id
+    assert envelope.producer == "markettwin-control-api"
+
+    assert envelope.correlation_id == str(
+        test_run_id
     )
 
-    assert restored == message
-
-    assert (
-        RUN_REQUEST_TOPIC
-        == "markettwin.run.requests.v1"
-    )
-
-
-def test_run_request_rejects_unknown_version() -> None:
-    with pytest.raises(
-        ValueError,
-        match="Unsupported",
-    ):
-        RunRequestedMessage.from_json(
-            """
-            {
-              "event_id":
-                "00000000-0000-0000-0000-000000000001",
-              "test_run_id":
-                "00000000-0000-0000-0000-000000000002",
-              "occurred_at":
-                "2026-09-27T12:30:00+00:00",
-              "schema_version": 999
-            }
-            """
-        )
+    assert envelope.payload == {
+        "test_run_id": str(test_run_id),
+    }
