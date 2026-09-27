@@ -1,4 +1,4 @@
-"""Run Meta Agent planning for the latest TestRun without persisting changes."""
+"""Run Meta Agent planning for the latest TestRun with observability."""
 
 import asyncio
 import os
@@ -8,6 +8,9 @@ from markettwin_database import (
     create_session_factory,
 )
 from markettwin_database.models.testing import TestRun
+from markettwin_execution_orchestrator.observability import (
+    initialize_adk_observability,
+)
 from markettwin_execution_orchestrator.workflow.planning import (
     MetaPlanningRequest,
     generate_meta_agent_plan,
@@ -29,6 +32,8 @@ def database_url() -> str:
 
 
 async def main() -> None:
+    initialize_adk_observability()
+
     engine = create_database_engine(database_url())
     session_factory = create_session_factory(engine)
 

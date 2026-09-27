@@ -7,6 +7,7 @@ from threading import Lock
 
 from markettwin_shared.observability import (
     initialize_observability,
+    observability_capture_content_enabled,
 )
 from openinference.instrumentation import (
     TraceConfig,
@@ -50,17 +51,20 @@ def initialize_adk_observability(
                 instrumented=True,
             )
 
+        capture_content = (
+            observability_capture_content_enabled()
+        )
         config = TraceConfig(
-            hide_inputs=True,
-            hide_outputs=True,
-            hide_input_messages=True,
-            hide_output_messages=True,
-            hide_input_images=True,
-            hide_input_text=True,
-            hide_output_text=True,
-            hide_prompts=True,
-            hide_choices=True,
-            hide_llm_tools=True,
+            hide_inputs=not capture_content,
+            hide_outputs=not capture_content,
+            hide_input_messages=not capture_content,
+            hide_output_messages=not capture_content,
+            hide_input_images=not capture_content,
+            hide_input_text=not capture_content,
+            hide_output_text=not capture_content,
+            hide_prompts=not capture_content,
+            hide_choices=not capture_content,
+            hide_llm_tools=not capture_content,
         )
 
         GoogleADKInstrumentor().instrument(

@@ -8,6 +8,9 @@ from google.genai import types
 from markettwin_execution_orchestrator.agents.browser_agent import create_browser_agent
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
 from markettwin_execution_orchestrator.browser.tools import create_browser_tools
+from markettwin_execution_orchestrator.observability import (
+    initialize_adk_observability,
+)
 
 AUTHORIZED_TARGET = "https://en.wikipedia.org/wiki/Software_testing"
 EXPECTED_HEADING = "Software testing"
@@ -18,6 +21,8 @@ USER_ID = "local_developer"
 async def main() -> None:
     """Execute one authorized public-site mission without Node or Playwright MCP."""
 
+    initialize_adk_observability()
+    
     execution_id = uuid4()
     journey_id = uuid4()
 

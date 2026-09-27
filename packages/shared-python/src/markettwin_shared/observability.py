@@ -72,6 +72,7 @@ class ObservabilitySettings:
     enabled: bool
     service_name: str
     traces_endpoint: str | None
+    capture_content: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +86,10 @@ class ObservabilityBootstrapResult:
 
 
 _initialization_lock = Lock()
+
+_CAPTURE_CONTENT_ENV = (
+    "MARKETTWIN_OBSERVABILITY_CAPTURE_CONTENT"
+)
 
 _initialized_result: (
     ObservabilityBootstrapResult | None
@@ -171,6 +176,10 @@ def load_observability_settings(
         _OBSERVABILITY_ENABLED_ENV,
         default=False,
     )
+    capture_content = _environment_boolean(
+    _CAPTURE_CONTENT_ENV,
+    default=False,
+    )
 
     service_name = os.getenv(
         _SERVICE_NAME_ENV,
@@ -197,6 +206,7 @@ def load_observability_settings(
         enabled=enabled,
         service_name=service_name,
         traces_endpoint=traces_endpoint,
+        capture_content=capture_content,
     )
 
 
@@ -339,3 +349,8 @@ class MarketTwinCorrelationSpanProcessor(
     ) -> bool:
         del timeout_millis
         return True
+    
+def observability_capture_content_enabled() -> bool:
+    """Return whether trace content capture is explicitly enabled."""
+
+    return load_observability_settings().capture_content
