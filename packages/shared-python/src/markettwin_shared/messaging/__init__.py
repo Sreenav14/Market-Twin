@@ -1,4 +1,8 @@
 from .envelope import EventEnvelope
+from .kafka_producer import (
+    KafkaProducer,
+    KafkaProducerSettings,
+)
 from .run_dispatch import (
     COMMANDS_TOPIC,
     RUN_REQUEST_TOPIC,
@@ -14,4 +18,6 @@ __all__ = [
     "RUN_REQUESTED_EVENT_TYPE",
     "RUN_REQUESTED_EVENT_VERSION",
     "EventEnvelope",
+    "KafkaProducer",
+    "KafkaProducerSettings",
 ]
