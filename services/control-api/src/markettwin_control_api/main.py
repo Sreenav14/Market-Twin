@@ -36,6 +36,13 @@ class HealthResponse(BaseModel):
     environment: str
 
 
+class KafkaHealthResponse(BaseModel):
+    """Kafka connectivity, independent of Control API process health."""
+
+    status: Literal["connected", "unavailable"]
+    outbox_relay_enabled: bool
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
@@ -105,6 +112,38 @@ def create_app() -> FastAPI:
         response_model=HealthResponse,
         tags=["System"],
         summary="Check API process health",
+    )
+
+    async def kafka_health() -> KafkaHealthResponse:
+        """Probe Kafka authentication and connectivity without publishing events."""
+        status: Literal["connected", "unavailable"] = "unavailable"
+        producer: KafkaProducer | None = None
+        try:
+            async with asyncio.timeout(5):
+                producer = KafkaProducer(settings.kafka_producer_settings)
+                await producer.start()
+                status = "connected"
+        except Exception:
+            pass
+        finally:
+            if producer is not None:
+                try:
+                    async with asyncio.timeout(2):
+                        await producer.stop()
+                except Exception:
+                    pass
+        return KafkaHealthResponse(
+            status=status,
+            outbox_relay_enabled=settings.outbox_relay_enabled,
+        )
+
+    application.add_api_route(
+        "/api/v1/health/kafka",
+        kafka_health,
+        methods=["GET"],
+        response_model=KafkaHealthResponse,
+        tags=["System"],
+        summary="Check Kafka connectivity",
     )
 
     application.include_router(auth_router)

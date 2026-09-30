@@ -49,6 +49,7 @@ class KafkaConsumerSettings:
     ssl_ca_file: str | None = None
 
     client_id: str = "markettwin"
+    max_poll_interval_ms: int = 300_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +205,7 @@ class KafkaConsumer:
                 ),
                 client_id=settings.client_id,
                 group_id=settings.group_id,
+                max_poll_interval_ms=settings.max_poll_interval_ms,
                 security_protocol=str(
                     settings.security_protocol
                 ),
@@ -225,7 +227,7 @@ class KafkaConsumer:
 
         try:
             await consumer.start()
-        except Exception:
+        except BaseException:
             await consumer.stop()
             raise
 

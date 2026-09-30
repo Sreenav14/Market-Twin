@@ -11,6 +11,7 @@ import { BrandMark } from "../components/ui/BrandMark";
 import { ErrorPanel, LoadingPanel } from "../components/ui/StateViews";
 import { Icon } from "../components/ui/Icon";
 import { CommandMenu } from "../components/markettwin/CommandMenu";
+import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { CurrentUser, Workspace, api } from "../lib/api";
 import { roleLabel } from "../lib/permissions";
 import { useAsync } from "../lib/useAsync";
@@ -258,7 +259,10 @@ export function AppShell({
               </span>
             ))}
           </nav>
-          <CommandMenu />
+          <div className="header-actions">
+            <KafkaStatusBadge />
+            <CommandMenu />
+          </div>
         </header>
         <main className="page-container" id="main-content" tabIndex={-1}>
           {logoutError ? (

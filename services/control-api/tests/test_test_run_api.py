@@ -548,7 +548,7 @@ async def test_start_test_run_dispatches_only_once(
         == persisted_run.test_run_id
     )
     assert message["event_type"] == "run.requested"
-    assert message["topic"] == "markettwin.commands"
+    assert message["topic"] == "markettwin.execution.commands"
     assert (
         message["message_key"]
         == str(persisted_run.test_run_id)

@@ -189,7 +189,7 @@ class KafkaProducer:
 
         try:
             await producer.start()
-        except Exception:
+        except BaseException:
             await producer.stop()
             raise
 

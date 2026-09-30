@@ -148,6 +148,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 export const api = {
+  kafkaHealth: (signal?: AbortSignal) =>
+    request<{ status: "connected" | "unavailable"; outbox_relay_enabled: boolean }>(
+      "/api/v1/health/kafka",
+      { signal },
+    ),
   getArtifactAccess: (
     runId: string,
     artifactId: string,
