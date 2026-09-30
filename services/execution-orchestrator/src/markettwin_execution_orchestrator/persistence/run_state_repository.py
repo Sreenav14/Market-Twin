@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from markettwin_database.models.testing import TestRun
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -21,6 +22,9 @@ class RunStateRepository:
         test_run_id: UUID,
     ) -> None:
         run = await self._get_run(test_run_id)
+        
+        if run.status == "planning":
+            return
         
         if run.status != "draft":
             raise RuntimeError(
@@ -109,3 +113,24 @@ class RunStateRepository:
             )
             
         return run
+    
+    async def claim_queued_for_planning(
+        self,
+        *,
+        test_run_id: UUID,
+    ) -> bool:
+        """Atomically claim one queued TestRun for planning."""
+
+        statement = (
+            update(TestRun)
+            .where(
+                TestRun.id == test_run_id,
+                TestRun.status == "queued",
+            )
+            .values(status="planning")
+            .returning(TestRun.id)
+        )
+
+        result = await self._session.execute(statement)
+
+        return result.scalar_one_or_none() is not None

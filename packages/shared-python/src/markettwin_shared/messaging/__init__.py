@@ -1,4 +1,10 @@
 from .envelope import EventEnvelope
+from .kafka_consumer import (
+    KafkaConsumer,
+    KafkaConsumerSettings,
+    KafkaMessage,
+    load_kafka_consumer_settings,
+)
 from .kafka_producer import (
     KafkaProducer,
     KafkaProducerSettings,
@@ -22,4 +28,8 @@ __all__ = [
     "KafkaProducer",
     "KafkaProducerSettings",
     "load_kafka_producer_settings",
+    "KafkaConsumer",
+    "KafkaConsumerSettings",
+    "KafkaMessage",
+    "load_kafka_consumer_settings",
 ]
