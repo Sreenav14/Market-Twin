@@ -17,6 +17,7 @@ import {
 } from "../components/ui/StateViews";
 import { TestStatusBadge } from "../components/ui/StatusBadge";
 import { DeleteAction } from "../components/markettwin/DeleteAction";
+import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { canManageLifecycle } from "../lib/permissions";
 import { Button } from "../components/ui/button";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
@@ -130,19 +131,26 @@ export function RunLayout() {
             <TestStatusBadge status={run.status} />
             {canManageLifecycle(appContext.workspace.role) &&
             run.status === "draft" ? (
-              <Button onClick={() => void startRun()} disabled={starting}>
-                {starting ? (
-                  <>
-                    <Spinner />
-                    Starting…
-                  </>
-                ) : (
-                  <>
-                    <Play size={16} aria-hidden="true" />
-                    Start test
-                  </>
-                )}
-              </Button>
+              <>
+                <KafkaStatusBadge />
+                <Button
+                  className="start-test-button"
+                  onClick={() => void startRun()}
+                  disabled={starting}
+                >
+                  {starting ? (
+                    <>
+                      <Spinner />
+                      Starting…
+                    </>
+                  ) : (
+                    <>
+                      <Play size={16} aria-hidden="true" />
+                      Start test
+                    </>
+                  )}
+                </Button>
+              </>
             ) : null}
             {canManageLifecycle(appContext.workspace.role) ? (
               <DeleteAction

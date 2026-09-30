@@ -110,8 +110,8 @@ async def test_foreign_workspace_item_is_not_found(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["planning", "queued", "running", "completed"])
-async def test_started_or_completed_test_cannot_be_deleted(
+@pytest.mark.parametrize("state", ["planning", "queued", "running"])
+async def test_in_progress_test_cannot_be_deleted(
     monkeypatch: pytest.MonkeyPatch,
     state: str,
 ) -> None:
@@ -120,13 +120,13 @@ async def test_started_or_completed_test_cannot_be_deleted(
     with pytest.raises(HTTPException) as error:
         await lifecycle.delete_resource(request(), entity.id, TestRun)
     assert error.value.status_code == 409
-    assert "retained" in error.value.detail
+    assert "Wait for the test to finish" in error.value.detail
     session.delete.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["failed", "cancelled"])
-async def test_aborted_test_can_be_deleted(
+@pytest.mark.parametrize("state", ["completed", "failed", "cancelled"])
+async def test_terminal_test_can_be_deleted(
     monkeypatch: pytest.MonkeyPatch,
     state: str,
 ) -> None:

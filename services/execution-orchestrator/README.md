@@ -72,6 +72,18 @@ replaying potentially state-changing browser actions. Invalid commands remain
 uncommitted and are logged for operator correction. The consumer allows up to
 24 hours between polls for a long execution.
 
+The diagnostic `scripts/run_one_execution_command.py` uses the same
+`process_command()` implementation, poll interval, and consumer group. It commits
+only after processing returns and then exits. Stop the persistent worker before
+using this diagnostic; do not run both simultaneously.
+
+V1 supports one active execution consumer. Recovery does not establish ownership
+of an in-progress run: a redelivery in planning/running is treated as interrupted
+and marked failed. This is not safe for horizontal worker scaling, where a Kafka
+rebalance could redeliver work while its original worker is still alive. Before
+running multiple workers, add a lease/attempt-owner mechanism and only recover a
+run after its owner's lease expires. Worker health is a separate future addition.
+
 Ctrl+C stops the worker and closes its Kafka and database resources. For deployment,
 run `python -m markettwin_execution_orchestrator.worker` under the deployment's
 process supervisor with an automatic restart policy; closing a local terminal
@@ -79,6 +91,8 @@ stops its worker.
 
 `GET /api/v1/health/kafka` separately checks broker connectivity/authentication
 without publishing or consuming messages. It returns `connected` or `unavailable`
-and whether the outbox relay is enabled. The AppShell polls it every 15 seconds.
+and whether the outbox relay is enabled. The draft test's Start controls poll it
+every 15 seconds. Connected with the relay disabled is shown as a warning:
+`Kafka connected · relay off`.
 This checks Kafka connectivity, not worker availability, topic permissions, or
 successful outbox delivery. `/health` remains a process-health endpoint.

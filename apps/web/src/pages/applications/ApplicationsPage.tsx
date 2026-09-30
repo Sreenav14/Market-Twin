@@ -27,9 +27,8 @@ export function ApplicationsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Products"
         title="Applications"
-        description="Organize the products and environments your team is authorized to evaluate."
+        description="Manage your applications and their test environments."
         action={
           canWrite ? (
             <Link className="primary-button" to="/applications/new">

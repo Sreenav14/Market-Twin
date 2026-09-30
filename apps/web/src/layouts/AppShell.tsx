@@ -6,12 +6,11 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { ChevronRight, FlaskConical } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { BrandMark } from "../components/ui/BrandMark";
 import { ErrorPanel, LoadingPanel } from "../components/ui/StateViews";
 import { Icon } from "../components/ui/Icon";
 import { CommandMenu } from "../components/markettwin/CommandMenu";
-import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { CurrentUser, Workspace, api } from "../lib/api";
 import { roleLabel } from "../lib/permissions";
 import { useAsync } from "../lib/useAsync";
@@ -140,7 +139,7 @@ export function AppShell({
           <BrandMark />
           <div>
             <strong>MarketTwin</strong>
-            <span>Product readiness testing</span>
+            <span>Testing workspace</span>
           </div>
         </Link>
         <div className="workspace-switcher">
@@ -200,14 +199,6 @@ export function AppShell({
             <span>Tests</span>
           </NavLink>
         </nav>
-        <div className="sidebar-note">
-          <FlaskConical size={19} aria-hidden="true" />
-          <p>
-            Different perspectives.
-            <br />
-            Evidence you can inspect.
-          </p>
-        </div>
         <nav
           className="sidebar-nav sidebar-nav-secondary"
           aria-label="Workspace navigation"
@@ -259,10 +250,7 @@ export function AppShell({
               </span>
             ))}
           </nav>
-          <div className="header-actions">
-            <KafkaStatusBadge />
-            <CommandMenu />
-          </div>
+          <CommandMenu />
         </header>
         <main className="page-container" id="main-content" tabIndex={-1}>
           {logoutError ? (

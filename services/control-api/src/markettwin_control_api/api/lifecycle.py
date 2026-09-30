@@ -1,4 +1,4 @@
-"""Authorized deletion of draft tests and unused target/application records."""
+"""Authorized deletion of inactive tests and unused target/application records."""
 
 from uuid import UUID
 
@@ -20,17 +20,17 @@ from markettwin_control_api.persistence.models import (
 
 router = APIRouter(tags=["Lifecycle"])
 
-DELETABLE_TEST_STATUSES = frozenset({"draft", "failed", "cancelled"})
+DELETABLE_TEST_STATUSES = frozenset({"draft", "completed", "failed", "cancelled"})
 
 
 async def check_dependencies(session: AsyncSession, entity: object) -> None:
-    """Reject deletion once a test has started or while parent dependencies exist."""
+    """Reject deletion during execution or while parent dependencies exist."""
     if isinstance(entity, TestRun):
         if entity.status not in DELETABLE_TEST_STATUSES:
             raise HTTPException(
                 409,
-                "In-progress and completed tests are retained "
-                "to preserve their results and evidence.",
+                "Queued and in-progress tests cannot be deleted. "
+                "Wait for the test to finish.",
             )
 
         if entity.status == "draft":
@@ -50,7 +50,7 @@ async def check_dependencies(session: AsyncSession, entity: object) -> None:
         if await session.scalar(select(TestRun.id).where(TestRun.target_id == entity.id).limit(1)):
             raise HTTPException(
                 409,
-                "Delete this target's draft tests first, "
+                "Delete this target's tests first, "
                 "then delete the target.",
             )
 
@@ -58,7 +58,7 @@ async def check_dependencies(session: AsyncSession, entity: object) -> None:
         if await session.scalar(
             select(TestRun.id).where(TestRun.application_id == entity.id).limit(1)
         ):
-            raise HTTPException(409, "Delete this application's draft tests first.")
+            raise HTTPException(409, "Delete this application's tests first.")
         if await session.scalar(
             select(ApplicationTarget.id)
             .where(ApplicationTarget.application_id == entity.id)
@@ -120,7 +120,7 @@ async def delete_resource(
 
 @router.delete("/api/v1/test-runs/{test_run_id}", status_code=204)
 async def delete_test_run(test_run_id: UUID, request: Request) -> Response:
-    """Delete a draft, failed, or cancelled test."""
+    """Delete a draft, completed, failed, or cancelled test and its dependent records."""
     return await delete_resource(request, test_run_id, TestRun)
 
 

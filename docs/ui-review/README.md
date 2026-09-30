@@ -1,17 +1,15 @@
 # Local UI review
 
-The screenshots in this directory show the implemented React application rendered by Playwright with explicit API test fixtures. They are visual review samples, not results from a live MarketTwin Test. Production pages use the existing Control API.
+This directory retains the written UI research, decisions and validation results.
+Generated review screenshots were removed after visual verification at the user's
+request. Future browser captures use Playwright's ignored `test-results` folder.
+Production pages use the existing Control API.
 
-## Review screens
+## Review documents
 
-- [Redesigned sign-in, desktop](signin-chromium.png)
-- [Redesigned sign-in, mobile](signin-mobile-chromium.png)
 - [Database deletion behavior and verification](DELETION.md)
-- [Test overview, desktop](overview-chromium.png)
-- [Findings, mobile](findings-mobile-chromium.png)
-- [Report, desktop](report-chromium.png)
-- New Test screenshots are regenerated as `new-test-<project>.png` by the Playwright UI workflow.
-- [Workspace, desktop](workspace-chromium.png)
+- [Research and changelog](RESEARCH_AND_CHANGELOG.md)
+- [Dark theme research and validation](DARK_THEME.md)
 
 See [the UI audit](../UI_UX_AUDIT.md) for the architecture review, design decisions, source skills, and API boundaries.
 
@@ -41,7 +39,7 @@ With the development server running, in another terminal:
 npm.cmd run test:e2e --workspace=@markettwin/web -- --workers=1
 ```
 
-The browser suite runs desktop Chromium and a Pixel 7 viewport. It checks navigation, Test creation requests, findings/report workflows, waiting and error states, permissions, keyboard navigation, horizontal overflow, deletion rules, and automated accessibility. It also refreshes these screenshots. API responses are intercepted in tests; this does not verify a live backend execution or evaluation pipeline.
+The browser suite runs desktop Chromium and a Pixel 7 viewport. It checks navigation, Test creation requests, findings/report workflows, waiting and error states, permissions, keyboard navigation, horizontal overflow, deletion rules, and automated accessibility. Screenshots are saved in ignored test output directories. API responses are intercepted in tests; this does not verify a live backend execution or evaluation pipeline.
 
 Detailed journey timelines, artifact downloads/inspection, live events, and human takeover still require the backend contracts identified in the implementation spec.
 

@@ -13,6 +13,6 @@ test("protected routes return an unauthenticated user to sign in", async ({
   await page.goto("/applications");
   await expect(page).toHaveURL(/\/login$/);
   await expect(
-    page.getByRole("heading", { name: /Build an app/ }),
+    page.getByRole("heading", { name: /Test user journeys/ }),
   ).toBeVisible();
 });

@@ -32,7 +32,10 @@ export function TargetOverviewPage() {
     return <ErrorPanel message={authorizationState.error} />;
   const target = targetState.data;
   const authorization = authorizationState.data;
-  const authorized = authorization?.status === "authorized";
+  const expired = Boolean(
+    authorization?.expires_at && Date.parse(authorization.expires_at) <= Date.now(),
+  );
+  const authorized = authorization?.status === "authorized" && !expired;
   const canWrite =
     canWriteWorkspace(workspace.role) && target.status === "active";
   return (
@@ -81,7 +84,7 @@ export function TargetOverviewPage() {
               <dt>Authorization</dt>
               <dd>
                 <StatusBadge
-                  status={authorization?.status ?? "not authorized"}
+                  status={expired ? "expired" : authorization?.status ?? "not authorized"}
                 />
               </dd>
             </div>

@@ -40,11 +40,13 @@ describe("report data boundaries", () => {
       deterministic: false,
     });
   });
-  it("allows draft, failed, and cancelled tests to be deleted", () => {
+  it("allows draft and terminal tests to be deleted, while protecting active tests", () => {
     expect(canDeleteTest("draft")).toBe(true);
     expect(canDeleteTest("failed")).toBe(true);
     expect(canDeleteTest("cancelled")).toBe(true);
-    expect(canDeleteTest("completed")).toBe(false);
+    expect(canDeleteTest("completed")).toBe(true);
+    expect(canDeleteTest("queued")).toBe(false);
+    expect(canDeleteTest("planning")).toBe(false);
     expect(canDeleteTest("running")).toBe(false);
   });
   it("puts unrecognized severity after the known severity levels", () => {

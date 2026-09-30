@@ -9,7 +9,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       <path
         d="M8.5 20.5 12.8 11l3.6 6.4 2.5-4.7 4.6 7.8"
         fill="none"
-        stroke="white"
+        stroke="var(--on-primary)"
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="2"

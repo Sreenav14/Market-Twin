@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { ApiError, api } from "../../lib/api";
 
 export function KafkaStatusBadge() {
   const health = useQuery({
@@ -9,17 +9,24 @@ export function KafkaStatusBadge() {
     retry: false,
   });
   const connected = !health.isError && health.data?.status === "connected";
+  const relayOff = health.data?.outbox_relay_enabled === false;
   const label = health.isPending
     ? "Kafka checking"
-    : connected
-      ? "Kafka connected"
-      : "Kafka unavailable";
+    : health.isError
+      ? "Kafka status unknown"
+      : connected
+        ? relayOff ? "Kafka connected · relay off" : "Kafka connected"
+        : "Kafka unavailable";
   return (
     <span
-      className={`status-badge status-${health.isPending ? "neutral" : connected ? "success" : "warning"}`}
+      className={`status-badge status-${health.isPending ? "neutral" : connected && !relayOff ? "success" : "warning"}`}
       role="status"
       title={
-        health.data?.outbox_relay_enabled === false
+        health.isError
+          ? health.error instanceof ApiError && health.error.status === 404
+            ? "The Kafka status endpoint is missing. Restart the Control API to load the current version."
+            : "Could not retrieve Kafka status from the Control API. The broker may still be online."
+          : health.data?.outbox_relay_enabled === false
           ? "Outbox relay is disabled. Enable it to publish queued run commands."
           : "Kafka broker connectivity. This does not report execution worker availability."
       }

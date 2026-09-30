@@ -2,6 +2,15 @@ body {
   font-size: 15px;
   line-height: 1.55;
 }
+::selection {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-3);
+  opacity: 1;
+}
 button,
 a,
 input,
@@ -18,6 +27,9 @@ button {
     background-color 140ms,
     border-color 140ms,
     color 140ms;
+}
+a {
+  transition: color 140ms ease, background-color 140ms ease;
 }
 button,
 input,
@@ -106,21 +118,23 @@ h3[id] {
   font-weight: 600;
 }
 .page-header {
-  margin-bottom: 32px;
+  margin-bottom: 28px;
   align-items: center;
 }
 .page-header-copy {
   min-width: 0;
 }
 .page-header h1 {
-  font-size: clamp(28px, 3vw, 36px);
-  line-height: 1.18;
-  letter-spacing: -0.04em;
+  font-size: clamp(26px, 2.5vw, 32px);
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .page-description {
+  margin-top: 8px;
   max-width: 65ch;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .primary-button,
@@ -146,7 +160,7 @@ h3[id] {
 }
 .secondary-button:hover:not(:disabled) {
   border-color: var(--primary);
-  background: #f5f7ff;
+  background: var(--surface-hover);
 }
 .ghost-button {
   background: transparent;
@@ -234,27 +248,32 @@ h3[id] {
   background: currentColor;
 }
 .status-success {
-  color: #196844;
-  background: #eaf4ee;
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success-border);
 }
 .status-danger {
-  color: #a4283c;
-  background: #fbecef;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
 }
 .status-warning {
-  color: #86520e;
-  background: #fff2db;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
 }
 .status-info {
-  color: #304bb5;
-  background: #edf0fc;
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: var(--info-border);
 }
 .status-neutral {
-  color: #55606c;
-  background: #eceff3;
+  color: var(--text-2);
+  background: var(--surface-muted);
+  border-color: var(--border);
 }
 .empty-state {
-  min-height: 270px;
+  min-height: 220px;
   border-style: solid;
   border-radius: 8px;
   box-shadow: none;
@@ -324,11 +343,11 @@ h3[id] {
   box-shadow: none;
 }
 .data-row:hover {
-  background: #f6f8fc;
+  background: var(--surface-hover);
 }
 .product-icon {
-  background: #edf0f7;
-  color: #4a5c85;
+  background: var(--info-bg);
+  color: var(--info);
   border-radius: 8px;
   font-size: 13px;
 }
@@ -373,14 +392,15 @@ h3[id] {
 }
 .tooltip {
   padding: 7px 11px;
-  background: var(--sidebar);
-  color: #fff;
+  background: var(--surface-overlay);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
   font-size: 12px;
   z-index: 100;
 }
 .tooltip svg {
-  fill: var(--sidebar);
+  fill: var(--surface-overlay);
 }
 .copy-control {
   display: inline-flex;

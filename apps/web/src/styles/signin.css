@@ -2,14 +2,14 @@
   min-height: 100svh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  background: #fff;
+  background: var(--page);
 }
 .signin-story {
   display: flex;
   flex-direction: column;
   padding: 36px clamp(28px, 4.4vw, 72px) 28px;
-  background: #18202d;
-  color: #f5f7fc;
+  background: var(--sidebar);
+  color: var(--text);
 }
 .signin-brand {
   display: flex;
@@ -22,7 +22,7 @@
 .signin-brand .brand-mark {
   width: 34px;
   height: 34px;
-  color: #7189e5;
+  color: var(--primary);
 }
 .signin-story-content {
   margin: auto 0;
@@ -38,25 +38,25 @@
   color: var(--text-3);
 }
 .signin-story .signin-kicker {
-  color: #b7c5e4;
+  color: var(--text-3);
 }
 .signin-story h1 {
   margin: 0;
   font-size: clamp(32px, 3.2vw, 48px);
   line-height: 1.15;
   letter-spacing: -0.045em;
-  color: #f5f7fc;
+  color: var(--text);
   font-weight: 600;
 }
 .signin-story h1 span {
-  color: #b0c1ff;
+  color: var(--primary);
 }
 .signin-description {
   margin: 22px 0 0;
   max-width: 43ch;
   font-size: 15px;
   line-height: 1.75;
-  color: #bdc7d8;
+  color: var(--text-2);
 }
 .signin-workflow {
   list-style: none;
@@ -77,7 +77,7 @@
   content: "";
   position: absolute;
   width: 1px;
-  background: #43506a;
+  background: var(--border);
   top: 40px;
   bottom: 0;
   left: 19px;
@@ -88,9 +88,9 @@
   flex: 0 0 40px;
   display: grid;
   place-items: center;
-  color: #c0d0ff;
-  background: #263247;
-  border: 1px solid #43506a;
+  color: var(--primary);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 9px;
 }
 .signin-workflow strong {
@@ -103,12 +103,12 @@
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 1.5;
-  color: #bdc7d8;
+  color: var(--text-2);
 }
 .signin-story-footer {
   margin: 0;
   font-size: 12px;
-  color: #b0bdd1;
+  color: var(--text-3);
 }
 .signin-access {
   display: flex;

@@ -19,19 +19,22 @@ from markettwin_control_api.persistence.models import (
     WorkspaceMember,
 )
 from markettwin_control_api.persistence.models import TestRun as RunModel
+from markettwin_database.models.evaluation import Finding, Report
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["draft", "completed"])
 @pytest.mark.skipif(
     os.environ.get("MARKETTWIN_TEST_DATABASE") != "1",
     reason="Set MARKETTWIN_TEST_DATABASE=1 to verify against local PostgreSQL.",
 )
-async def test_database_delete_draft_then_parent_records(
+async def test_database_delete_inactive_test_then_parent_records(
     monkeypatch: pytest.MonkeyPatch,
+    status: str,
 ) -> None:
-    """Delete only an untouched draft Test, then its target and application."""
+    """Delete inactive tests and cascade completed results before deleting parents."""
     engine = create_async_engine(get_settings().database_url, connect_args={"timeout": 5})
     try:
         async with engine.connect() as connection:
@@ -81,9 +84,19 @@ async def test_database_delete_draft_then_parent_records(
                             application_id=app_id,
                             target_id=target_id,
                             created_by_user_id=user_id,
-                            status="draft",
+                            status=status,
                         )
                     )
+                    await session.flush()
+                    if status == "completed":
+                        session.add(Report(test_run_id=run_id, version=1, status="completed"))
+                        session.add(Finding(
+                            test_run_id=run_id,
+                            severity="low",
+                            category="usability",
+                            title="Deletion regression test",
+                            summary="Result belonging to the completed test.",
+                        ))
                     await session.commit()
                 monkeypatch.setattr(
                     lifecycle, "get_authenticated_user_id", AsyncMock(return_value=user_id)
@@ -107,6 +120,10 @@ async def test_database_delete_draft_then_parent_records(
                     await connection.scalar(select(RunModel.id).where(RunModel.id == run_id))
                     is None
                 )
+                for result_model in (Report, Finding):
+                    assert await connection.scalar(
+                        select(result_model.id).where(result_model.test_run_id == run_id)
+                    ) is None
                 assert (await lifecycle.delete_target(target_id, request)).status_code == 204
                 assert (
                     await connection.scalar(

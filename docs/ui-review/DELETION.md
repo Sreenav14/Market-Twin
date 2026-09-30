@@ -2,7 +2,7 @@
 
 The product language is **Test**, **New test**, and **testing goal**. Existing `/runs` URLs and the persisted `study_brief` field remain internal V1 compatibility identifiers.
 
-Owners and administrators can delete draft Tests, unused Targets, and empty Applications. The confirmation dialog describes the item and consequences; Cancel receives initial focus. Server errors keep the dialog open and the row visible. Successful requests refresh only the relevant frontend data.
+Owners and administrators can delete unused draft, completed, failed, and cancelled Tests, unused Targets, and empty Applications. The confirmation dialog describes the item and consequences; Cancel receives initial focus. Server errors keep the dialog open and the row visible. Successful requests refresh only the relevant frontend data.
 
 The Control API implements:
 
@@ -14,11 +14,17 @@ These perform SQLAlchemy database deletes inside a transaction. They do not mere
 
 ## V1 deletion policy
 
-A Test can be hard-deleted **only while it is an unused `draft`**. If planning has persisted a Journey, or if the Test has moved beyond `draft`, deletion is rejected. Started, failed, cancelled, and completed Tests are retained so their execution history, results, and evidence remain auditable.
+A Test can be hard-deleted while it is an unused `draft` or has reached
+`completed`, `failed`, or `cancelled`. Queued, planning, and running Tests cannot
+be deleted. A draft with persisted Journeys is also rejected because execution
+has already started despite its stale status. The confirmation dialog explains
+that deleting a finished Test removes its results and evidence metadata.
 
 Targets can be deleted only after all of their Tests have been removed. Applications can be deleted only after all Tests and Targets have been removed.
 
-This deliberately avoids the previous unsafe behavior where database evidence metadata could be deleted while screenshot, trace, or log objects remained in S3/MinIO. A future retention/archive feature can introduce coordinated object-store cleanup if product requirements call for deleting executed Tests.
+Dependent database records are deleted through the existing foreign-key cascades.
+Screenshot, trace, and log objects in S3/MinIO are not purged by this endpoint;
+coordinated object-store retention cleanup remains separate from database deletion.
 
 No schema migration is required.
 

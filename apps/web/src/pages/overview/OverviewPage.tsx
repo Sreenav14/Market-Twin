@@ -18,10 +18,10 @@ export function OverviewPage() {
   const state = useWorkspaceTests(user.id, workspace.id);
   const canWrite = canWriteWorkspace(workspace.role);
   if (state.isPending) return <LoadingPanel label="Loading workspace" />;
-  if (state.isError)
+  if (!state.data)
     return (
       <ErrorPanel
-        message={state.error.message}
+        message={state.error?.message || "Could not load the workspace."}
         action={
           <Button variant="secondary" onClick={() => void state.refetch()}>
             Try again
@@ -38,7 +38,7 @@ export function OverviewPage() {
     <>
       <PageHeader
         title="Workspace overview"
-        description="See how your app performs and what stands between users and its value."
+        description="Recent tests and applications in your workspace."
         action={
           canWrite ? (
             <Link
@@ -57,10 +57,18 @@ export function OverviewPage() {
           ) : undefined
         }
       />
+      {state.isError ? (
+        <p className="inline-note" role="alert">
+          Could not refresh tests. Showing the last loaded data.{" "}
+          <Button variant="ghost" size="sm" onClick={() => void state.refetch()}>
+            Try again
+          </Button>
+        </p>
+      ) : null}
       {applications.length === 0 ? (
         <EmptyState
-          title="Bring your first product into focus"
-          copy="Add your app, connect a target, and test a real user task."
+          title="Add your first application"
+          copy="Connect a target environment to start testing."
           action={
             canWrite ? (
               <Link className="primary-button" to="/applications/new">
@@ -84,7 +92,7 @@ export function OverviewPage() {
               <dt>In progress</dt>
               <dd>
                 {active.length}
-                <span className="metric-signal" aria-hidden="true" />
+                {active.length > 0 ? <span className="metric-signal" aria-hidden="true" /> : null}
               </dd>
             </div>
             <div>
@@ -103,10 +111,9 @@ export function OverviewPage() {
               {runs.length === 0 ? (
                 <div className="first-study">
                   <FlaskConical size={30} aria-hidden="true" />
-                  <h3>Which experience should we test next?</h3>
+                  <h3>No tests yet</h3>
                   <p>
-                    Test a key user task, find the friction, and review the
-                    evidence in one place.
+                    Create a test for a user task you want to evaluate.
                   </p>
                   <Link
                     className="secondary-button"
@@ -163,9 +170,6 @@ export function OverviewPage() {
                   <ArrowUpRight size={16} aria-hidden="true" />
                 </Link>
               ))}
-              <p className="application-hint">
-                Each application groups its targets, tests, and findings.
-              </p>
             </aside>
           </div>
         </>

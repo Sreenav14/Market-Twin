@@ -1,6 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
 
 test("logged-out entry point is usable and accessible", async ({
   page,
@@ -14,7 +13,7 @@ test("logged-out entry point is usable and accessible", async ({
   );
   await page.goto("/login");
   await expect(
-    page.getByRole("heading", { name: /Build an app/ }),
+    page.getByRole("heading", { name: /Test user journeys/ }),
   ).toBeVisible();
   await expect(page.getByLabel("Email")).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
@@ -30,9 +29,8 @@ test("logged-out entry point is usable and accessible", async ({
       () => document.documentElement.scrollWidth > innerWidth + 1,
     ),
   ).toBe(false);
-  await mkdir("../../docs/ui-review", { recursive: true });
   await page.screenshot({
-    path: `../../docs/ui-review/signin-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("signin.png"),
     fullPage: true,
   });
 });

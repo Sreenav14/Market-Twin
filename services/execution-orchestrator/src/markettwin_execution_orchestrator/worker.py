@@ -27,6 +27,7 @@ from markettwin_execution_orchestrator.workflow.run_request_handler import (
 )
 
 logger = logging.getLogger(__name__)
+EXECUTION_MAX_POLL_INTERVAL_MS = 86_400_000
 
 
 async def process_command(
@@ -42,8 +43,9 @@ async def process_command(
             session=session,
         )
         if accepted is None:
-            # A committed acceptance without a terminal state means the prior
-            # worker stopped during execution. Do not replay browser actions.
+            # In V1 only one worker owns execution. Without leases, this branch
+            # must not be used to recover deliveries across concurrent workers.
+            # Do not replay potentially state-changing browser actions.
             run = await session.get(TestRun, UUID(str(envelope.payload["test_run_id"])))
             if run is not None and run.status in {"planning", "running"}:
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
@@ -111,7 +113,7 @@ async def main() -> None:
             group_id=EXECUTION_CONSUMER_NAME,
             client_id=EXECUTION_CONSUMER_NAME,
         ),
-        max_poll_interval_ms=86_400_000,
+        max_poll_interval_ms=EXECUTION_MAX_POLL_INTERVAL_MS,
     )
     try:
         await run_worker(KafkaConsumer(settings), create_session_factory(engine))

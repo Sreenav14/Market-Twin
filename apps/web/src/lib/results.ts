@@ -19,6 +19,7 @@ export const terminalTestStatuses = new Set<TestRunStatus>([
 ]);
 export const deletableTestStatuses = new Set<TestRunStatus>([
   "draft",
+  "completed",
   "failed",
   "cancelled",
 ]);

@@ -47,13 +47,13 @@ export function LoginPage({
         <div className="signin-story-content">
           <p className="signin-kicker">Product readiness testing</p>
           <h1 id="signin-title">
-            Build an app
+            Test user journeys.
             <br />
-            <span>people want to use.</span>
+            <span>Review the evidence.</span>
           </h1>
           <p className="signin-description">
-            Test your app with simulated users. Find usability barriers, uncover
-            friction, and see whether its value comes through.
+            Run browser tests with simulated users, inspect their journeys,
+            and review findings alongside screenshots and logs.
           </p>
           <ol className="signin-workflow" aria-label="How MarketTwin works">
             <li>
@@ -61,8 +61,8 @@ export function LoginPage({
                 <ScanLine size={20} aria-hidden="true" />
               </span>
               <div>
-                <strong>Put your app to the test</strong>
-                <p>Choose the experience you want to validate.</p>
+                <strong>Define a task</strong>
+                <p>Choose a target and describe the testing goal.</p>
               </div>
             </li>
             <li>
@@ -70,8 +70,8 @@ export function LoginPage({
                 <Route size={20} aria-hidden="true" />
               </span>
               <div>
-                <strong>Explore the experience</strong>
-                <p>Follow independent simulated user journeys.</p>
+                <strong>Run the test</strong>
+                <p>Follow progress as simulated users explore the application.</p>
               </div>
             </li>
             <li>
@@ -86,7 +86,7 @@ export function LoginPage({
           </ol>
         </div>
         <p className="signin-story-footer">
-          Find the friction before your users do.
+          MarketTwin testing workspace
         </p>
       </section>
       <section className="signin-access" aria-labelledby="signin-form-title">
@@ -95,8 +95,7 @@ export function LoginPage({
           Local workspace
         </div>
         <div className="signin-form-wrap">
-          <p className="signin-kicker">Put your product to the test</p>
-          <h2 id="signin-form-title">Welcome to MarketTwin</h2>
+          <h2 id="signin-form-title">Sign in to MarketTwin</h2>
           <p className="signin-form-description">
             Sign in to your workspace to create tests and review findings.
           </p>
@@ -146,7 +145,7 @@ export function LoginPage({
           </p>
         </div>
         <footer className="signin-access-footer">
-          Authorized targets. Independent perspectives. Traceable findings.
+          Use an account approved by your workspace administrator.
         </footer>
       </section>
     </main>

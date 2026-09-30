@@ -15,9 +15,9 @@ export function RunOverviewPage() {
     ? 4
     : run.status === "completed"
       ? 3
-      : ["running", "queued", "evaluating"].includes(run.status)
+      : run.status === "running"
         ? 2
-        : run.status === "planning"
+        : ["planning", "queued"].includes(run.status)
           ? 1
           : 0;
   const stopped = [

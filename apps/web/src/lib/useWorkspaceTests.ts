@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
+import { terminalTestStatuses } from "./results";
 
 export function useWorkspaceTests(userId: string, workspaceId: string) {
   return useQuery({
@@ -11,5 +12,11 @@ export function useWorkspaceTests(userId: string, workspaceId: string) {
       );
       return { applications, runs: groups.flat() };
     },
+    refetchInterval: (query) =>
+      query.state.data?.runs.some(
+        (run) => run.status !== "draft" && !terminalTestStatuses.has(run.status),
+      )
+        ? 5_000
+        : false,
   });
 }

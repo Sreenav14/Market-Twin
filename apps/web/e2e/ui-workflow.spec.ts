@@ -1,6 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
 
 const runId = "11111111-1111-4111-8111-111111111111";
 const appId = "22222222-2222-4222-8222-222222222222";
@@ -79,13 +78,18 @@ async function mockApi(
     empty?: boolean;
     runStatus?: string;
     listRunStatus?: string;
+    emptyWorkspace?: boolean;
+    emptyRuns?: boolean;
+    brief?: string;
   } = {},
 ) {
   await page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let data: unknown;
     let status = 200;
-    if (path === "/api/v1/me")
+    if (path === "/api/v1/health/kafka")
+      data = { status: "connected", outbox_relay_enabled: true };
+    else if (path === "/api/v1/me")
       data = {
         id: "user",
         email: "researcher@example.com",
@@ -101,7 +105,8 @@ async function mockApi(
           status: "active",
         },
       ];
-    else if (path === "/api/v1/workspaces/workspace/applications") data = [app];
+    else if (path === "/api/v1/workspaces/workspace/applications")
+      data = options.emptyWorkspace ? [] : [app];
     else if (path === `/api/v1/applications/${appId}`) data = app;
     else if (path === `/api/v1/applications/${appId}/targets`) {
       if (options.targetError) {
@@ -131,9 +136,13 @@ async function mockApi(
       data =
         route.request().method() === "POST"
           ? { ...run, status: "draft" }
-          : [{ ...run, status: options.listRunStatus || "completed" }];
+          : options.emptyRuns
+            ? []
+            : [{ ...run, status: options.listRunStatus || "completed",
+                configuration_snapshot: { study_brief: options.brief || run.configuration_snapshot.study_brief } }];
     else if (path === `/api/v1/test-runs/${runId}`)
-      data = { ...run, status: options.runStatus || "completed" };
+      data = { ...run, status: options.runStatus || "completed",
+        configuration_snapshot: { study_brief: options.brief || run.configuration_snapshot.study_brief } };
     else if (path === `/api/v1/test-runs/${runId}/results`) {
       status = options.resultsStatus || 200;
       data =
@@ -177,9 +186,8 @@ test("completed test: triage, detail and report", async ({
   ).toBeVisible();
   await expect(page.getByText("Planning is not connected yet.")).toHaveCount(0);
   await checkLayoutAndAccessibility(page);
-  await mkdir("../../docs/ui-review", { recursive: true });
   await page.screenshot({
-    path: `../../docs/ui-review/overview-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("overview.png"),
     fullPage: true,
   });
   await page
@@ -196,7 +204,7 @@ test("completed test: triage, detail and report", async ({
   ).toHaveCount(0);
   await checkLayoutAndAccessibility(page);
   await page.screenshot({
-    path: `../../docs/ui-review/findings-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("findings.png"),
     fullPage: true,
   });
   await page.getByRole("heading", { name: finding.title }).click();
@@ -217,7 +225,7 @@ test("completed test: triage, detail and report", async ({
   ).toBeVisible();
   await checkLayoutAndAccessibility(page);
   await page.screenshot({
-    path: `../../docs/ui-review/report-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("report.png"),
     fullPage: true,
   });
 });
@@ -280,10 +288,9 @@ test("test creation sends a real request with the chosen brief", async ({
     /first-time customer/,
   );
   await checkLayoutAndAccessibility(page);
-  await mkdir("../../docs/ui-review", { recursive: true });
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({
-    path: `../../docs/ui-review/new-test-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("new-test.png"),
     fullPage: true,
   });
   const request = page.waitForRequest(
@@ -328,9 +335,8 @@ test("workspace navigation supports keyboard and mobile", async ({
     page.getByRole("heading", { name: "Workspace overview" }),
   ).toBeVisible();
   await checkLayoutAndAccessibility(page);
-  await mkdir("../../docs/ui-review", { recursive: true });
   await page.screenshot({
-    path: `../../docs/ui-review/workspace-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("workspace.png"),
     fullPage: true,
   });
   await page.keyboard.press("Control+k");
@@ -447,3 +453,140 @@ test("viewers have no delete actions and started tests cannot be deleted", async
     page.getByRole("button", { name: /^Delete test:/ }),
   ).toBeDisabled();
 });
+
+test("queued tests do not claim planning is complete", async ({ page }) => {
+  await mockApi(page, { runStatus: "queued" });
+  await page.goto(`/runs/${runId}/overview`);
+  const planning = page.locator(".lifecycle-rail li").filter({ hasText: "Planning" });
+  await expect(planning).toHaveClass("stage-current");
+  await expect(planning).toContainText("Current stage");
+  await expect(page.locator(".lifecycle-rail li").filter({ hasText: "Execution" }))
+    .toContainText("Up next");
+});
+
+test("active workspace tests refresh to completed without navigation", async ({ page }) => {
+  await mockApi(page, { listRunStatus: "running" });
+  let requests = 0;
+  await page.route(`**/api/v1/applications/${appId}/test-runs`, (route) => {
+    requests += 1;
+    return route.fulfill({ json: [{ ...run, status: requests === 1 ? "running" : "completed" }] });
+  });
+  await page.goto("/overview");
+  await expect(page.locator(".study-row .status-badge")).toHaveText("running");
+  await expect(page.locator(".metric-signal")).toHaveCount(1);
+  await expect(page.locator(".study-row .status-badge"))
+    .toHaveText("completed", { timeout: 10_000 });
+  await expect(page.locator(".metric-signal")).toHaveCount(0);
+});
+
+test("starting a draft updates status and continues polling", async ({ page }) => {
+  await mockApi(page);
+  let started = false;
+  let polls = 0;
+  await page.route(`**/api/v1/test-runs/${runId}/start`, (route) => {
+    started = true;
+    return route.fulfill({ json: { ...run, status: "queued" } });
+  });
+  await page.route(`**/api/v1/test-runs/${runId}`, (route) => {
+    if (started) polls += 1;
+    return route.fulfill({ json: { ...run, status: !started ? "draft" : polls === 1 ? "queued" : "completed" } });
+  });
+  await page.goto(`/runs/${runId}/overview`);
+  await expect(page.getByText("Kafka connected", { exact: true })).toBeVisible();
+  const startSize = await page.getByRole("button", { name: "Start test", exact: true }).boundingBox();
+  const deleteSize = await page.getByRole("button", { name: /^Delete test:/ }).boundingBox();
+  expect(startSize?.height).toBe(deleteSize?.height);
+  await page.getByRole("button", { name: "Start test", exact: true }).click();
+  await expect(page.getByText("Kafka connected", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".page-action .status-badge")).toHaveText("queued");
+  await expect(page.locator(".page-action .status-badge"))
+    .toHaveText("completed", { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "2 findings to review" })).toBeVisible();
+});
+
+test("expired target authorization is visible and does not offer an authorized test", async ({ page }) => {
+  await mockApi(page);
+  await page.route(`**/api/v1/targets/${targetId}`, (route) => route.fulfill({ json: {
+    id: targetId, application_id: appId, name: "Storefront", environment: "staging",
+    base_url: "https://shop.example.com", requires_auth: false, status: "active", allowed_origins: [],
+  } }));
+  await page.route(`**/api/v1/targets/${targetId}/authorization`, (route) => route.fulfill({ json: {
+    id: "authorization", target_id: targetId, status: "authorized", expires_at: "2020-01-01T00:00:00Z",
+  } }));
+  await page.goto(`/targets/${targetId}`);
+  await expect(page.getByText("expired", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "New test", exact: true })).toHaveCount(0);
+  await checkLayoutAndAccessibility(page);
+});
+
+test("empty workspace and tests offer clear next actions", async ({ page }) => {
+  await mockApi(page, { emptyWorkspace: true });
+  await page.goto("/overview");
+  await expect(page.getByRole("heading", { name: "Add your first application" })).toBeVisible();
+  await checkLayoutAndAccessibility(page);
+  await mockApi(page, { emptyRuns: true });
+  await page.goto("/runs");
+  await expect(page.getByRole("heading", { name: "No tests yet" })).toBeVisible();
+  await checkLayoutAndAccessibility(page);
+});
+
+test("reduced motion disables decorative transitions", async ({ page }) => {
+  await mockApi(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/overview");
+  const trigger = page.getByRole("button", { name: "Open quick navigation" });
+  await expect(trigger).toBeVisible();
+  expect(await trigger.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe("0s");
+  await trigger.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(await page.locator(".dialog-overlay").evaluate((element) => getComputedStyle(element).animationName))
+    .toBe("none");
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
+
+for (const path of ["/overview", "/runs", `/applications/${appId}/runs/new`, `/runs/${runId}/overview`]) {
+  test(`320px reflow with long content: ${path}`, async ({ page }) => {
+    await mockApi(page, { brief: "Review the complete checkout journey for a first-time customer. ".repeat(8) });
+    await page.setViewportSize({ width: 320, height: 780 });
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText("Kafka connected", { exact: true })).toHaveCount(0);
+    await checkLayoutAndAccessibility(page);
+  });
+}
+
+test("320px draft controls stay usable and Start matches other button heights", async ({ page }, testInfo) => {
+  await mockApi(page, { runStatus: "draft" });
+  await page.setViewportSize({ width: 320, height: 780 });
+  await page.goto(`/runs/${runId}/overview`);
+  await expect(page.getByText("Kafka connected", { exact: true })).toBeVisible();
+  const start = await page.getByRole("button", { name: "Start test", exact: true }).boundingBox();
+  const remove = await page.getByRole("button", { name: /^Delete test:/ }).boundingBox();
+  expect(start?.height).toBe(remove?.height);
+  expect(start?.width).toBeLessThan(180);
+  await checkLayoutAndAccessibility(page);
+  await page.screenshot({ path: testInfo.outputPath("start-test-narrow.png"), fullPage: true });
+});
+
+for (const path of ["/overview", "/runs"]) {
+  test(`background refresh failure preserves data and retry recovers: ${path}`, async ({ page }) => {
+    await mockApi(page);
+    let requests = 0;
+    let failing = true;
+    await page.route(`**/api/v1/applications/${appId}/test-runs`, (route) => {
+      requests += 1;
+      return requests > 1 && failing
+        ? route.fulfill({ status: 503, json: { detail: "Temporary outage" } })
+        : route.fulfill({ json: [{ ...run, status: failing ? "running" : "completed" }] });
+    });
+    await page.goto(path);
+    await expect(page.locator(".study-row .status-badge")).toHaveText("running");
+    await expect(page.getByRole("alert")).toContainText("Showing the last loaded data", { timeout: 15_000 });
+    await expect(page.locator(".study-row .status-badge")).toHaveText("running");
+    failing = false;
+    await page.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(page.locator(".study-row .status-badge")).toHaveText("completed");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+}

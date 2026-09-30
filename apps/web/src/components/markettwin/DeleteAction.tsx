@@ -80,7 +80,7 @@ export function DeleteAction({
   if (disabled) {
     const message =
       kind === "test"
-        ? "In-progress and completed tests are retained to preserve results and evidence."
+        ? "Queued and in-progress tests cannot be deleted. Wait for the test to finish."
         : `This ${kind} cannot be deleted while it still has dependent records.`;
     return (
       <Tooltip text={message}>
@@ -114,8 +114,8 @@ export function DeleteAction({
           <Dialog.Title>Delete {kind}?</Dialog.Title>
           <Dialog.Description className="delete-description">
             {kind === "test"
-              ? "This permanently removes the test. In-progress and completed tests stay in the workspace so their results and evidence are preserved."
-              : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its draft tests first." : "Delete its draft tests and targets first."}`}{" "}
+              ? "This permanently removes the test and its results and evidence records."
+              : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its tests first." : "Delete its tests and targets first."}`}{" "}
             This cannot be undone.
           </Dialog.Description>
           <p className="delete-item-name">{name}</p>

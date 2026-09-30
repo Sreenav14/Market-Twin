@@ -6,7 +6,7 @@ import {
   useOutletContext,
   useParams,
 } from "react-router-dom";
-import { ArrowRight, Check, Lightbulb, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, ShieldCheck } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import {
   EmptyState,
@@ -116,8 +116,8 @@ export function NewRunPage() {
   const header = (
     <PageHeader
       eyebrow="New test"
-      title="What should we test?"
-      description="Choose your app environment and the user experience you want to validate."
+      title="Create a test"
+      description="Choose a target and describe the task to test."
     />
   );
   if (!canWrite)
@@ -253,7 +253,7 @@ export function NewRunPage() {
               placeholder="Can a first-time customer understand our pricing and choose the right plan?…"
               maxLength={4000}
               rows={6}
-              aria-describedby="brief-help brief-count"
+              aria-describedby={error ? "brief-help brief-count brief-error" : "brief-help brief-count"}
               aria-invalid={Boolean(error)}
             />
             <div className="composer-meta">
@@ -265,7 +265,7 @@ export function NewRunPage() {
               </span>
             </div>
             <div className="brief-examples">
-              <span>Try a starting point</span>
+              <span>Example briefs</span>
               {examples.map((example) => (
                 <button
                   key={example.title}
@@ -281,12 +281,12 @@ export function NewRunPage() {
             </div>
           </div>
           {error ? (
-            <p className="composer-error" role="alert">
+            <p id="brief-error" className="composer-error" role="alert">
               {error}
             </p>
           ) : null}
           <div className="composer-footer">
-            <p>Perspectives and missions are generated for this test.</p>
+            <p>Creates a draft. Start it when you're ready.</p>
             <Button type="submit" disabled={busy}>
               {busy ? (
                 <>
@@ -302,12 +302,9 @@ export function NewRunPage() {
           </div>
         </form>
         <aside className="study-guidance">
-          <span className="guidance-icon">
-            <Lightbulb size={22} aria-hidden="true" />
-          </span>
-          <h2>A useful test starts with a clear question.</h2>
+          <h2>Writing the test brief</h2>
           <p>
-            Focus on one decision or outcome that matters to your customers.
+            Describe who is using the application and what they need to complete.
           </p>
           <ul>
             <li>
@@ -320,7 +317,7 @@ export function NewRunPage() {
             </li>
             <li>
               <Check size={16} aria-hidden="true" />
-              Leave room for different approaches.
+              Include any constraints or context.
             </li>
           </ul>
           <div className="guidance-scope">

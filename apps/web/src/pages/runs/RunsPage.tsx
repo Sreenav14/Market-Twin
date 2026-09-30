@@ -43,7 +43,7 @@ export function RunsPage() {
     <>
       <PageHeader
         title="Tests"
-        description="Track your product tests, review usability issues, and see what needs attention."
+        description="Track execution and review results."
         action={
           canWriteWorkspace(workspace.role) ? (
             <Link className="primary-button" to="/applications">
@@ -54,9 +54,9 @@ export function RunsPage() {
       />
       {state.isPending ? (
         <LoadingPanel label="Loading tests" />
-      ) : state.isError ? (
+      ) : !state.data ? (
         <ErrorPanel
-          message={state.error.message}
+          message={state.error?.message || "Could not load tests."}
           action={
             <Button variant="secondary" onClick={() => void state.refetch()}>
               Try again
@@ -65,6 +65,14 @@ export function RunsPage() {
         />
       ) : (
         <>
+          {state.isError ? (
+            <p className="inline-note" role="alert">
+              Could not refresh tests. Showing the last loaded data.{" "}
+              <Button variant="ghost" size="sm" onClick={() => void state.refetch()}>
+                Try again
+              </Button>
+            </p>
+          ) : null}
           <div className="filter-bar">
             <div className="search-field">
               <Search size={17} aria-hidden="true" />
@@ -129,12 +137,12 @@ export function RunsPage() {
               title={
                 state.data.runs.length
                   ? "No matching tests"
-                  : "Your first test starts with a question"
+                  : "No tests yet"
               }
               copy={
                 state.data.runs.length
                   ? "Try another search or clear your filters."
-                  : "Choose an application and describe the experience you want to investigate."
+                  : "Choose an application to create your first test."
               }
               action={
                 state.data.runs.length ? (

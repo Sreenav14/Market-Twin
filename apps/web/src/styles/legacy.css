@@ -29,7 +29,7 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 a:focus-visible {
-  outline: 2px solid #3d5afe;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 .visually-hidden {
@@ -84,9 +84,9 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   padding: 20px 14px 16px;
-  color: #f5f7fb;
+  color: var(--text);
   background: var(--sidebar);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--border);
 }
 .sidebar-brand {
   display: flex;
@@ -103,7 +103,7 @@ a:focus-visible {
 .sidebar-brand span,
 .workspace-copy span,
 .user-copy span {
-  color: #7f8795;
+  color: var(--text-3);
   font-size: 10.5px;
 }
 .workspace-switcher {
@@ -112,9 +112,9 @@ a:focus-visible {
   gap: 10px;
   min-height: 58px;
   padding: 9px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface);
 }
 .workspace-avatar,
 .user-avatar {
@@ -123,7 +123,7 @@ a:focus-visible {
   width: 32px;
   height: 32px;
   border-radius: 9px;
-  background: #2a2f3a;
+  background: var(--surface-muted);
   font-size: 12px;
   font-weight: 750;
 }
@@ -159,22 +159,22 @@ a:focus-visible {
   min-height: 40px;
   padding: 0 10px;
   border-radius: 9px;
-  color: #9299a5;
+  color: var(--text-3);
   font-size: 12.5px;
   font-weight: 600;
 }
 .nav-link:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  background: var(--surface-hover);
 }
 .nav-link.active {
-  color: #fff;
-  background: #20242c;
+  color: var(--text);
+  background: var(--info-bg);
   box-shadow: inset 3px 0 0 var(--primary);
 }
 .sidebar-section-label {
   margin: 26px 10px 0;
-  color: #626a77;
+  color: var(--text-3);
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.11em;
@@ -186,7 +186,7 @@ a:focus-visible {
   align-items: center;
   gap: 9px;
   padding: 14px 8px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--border);
 }
 .icon-button {
   display: grid;
@@ -195,7 +195,7 @@ a:focus-visible {
   height: 34px;
   border: 0;
   border-radius: 9px;
-  color: #858d99;
+  color: var(--text-3);
   background: transparent;
   cursor: pointer;
 }
@@ -213,7 +213,7 @@ a:focus-visible {
   min-height: 62px;
   padding: 0 30px;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface);
   backdrop-filter: blur(14px);
 }
 .breadcrumb {
@@ -230,7 +230,7 @@ a:focus-visible {
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--text-3);
-  background: #fff;
+  background: var(--surface);
   font-size: 10.5px;
 }
 .environment-pill > span {
@@ -295,7 +295,7 @@ a:focus-visible {
 }
 .primary-button {
   border: 1px solid var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   background: var(--primary);
 }
 .primary-button:hover:not(:disabled) {
@@ -303,13 +303,13 @@ a:focus-visible {
 }
 .secondary-button {
   border: 1px solid var(--border-strong);
-  color: #343a46;
-  background: #fff;
+  color: var(--text-2);
+  background: var(--surface);
 }
 .danger-button {
-  border: 1px solid #efc6cc;
+  border: 1px solid var(--danger-border);
   color: var(--danger);
-  background: #fff8f9;
+  background: var(--danger-bg);
 }
 .primary-button:disabled,
 .secondary-button:disabled,
@@ -343,7 +343,7 @@ a:focus-visible {
 .data-list,
 .run-progress {
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .metric-card {
@@ -411,9 +411,9 @@ a:focus-visible {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  color: #39435b;
-  background: #eef0ff;
-  border: 1px solid #e0e3ff;
+  color: var(--info);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
   font-size: 11px;
   font-weight: 800;
 }
@@ -455,7 +455,7 @@ a:focus-visible {
   border-bottom: 0;
 }
 .data-row:hover {
-  background: #fafbfc;
+  background: var(--surface-muted);
 }
 .row-icon {
   display: grid;
@@ -464,7 +464,7 @@ a:focus-visible {
   height: 36px;
   border-radius: 10px;
   color: var(--primary);
-  background: #f0f1ff;
+  background: var(--info-bg);
 }
 .row-primary {
   min-width: 0;
@@ -494,31 +494,31 @@ a:focus-visible {
   text-transform: capitalize;
 }
 .status-success {
-  color: #126b4a;
-  background: #edf8f3;
-  border: 1px solid #cde9dc;
+  color: var(--success);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
 }
 .status-info {
-  color: #315f9c;
-  background: #eef5fd;
-  border: 1px solid #d7e6f8;
+  color: var(--info);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
 }
 .status-danger {
-  color: #a83243;
-  background: #fff0f2;
-  border: 1px solid #f3d4da;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
 }
 .status-neutral {
-  color: #626b79;
-  background: #f4f5f7;
-  border: 1px solid #e4e7eb;
+  color: var(--text-2);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
 }
 .form-grid {
   display: grid;
   gap: 12px;
 }
 .field-label {
-  color: #555d6a;
+  color: var(--text-2);
   font-size: 10.5px;
   font-weight: 750;
 }
@@ -528,7 +528,7 @@ a:focus-visible {
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--text);
-  background: #fff;
+  background: var(--surface);
 }
 .text-input {
   min-height: 43px;
@@ -579,7 +579,7 @@ a:focus-visible {
   padding: 22px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: #f9fafb;
+  background: var(--surface-muted);
 }
 .info-card p,
 .future-stage p,
@@ -639,11 +639,11 @@ a:focus-visible {
   height: 46px;
   border-radius: 12px;
   color: var(--danger);
-  background: #fff2f4;
+  background: var(--danger-bg);
 }
 .authorization-orb.active {
   color: var(--success);
-  background: #eef9f4;
+  background: var(--success-bg);
 }
 .authorization-status p:last-child {
   color: var(--text-2);
@@ -673,16 +673,16 @@ a:focus-visible {
 .inline-note {
   margin-top: 20px;
   padding: 12px;
-  border: 1px solid #e6e1c7;
+  border: 1px solid var(--warning-border);
   border-radius: 10px;
-  background: #fffcef;
+  background: var(--warning-bg);
   font-size: 11px;
 }
 .study-composer {
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .composer-target {
@@ -691,7 +691,7 @@ a:focus-visible {
   gap: 14px;
   padding: 15px 20px;
   border-bottom: 1px solid var(--border);
-  background: #fafbfc;
+  background: var(--surface-muted);
 }
 .composer-target label {
   color: var(--text-3);
@@ -731,7 +731,7 @@ a:focus-visible {
   align-items: center;
   padding: 15px 20px;
   border-top: 1px solid var(--border);
-  background: #fafbfc;
+  background: var(--surface-muted);
 }
 .dynamic-note {
   display: flex;
@@ -760,13 +760,13 @@ a:focus-visible {
   display: flex;
   align-items: center;
   min-height: 42px;
-  color: #737b88;
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
 }
 .tab-link.active {
-  color: #252a33;
+  color: var(--primary);
 }
 .tab-link.active:after {
   content: "";
@@ -778,7 +778,7 @@ a:focus-visible {
   background: var(--primary);
 }
 .tab-link.disabled {
-  color: #a5abb5;
+  color: var(--text-3);
   cursor: not-allowed;
 }
 .run-progress {
@@ -793,7 +793,7 @@ a:focus-visible {
 .run-progress-track span {
   height: 5px;
   border-radius: 999px;
-  background: #e7e9ed;
+  background: var(--surface-muted);
 }
 .run-progress-track span.complete {
   background: var(--primary);
@@ -831,9 +831,9 @@ a:focus-visible {
   gap: 24px;
   margin-top: 42px;
   padding: 22px;
-  border: 1px solid #efd6da;
+  border: 1px solid var(--danger-border);
   border-radius: 14px;
-  background: #fffafb;
+  background: var(--danger-bg);
 }
 .danger-actions {
   display: flex;
@@ -844,10 +844,10 @@ a:focus-visible {
   place-items: center;
   min-height: 240px;
   padding: 34px;
-  border: 1px dashed #d6dae1;
+  border: 1px dashed var(--border);
   border-radius: 14px;
   text-align: center;
-  background: #fff;
+  background: var(--surface);
 }
 .empty-state p {
   max-width: 440px;
@@ -863,10 +863,10 @@ a:focus-visible {
   justify-content: space-between;
   gap: 20px;
   padding: 16px;
-  border: 1px solid #f0cdd2;
+  border: 1px solid var(--danger-border);
   border-radius: 11px;
-  color: #9f3342;
-  background: #fff7f8;
+  color: var(--danger);
+  background: var(--danger-bg);
   font-size: 11px;
 }
 .settings-layout {
@@ -890,7 +890,7 @@ a:focus-visible {
 }
 .settings-nav a.active {
   color: var(--primary);
-  background: #eeefff;
+  background: var(--info-bg);
 }
 .settings-panel {
   max-width: 760px;
@@ -900,14 +900,14 @@ a:focus-visible {
   display: grid;
   grid-template-rows: auto 1fr auto;
   padding: 0 36px;
-  background: #fff;
+  background: var(--surface);
 }
 .auth-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 76px;
-  border-bottom: 1px solid #f0f1f3;
+  border-bottom: 1px solid var(--border);
 }
 .auth-brand {
   display: flex;
@@ -953,7 +953,7 @@ a:focus-visible {
   padding: 28px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 18px 50px rgba(20, 24, 34, 0.08);
+  box-shadow: var(--shadow-overlay);
 }
 .auth-copy {
   margin-bottom: 22px;
@@ -971,8 +971,8 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-top: 1px solid #f0f1f3;
-  color: #9aa0aa;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
   font-size: 10px;
 }
 .auth-main-single {

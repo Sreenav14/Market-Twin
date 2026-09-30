@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "../../lib/api";
+import { ApiError, api } from "../../lib/api";
 import { KafkaStatusBadge } from "./KafkaStatusBadge";
 
 afterEach(() => vi.restoreAllMocks());
@@ -33,9 +33,27 @@ describe("KafkaStatusBadge", () => {
     expect(await screen.findByText("Kafka unavailable")).toHaveClass("status-warning");
   });
 
-  it("shows unavailable when the API request fails", async () => {
+  it("warns when the broker is connected but the outbox relay is disabled", async () => {
+    vi.spyOn(api, "kafkaHealth").mockResolvedValue({
+      status: "connected",
+      outbox_relay_enabled: false,
+    });
+    renderBadge();
+    const badge = await screen.findByText("Kafka connected · relay off");
+    expect(badge).toHaveClass("status-warning");
+    expect(badge).not.toHaveClass("status-success");
+  });
+
+  it("shows unknown when the API request fails", async () => {
     vi.spyOn(api, "kafkaHealth").mockRejectedValue(new Error("Offline"));
     renderBadge();
-    expect(await screen.findByText("Kafka unavailable")).toHaveClass("status-warning");
+    expect(await screen.findByText("Kafka status unknown")).toHaveClass("status-warning");
+  });
+
+  it("explains a missing health endpoint without claiming the broker is down", async () => {
+    vi.spyOn(api, "kafkaHealth").mockRejectedValue(new ApiError("Not Found", 404));
+    renderBadge();
+    expect(await screen.findByText("Kafka status unknown"))
+      .toHaveAttribute("title", expect.stringContaining("Restart the Control API"));
   });
 });

@@ -64,7 +64,9 @@ Implemented or updated:
 - command menu and route-aware breadcrumbs;
 - workspace role-aware create and delete controls.
 
-The UI review screenshots are in [`docs/ui-review`](ui-review/README.md). They were rendered with explicit API fixtures and are visual test samples, not live evaluation results.
+The written UI review is in [`docs/ui-review`](ui-review/README.md). Generated
+fixture screenshots were removed after review at the user's request. Future
+browser captures are saved in ignored Playwright test output directories.
 
 ## Deletion: frontend and backend
 
