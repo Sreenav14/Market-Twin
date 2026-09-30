@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
@@ -7,9 +8,13 @@ import {
   useParams,
   useNavigate,
 } from "react-router-dom";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, Play, RefreshCw } from "lucide-react";
 import { PageHeader } from "../components/ui/PageHeader";
-import { ErrorPanel, LoadingPanel } from "../components/ui/StateViews";
+import {
+  ErrorPanel,
+  LoadingPanel,
+  Spinner,
+} from "../components/ui/StateViews";
 import { TestStatusBadge } from "../components/ui/StatusBadge";
 import { DeleteAction } from "../components/markettwin/DeleteAction";
 import { canManageLifecycle } from "../lib/permissions";
@@ -34,6 +39,8 @@ export function RunLayout() {
   const navigate = useNavigate();
   const appContext = useOutletContext<AppShellContext>();
   const { runId = "" } = useParams();
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const runQuery = useQuery({
     queryKey: ["run", appContext.user.id, runId],
     queryFn: ({ signal }) => api.getRun(runId, signal),
@@ -42,6 +49,25 @@ export function RunLayout() {
         ? 5_000
         : false,
   });
+  async function startRun() {
+    if (starting || runQuery.data?.status !== "draft") return;
+
+    setStarting(true);
+    setStartError(null);
+
+    try {
+      await api.startRun(runId);
+      await runQuery.refetch();
+    } catch (error) {
+      setStartError(
+        error instanceof Error
+          ? error.message
+          : "Could not start the test. Please try again.",
+      );
+    } finally {
+      setStarting(false);
+    }
+  }
   const resultsQuery = useQuery({
     queryKey: ["results", appContext.user.id, runId],
     enabled: runQuery.data?.status === "completed",
@@ -102,6 +128,22 @@ export function RunLayout() {
         action={
           <div className="header-actions">
             <TestStatusBadge status={run.status} />
+            {canManageLifecycle(appContext.workspace.role) &&
+            run.status === "draft" ? (
+              <Button onClick={() => void startRun()} disabled={starting}>
+                {starting ? (
+                  <>
+                    <Spinner />
+                    Starting…
+                  </>
+                ) : (
+                  <>
+                    <Play size={16} aria-hidden="true" />
+                    Start test
+                  </>
+                )}
+              </Button>
+            ) : null}
             {canManageLifecycle(appContext.workspace.role) ? (
               <DeleteAction
                 kind="test"
@@ -123,6 +165,11 @@ export function RunLayout() {
           </div>
         }
       />
+      {startError ? (
+        <p className="composer-error" role="alert">
+          {startError}
+        </p>
+      ) : null}
       <nav className="tab-strip" aria-label="Test sections">
         {["overview", "findings", "report"].map((tab) => (
           <NavLink

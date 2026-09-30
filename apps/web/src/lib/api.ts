@@ -220,6 +220,13 @@ export const api = {
     request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
   getRunResults: (runId: string, signal?: AbortSignal) =>
     request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
+  startRun: (runId: string) =>
+    request<TestRun>(
+      `/api/v1/test-runs/${runId}/start`,
+      {
+        method: "POST",
+      },
+    ),
   createRun: (applicationId: string, targetId: string, testBrief: string) =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",

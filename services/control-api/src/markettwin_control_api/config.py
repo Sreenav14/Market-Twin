@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         "SASL_SSL",
     ] = "PLAINTEXT"
     
-    kafka_sasl_mechanisms: Literal[
+    kafka_sasl_mechanism: Literal[
         "PLAIN",
         "SCRAM-SHA-256",
         "SCRAM-SHA-512",
@@ -102,7 +102,7 @@ class Settings(BaseSettings):
         return KafkaProducerSettings(
             bootstrap_servers = bootstrap_servers,
             security_protocol = self.kafka_security_protocol,
-            sasl_mechanism = self.kafka_sasl_mechanisms,
+            sasl_mechanism = self.kafka_sasl_mechanism,
             username = self.kafka_username,
             password = password,
             ssl_ca_file = self.kafka_ssl_ca_file,
