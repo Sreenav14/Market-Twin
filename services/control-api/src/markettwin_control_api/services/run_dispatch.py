@@ -7,7 +7,7 @@ from markettwin_database.repositories import (
     OutboxRepository,
 )
 from markettwin_shared.messaging import (
-    COMMANDS_TOPIC,
+    EXECUTION_COMMANDS_TOPIC,
     RunRequestedMessage,
 )
 
@@ -64,7 +64,7 @@ class RunDispatchService:
             aggregate_type="test_run",
             aggregate_id=queued_run.test_run_id,
             event_type=envelope.event_type,
-            topic=COMMANDS_TOPIC,
+            topic=EXECUTION_COMMANDS_TOPIC,
             message_key=str(
                 queued_run.test_run_id
             ),

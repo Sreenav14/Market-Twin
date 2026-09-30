@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import ssl
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from aiokafka import AIOKafkaProducer  # pyright: ignore[reportMissingTypeStubs]
 
@@ -39,6 +40,84 @@ class KafkaProducerSettings:
     ssl_ca_file: str | None = None
 
     client_id: str = "markettwin"
+
+
+def load_kafka_producer_settings() -> KafkaProducerSettings:
+    """Load Kafka producer configuration from environment."""
+
+    raw_servers = os.getenv(
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "",
+    ).strip()
+
+    if not raw_servers:
+        raise RuntimeError(
+            "KAFKA_BOOTSTRAP_SERVERS is required."
+        )
+
+    bootstrap_servers = tuple(
+        server.strip()
+        for server in raw_servers.split(",")
+        if server.strip()
+    )
+
+    raw_security_protocol = os.getenv(
+        "KAFKA_SECURITY_PROTOCOL",
+        "PLAINTEXT",
+    ).strip()
+
+    allowed_protocols = {
+        "PLAINTEXT",
+        "SSL",
+        "SASL_PLAINTEXT",
+        "SASL_SSL",
+    }
+
+    if raw_security_protocol not in allowed_protocols:
+        raise RuntimeError(
+            "Unsupported KAFKA_SECURITY_PROTOCOL."
+        )
+
+    security_protocol = cast(
+        KafkaSecurityProtocol,
+        raw_security_protocol,
+    )
+
+    raw_mechanism = os.getenv(
+        "KAFKA_SASL_MECHANISM",
+        "",
+    ).strip()
+
+    sasl_mechanism: KafkaSaslMechanism | None = None
+
+    if raw_mechanism:
+        allowed_mechanisms = {
+            "PLAIN",
+            "SCRAM-SHA-256",
+            "SCRAM-SHA-512",
+        }
+
+        if raw_mechanism not in allowed_mechanisms:
+            raise RuntimeError(
+                "Unsupported KAFKA_SASL_MECHANISM."
+            )
+
+        sasl_mechanism = cast(
+            KafkaSaslMechanism,
+            raw_mechanism,
+        )
+
+    return KafkaProducerSettings(
+        bootstrap_servers=bootstrap_servers,
+        security_protocol=security_protocol,
+        sasl_mechanism=sasl_mechanism,
+        username=os.getenv("KAFKA_USERNAME"),
+        password=os.getenv("KAFKA_PASSWORD"),
+        ssl_ca_file=(
+            os.getenv("KAFKA_SSL_CA_FILE")
+            or None
+        ),
+    )
 
 
 class KafkaProducer:
@@ -94,7 +173,7 @@ class KafkaProducer:
             ),
             client_id=settings.client_id,
             security_protocol=(
-                settings.security_protocol
+                str(settings.security_protocol)
             ),
             ssl_context=ssl_context,
             sasl_mechanism=(
@@ -108,7 +187,11 @@ class KafkaProducer:
             enable_idempotence=True,
         )
 
-        await producer.start()
+        try:
+            await producer.start()
+        except Exception:
+            await producer.stop()
+            raise
 
         self._producer = producer
 

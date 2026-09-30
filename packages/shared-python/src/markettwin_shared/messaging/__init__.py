@@ -2,9 +2,10 @@ from .envelope import EventEnvelope
 from .kafka_producer import (
     KafkaProducer,
     KafkaProducerSettings,
+    load_kafka_producer_settings,
 )
 from .run_dispatch import (
-    COMMANDS_TOPIC,
+    EXECUTION_COMMANDS_TOPIC,
     RUN_REQUEST_TOPIC,
     RUN_REQUESTED_EVENT_TYPE,
     RUN_REQUESTED_EVENT_VERSION,
@@ -14,10 +15,11 @@ from .run_dispatch import (
 __all__ = [
     "RunRequestedMessage",
     "RUN_REQUEST_TOPIC",
-    "COMMANDS_TOPIC",
+    "EXECUTION_COMMANDS_TOPIC",
     "RUN_REQUESTED_EVENT_TYPE",
     "RUN_REQUESTED_EVENT_VERSION",
     "EventEnvelope",
     "KafkaProducer",
     "KafkaProducerSettings",
+    "load_kafka_producer_settings",
 ]

@@ -3,7 +3,10 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from markettwin_shared.messaging import (
+    KafkaProducerSettings,
+)
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,8 +36,25 @@ class Settings(BaseSettings):
     postgres_db: str = "markettwin"
     postgres_user: str = "markettwin"
     postgres_password: str = "markettwin"
-    
+    outbox_relay_enabled: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
+    
+    kafka_security_protocol: Literal[
+        "PLAINTEXT",
+        "SSL",
+        "SASL_PLAINTEXT",
+        "SASL_SSL",
+    ] = "PLAINTEXT"
+    
+    kafka_sasl_mechanisms: Literal[
+        "PLAIN",
+        "SCRAM-SHA-256",
+        "SCRAM-SHA-512",
+    ] | None = None
+    
+    kafka_username: str | None = None
+    kafka_password: SecretStr | None = None
+    kafka_ssl_ca_file: str | None = None
     
     s3_endpoint_url: str = "http://localhost:9000"
     s3_bucket: str = "markettwin-local"
@@ -58,7 +78,36 @@ class Settings(BaseSettings):
             f"{self.postgres_db}"
         )
         
-    
+    @property
+    def kafka_producer_settings(
+        self
+    )-> KafkaProducerSettings:
+        "Return the Kafka producer configuration."
+        
+        bootstrap_servers = tuple(
+            server.strip()
+            for server in self.kafka_bootstrap_servers.split(",")
+            if server.strip()
+        )
+
+        if not bootstrap_servers:
+            raise ValueError("Kafka bootstrap servers are required.")
+        
+        password = (
+            self.kafka_password.get_secret_value()
+            if self.kafka_password is not None
+            else None
+        )
+        
+        return KafkaProducerSettings(
+            bootstrap_servers = bootstrap_servers,
+            security_protocol = self.kafka_security_protocol,
+            sasl_mechanism = self.kafka_sasl_mechanisms,
+            username = self.kafka_username,
+            password = password,
+            ssl_ca_file = self.kafka_ssl_ca_file,
+            client_id = "markettwin-control-api",
+        )
 
 @lru_cache
 def get_settings() -> Settings:

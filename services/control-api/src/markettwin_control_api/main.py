@@ -1,11 +1,12 @@
 """MarketTwin Control API application."""
 
-
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Final, Literal
 
 from fastapi import FastAPI
+from markettwin_shared.messaging import KafkaProducer
 from pydantic import BaseModel
 
 from markettwin_control_api.api.applications import router as applications_router
@@ -20,6 +21,7 @@ from markettwin_control_api.api.test_run_results import router as test_run_resul
 from markettwin_control_api.api.workspaces import router as workspaces_router
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.database import DatabaseRuntime
+from markettwin_control_api.services import OutboxRelay, run_outbox_relay
 
 APP_NAME: Final[str] = "MarketTwin Control API"
 APP_VERSION: Final[str] = "0.1.0"
@@ -46,12 +48,34 @@ def create_app() -> FastAPI:
         """Own long-lived application resources."""
 
         database = DatabaseRuntime(settings)
-
         application.state.database = database
+        relay_task: asyncio.Task[None] | None = None
 
+        if settings.outbox_relay_enabled:
+            producer = KafkaProducer(settings.kafka_producer_settings)
+            
+            relay = OutboxRelay(
+                session_factory = database.session_factory,
+                producer = producer,
+            )
+            
+            relay_task = asyncio.create_task(run_outbox_relay(
+                relay = relay,
+                producer = producer,
+            ),
+            name = "markettwin-outbox-relay",
+            )
+        
         try:
             yield
         finally:
+            if relay_task is not None:
+                relay_task.cancel()
+                
+                try:
+                    await relay_task
+                except asyncio.CancelledError:
+                    pass
             await database.close()
 
     application = FastAPI(

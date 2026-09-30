@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from markettwin_shared.messaging import (
-    COMMANDS_TOPIC,
+    EXECUTION_COMMANDS_TOPIC,
     RUN_REQUESTED_EVENT_TYPE,
     RUN_REQUESTED_EVENT_VERSION,
     RunRequestedMessage,
@@ -30,7 +30,7 @@ def test_run_requested_message_builds_envelope() -> None:
 
     envelope = message.to_envelope()
 
-    assert COMMANDS_TOPIC == "markettwin.commands"
+    assert EXECUTION_COMMANDS_TOPIC == "markettwin.execution.commands"
 
     assert envelope.event_id == event_id
     assert envelope.event_type == RUN_REQUESTED_EVENT_TYPE
