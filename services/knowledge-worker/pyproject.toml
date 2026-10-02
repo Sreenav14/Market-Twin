@@ -8,11 +8,14 @@ version = "0.1.0"
 description = "MarketTwin ingestion and knowledge-generation worker"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "markettwin-database",
     "markettwin-shared-python",
+    "pymupdf>=1.26,<2",
 ]
 
 [tool.uv.sources]
 markettwin-shared-python = { workspace = true }
+markettwin-database = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/markettwin_knowledge_worker"]

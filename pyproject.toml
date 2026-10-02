@@ -70,6 +70,7 @@ testpaths = [
     "services/execution-orchestrator/tests",
     "services/evaluation-worker/tests",
     "packages/shared-python/tests",
+    "packages/database-python/tests",
 ]
 addopts = "-ra --import-mode=importlib"
 asyncio_mode = "auto"

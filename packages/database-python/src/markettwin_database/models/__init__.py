@@ -19,6 +19,17 @@ from .execution import (
     RunEvent,
 )
 from .integration import OutboxEvent, ProcessedMessage
+from .knowledge import (
+    AssetVersion,
+    BlueprintVersion,
+    BlueprintVersionAsset,
+    EvidenceUnit,
+    ProductBlueprint,
+    Skill,
+    SkillEvidenceReference,
+    SkillVersion,
+    SourceAsset,
+)
 from .testing import (
     Application,
     ApplicationTarget,
@@ -57,4 +68,13 @@ __all__ = [
     "TestRun",
     "OutboxEvent",
     "ProcessedMessage",
+    "ProductBlueprint",
+    "BlueprintVersion",
+    "SourceAsset",
+    "BlueprintVersionAsset",
+    "AssetVersion",
+    "SkillVersion",
+    "Skill",
+    "EvidenceUnit",
+    "SkillEvidenceReference",
 ]
