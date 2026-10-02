@@ -1,78 +1,64 @@
-"""Tests for deterministic PDF extraction."""
+"""PDF extraction preserves source pages and exposes extraction limits."""
 
 from pathlib import Path
 
-import pymupdf
-from markettwin_knowledge_worker.extraction import PdfExtractor
+import pytest
+from markettwin_knowledge_worker.extraction import PdfExtractionError, PdfExtractor
+from pypdf import PdfReader, PdfWriter
+
+from .conftest import write_pdf
 
 
-def _create_test_pdf(path: Path) -> None:
-    document = pymupdf.open()
-
-    text_page = document.new_page()
-
-    text_page.insert_text(
-        (72, 72),
-        "Resume Upload",
+def test_pdf_extractor_preserves_text_and_flags_visual_pages(tmp_path: Path) -> None:
+    path = tmp_path / "requirements.pdf"
+    write_pdf(
+        path,
+        ("Resume Upload\nUsers may upload PDF or DOCX resumes.\nMaximum size is 10 MB.",),
+        visual_page=True,
     )
-
-    text_page.insert_text(
-        (72, 100),
-        "Users may upload PDF or DOCX resumes.",
-    )
-
-    text_page.insert_text(
-        (72, 128),
-        "Maximum upload size is 10 MB.",
-    )
-
-    visual_page = document.new_page()
-
-    visual_page.draw_rect(
-        pymupdf.Rect(
-            100,
-            100,
-            400,
-            400,
-        )
-    )
-
-    document.save(path)
-    document.close()
+    result = PdfExtractor().extract(path)
+    assert result.source_item_count == result.processed_item_count == 2
+    assert result.coverage_complete
+    assert len(result.units) == 1
+    assert result.units[0].source_locator == {"page": 1}
+    assert result.units[0].ordinal == 1
+    assert result.units[0].extractor_name == "pypdf"
+    assert "10 MB" in (result.units[0].content_text or "")
+    assert [issue.source_locator for issue in result.issues if issue.requires_fallback] == [
+        {"page": 2}
+    ]
 
 
-def test_pdf_extractor_preserves_text_and_flags_visual_pages(
-    tmp_path: Path,
-) -> None:
-    pdf_path = tmp_path / "requirements.pdf"
+def test_requirement_pages_keep_numbered_provenance(requirements_pdf: Path) -> None:
+    result = PdfExtractor().extract(requirements_pdf)
+    assert [unit.ordinal for unit in result.units] == [1, 2, 3]
+    assert [unit.source_locator for unit in result.units] == [{"page": 1}, {"page": 2}, {"page": 3}]
+    assert "match score" in (result.units[1].content_text or "")
+    assert not result.issues
 
-    _create_test_pdf(pdf_path)
 
-    result = PdfExtractor().extract(pdf_path)
+def test_empty_pdf_page_has_no_fake_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "blank.pdf"
+    write_pdf(path, ("",))
+    result = PdfExtractor().extract(path)
+    assert not result.units
+    assert result.issues[0].code == "blank_page"
 
-    assert result.source_item_count == 2
-    assert result.processed_item_count == 2
-    assert result.coverage_complete is True
 
-    extracted_text = "\n".join(
-        unit.content_text or ""
-        for unit in result.units
-    )
+def test_password_protected_pdf_is_rejected(requirements_pdf: Path, tmp_path: Path) -> None:
+    path = tmp_path / "protected.pdf"
+    with PdfWriter() as writer:
+        writer.append(PdfReader(requirements_pdf))
+        writer.encrypt("test-password")
+        writer.write(path)
+    with pytest.raises(PdfExtractionError) as error:
+        PdfExtractor().extract(path)
+    assert error.value.code == "password_protected"
 
-    assert "Resume Upload" in extracted_text
-    assert "PDF or DOCX" in extracted_text
-    assert "10 MB" in extracted_text
 
-    assert all(
-        unit.source_locator["page"] == 1
-        for unit in result.units
-    )
-
-    fallback_pages = {
-        issue.source_locator["page"]
-        for issue in result.issues
-        if issue.requires_fallback
-    }
-
-    assert fallback_pages == {2}
-    assert result.requires_fallback is True
+def test_corrupt_pdf_is_reported_as_parsing_failed(tmp_path: Path) -> None:
+    path = tmp_path / "broken.pdf"
+    path.write_bytes(b"not a PDF")
+    with pytest.raises(PdfExtractionError) as error:
+        PdfExtractor().extract(path)
+    assert error.value.code == "parsing_failed"

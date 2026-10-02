@@ -10,7 +10,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "markettwin-database",
     "markettwin-shared-python",
-    "pymupdf>=1.26,<2",
+    "pypdf>=6,<7",
+    "litellm==1.93.0",
 ]
 
 [tool.uv.sources]

@@ -1,7 +1,6 @@
 """Shared knowledge-domain contracts for MarketTwin."""
 
-from typing import Literal
-from uuid import UUID
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,7 +35,7 @@ class GeneratedSkillDraft(BaseModel):
 
     definition: SkillDefinition
 
-    evidence_unit_ids: tuple[UUID, ...] = Field(
+    evidence_ordinals: tuple[Annotated[int, Field(gt=0, strict=True)], ...] = Field(
         min_length=1,
     )
 
