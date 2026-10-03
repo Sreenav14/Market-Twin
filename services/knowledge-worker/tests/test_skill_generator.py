@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
-from markettwin_knowledge_worker import skill_generator
+from markettwin_knowledge_worker import knowledge_builder
 from markettwin_knowledge_worker.extraction import PdfExtractor
 from markettwin_knowledge_worker.extraction.contracts import ExtractedEvidence, ExtractionResult
 from markettwin_knowledge_worker.skill_generator import GeneratedSkills, SkillGenerator
@@ -36,6 +36,8 @@ DRAFT: dict[str, object] = {
 
 
 def completion(content: str, *, finish_reason: str = "stop") -> ModelResponse:
+    if content.startswith('{"skills":'):
+        content = json.dumps({"application_knowledge": [], "artifacts": [], **json.loads(content)})
     return ModelResponse(
         choices=[
             {
@@ -51,7 +53,7 @@ async def test_generator_uses_real_pdf_text_and_returns_grounded_drafts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock = AsyncMock(return_value=completion(json.dumps({"skills": [DRAFT]})))
-    monkeypatch.setattr(skill_generator, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
     monkeypatch.setenv("MODEL_NAME", "openai/gpt-4o-mini")
     drafts = await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
     assert drafts[0].evidence_ordinals == (1,)
@@ -91,7 +93,7 @@ async def test_generator_rejects_unknown_citations(
             )
         )
     )
-    monkeypatch.setattr(skill_generator, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
     with pytest.raises(ValueError, match="unknown evidence ordinals"):
         await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
 
@@ -102,7 +104,9 @@ async def test_generator_rejects_invalid_structured_output(
     requirements_pdf: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(skill_generator, "acompletion", AsyncMock(return_value=completion(content)))
+    monkeypatch.setattr(
+        knowledge_builder, "acompletion", AsyncMock(return_value=completion(content))
+    )
     with pytest.raises(ValidationError):
         await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
 
@@ -112,7 +116,7 @@ async def test_generator_rejects_truncated_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        skill_generator,
+        knowledge_builder,
         "acompletion",
         AsyncMock(
             return_value=completion(
@@ -130,7 +134,7 @@ async def test_generator_requires_content_and_unique_ordinals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock = AsyncMock()
-    monkeypatch.setattr(skill_generator, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
     extraction = PdfExtractor().extract(requirements_pdf)
     for invalid in (
         replace(extraction, units=()),
@@ -152,7 +156,7 @@ async def test_generator_surfaces_missing_visual_content(
         visual_page=True,
     )
     mock = AsyncMock(return_value=completion(json.dumps({"skills": [DRAFT]})))
-    monkeypatch.setattr(skill_generator, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
     drafts = await SkillGenerator().generate(PdfExtractor().extract(path))
     assert any("needs_visual_fallback" in warning for warning in drafts[0].warnings)
 
@@ -162,7 +166,7 @@ async def test_generator_can_return_no_documented_skills(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        skill_generator, "acompletion", AsyncMock(return_value=completion('{"skills": []}'))
+        knowledge_builder, "acompletion", AsyncMock(return_value=completion('{"skills": []}'))
     )
     assert await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf)) == ()
 
@@ -200,14 +204,14 @@ async def test_generator_batches_whole_evidence_then_consolidates(
             completion(json.dumps({"skills": [consolidated]})),
         ]
     )
-    monkeypatch.setattr(skill_generator, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
 
     drafts = await SkillGenerator().generate(extraction)
 
     assert drafts[0].evidence_ordinals == (1, 2)
     assert mock.await_count == 3
     final_prompt = json.dumps(mock.await_args_list[-1].kwargs["messages"])
-    assert "candidate_skills" in final_prompt
+    assert "candidate_results" in final_prompt
     assert "aaaaaaaa" not in final_prompt
 
 

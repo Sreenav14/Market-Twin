@@ -46,3 +46,43 @@ class GeneratedSkillDraft(BaseModel):
     ]
 
     warnings: tuple[str, ...] = ()
+
+
+class ApplicationKnowledgeDraft(BaseModel):
+    """Grounded product context that is useful but not necessarily testable as a Skill."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=4000)
+    evidence_ordinals: tuple[Annotated[int, Field(gt=0, strict=True)], ...] = Field(
+        min_length=1,
+    )
+    grounding_confidence: Literal["low", "medium", "high"]
+    warnings: tuple[str, ...] = ()
+
+
+class ProcedureArtifactDraft(BaseModel):
+    """Grounded procedure or structured operational artifact proposed for review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=255)
+    kind: Literal["procedure", "artifact"]
+    content: str = Field(min_length=1, max_length=4000)
+    steps: tuple[str, ...] = ()
+    evidence_ordinals: tuple[Annotated[int, Field(gt=0, strict=True)], ...] = Field(
+        min_length=1,
+    )
+    grounding_confidence: Literal["low", "medium", "high"]
+    warnings: tuple[str, ...] = ()
+
+
+class KnowledgeBuildResult(BaseModel):
+    """One grounded semantic result from one source or consolidated source batches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_knowledge: tuple[ApplicationKnowledgeDraft, ...]
+    artifacts: tuple[ProcedureArtifactDraft, ...]
+    skills: tuple[GeneratedSkillDraft, ...]

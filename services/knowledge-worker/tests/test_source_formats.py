@@ -1,20 +1,20 @@
 """Representative source formats preserve content, provenance, and coverage."""
 
+import asyncio
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
 from markettwin_knowledge_worker.extraction import extract_source
 from markettwin_knowledge_worker.extraction.csv_file import CsvExtractor
-from markettwin_knowledge_worker.extraction.image import ImageExtractor
+from markettwin_knowledge_worker.extraction.image import ImageExtractionError, ImageExtractor
 from markettwin_knowledge_worker.extraction.json_file import JsonExtractor
 from markettwin_knowledge_worker.extraction.pptx import PptxExtractor
 from markettwin_knowledge_worker.extraction.text import TextExtractor
 from markettwin_knowledge_worker.extraction.video import (
     VideoClip,
-    VideoClipUnderstanding,
     VideoExtractor,
 )
 from markettwin_knowledge_worker.extraction.xlsx import XlsxExtractor
@@ -120,8 +120,8 @@ def test_json_array_ranges_match_payload_after_recursive_splitting(
     assert grouped_indices == [index for index in range(len(items)) if index != oversized_index]
 
 
-async def test_dispatcher_and_image_model_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+async def test_dispatcher_and_image_adapter_preserve_whole_media(
+    tmp_path: Path,
 ) -> None:
     text_path = tmp_path / "source.TXT"
     text_path.write_text("Users can upload a resume.", encoding="utf-8")
@@ -129,30 +129,24 @@ async def test_dispatcher_and_image_model_configuration(
 
     image_path = tmp_path / "screen.png"
     image_path.write_bytes(b"image bytes")
-    response = ModelResponse(
-        choices=[
-            {
-                "finish_reason": "stop",
-                "message": {
-                    "role": "assistant",
-                    "content": json.dumps({"content": "Upload button", "warnings": []}),
-                },
-            }
-        ]
-    )
-    completion = AsyncMock(return_value=response)
-    monkeypatch.setattr("markettwin_knowledge_worker.extraction.image.acompletion", completion)
-    monkeypatch.setenv("KNOWLEDGE_MODEL_TIMEOUT_SECONDS", "123")
-    monkeypatch.setenv("KNOWLEDGE_MODEL_NUM_RETRIES", "2")
-
     result = await ImageExtractor().extract(image_path)
 
-    assert result.units[0].content_text == "Upload button"
-    assert completion.call_args.kwargs["timeout"] == 123
-    assert completion.call_args.kwargs["num_retries"] == 2
+    assert result.units[0].content_text is None
+    assert result.units[0].content_json == {"media_type": "image/png"}
+    assert result.units[0].source_locator == {"image": 1}
+    assert result.units[0].evidence_type == "image"
+    assert result.units[0].media_path == image_path
+    assert result.coverage_complete
 
 
-async def test_video_coverage_counts_only_successful_clips(
+async def test_image_adapter_rejects_empty_images(tmp_path: Path) -> None:
+    image_path = tmp_path / "empty.png"
+    image_path.write_bytes(b"")
+    with pytest.raises(ImageExtractionError, match="Image is empty"):
+        await ImageExtractor().extract(image_path)
+
+
+async def test_video_adapter_returns_timestamped_clips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "demo.mp4"
@@ -162,27 +156,52 @@ async def test_video_coverage_counts_only_successful_clips(
         VideoClip(path, 0.0, 90.0),
         VideoClip(path, 85.0, 120.0),
     )
-    monkeypatch.setenv("VIDEO_MODEL_NAME", "openai/test")
-
     def duration_seconds(_path: Path) -> float:
         return 120.0
 
     monkeypatch.setattr(extractor, "_duration_seconds", duration_seconds)
     monkeypatch.setattr(extractor, "_prepare_clips", AsyncMock(return_value=clips))
-    monkeypatch.setattr(
-        extractor,
-        "_understand_clip",
-        AsyncMock(
-            side_effect=[
-                VideoClipUnderstanding(content="User uploads a PDF."),
-                RuntimeError("model failed"),
-            ]
-        ),
-    )
 
     result = await extractor.extract(path)
 
     assert result.source_item_count == 2
-    assert result.processed_item_count == 1
-    assert not result.coverage_complete
-    assert result.issues[-1].code == "video_understanding_failed"
+    assert result.processed_item_count == 2
+    assert result.coverage_complete
+    assert result.issues == ()
+    assert [unit.source_locator for unit in result.units] == [
+        {"start_seconds": 0.0, "end_seconds": 90.0},
+        {"start_seconds": 85.0, "end_seconds": 120.0},
+    ]
+    assert [unit.media_path for unit in result.units] == [path, path]
+    assert result.cleanup_paths
+    shutil.rmtree(result.cleanup_paths[0], ignore_errors=True)
+
+
+async def test_video_cancellation_cleans_prepared_clips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"original")
+    clips_root = tmp_path / "clips"
+    clips_root.mkdir()
+    (clips_root / "partial.mp4").write_bytes(b"partial")
+    extractor = VideoExtractor()
+
+    def duration_seconds(_path: Path) -> float:
+        return 120.0
+
+    def temporary_directory(*, prefix: str) -> str:
+        assert prefix == "markettwin-video-"
+        return str(clips_root)
+
+    monkeypatch.setattr(extractor, "_duration_seconds", duration_seconds)
+    monkeypatch.setattr(
+        "markettwin_knowledge_worker.extraction.video.mkdtemp", temporary_directory
+    )
+    monkeypatch.setattr(
+        extractor, "_prepare_clips", AsyncMock(side_effect=asyncio.CancelledError)
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await extractor.extract(source)
+    assert not clips_root.exists()
+    assert source.read_bytes() == b"original"

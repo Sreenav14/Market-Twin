@@ -20,6 +20,9 @@ class ExtractedEvidence:
 
     ordinal: int
 
+    # Runtime-only media input for the Knowledge Builder. It is never persisted as evidence.
+    media_path: Path | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class ExtractionIssue:
@@ -42,6 +45,9 @@ class ExtractionResult:
 
     source_item_count: int
     processed_item_count: int
+
+    # Long-video clips are temporary source-adapter artifacts. The caller owns cleanup.
+    cleanup_paths: tuple[Path, ...] = ()
 
     @property
     def requires_fallback(self) -> bool:
