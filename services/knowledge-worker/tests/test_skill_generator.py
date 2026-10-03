@@ -12,6 +12,7 @@ import pytest
 from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
 from markettwin_knowledge_worker import skill_generator
 from markettwin_knowledge_worker.extraction import PdfExtractor
+from markettwin_knowledge_worker.extraction.contracts import ExtractedEvidence, ExtractionResult
 from markettwin_knowledge_worker.skill_generator import GeneratedSkills, SkillGenerator
 from markettwin_shared.knowledge import GeneratedSkillDraft
 from pydantic import ValidationError
@@ -59,7 +60,7 @@ async def test_generator_uses_real_pdf_text_and_returns_grounded_drafts(
     assert request["response_format"] is GeneratedSkills
     prompt = json.dumps(request["messages"])
     assert "Maximum upload size is 10 MB" in prompt
-    assert '"ordinal": 3' in prompt.replace('\\"', '"')
+    assert '"page_end": 3' in prompt.replace('\\"', '"')
     assert "evidence_unit_ids" not in prompt
     mock.assert_awaited_once()
 
@@ -166,6 +167,50 @@ async def test_generator_can_return_no_documented_skills(
     assert await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf)) == ()
 
 
+async def test_generator_batches_whole_evidence_then_consolidates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KNOWLEDGE_SOURCE_CHUNK_MAX_CHARS", "50")
+    monkeypatch.setenv("KNOWLEDGE_SKILL_BATCH_MAX_CHARS", "60")
+    extraction = ExtractionResult(
+        source_path=tmp_path / "large.txt",
+        units=tuple(
+            ExtractedEvidence(
+                evidence_type="text",
+                content_text=character * 40,
+                content_json=None,
+                source_locator={"line": ordinal},
+                extractor_name="test",
+                extractor_version="1",
+                ordinal=ordinal,
+            )
+            for ordinal, character in ((1, "a"), (2, "b"))
+        ),
+        issues=(),
+        source_item_count=2,
+        processed_item_count=2,
+    )
+    second = {**DRAFT, "name": "Analyze Resume", "evidence_ordinals": [2]}
+    consolidated = {**DRAFT, "evidence_ordinals": [1, 2]}
+    mock = AsyncMock(
+        side_effect=[
+            completion(json.dumps({"skills": [DRAFT]})),
+            completion(json.dumps({"skills": [second]})),
+            completion(json.dumps({"skills": [consolidated]})),
+        ]
+    )
+    monkeypatch.setattr(skill_generator, "acompletion", mock)
+
+    drafts = await SkillGenerator().generate(extraction)
+
+    assert drafts[0].evidence_ordinals == (1, 2)
+    assert mock.await_count == 3
+    final_prompt = json.dumps(mock.await_args_list[-1].kwargs["messages"])
+    assert "candidate_skills" in final_prompt
+    assert "aaaaaaaa" not in final_prompt
+
+
 @pytest.mark.skipif(
     os.environ.get("MARKETTWIN_TEST_LLM") != "1",
     reason="Set MARKETTWIN_TEST_LLM=1 to run the real configured model (incurs API usage).",
@@ -176,7 +221,7 @@ async def test_live_pdf_produces_useful_grounded_skills(requirements_pdf: Path) 
     drafts = await SkillGenerator().generate(extraction)
     print(json.dumps({"skills": [draft.model_dump(mode="json") for draft in drafts]}, indent=2))
     assert len(drafts) >= 3
-    for capability, ordinal in (("upload", 1), ("analy", 2), ("download", 3)):
+    for capability, ordinal in (("upload", 1), ("analy", 1), ("download", 1)):
         matching = [
             draft
             for draft in drafts

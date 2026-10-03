@@ -6,8 +6,8 @@ import pypdf
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from markettwin_knowledge_worker.extraction.chunking import SourcePart, text_evidence
 from markettwin_knowledge_worker.extraction.contracts import (
-    ExtractedEvidence,
     ExtractionIssue,
     ExtractionResult,
 )
@@ -32,7 +32,7 @@ class PdfExtractor:
 
     def extract(self, path: Path) -> ExtractionResult:
         """Return numbered evidence with page provenance, not estimated boxes."""
-        units: list[ExtractedEvidence] = []
+        parts: list[SourcePart] = []
         issues: list[ExtractionIssue] = []
         try:
             with path.open("rb") as stream:
@@ -48,17 +48,7 @@ class PdfExtractor:
                     )
                     text = (page.extract_text() or "").strip()
                     if text:
-                        units.append(
-                            ExtractedEvidence(
-                                evidence_type="text",
-                                content_text=text,
-                                content_json=None,
-                                source_locator={"page": page_number},
-                                extractor_name=self.name,
-                                extractor_version=self.version,
-                                ordinal=len(units) + 1,
-                            )
-                        )
+                        parts.append(SourcePart(text=text, locator={"page": page_number}))
                     if has_visual_content and len(text) < self._minimum_visual_page_text_chars:
                         issues.append(
                             ExtractionIssue(
@@ -82,7 +72,9 @@ class PdfExtractor:
             ) from exc
         return ExtractionResult(
             source_path=path,
-            units=tuple(units),
+            units=text_evidence(
+                parts, extractor_name=self.name, extractor_version=self.version
+            ),
             issues=tuple(issues),
             source_item_count=page_count,
             processed_item_count=page_count,

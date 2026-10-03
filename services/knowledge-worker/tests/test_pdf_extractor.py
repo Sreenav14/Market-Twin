@@ -20,7 +20,7 @@ def test_pdf_extractor_preserves_text_and_flags_visual_pages(tmp_path: Path) -> 
     assert result.source_item_count == result.processed_item_count == 2
     assert result.coverage_complete
     assert len(result.units) == 1
-    assert result.units[0].source_locator == {"page": 1}
+    assert result.units[0].source_locator == {"page_start": 1, "page_end": 1}
     assert result.units[0].ordinal == 1
     assert result.units[0].extractor_name == "pypdf"
     assert "10 MB" in (result.units[0].content_text or "")
@@ -31,9 +31,9 @@ def test_pdf_extractor_preserves_text_and_flags_visual_pages(tmp_path: Path) -> 
 
 def test_requirement_pages_keep_numbered_provenance(requirements_pdf: Path) -> None:
     result = PdfExtractor().extract(requirements_pdf)
-    assert [unit.ordinal for unit in result.units] == [1, 2, 3]
-    assert [unit.source_locator for unit in result.units] == [{"page": 1}, {"page": 2}, {"page": 3}]
-    assert "match score" in (result.units[1].content_text or "")
+    assert [unit.ordinal for unit in result.units] == [1]
+    assert result.units[0].source_locator == {"page_start": 1, "page_end": 3}
+    assert "match score" in (result.units[0].content_text or "")
     assert not result.issues
 
 
