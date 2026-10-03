@@ -125,7 +125,10 @@ class SkillReconciler:
         decisions: tuple[SkillReconciliationDecision, ...],
     ) -> None:
         expected_indices = set(range(1, len(candidates) + 1))
-        if {decision.candidate_index for decision in decisions} != expected_indices:
+        if (
+            len(decisions) != len(candidates)
+            or {decision.candidate_index for decision in decisions} != expected_indices
+        ):
             raise ValueError("Reconciliation must return exactly one decision per candidate.")
         existing_ids = {skill.id for skill in existing}
         for decision in decisions:

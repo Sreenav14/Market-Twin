@@ -14,7 +14,6 @@ source file
 → bounded Skill-generation batches
 → candidate consolidation only when more than one batch exists
 → grounded draft Skills
-→ optional reconciliation with approved Skills
 → human review and approval
 ```
 
@@ -82,13 +81,20 @@ action. Candidate indices, approved Skill IDs, and new evidence ordinals are val
 the model response. Updates remain proposed drafts so existing approved knowledge is unchanged until
 human approval.
 
+Reconciliation is currently a standalone proposal API and is not wired into
+`KnowledgeIngestionService`. Before enabling incremental persistence, the repository must accept
+the reconciled logical Skill UUID explicitly: name matching cannot safely connect a renamed
+candidate such as "Resume Upload" to an approved "Upload Resume" Skill. Updates must also retain
+old grounding alongside new evidence. These persistence changes remain pending.
+
 ## Verification
 
 - NumPy DOCX: 79 meaningful parser parts became one 3,960-character evidence unit with all content
   preserved in document order and no extraction issues.
 - Live NumPy generation: completed without truncation and returned 10 grounded capability Skills,
   all citing evidence ordinal 1.
-- Cross-format and boundary suite: 33 tests passed; the live-model and database tests remain opt-in
+- Cross-format and boundary suite after provenance/decision review: 37 tests passed; the live-model
+  and database tests remain opt-in
   in the normal suite.
 - Full repository regression suite: 235 passed and 5 opt-in tests skipped.
 - PostgreSQL proof: one real extracted PDF persisted one EvidenceUnit, one draft SkillVersion, and
@@ -119,6 +125,11 @@ uv run --no-sync --env-file .env python -m pytest services/knowledge-worker/test
    example now uses `postgresql+asyncpg://`.
 4. `litellm` appeared twice in the Knowledge Worker dependencies. The duplicate declaration was
    removed.
+5. After recursively splitting an oversized JSON array element, subsequent grouped elements could
+   carry a stale start index. Each new group now takes the index of its first actual element;
+   regression cases cover oversized elements at the beginning and middle of an array.
+6. Reconciliation's set comparison allowed duplicate decisions when all candidate indices were also
+   present. Validation now checks both decision count and complete index coverage.
 
 ## Deliberate V1 limits
 
@@ -126,3 +137,9 @@ This work does not add RAG, embeddings, vector retrieval, semantic model chunkin
 graph, universal OCR, video frame/audio decomposition, automatic Skill deletion, or automatic
 approval. PDF and presentation visual fallback issues remain visible for later review rather than
 being silently treated as complete extraction.
+
+The video architecture is implemented, but its live model transport has not been proven. The current
+video test mocks clip preparation and model understanding; it proves successful-clip accounting,
+not real PyAV duration inspection, FFmpeg trimming, or provider acceptance of LiteLLM video payloads.
+A real short-video call and a long-video clipping/overlap proof are still required before describing
+video ingestion as verified end to end.

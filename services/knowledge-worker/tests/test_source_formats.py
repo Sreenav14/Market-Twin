@@ -90,6 +90,36 @@ def test_pptx_and_xlsx_chunk_without_losing_source_order(
     assert "10 MB" in "".join(unit.content_text or "" for unit in workbook_result.units)
 
 
+@pytest.mark.parametrize("oversized_index", [0, 1, 2])
+def test_json_array_ranges_match_payload_after_recursive_splitting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, oversized_index: int
+) -> None:
+    _small_chunks(monkeypatch)
+    items: list[object] = ["first", "second", "third", "fourth"]
+    items[oversized_index] = "x" * 180
+    path = tmp_path / "array.json"
+    path.write_text(json.dumps({"items": items}), encoding="utf-8")
+
+    result = JsonExtractor().extract(path)
+
+    split_content = ""
+    grouped_indices: list[int] = []
+    for unit in result.units:
+        locator = str(unit.source_locator["json_path"])
+        assert unit.content_json is not None
+        payload = unit.content_json["value"]
+        if "[chars:" in locator:
+            assert locator.startswith(f"$.items[{oversized_index}][chars:")
+            assert isinstance(payload, str)
+            split_content += payload
+        else:
+            start, end = (int(index) for index in locator.removeprefix("$.items[")[:-1].split(":"))
+            assert payload == items[start:end]
+            grouped_indices.extend(range(start, end))
+    assert split_content == items[oversized_index]
+    assert grouped_indices == [index for index in range(len(items)) if index != oversized_index]
+
+
 async def test_dispatcher_and_image_model_configuration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

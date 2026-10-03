@@ -10,6 +10,7 @@ from markettwin_knowledge_worker import skill_reconciler
 from markettwin_knowledge_worker.skill_reconciler import (
     ExistingApprovedSkill,
     SkillReconciler,
+    SkillReconciliationDecision,
 )
 from markettwin_shared.knowledge import GeneratedSkillDraft, SkillDefinition
 
@@ -21,6 +22,39 @@ def _draft(name: str, ordinal: int) -> GeneratedSkillDraft:
         evidence_ordinals=(ordinal,),
         grounding_confidence="high",
     )
+
+
+async def test_reconciler_rejects_duplicate_decisions_with_complete_index_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates = (_draft("Upload Resume", 1), _draft("Download Report", 2))
+    decisions = tuple(
+        SkillReconciliationDecision(
+            candidate_index=index,
+            action="CREATE",
+            proposed_skill=candidates[index - 1],
+            confirming_evidence_ordinals=(index,),
+            reason="Distinct capability",
+        )
+        for index in (1, 1, 2)
+    )
+    response = ModelResponse(
+        choices=[
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {"decisions": [decision.model_dump(mode="json") for decision in decisions]}
+                    ),
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr(skill_reconciler, "acompletion", AsyncMock(return_value=response))
+
+    with pytest.raises(ValueError, match="exactly one decision per candidate"):
+        await SkillReconciler().reconcile(existing=(), candidates=candidates)
 
 
 async def test_reconciler_proposes_create_update_and_unchanged(

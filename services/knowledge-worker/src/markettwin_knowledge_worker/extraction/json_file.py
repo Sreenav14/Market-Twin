@@ -109,6 +109,8 @@ def _split_json_value(
             if _json_size({"value": child}) > max_chars:
                 pieces.extend(_split_json_value(child, f"{json_path}[{index}]", max_chars))
             else:
+                if not group:
+                    group_start = index
                 group.append(child)
         if group:
             pieces.append(
