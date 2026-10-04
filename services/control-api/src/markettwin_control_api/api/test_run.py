@@ -39,6 +39,7 @@ from markettwin_control_api.services import (
     RunDispatchService,
     RunNotQueueableError,
 )
+from markettwin_control_api.knowledge.repository import IngestionRepository
 
 router = APIRouter(
     tags=["Test Runs"],
@@ -49,6 +50,14 @@ class CreateTestRunRequest(BaseModel):
     """Request for creating a MarketTwin test run."""
 
     target_id: UUID
+    knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
+
+    @field_validator("knowledge_entry_ids")
+    @classmethod
+    def unique_knowledge_entries(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("Select each knowledge set once.")
+        return value
 
     study_brief: str = Field(
         min_length=10,
@@ -239,6 +248,36 @@ async def create_test_run(
                     authorization.authorization_id
                 ),
             }
+            if payload.knowledge_entry_ids:
+                knowledge_repository = IngestionRepository(database_session)
+                selected_knowledge: list[dict[str, object]] = []
+                for entry_id in payload.knowledge_entry_ids:
+                    record = await knowledge_repository.get(
+                        application.workspace_id, entry_id, application_id=application.application_id
+                    )
+                    if record is None:
+                        raise HTTPException(
+                            status_code=404,
+                            detail="Selected knowledge is not attached to this application.",
+                        )
+                    if record.version.status != "approved":
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Selected knowledge must be approved before testing.",
+                        )
+                    preview = record.entry.preview
+                    selected_knowledge.append(
+                        {
+                            "id": str(record.entry.id),
+                            "name": record.blueprint.name,
+                            "source_name": record.asset.original_filename,
+                            "roles": record.pin.roles,
+                            "application_knowledge": preview["application_knowledge"],
+                            "artifacts": preview["artifacts"],
+                            "skills": preview["skills"],
+                        }
+                    )
+                configuration_snapshot["knowledge"] = selected_knowledge
 
             repository = TestRunRepository(
                 database_session

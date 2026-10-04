@@ -7,11 +7,9 @@ from uuid import UUID
 
 from markettwin_database import (
     create_database_engine,
-    create_session_factory,
 )
-from markettwin_evaluation_worker.workflow import (
-    evaluate_and_generate_report,
-)
+from markettwin_evaluation_worker.worker import process_run
+from opentelemetry import trace
 
 
 def database_url() -> str:
@@ -28,25 +26,24 @@ def database_url() -> str:
 async def main(test_run_id: UUID) -> None:
     
     engine = create_database_engine(database_url())
-    session_factory = create_session_factory(engine)
 
     try:
-        async with session_factory() as session:
-            result = await evaluate_and_generate_report(
-                test_run_id=test_run_id,
-                session=session,
-            )
+        result = await process_run(engine, test_run_id)
+        if result is None:
+            print("Evaluation is already complete, already owned, or the TestRun is not completed.")
+            return
 
-            print("MarketTwin evaluation finished.")
-            print(f"TestRun: {result.test_run_id}")
-            print(f"Findings: {len(result.finding_ids)}")
-            print(f"Visual checks:"
-                  f"{result.visual_evaluation_count}"
-                  )
-            print(f"Report: {result.report_id}")
+        print("MarketTwin evaluation finished.")
+        print(f"TestRun: {result.test_run_id}")
+        print(f"Findings: {len(result.finding_ids)}")
+        print(f"Visual checks: {result.visual_evaluation_count}")
+        print(f"Report: {result.report_id}")
 
     finally:
         await engine.dispose()
+        flush = getattr(trace.get_tracer_provider(), "force_flush", None)
+        if flush is not None:
+            await asyncio.to_thread(flush, timeout_millis=5000)
 
 
 if __name__ == "__main__":

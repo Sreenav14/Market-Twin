@@ -20,10 +20,12 @@ from .execution import (
 )
 from .integration import OutboxEvent, ProcessedMessage
 from .knowledge import (
+    ApplicationKnowledgeEntry,
     AssetVersion,
     BlueprintVersion,
     BlueprintVersionAsset,
     EvidenceUnit,
+    IngestionEntry,
     ProductBlueprint,
     Skill,
     SkillEvidenceReference,
@@ -76,5 +78,7 @@ __all__ = [
     "SkillVersion",
     "Skill",
     "EvidenceUnit",
+    "IngestionEntry",
+    "ApplicationKnowledgeEntry",
     "SkillEvidenceReference",
 ]

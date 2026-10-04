@@ -939,6 +939,7 @@ source = { editable = "services/control-api" }
 dependencies = [
     { name = "boto3" },
     { name = "fastapi", extra = ["standard-no-fastapi-cloud-cli"] },
+    { name = "httpx" },
     { name = "markettwin-database" },
     { name = "markettwin-shared-python" },
     { name = "pydantic-settings" },
@@ -949,6 +950,7 @@ dependencies = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.35,<2" },
     { name = "fastapi", extras = ["standard-no-fastapi-cloud-cli"], specifier = "==0.139.2" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "markettwin-database", editable = "packages/database-python" },
     { name = "markettwin-shared-python", editable = "packages/shared-python" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
@@ -1028,25 +1030,33 @@ version = "0.1.0"
 source = { editable = "services/knowledge-worker" }
 dependencies = [
     { name = "av" },
+    { name = "fastapi" },
     { name = "litellm" },
     { name = "markettwin-database" },
     { name = "markettwin-shared-python" },
+    { name = "openinference-instrumentation-litellm" },
     { name = "openpyxl" },
     { name = "pypdf" },
     { name = "python-docx" },
+    { name = "python-multipart" },
     { name = "python-pptx" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "av", specifier = ">=15,<17" },
+    { name = "fastapi", specifier = "==0.139.2" },
     { name = "litellm", specifier = "==1.93.0" },
     { name = "markettwin-database", editable = "packages/database-python" },
     { name = "markettwin-shared-python", editable = "packages/shared-python" },
+    { name = "openinference-instrumentation-litellm", specifier = "==0.1.45" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "pypdf", specifier = ">=6,<7" },
     { name = "python-docx", specifier = ">=1.2,<2" },
+    { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "python-pptx", specifier = ">=1.0,<2" },
+    { name = "uvicorn", specifier = ">=0.52,<1" },
 ]
 
 [[package]]

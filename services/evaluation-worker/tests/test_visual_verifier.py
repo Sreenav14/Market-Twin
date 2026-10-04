@@ -11,6 +11,16 @@ from litellm.exceptions import RateLimitError
 from markettwin_evaluation_worker import visual_verifier
 
 
+def test_visual_model_uses_selected_model_unless_overridden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODEL_NAME", "openai/gpt-6-luna")
+    monkeypatch.delenv("VISUAL_MODEL_NAME", raising=False)
+    assert visual_verifier._visual_model_name() == "openai/gpt-6-luna"
+    monkeypatch.setenv("VISUAL_MODEL_NAME", "openai/explicit-image-model")
+    assert visual_verifier._visual_model_name() == "openai/explicit-image-model"
+
+
 @pytest.mark.asyncio
 async def test_visual_verifier_sends_real_image_bytes(
     tmp_path: Path,
@@ -56,7 +66,7 @@ async def test_visual_verifier_sends_real_image_bytes(
         )
 
     monkeypatch.setattr(
-        visual_verifier,
+        visual_verifier.litellm,
         "acompletion",
         fake_acompletion,
     )
@@ -176,7 +186,7 @@ async def test_visual_verifier_retries_rate_limits(
         delays.append(delay)
 
     monkeypatch.setattr(
-        visual_verifier,
+        visual_verifier.litellm,
         "acompletion",
         fake_acompletion,
     )
@@ -221,7 +231,7 @@ async def test_visual_verifier_marks_exhausted_rate_limit_unverified(
         delays.append(delay)
 
     monkeypatch.setattr(
-        visual_verifier,
+        visual_verifier.litellm,
         "acompletion",
         always_rate_limited,
     )

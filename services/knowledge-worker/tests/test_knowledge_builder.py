@@ -6,11 +6,32 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock
 
+import litellm
 import pytest
 from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
-from markettwin_knowledge_worker import knowledge_builder
+from markettwin_knowledge_worker.config import KnowledgeConfig, KnowledgeConfigurationError
 from markettwin_knowledge_worker.extraction.contracts import ExtractedEvidence, ExtractionResult
 from markettwin_knowledge_worker.knowledge_builder import KnowledgeBuilder
+
+
+async def test_output_budget_is_configurable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KNOWLEDGE_MODEL_MAX_OUTPUT_TOKENS", "4096")
+    completion = AsyncMock(return_value=_completion(_result()))
+    monkeypatch.setattr(litellm, "acompletion", completion)
+    await KnowledgeBuilder._call_model(  # pyright: ignore[reportPrivateUsage]
+        model="openai/test", api_key=None, instruction="Build knowledge",
+        messages=[{"role": "user", "content": "source"}], config=KnowledgeConfig.from_env(),
+    )
+    assert completion.call_args.kwargs["max_completion_tokens"] == 4096
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "invalid"])
+def test_output_budget_rejects_invalid_settings(
+    monkeypatch: pytest.MonkeyPatch, value: str,
+) -> None:
+    monkeypatch.setenv("KNOWLEDGE_MODEL_MAX_OUTPUT_TOKENS", value)
+    with pytest.raises(KnowledgeConfigurationError):
+        KnowledgeConfig.from_env()
 
 
 def _completion(payload: dict[str, object]) -> ModelResponse:
@@ -79,7 +100,7 @@ async def test_builder_returns_all_grounded_knowledge_types(
         processed_item_count=1,
     )
     mock = AsyncMock(return_value=_completion(_result()))
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(litellm, "acompletion", mock)
 
     result = await KnowledgeBuilder().build(extraction)
 
@@ -120,14 +141,14 @@ async def test_builder_sends_original_image_to_the_semantic_call(
         processed_item_count=1,
     )
     mock = AsyncMock(return_value=_completion(_result()))
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(litellm, "acompletion", mock)
     monkeypatch.setenv("IMAGE_MODEL_NAME", "openai/test-vision")
 
     await KnowledgeBuilder().build(extraction)
 
     request = cast(dict[str, object], mock.call_args.kwargs)
     messages = cast(list[dict[str, object]], request["messages"])
-    content = cast(list[dict[str, object]], messages[1]["content"])
+    content = cast(list[dict[str, object]], messages[-1]["content"])
     image_part = next(part for part in content if part["type"] == "image_url")
     image_url = cast(dict[str, str], image_part["image_url"])
     assert image_url["url"].startswith("data:image/png;base64,")
@@ -155,7 +176,7 @@ async def test_builder_rejects_unknown_ordinal_before_consolidation(
         processed_item_count=1,
     )
     mock = AsyncMock(return_value=_completion(_result(ordinal=2)))
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(litellm, "acompletion", mock)
 
     with pytest.raises(ValueError, match="unknown evidence ordinals"):
         await KnowledgeBuilder().build(extraction)
@@ -195,7 +216,7 @@ async def test_video_uses_actual_clips_and_cleans_only_temporary_files(
         side_effect=RuntimeError("provider failed") if fails else None,
         return_value=_completion(_result()),
     )
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(litellm, "acompletion", mock)
     monkeypatch.setenv("VIDEO_MODEL_NAME", "openai/test-video")
     monkeypatch.setenv("VIDEO_INPUT_FORMAT", "video_url")
     if fails:
@@ -205,7 +226,7 @@ async def test_video_uses_actual_clips_and_cleans_only_temporary_files(
         await KnowledgeBuilder().build(extraction)
     request = cast(dict[str, object], mock.call_args.kwargs)
     messages = cast(list[dict[str, object]], request["messages"])
-    content = cast(list[dict[str, object]], messages[1]["content"])
+    content = cast(list[dict[str, object]], messages[-1]["content"])
     video_part = next(part for part in content if part["type"] == "video_url")
     video_url = cast(dict[str, str], video_part["video_url"])
     assert video_url["url"] == "data:video/mp4;base64,dHJpbW1lZC12aWRlbw=="
@@ -242,7 +263,26 @@ async def test_consolidation_cannot_cite_unused_source_evidence(
             _completion(_result(ordinal=2)),
         ]
     )
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(litellm, "acompletion", mock)
     with pytest.raises(ValueError, match="unknown evidence ordinals"):
         await KnowledgeBuilder().build(extraction)
     assert mock.await_count == 3
+
+
+@pytest.mark.parametrize("evidence_type,override", [
+    ("text", None), ("image", "IMAGE_MODEL_NAME"), ("video_segment", "VIDEO_MODEL_NAME"),
+])
+def test_source_model_selection_uses_env_and_optional_media_override(
+    monkeypatch: pytest.MonkeyPatch, evidence_type: str, override: str | None,
+) -> None:
+    monkeypatch.setenv("MODEL_NAME", "openai/gpt-6-luna")
+    monkeypatch.delenv("IMAGE_MODEL_NAME", raising=False)
+    monkeypatch.delenv("VIDEO_MODEL_NAME", raising=False)
+    unit = ExtractedEvidence(
+        evidence_type=evidence_type, content_text="source", content_json=None, source_locator={},
+        extractor_name="test", extractor_version="1", ordinal=1,
+    )
+    assert KnowledgeBuilder._model_for((unit,))[0] == "openai/gpt-6-luna"  # pyright: ignore[reportPrivateUsage]
+    if override:
+        monkeypatch.setenv(override, "provider/media-model")
+        assert KnowledgeBuilder._model_for((unit,))[0] == "provider/media-model"  # pyright: ignore[reportPrivateUsage]

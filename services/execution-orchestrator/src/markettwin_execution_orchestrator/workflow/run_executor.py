@@ -51,6 +51,7 @@ class MarketTwinRunRequest:
 
     network_policy: NetworkPolicy = "public_only"
     max_duration_seconds_per_journey: int = 180
+    knowledge_context: tuple[dict[str, object], ...] = ()
 
 
 async def execute_markettwin_run(
@@ -95,6 +96,7 @@ async def execute_markettwin_run(
                 test_run_id=request.run_id,
                 study_brief=study_brief,
                 target_snapshot=request.target_snapshot,
+                knowledge_context=request.knowledge_context,
             ),
             session=session,
         )

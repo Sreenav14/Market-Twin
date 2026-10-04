@@ -11,6 +11,16 @@ const destinations = [
     href: "/overview",
   },
   {
+    title: "Ingestion",
+    description: "Ingest knowledge from source files",
+    href: "/ingestion",
+  },
+  {
+    title: "Review knowledge",
+    description: "Review and approve knowledge for tests",
+    href: "/knowledge/review",
+  },
+  {
     title: "Applications",
     description: "Choose a product or start a test",
     href: "/applications",

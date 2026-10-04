@@ -6,7 +6,7 @@ from typing import Literal
 from markettwin_shared.messaging import (
     KafkaProducerSettings,
 )
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     postgres_user: str = "markettwin"
     postgres_password: str = "markettwin"
     outbox_relay_enabled: bool = False
+    knowledge_worker_url: str = "http://127.0.0.1:8010"
+    knowledge_model_timeout_seconds: float = Field(default=180, gt=0)
+    knowledge_preview_timeout_seconds: float = Field(default=240, gt=0)
+    knowledge_preview_max_bytes: int = Field(default=52428800, gt=0)
     kafka_bootstrap_servers: str = "localhost:9092"
     
     kafka_security_protocol: Literal[
@@ -66,6 +70,12 @@ class Settings(BaseSettings):
         extra = "ignore",
         case_sensitive = False,
     )
+
+    @model_validator(mode="after")
+    def validate_knowledge_timeout(self) -> "Settings":
+        if self.knowledge_preview_timeout_seconds <= self.knowledge_model_timeout_seconds:
+            raise ValueError("Knowledge preview timeout must exceed model timeout.")
+        return self
     @property
     def database_url(self) -> str:
         """Return the async PostgreSQL database URL."""

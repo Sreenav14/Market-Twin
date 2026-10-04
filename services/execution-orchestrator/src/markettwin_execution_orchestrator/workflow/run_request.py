@@ -66,4 +66,7 @@ def build_run_request(
         max_duration_seconds_per_journey=(
             max_duration_seconds_per_journey
         ),
+        knowledge_context=tuple(
+            cast(list[dict[str, object]], configuration_snapshot.get("knowledge", []))
+        ),
     )

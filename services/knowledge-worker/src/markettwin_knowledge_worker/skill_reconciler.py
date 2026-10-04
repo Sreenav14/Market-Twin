@@ -5,9 +5,10 @@ import os
 from typing import Literal, cast
 from uuid import UUID
 
-from litellm import acompletion  # pyright: ignore[reportUnknownVariableType]
+import litellm
 from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
 from markettwin_shared.knowledge import GeneratedSkillDraft, SkillDefinition
+from markettwin_shared.model_parameters import completion_parameters
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from markettwin_knowledge_worker.config import KnowledgeConfig
@@ -80,7 +81,7 @@ class SkillReconciler:
             model = f"openai/{model}"
         response = cast(
             ModelResponse,
-            await acompletion(
+            await litellm.acompletion(  # pyright: ignore[reportUnknownMemberType]
                 model=model,
                 api_key=os.getenv("MODEL_API_KEY") or os.getenv("OPENAI_API_KEY"),
                 messages=[
@@ -102,8 +103,7 @@ class SkillReconciler:
                     },
                 ],
                 response_format=SkillReconciliationResult,
-                temperature=0,
-                max_tokens=8192,
+                **completion_parameters(model, config.model_max_output_tokens, temperature=0),
                 timeout=config.model_timeout_seconds,
                 num_retries=config.model_num_retries,
             ),

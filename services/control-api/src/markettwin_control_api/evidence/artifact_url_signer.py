@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal, Protocol, cast
+from urllib.parse import quote
 
 from boto3.session import Session
 from botocore.config import Config
@@ -62,15 +63,19 @@ class ArtifactUrlSigner:
         bucket: str,
         object_key: str,
         expires_in_seconds: int = DEFAULT_ARTIFACT_TTL_SECONDS,
+        download_filename: str | None = None,
     ) -> str:
         """Create a temporary signed URL for one private object."""
         
+        params = {"Bucket": bucket, "Key": object_key}
+        if download_filename is not None:
+            params["ResponseContentDisposition"] = (
+                "attachment; filename*=UTF-8''" + quote(download_filename, safe="")
+            )
+            params["ResponseContentType"] = "application/octet-stream"
+
         return self._client.generate_presigned_url(\
                 ClientMethod="get_object",
-                Params={
-                    "Bucket": bucket,
-                    "Key": object_key,
-                },
+                Params=params,
                 ExpiresIn=expires_in_seconds,
             )
-    

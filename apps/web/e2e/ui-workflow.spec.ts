@@ -107,6 +107,7 @@ async function mockApi(
       ];
     else if (path === "/api/v1/workspaces/workspace/applications")
       data = options.emptyWorkspace ? [] : [app];
+    else if (path === "/api/v1/workspaces/workspace/ingestion") data = [];
     else if (path === `/api/v1/applications/${appId}`) data = app;
     else if (path === `/api/v1/applications/${appId}/targets`) {
       if (options.targetError) {
@@ -299,6 +300,7 @@ test("test creation sends a real request with the chosen brief", async ({
   await page.getByRole("button", { name: "Create test", exact: true }).click();
   expect((await request).postDataJSON()).toEqual({
     target_id: targetId,
+    knowledge_entry_ids: [],
     study_brief:
       "Can a first-time customer understand our pricing and confidently choose the right plan?",
   });
@@ -347,7 +349,7 @@ test("workspace navigation supports keyboard and mobile", async ({
   await page.getByLabel("Search pages").fill("tests");
   await page
     .getByRole("navigation", { name: "Navigation results" })
-    .getByRole("link")
+    .getByRole("link", { name: /^Tests / })
     .click();
   await expect(page).toHaveURL(/\/runs$/);
   await expect(

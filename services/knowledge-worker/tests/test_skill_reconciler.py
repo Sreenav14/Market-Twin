@@ -4,9 +4,9 @@ import json
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import litellm
 import pytest
 from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
-from markettwin_knowledge_worker import skill_reconciler
 from markettwin_knowledge_worker.skill_reconciler import (
     ExistingApprovedSkill,
     SkillReconciler,
@@ -51,7 +51,7 @@ async def test_reconciler_rejects_duplicate_decisions_with_complete_index_set(
             }
         ]
     )
-    monkeypatch.setattr(skill_reconciler, "acompletion", AsyncMock(return_value=response))
+    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=response))
 
     with pytest.raises(ValueError, match="exactly one decision per candidate"):
         await SkillReconciler().reconcile(existing=(), candidates=candidates)
@@ -115,7 +115,7 @@ async def test_reconciler_proposes_create_update_and_unchanged(
         ]
     )
     completion = AsyncMock(return_value=response)
-    monkeypatch.setattr(skill_reconciler, "acompletion", completion)
+    monkeypatch.setattr(litellm, "acompletion", completion)
 
     result = await SkillReconciler().reconcile(existing=existing, candidates=candidates)
 
@@ -148,7 +148,7 @@ async def test_reconciler_rejects_unknown_skill_or_evidence(
         ]
     }
     monkeypatch.setattr(
-        skill_reconciler,
+        litellm,
         "acompletion",
         AsyncMock(
             return_value=ModelResponse(

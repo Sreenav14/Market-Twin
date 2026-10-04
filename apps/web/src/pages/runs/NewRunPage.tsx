@@ -42,11 +42,17 @@ export function NewRunPage() {
   const { workspace, user } = useOutletContext<AppShellContext>();
   const [targetId, setTargetId] = useState("");
   const [brief, setBrief] = useState("");
+  const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitting = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const canWrite = canWriteWorkspace(workspace.role);
+  const knowledgeState = useQuery({
+    queryKey: ["ingestion", user.id, workspace.id, applicationId],
+    enabled: canWrite,
+    queryFn: () => api.listIngestion(workspace.id, applicationId),
+  });
   const state = useQuery({
     queryKey: ["test-targets", user.id, applicationId],
     enabled: canWrite,
@@ -99,7 +105,7 @@ export function NewRunPage() {
     setBusy(true);
     setError(null);
     try {
-      const run = await api.createRun(applicationId, target.id, brief.trim());
+      const run = await api.createRun(applicationId, target.id, brief.trim(), knowledgeIds);
       setBrief("");
       navigate(`/runs/${run.id}/overview`);
     } catch (error) {
@@ -237,6 +243,22 @@ export function NewRunPage() {
               Authorized
             </span>
           </div>
+          <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
+            <h2 id="test-knowledge-heading">Knowledge for this test <span className="muted">Optional</span></h2>
+            <p className="form-help">Select approved knowledge attached to this application before agents are created. You can select up to 10 sets.</p>
+            {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
+              <p className="form-error" role="alert">Could not load knowledge. <Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button></p>
+            ) : knowledgeState.data.filter((entry) => entry.status === "approved").length ? (
+              <fieldset className="knowledge-choices"><legend className="visually-hidden">Select approved knowledge sets</legend>
+                {knowledgeState.data.filter((entry) => entry.status === "approved").map((entry) => (
+                  <div className="knowledge-choice" key={entry.id}>
+                    <label><input type="checkbox" checked={knowledgeIds.includes(entry.id)} disabled={busy || (knowledgeIds.length >= 10 && !knowledgeIds.includes(entry.id))} onChange={(event) => setKnowledgeIds((previous) => event.target.checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id))} /><span><strong>{entry.name}</strong><span className="muted">{entry.knowledge_count} knowledge items · {entry.artifact_count} artifacts · {entry.skill_count} Skills</span></span></label>
+                    <Link className="text-link" to={`/knowledge/review/${entry.id}`} target="_blank" rel="noreferrer">View<span className="visually-hidden"> {entry.name} in a new tab</span></Link>
+                  </div>
+                ))}
+              </fieldset>
+            ) : <p className="muted">No approved knowledge attached yet. <Link className="text-link" to="/knowledge/review" target="_blank" rel="noreferrer">Review knowledge</Link> and attach a set to this application, or continue without knowledge.</p>}
+          </section>
           <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
               Your testing goal

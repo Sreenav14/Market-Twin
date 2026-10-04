@@ -37,3 +37,16 @@ def test_create_download_url_signs_exact_object() -> None:
         },
         ExpiresIn=300,
     )
+
+
+def test_source_download_does_not_render_declared_html_inline() -> None:
+    client = Mock()
+    signer = ArtifactUrlSigner(region="us-east-1", endpoint_url=None, client=client)
+    signer.create_download_url(
+        bucket="sources", object_key="knowledge/source", download_filename="report draft.html"
+    )
+    params = client.generate_presigned_url.call_args.kwargs["Params"]
+    assert params["ResponseContentDisposition"] == (
+        "attachment; filename*=UTF-8''report%20draft.html"
+    )
+    assert params["ResponseContentType"] == "application/octet-stream"

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.artifacts import router as artifacts_router
 from markettwin_control_api.api.auth import router as auth_router
+from markettwin_control_api.api.ingestion import router as ingestion_router
 from markettwin_control_api.api.lifecycle import router as lifecycle_router
 from markettwin_control_api.api.runtime_snapshots import router as runtime_snapshots_router
 from markettwin_control_api.api.target_authorizations import router as target_authorizations_router
@@ -21,6 +22,7 @@ from markettwin_control_api.api.test_run_results import router as test_run_resul
 from markettwin_control_api.api.workspaces import router as workspaces_router
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.database import DatabaseRuntime
+from markettwin_control_api.knowledge.processor import run_ingestion_processor
 from markettwin_control_api.services import OutboxRelay, run_outbox_relay
 
 APP_NAME: Final[str] = "MarketTwin Control API"
@@ -56,6 +58,9 @@ def create_app() -> FastAPI:
 
         database = DatabaseRuntime(settings)
         application.state.database = database
+        ingestion_task = asyncio.create_task(
+            run_ingestion_processor(database.engine, settings), name="markettwin-ingestion"
+        )
         relay_task: asyncio.Task[None] | None = None
 
         if settings.outbox_relay_enabled:
@@ -76,6 +81,11 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            ingestion_task.cancel()
+            try:
+                await ingestion_task
+            except asyncio.CancelledError:
+                pass
             if relay_task is not None:
                 relay_task.cancel()
                 
@@ -150,6 +160,7 @@ def create_app() -> FastAPI:
     application.include_router(lifecycle_router)
     application.include_router(workspaces_router)
     application.include_router(applications_router)
+    application.include_router(ingestion_router)
     application.include_router(targets_router)
     application.include_router(target_authorizations_router)
     application.include_router(test_run_router)

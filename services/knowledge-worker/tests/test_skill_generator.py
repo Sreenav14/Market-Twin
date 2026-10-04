@@ -13,6 +13,7 @@ from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTy
 from markettwin_knowledge_worker import knowledge_builder
 from markettwin_knowledge_worker.extraction import PdfExtractor
 from markettwin_knowledge_worker.extraction.contracts import ExtractedEvidence, ExtractionResult
+from markettwin_knowledge_worker.knowledge_builder import KnowledgeOutputLimitError
 from markettwin_knowledge_worker.skill_generator import GeneratedSkills, SkillGenerator
 from markettwin_shared.knowledge import GeneratedSkillDraft
 from pydantic import ValidationError
@@ -53,7 +54,7 @@ async def test_generator_uses_real_pdf_text_and_returns_grounded_drafts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock = AsyncMock(return_value=completion(json.dumps({"skills": [DRAFT]})))
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder.litellm, "acompletion", mock)
     monkeypatch.setenv("MODEL_NAME", "openai/gpt-4o-mini")
     drafts = await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
     assert drafts[0].evidence_ordinals == (1,)
@@ -93,7 +94,7 @@ async def test_generator_rejects_unknown_citations(
             )
         )
     )
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder.litellm, "acompletion", mock)
     with pytest.raises(ValueError, match="unknown evidence ordinals"):
         await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
 
@@ -105,7 +106,7 @@ async def test_generator_rejects_invalid_structured_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        knowledge_builder, "acompletion", AsyncMock(return_value=completion(content))
+        knowledge_builder.litellm, "acompletion", AsyncMock(return_value=completion(content))
     )
     with pytest.raises(ValidationError):
         await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
@@ -116,7 +117,7 @@ async def test_generator_rejects_truncated_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        knowledge_builder,
+        knowledge_builder.litellm,
         "acompletion",
         AsyncMock(
             return_value=completion(
@@ -125,7 +126,7 @@ async def test_generator_rejects_truncated_response(
             )
         ),
     )
-    with pytest.raises(RuntimeError, match="complete structured response"):
+    with pytest.raises(KnowledgeOutputLimitError, match="output limit"):
         await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf))
 
 
@@ -134,7 +135,7 @@ async def test_generator_requires_content_and_unique_ordinals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock = AsyncMock()
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder.litellm, "acompletion", mock)
     extraction = PdfExtractor().extract(requirements_pdf)
     for invalid in (
         replace(extraction, units=()),
@@ -156,7 +157,7 @@ async def test_generator_surfaces_missing_visual_content(
         visual_page=True,
     )
     mock = AsyncMock(return_value=completion(json.dumps({"skills": [DRAFT]})))
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder.litellm, "acompletion", mock)
     drafts = await SkillGenerator().generate(PdfExtractor().extract(path))
     assert any("needs_visual_fallback" in warning for warning in drafts[0].warnings)
 
@@ -166,7 +167,8 @@ async def test_generator_can_return_no_documented_skills(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        knowledge_builder, "acompletion", AsyncMock(return_value=completion('{"skills": []}'))
+        knowledge_builder.litellm, "acompletion",
+        AsyncMock(return_value=completion('{"skills": []}')),
     )
     assert await SkillGenerator().generate(PdfExtractor().extract(requirements_pdf)) == ()
 
@@ -204,7 +206,7 @@ async def test_generator_batches_whole_evidence_then_consolidates(
             completion(json.dumps({"skills": [consolidated]})),
         ]
     )
-    monkeypatch.setattr(knowledge_builder, "acompletion", mock)
+    monkeypatch.setattr(knowledge_builder.litellm, "acompletion", mock)
 
     drafts = await SkillGenerator().generate(extraction)
 

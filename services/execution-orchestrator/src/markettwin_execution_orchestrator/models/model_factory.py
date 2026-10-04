@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from google.adk.models.lite_llm import LiteLlm
+from markettwin_shared.model_parameters import completion_parameters
 
 DEFAULT_MODEL_PROVIDER: Final[str] = "openai"
 DEFAULT_OPENAI_MODEL_NAME: Final[str] = "openai/gpt-4o-mini"
@@ -60,6 +61,12 @@ def resolve_model_runtime_configuration(
         DEFAULT_MODEL_PROVIDER,
     ).strip().casefold() or DEFAULT_MODEL_PROVIDER
 
+    configured_model = (os.getenv("MODEL_NAME") or "").strip()
+    if "/" in configured_model and not (provider == "ollama" and os.getenv("OLLAMA_MODEL_NAME")):
+        provider = configured_model.split("/", 1)[0]
+        if provider == "ollama_chat":
+            provider = "ollama"
+
     if provider == "openai":
         model_name = (
             os.getenv("MODEL_NAME")
@@ -74,6 +81,7 @@ def resolve_model_runtime_configuration(
             model_name=model_name,
             max_tokens=max_tokens,
             num_retries=DEFAULT_OPENAI_NUM_RETRIES,
+            reasoning_effort=(os.getenv("MODEL_REASONING_EFFORT") or "").strip() or None,
         )
 
     if provider == "ollama":
@@ -100,9 +108,15 @@ def resolve_model_runtime_configuration(
             reasoning_effort="none",
         )
 
-    raise ValueError(
-        f'Unsupported MODEL_PROVIDER: "{provider}".'
-    )
+    if configured_model:
+        model_name = (
+            configured_model if "/" in configured_model else f"{provider}/{configured_model}"
+        )
+        return ModelRuntimeConfiguration(
+            provider=provider, model_name=model_name, max_tokens=max_tokens,
+            num_retries=DEFAULT_OPENAI_NUM_RETRIES,
+        )
+    raise ValueError(f'MODEL_NAME is required for MODEL_PROVIDER "{provider}".')
 
 
 def create_model(
@@ -130,13 +144,13 @@ def create_model(
             return LiteLlm(
                 model=configuration.model_name,
                 api_key=api_key,
-                max_tokens=configuration.max_tokens,
+                **completion_parameters(configuration.model_name, configuration.max_tokens),
                 num_retries=configuration.num_retries,
             )
 
         return LiteLlm(
             model=configuration.model_name,
-            max_tokens=configuration.max_tokens,
+            **completion_parameters(configuration.model_name, configuration.max_tokens),
             num_retries=configuration.num_retries,
         )
 
@@ -164,6 +178,9 @@ def create_model(
             reasoning_effort=configuration.reasoning_effort,
         )
 
-    raise RuntimeError(
-        "Resolved an unsupported model provider."
+    parameters = completion_parameters(configuration.model_name, configuration.max_tokens)
+    api_key = os.getenv("MODEL_API_KEY")
+    return LiteLlm(
+        model=configuration.model_name, api_key=api_key,
+        num_retries=configuration.num_retries, **parameters,
     )

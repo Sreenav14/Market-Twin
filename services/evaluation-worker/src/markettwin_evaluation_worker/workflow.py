@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
+from markettwin_shared.observability import use_observability_correlation
+from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_evaluation_worker.deterministic_evaluator import (
@@ -52,10 +54,26 @@ async def evaluate_and_generate_report(
     session: AsyncSession,
     visual_storage: VisualArtifactStorage | None = None,
 ) -> EvaluationWorkflowResult:
+    """Trace deterministic evaluation, visual checks, and final report generation."""
+    initialize_litellm_observability()
+    with use_observability_correlation(test_run_id=test_run_id):
+        with trace.get_tracer(__name__).start_as_current_span("evaluation.run") as span:
+            span.set_attribute("openinference.span.kind", "CHAIN")
+            span.set_attribute("markettwin.test_run_id", str(test_run_id))
+            return await _evaluate_and_generate_report(
+                test_run_id=test_run_id, session=session, visual_storage=visual_storage,
+            )
+
+
+async def _evaluate_and_generate_report(
+    *,
+    test_run_id: UUID,
+    session: AsyncSession,
+    visual_storage: VisualArtifactStorage | None = None,
+) -> EvaluationWorkflowResult:
     """Create findings and report in one transaction."""
 
     try:
-        initialize_litellm_observability()
         readiness_repository = EvaluationRepository(
             session
         )

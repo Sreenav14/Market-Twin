@@ -24,7 +24,7 @@ npm-debug.log*
 venv/
 __pycache__/
 *.py[cod]
-.pytest_cache/
+.pytest*
 .mypy_cache/
 .pyright/
 .ruff_cache/

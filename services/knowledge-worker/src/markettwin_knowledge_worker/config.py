@@ -16,8 +16,11 @@ class KnowledgeConfig:
     skill_batch_max_chars: int = 64000
     model_timeout_seconds: float = 180
     model_num_retries: int = 0
+    model_max_output_tokens: int = 16384
 
     def __post_init__(self) -> None:
+        if self.model_max_output_tokens < 1:
+            raise KnowledgeConfigurationError("Model output limit must be positive.")
         if not 0 < self.source_chunk_max_chars < self.skill_batch_max_chars:
             raise KnowledgeConfigurationError(
                 "Source chunk limit must be positive and smaller than Skill batch limit."
@@ -35,6 +38,9 @@ class KnowledgeConfig:
                 skill_batch_max_chars=int(os.getenv("KNOWLEDGE_SKILL_BATCH_MAX_CHARS", "64000")),
                 model_timeout_seconds=float(os.getenv("KNOWLEDGE_MODEL_TIMEOUT_SECONDS", "180")),
                 model_num_retries=int(os.getenv("KNOWLEDGE_MODEL_NUM_RETRIES", "0")),
+                model_max_output_tokens=int(
+                    os.getenv("KNOWLEDGE_MODEL_MAX_OUTPUT_TOKENS", "16384")
+                ),
             )
         except ValueError as exc:
             raise KnowledgeConfigurationError(str(exc)) from exc

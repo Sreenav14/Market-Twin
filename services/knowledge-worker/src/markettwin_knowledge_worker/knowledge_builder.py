@@ -8,14 +8,16 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import cast
 
-from litellm import acompletion  # pyright: ignore[reportUnknownVariableType]
+import litellm
 from litellm.types.utils import ModelResponse  # pyright: ignore[reportMissingTypeStubs]
 from markettwin_shared.knowledge import (
     ApplicationKnowledgeDraft,
     GeneratedSkillDraft,
     KnowledgeBuildResult,
     ProcedureArtifactDraft,
+    SkillDefinition,
 )
+from markettwin_shared.model_parameters import completion_parameters
 
 from markettwin_knowledge_worker.config import KnowledgeConfig
 from markettwin_knowledge_worker.extraction import ExtractedEvidence, ExtractionResult
@@ -70,6 +72,11 @@ Final selection check: compare each pair of application-knowledge items that cit
 If they can be combined without losing a meaningfully distinct downstream use, return one item.
 For each artifact, identify the source-supported structure it preserves beyond its knowledge
 summary; omit it when it only says that the source contains a diagram, list, or other material.
+
+Formal requirements describing supported actions, rules, and outcomes establish Skills even without
+button names or imperative wording. Resolve these capabilities first; do not merely paraphrase
+them as context and omit their Skills. Keep other useful context as application knowledge.
+The illustrative exchanges show category decisions only. Do not copy their facts or ordinals.
 """
 
 KNOWLEDGE_CONSOLIDATION_INSTRUCTION = """Consolidate grounded MarketTwin knowledge candidates.
@@ -82,6 +89,10 @@ Keep separate items only when they have meaningfully different downstream uses. 
 artifact that merely restates application knowledge without preserving distinct structure.
 Return the smallest useful set of distinct structured knowledge items.
 """
+
+
+class KnowledgeOutputLimitError(RuntimeError):
+    """The model stopped before producing complete structured knowledge."""
 
 
 class KnowledgeBuilder:
@@ -194,7 +205,10 @@ class KnowledgeBuilder:
     def _source_messages(
         self, extraction: ExtractionResult, batch: tuple[ExtractedEvidence, ...]
     ) -> list[dict[str, object]]:
-        text_parts: list[str] = [f"SOURCE: {extraction.source_path.name}"]
+        text_parts: list[str] = [
+            "ACTUAL SOURCE: cite only the evidence below, never the illustrative examples.",
+            f"SOURCE: {extraction.source_path.name}",
+        ]
         media_parts: list[dict[str, object]] = []
         for unit in batch:
             text_parts.append(
@@ -226,9 +240,64 @@ class KnowledgeBuilder:
                 )
             )
         source_text = "\n\n".join(text_parts)
-        if not media_parts:
-            return [{"role": "user", "content": source_text}]
-        return [{"role": "user", "content": [{"type": "text", "text": source_text}, *media_parts]}]
+        source_message: dict[str, object] = {
+            "role": "user",
+            "content": (
+                [{"type": "text", "text": source_text}, *media_parts]
+                if media_parts
+                else source_text
+            ),
+        }
+        return [
+            {
+                "role": "user",
+                "content": "Illustrative source, Evidence 1: Components are A, B, C. "
+                "A connects to B. No other facts are supplied.",
+            },
+            {
+                "role": "assistant",
+                "content": KnowledgeBuildResult(
+                    application_knowledge=(
+                        ApplicationKnowledgeDraft(
+                            name="Components and connection",
+                            content="The source names A, B, and C and connects A to B.",
+                            evidence_ordinals=(1,),
+                            grounding_confidence="high",
+                        ),
+                    ),
+                    artifacts=(),
+                    skills=(),
+                ).model_dump_json(),
+            },
+            {
+                "role": "user",
+                "content": "Illustrative source, Evidence 1: The service accepts JSON and XML "
+                "submissions, up to 5 KB. Accepted submissions appear in the inbox. "
+                "Unsupported formats show Format rejected. No other facts are supplied.",
+            },
+            {
+                "role": "assistant",
+                "content": KnowledgeBuildResult(
+                    application_knowledge=(),
+                    artifacts=(),
+                    skills=(
+                        GeneratedSkillDraft(
+                            name="Submit data",
+                            definition=SkillDefinition(
+                                intent="Submit supported data",
+                                inputs=("JSON", "XML"),
+                                constraints=("Maximum submission size is 5 KB",),
+                                expected_outcomes=("Accepted submissions appear in the inbox",),
+                                failure_signals=("Unsupported formats show Format rejected",),
+                            ),
+                            evidence_ordinals=(1,),
+                            grounding_confidence="high",
+                        ),
+                    ),
+                ).model_dump_json(),
+            },
+            source_message,
+        ]
 
     @staticmethod
     def _content_text(unit: ExtractedEvidence) -> str:
@@ -258,14 +327,14 @@ class KnowledgeBuilder:
     def _model_for(units: tuple[ExtractedEvidence, ...]) -> tuple[str, str | None]:
         evidence_types = {unit.evidence_type for unit in units}
         if "video_segment" in evidence_types:
-            configured_model = (os.getenv("VIDEO_MODEL_NAME") or "").strip()
+            configured_model = (
+                os.getenv("VIDEO_MODEL_NAME") or os.getenv("MODEL_NAME") or "openai/gpt-4o-mini"
+            ).strip()
             api_key = (
                 os.getenv("VIDEO_MODEL_API_KEY")
                 or os.getenv("MODEL_API_KEY")
                 or os.getenv("OPENAI_API_KEY")
             )
-            if not configured_model:
-                raise ValueError("VIDEO_MODEL_NAME is required for video knowledge generation.")
         elif "image" in evidence_types:
             configured_model = (
                 os.getenv("IMAGE_MODEL_NAME") or os.getenv("MODEL_NAME") or "openai/gpt-4o-mini"
@@ -292,19 +361,20 @@ class KnowledgeBuilder:
     ) -> KnowledgeBuildResult:
         response = cast(
             ModelResponse,
-            await acompletion(
+            await litellm.acompletion(  # pyright: ignore[reportUnknownMemberType]
                 model=model,
                 api_key=api_key,
                 messages=[{"role": "system", "content": instruction}, *messages],
                 response_format=KnowledgeBuildResult,
-                temperature=0,
-                max_tokens=8192,
+                **completion_parameters(model, config.model_max_output_tokens, temperature=0),
                 timeout=config.model_timeout_seconds,
                 num_retries=config.model_num_retries,
             ),
         )
         if not response.choices or response.choices[0].finish_reason != "stop":
             reason = response.choices[0].finish_reason if response.choices else "no choices"
+            if reason == "length":
+                raise KnowledgeOutputLimitError("Knowledge generation reached its output limit.")
             raise RuntimeError(
                 f"Knowledge Builder did not return a complete structured response ({reason})."
             )

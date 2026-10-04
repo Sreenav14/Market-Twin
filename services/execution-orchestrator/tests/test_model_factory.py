@@ -21,6 +21,7 @@ def test_create_model_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> Non
         captured.update(model=model, **kwargs)
         return object()
 
+    monkeypatch.delenv("MODEL_REASONING_EFFORT", raising=False)
     monkeypatch.delenv("MODEL_PROVIDER", raising=False)
     monkeypatch.delenv("MODEL_NAME", raising=False)
     monkeypatch.delenv("MODEL_API_KEY", raising=False)
@@ -31,7 +32,7 @@ def test_create_model_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert captured == {
         "model": DEFAULT_OPENAI_MODEL_NAME,
-        "max_tokens": DEFAULT_MAX_TOKENS,
+        "max_completion_tokens": DEFAULT_MAX_TOKENS,
         "num_retries": DEFAULT_OPENAI_NUM_RETRIES,
     }
 
@@ -120,6 +121,7 @@ def test_resolved_openai_configuration_is_safe(
         "super-secret-key",
     )
 
+    monkeypatch.delenv("MODEL_REASONING_EFFORT", raising=False)
     configuration = (
         resolve_model_runtime_configuration()
     )
@@ -139,3 +141,46 @@ def test_resolved_openai_configuration_is_safe(
     assert "super-secret-key" not in str(
         configuration.snapshot_parameters()
     )
+
+
+def test_openai_reasoning_configuration_reaches_agent_and_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def capture_model(model: str, **kwargs: Any) -> object:
+        captured.update(model=model, **kwargs)
+        return object()
+
+    monkeypatch.setenv("MODEL_PROVIDER", "openai")
+    monkeypatch.setenv("MODEL_NAME", "openai/gpt-6-luna")
+    monkeypatch.setenv("MODEL_REASONING_EFFORT", "none")
+    monkeypatch.setattr(model_factory, "LiteLlm", capture_model)
+    create_model()
+    assert captured["reasoning_effort"] == "none"
+    assert captured["allowed_openai_params"] == ["reasoning_effort"]
+    assert captured["max_completion_tokens"] == DEFAULT_MAX_TOKENS
+    configuration = resolve_model_runtime_configuration()
+    assert configuration.snapshot_parameters()["reasoning_effort"] == "none"
+
+
+def test_provider_qualified_model_selects_litellm_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def capture_model(model: str, **kwargs: Any) -> object:
+        captured.update(model=model, **kwargs)
+        return object()
+
+    monkeypatch.setenv("MODEL_PROVIDER", "openai")
+    monkeypatch.setenv("MODEL_NAME", "anthropic/configured-model")
+    monkeypatch.setenv("MODEL_API_KEY", "provider-key")
+    monkeypatch.setenv("MODEL_REASONING_EFFORT", "none")
+    monkeypatch.setattr(model_factory, "LiteLlm", capture_model)
+    create_model()
+    assert resolve_model_runtime_configuration().provider == "anthropic"
+    assert captured["model"] == "anthropic/configured-model"
+    assert captured["max_tokens"] == DEFAULT_MAX_TOKENS
+    assert captured["api_key"] == "provider-key"
+    assert "reasoning_effort" not in captured

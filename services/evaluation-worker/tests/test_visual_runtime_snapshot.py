@@ -11,6 +11,7 @@ from pytest import MonkeyPatch
 def test_build_visual_runtime_snapshot_payload(
     monkeypatch: MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("MODEL_REASONING_EFFORT", raising=False)
     monkeypatch.setenv(
         "VISUAL_MODEL_NAME",
         "gpt-4o-mini",
@@ -52,7 +53,7 @@ def test_build_visual_runtime_snapshot_payload(
     ] == VISUAL_TEMPERATURE
 
     assert payload.model_configuration[
-        "max_tokens"
+        "max_completion_tokens"
     ] == VISUAL_MAX_TOKENS
 
     assert payload.model_configuration[

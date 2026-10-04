@@ -12,13 +12,13 @@ export function DeleteAction({
   name,
   onDeleted,
   disabled = false,
+  workspaceId,
 }: {
-  kind: "test" | "target" | "application";
   id: string;
   name: string;
   onDeleted: () => void;
   disabled?: boolean;
-}) {
+} & ({ kind: "knowledge"; workspaceId: string } | { kind: "test" | "target" | "application"; workspaceId?: never })) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +32,9 @@ export function DeleteAction({
     setBusy(true);
     setError(null);
     try {
-      await {
+      if (kind === "knowledge") {
+        await api.deleteIngestion(workspaceId, id);
+      } else await {
         test: api.deleteRun,
         target: api.deleteTarget,
         application: api.deleteApplication,
@@ -53,6 +55,16 @@ export function DeleteAction({
         predicate: (query) =>
           ["run", "results"].includes(String(query.queryKey[0])) &&
           query.queryKey.includes(id),
+      });
+    }
+    if (kind === "knowledge") {
+      queryClient.removeQueries({
+        predicate: (query) =>
+          ["knowledge-review", "knowledge-source"].includes(String(query.queryKey[0])) &&
+          query.queryKey.includes(workspaceId) && query.queryKey.includes(id),
+      });
+      await queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === "ingestion" && query.queryKey.includes(workspaceId),
       });
     }
     await queryClient.invalidateQueries({ queryKey: ["workspace-tests"] });
@@ -113,10 +125,12 @@ export function DeleteAction({
         >
           <Dialog.Title>Delete {kind}?</Dialog.Title>
           <Dialog.Description className="delete-description">
-            {kind === "test"
+            {kind === "knowledge"
+              ? "This removes the set from your knowledge library and future test selection. Existing tests keep their saved knowledge and source history."
+              : kind === "test"
               ? "This permanently removes the test and its results and evidence records."
-              : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its tests first." : "Delete its tests and targets first."}`}{" "}
-            This cannot be undone.
+              : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its tests first." : "Delete its tests and targets first."}`}
+            {kind !== "knowledge" ? " This cannot be undone." : null}
           </Dialog.Description>
           <p className="delete-item-name">{name}</p>
           {error ? (

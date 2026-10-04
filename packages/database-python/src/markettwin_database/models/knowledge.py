@@ -19,7 +19,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from markettwin_database.base import Base
 
@@ -101,6 +101,75 @@ class ProductBlueprint(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class IngestionEntry(Base):
+    """Generated knowledge awaiting review for one source-backed Blueprint Version."""
+
+    __tablename__ = "ingestion_entries"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id", name="uq_ingestion_entries_workspace_id_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "blueprint_id", "id"],
+            [
+                "knowledge.blueprint_versions.workspace_id",
+                "knowledge.blueprint_versions.blueprint_id",
+                "knowledge.blueprint_versions.id",
+            ],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "blueprint_id", "asset_version_id"],
+            [
+                "knowledge.asset_versions.workspace_id",
+                "knowledge.asset_versions.blueprint_id",
+                "knowledge.asset_versions.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        {"schema": "knowledge"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    workspace_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), nullable=False, index=True
+    )
+    blueprint_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    asset_version_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), nullable=False
+    )
+    preview: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    application_links: Mapped[list["ApplicationKnowledgeEntry"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class ApplicationKnowledgeEntry(Base):
+    """Attach a reviewed workspace knowledge set to an application."""
+
+    __tablename__ = "application_knowledge_entries"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "application_id"],
+            ["testing.applications.workspace_id", "testing.applications.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "ingestion_entry_id"],
+            ["knowledge.ingestion_entries.workspace_id", "knowledge.ingestion_entries.id"],
+            ondelete="CASCADE",
+        ),
+        {"schema": "knowledge"},
+    )
+    workspace_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    application_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    ingestion_entry_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    attached_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("core.users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

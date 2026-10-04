@@ -9,6 +9,7 @@ from pytest import MonkeyPatch
 def test_build_meta_runtime_snapshot_payload(
     monkeypatch: MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("MODEL_REASONING_EFFORT", raising=False)
     monkeypatch.setenv(
         "MODEL_PROVIDER",
         "openai",

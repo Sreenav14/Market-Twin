@@ -24,6 +24,11 @@ function breadcrumbItems(path: string) {
   const parts = path.split("/").filter(Boolean);
   const section = parts[0];
   if (section === "overview") return [{ label: "Overview", href: "/overview" }];
+  if (section === "ingestion") return [{ label: "Ingestion", href: "/ingestion" }];
+  if (section === "knowledge") return [
+    { label: "Review knowledge", href: "/knowledge/review" },
+    ...(parts[2] ? [{ label: "Knowledge set", href: path }] : []),
+  ];
   if (section === "runs")
     return [
       { label: "Tests", href: "/runs" },
@@ -181,6 +186,22 @@ export function AppShell({
           >
             <Icon name="home" />
             <span>Overview</span>
+          </NavLink>
+          <NavLink
+            to="/ingestion"
+            aria-label="Ingestion"
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+          >
+            <Icon name="ingestion" />
+            <span>Ingestion</span>
+          </NavLink>
+          <NavLink
+            to="/knowledge/review"
+            aria-label="Review knowledge"
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+          >
+            <Icon name="knowledge" />
+            <span>Review knowledge</span>
           </NavLink>
           <NavLink
             to="/applications"

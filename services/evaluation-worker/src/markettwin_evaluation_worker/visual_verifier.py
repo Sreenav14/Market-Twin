@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from litellm import acompletion  # pyright: ignore[reportUnknownVariableType]
+import litellm
 from litellm.exceptions import RateLimitError
+from markettwin_shared.model_parameters import completion_parameters
 from markettwin_shared.runtime_snapshot import (
     AgentRuntimeSnapshotPayload,
 )
@@ -90,9 +91,8 @@ def _image_data_url(
 def _visual_model_name() -> str:
     """Return the model reserved for visual verification."""
 
-    model = os.getenv(
-        "VISUAL_MODEL_NAME",
-        DEFAULT_VISUAL_MODEL,
+    model = (
+        os.getenv("VISUAL_MODEL_NAME") or os.getenv("MODEL_NAME") or DEFAULT_VISUAL_MODEL
     ).strip()
 
     if not model:
@@ -113,7 +113,7 @@ async def _acompletion_with_rate_limit_retry(
 
     for attempt in range(VISUAL_RATE_LIMIT_MAX_ATTEMPTS):
         try:
-            return await acompletion(**request)
+            return await litellm.acompletion(**request)  # pyright: ignore[reportUnknownMemberType]
         except RateLimitError:
             if attempt == VISUAL_RATE_LIMIT_MAX_ATTEMPTS - 1:
                 raise
@@ -169,8 +169,9 @@ async def verify_visual_criterion(
                 "content": content,
             }
         ],
-        "temperature": VISUAL_TEMPERATURE,
-        "max_tokens": VISUAL_MAX_TOKENS,
+        **completion_parameters(
+            _visual_model_name(), VISUAL_MAX_TOKENS, temperature=VISUAL_TEMPERATURE,
+        ),
         "response_format": {
             "type": "json_object",
         },
@@ -287,8 +288,7 @@ def build_visual_runtime_snapshot_payload(
         model_provider=model_provider,
         model_name=model_name,
         model_configuration={
-            "temperature": VISUAL_TEMPERATURE,
-            "max_tokens": VISUAL_MAX_TOKENS,
+            **completion_parameters(model_name, VISUAL_MAX_TOKENS, temperature=VISUAL_TEMPERATURE),
             "response_format": {
                 "type": "json_object",
             },

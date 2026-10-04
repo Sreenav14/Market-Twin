@@ -65,6 +65,10 @@ export function OverviewPage() {
           </Button>
         </p>
       ) : null}
+      <section className="panel knowledge-intro" aria-label="Prepare knowledge for testing">
+        <div><h2>Prepare knowledge for your tests</h2><p className="muted">Ingest source material, review what MarketTwin learns, then select approved knowledge when creating a test.</p></div>
+        <div className="inline-actions"><Link className="secondary-button" to="/ingestion">Ingest knowledge</Link><Link className="text-link" to="/knowledge/review">Review knowledge</Link></div>
+      </section>
       {applications.length === 0 ? (
         <EmptyState
           title="Add your first application"

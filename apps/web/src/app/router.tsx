@@ -8,6 +8,9 @@ import { OverviewPage } from "../pages/overview/OverviewPage";
 import { ApplicationsPage } from "../pages/applications/ApplicationsPage";
 import { NewApplicationPage } from "../pages/applications/NewApplicationPage";
 import { ApplicationOverviewPage } from "../pages/applications/ApplicationOverviewPage";
+import { IngestionPage } from "../pages/knowledge/IngestionPage";
+import { ReviewKnowledgePage } from "../pages/knowledge/ReviewKnowledgePage";
+import { KnowledgeReviewPage } from "../pages/knowledge/KnowledgeReviewPage";
 import { ApplicationRunsPage } from "../pages/applications/ApplicationRunsPage";
 import { EditApplicationPage } from "../pages/applications/EditApplicationPage";
 import { TargetsPage } from "../pages/targets/TargetsPage";
@@ -55,11 +58,18 @@ export function AuthenticatedRouter({
           element={<Navigate to="/overview" replace />}
         />
         <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/ingestion" element={<IngestionPage />} />
+        <Route path="/knowledge/review" element={<ReviewKnowledgePage />} />
+        <Route path="/knowledge/review/:entryId" element={<KnowledgeReviewPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/applications/new" element={<NewApplicationPage />} />
         <Route
           path="/applications/:applicationId"
           element={<ApplicationOverviewPage />}
+        />
+        <Route
+          path="/applications/:applicationId/knowledge"
+          element={<Navigate to="/ingestion" replace />}
         />
         <Route
           path="/applications/:applicationId/edit"

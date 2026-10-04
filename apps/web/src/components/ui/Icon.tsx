@@ -12,6 +12,8 @@ import {
   Check,
   UserRound,
   Building2,
+  Upload,
+  BookOpenCheck,
 } from "lucide-react";
 
 const icons = {
@@ -28,6 +30,8 @@ const icons = {
   check: Check,
   user: UserRound,
   workspace: Building2,
+  ingestion: Upload,
+  knowledge: BookOpenCheck,
 };
 export type IconName = keyof typeof icons;
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {

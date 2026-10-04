@@ -12,15 +12,25 @@ class SkillDefinition(BaseModel):
 
     intent: str = Field(min_length=1, max_length=1000)
 
-    preconditions: tuple[str, ...] = ()
-    inputs: tuple[str, ...] = ()
-    constraints: tuple[str, ...] = ()
+    preconditions: tuple[str, ...] = Field(
+        default=(), description="Only source-stated prerequisites. Empty when not established."
+    )
+    inputs: tuple[str, ...] = Field(
+        default=(), description="Only source-stated inputs. Empty when not established."
+    )
+    constraints: tuple[str, ...] = Field(
+        default=(), description="Only source-stated rules or limits. Empty when not established."
+    )
 
     expected_outcomes: tuple[str, ...] = Field(
         min_length=1,
+        description="Observable results explicitly established by the source for this capability.",
     )
 
-    failure_signals: tuple[str, ...] = ()
+    failure_signals: tuple[str, ...] = Field(
+        default=(),
+        description="Only failures stated or demonstrated in the source. Otherwise empty.",
+    )
 
 
 class GeneratedSkillDraft(BaseModel):
@@ -33,7 +43,10 @@ class GeneratedSkillDraft(BaseModel):
         max_length=255,
     )
 
-    definition: SkillDefinition
+    definition: SkillDefinition = Field(
+        description="A source-established actionable capability with an observable outcome. "
+        "Component labels and architectural arrows alone are context, not a Skill."
+    )
 
     evidence_ordinals: tuple[Annotated[int, Field(gt=0, strict=True)], ...] = Field(
         min_length=1,
@@ -54,7 +67,12 @@ class ApplicationKnowledgeDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(
+        min_length=1,
+        max_length=4000,
+        description="Source-established facts and relationships only. A named component does not "
+        "establish its conventional purpose. Merge overlapping summaries of the same concept.",
+    )
     evidence_ordinals: tuple[Annotated[int, Field(gt=0, strict=True)], ...] = Field(
         min_length=1,
     )
@@ -69,8 +87,15 @@ class ProcedureArtifactDraft(BaseModel):
 
     name: str = Field(min_length=1, max_length=255)
     kind: Literal["procedure", "artifact"]
-    content: str = Field(min_length=1, max_length=4000)
-    steps: tuple[str, ...] = ()
+    content: str = Field(
+        min_length=1,
+        max_length=4000,
+        description="Reusable source-supported rules, transitions, or structure beyond a summary. "
+        "Merely describing the existence of a diagram or document is not an artifact.",
+    )
+    steps: tuple[str, ...] = Field(
+        default=(), description="Only an explicit source-established sequence; otherwise empty."
+    )
     evidence_ordinals: tuple[Annotated[int, Field(gt=0, strict=True)], ...] = Field(
         min_length=1,
     )
@@ -83,6 +108,17 @@ class KnowledgeBuildResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    application_knowledge: tuple[ApplicationKnowledgeDraft, ...]
-    artifacts: tuple[ProcedureArtifactDraft, ...]
-    skills: tuple[GeneratedSkillDraft, ...]
+    application_knowledge: tuple[ApplicationKnowledgeDraft, ...] = Field(
+        description="The smallest useful set of distinct source-grounded context items. Merge "
+        "overview/component summaries about the same concept. Empty if none is established."
+    )
+    artifacts: tuple[ProcedureArtifactDraft, ...] = Field(
+        description="Only distinct reusable structure established by the source. Empty is normal. "
+        "Do not create an artifact merely because the source is a diagram or a document."
+    )
+    skills: tuple[GeneratedSkillDraft, ...] = Field(
+        description="Every source-established capability with actions, rules, "
+        "and observable outcomes, including formal requirements. "
+        "Empty only when no capability is established. "
+        "Labels, components, and arrows alone do not establish a Skill."
+    )

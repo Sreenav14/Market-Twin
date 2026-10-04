@@ -21,6 +21,7 @@ async def browser_get_state() -> dict[str, object]:
 def test_build_persona_runtime_snapshot_payload(
     monkeypatch: MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("MODEL_REASONING_EFFORT", raising=False)
     monkeypatch.setenv(
         "MODEL_PROVIDER",
         "openai",

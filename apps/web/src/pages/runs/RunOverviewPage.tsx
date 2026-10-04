@@ -160,6 +160,12 @@ export function RunOverviewPage() {
             </dd>
           </div>
           <div>
+            <dt>Knowledge</dt>
+            <dd>{Array.isArray(run.configuration_snapshot.knowledge) && run.configuration_snapshot.knowledge.length
+              ? run.configuration_snapshot.knowledge.map((entry: unknown) => typeof entry === "object" && entry !== null ? textValue((entry as Record<string, unknown>).name, "Knowledge set") : "Knowledge set").join(", ")
+              : "No knowledge selected"}</dd>
+          </div>
+          <div>
             <dt>Test identifier</dt>
             <dd>
               <span className="monospace">{run.id}</span>{" "}
