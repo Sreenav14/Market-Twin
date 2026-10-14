@@ -105,12 +105,11 @@ def valid_case_evidence(
 def grounded_failure(
     case: TestCaseSpec, plan: DeepFeaturePlan, trusted_scope: FeatureScope | None
 ) -> bool:
-    if trusted_scope is None or plan.scope != trusted_scope or case.preconditions:
+    grounded = [item for item in case.expected if item.origin != "inferred"]
+    if trusted_scope is None or plan.scope != trusted_scope or case.preconditions or not grounded:
         return False
     requirements = {item.requirement_id: item for item in trusted_scope.requirements}
-    for assertion in case.expected:
-        if assertion.origin == "inferred":
-            continue
+    for assertion in grounded:
         refs = [requirements.get(reference) for reference in assertion.requirement_refs]
         source = "fixture" if assertion.origin == "fixture_truth" else "approved_knowledge"
         if not refs or any(item is None or item.source != source for item in refs):
@@ -309,7 +308,12 @@ async def evaluate_deep_run(
         "planned": len(entries),
         "executed": sum(entry.get("execution_id") is not None for entry in entries),
         "passed": counts["satisfied"],
-        "failed_assertions": counts["not_satisfied"],
+        "failed_assertions": sum(
+            assertion.get("status") == "not_satisfied"
+            for entry in entries
+            for assertion in entry.get("assertions", [])
+            if isinstance(assertion, dict)
+        ),
         "blocked": counts["blocked"],
         "inconclusive": counts["unverified"],
         "not_run": counts["not_run"],

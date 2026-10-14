@@ -6,9 +6,9 @@ import json
 import time
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from markettwin_database.models import AgentExecution, ExecutionStep, PersonaJourney
+from markettwin_database.models import AgentExecution, ExecutionStep, PersonaJourney, TestRun
 from markettwin_shared.deep_testing import CaseExecutionResult
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,6 +108,34 @@ def case_journey(case: TestCaseSpec) -> PersonaJourneySpec:
     )
 
 
+def authorized_scope_snapshot(
+    snapshot: dict[str, object],
+    scope: FeatureScope,
+) -> dict[str, object]:
+    """Return the snapshot containing the exact scope the executor is allowed to run."""
+    existing = snapshot.get("feature_scope")
+    payload = scope.model_dump(mode="json")
+    if existing is None:
+        return {**snapshot, "feature_scope": payload}
+    if FeatureScope.model_validate(existing) != scope:
+        raise ValueError("Feature scope does not match the authorized snapshot.")
+    return snapshot
+
+
+async def freeze_authorized_scope(
+    session: AsyncSession,
+    test_run_id: UUID,
+    scope: FeatureScope,
+) -> None:
+    run = await session.get(TestRun, test_run_id)
+    if run is None:
+        raise ValueError("Authorized test run is missing.")
+    updated = authorized_scope_snapshot(dict(run.configuration_snapshot), scope)
+    if updated != dict(run.configuration_snapshot):
+        run.configuration_snapshot = updated
+        await session.commit()
+
+
 def skip_reason(
     *,
     remaining_seconds: float,
@@ -136,7 +164,11 @@ def coverage_summary(
         "executed": len(results),
         "covered": sum(bool(item.assertion_results) for item in results),
         "passed": sum(item.verdict == "satisfied" for item in results),
-        "failed_assertions": sum(item.verdict == "not_satisfied" for item in results),
+        "failed_assertions": sum(
+            assertion.status == "not_satisfied"
+            for item in results
+            for assertion in item.assertion_results
+        ),
         "blocked": sum(item.execution_status == "policy_blocked" for item in results),
         "inconclusive": sum(
             item.verdict == "unverified" and item.execution_status != "policy_blocked"
@@ -167,6 +199,7 @@ async def execute_deep_feature_run(
         validate_target_url(origin, request.allowed_origins, request.network_policy)
     if request.fixture_truth and request.network_policy != "local_development":
         raise ValueError("Fixture truth requires an explicit local development request.")
+    await freeze_authorized_scope(session, request.run_id, scope)
     budget = PlanBudget.model_validate(request.feature_budget or {})
     planning = DeepFeaturePlanningRequest(
         test_run_id=request.run_id,

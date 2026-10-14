@@ -55,6 +55,13 @@ Pre-existing long lines in control-api case tests and deep_run.py were left
 unchanged. No model experiment, authorized external application, migration,
 commit, push, or deployment was run.
 
+Ordinary deep runs now freeze the validated feature scope into the run snapshot
+before execution. The evaluator still confirms a finding only when that same scope
+contains the matching requirement assertion. Inferred expectations stay
+unconfirmed. Case action rows use the persisted step status, and failed-assertion
+counts count individual checks. Deep mode remains opt-in, and the executor remains
+deterministic until an accuracy benchmark justifies bounded recovery.
+
 Still open: T09 has no measured model/budget winner because no paid model matrix
 was run. T10 has no reviewed form, list/filter, and navigation proof on authorized
 applications. T12 has no live backend-to-browser participant trial. T13 release

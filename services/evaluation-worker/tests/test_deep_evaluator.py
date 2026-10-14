@@ -63,6 +63,12 @@ def test_exact_observation_actions_and_source_support_case() -> None:
     assert valid_case_evidence(case, result, steps, artifacts)
     assert grounded_failure(case, plan, plan.scope)
     assert not grounded_failure(case, plan, None)
+    inferred_assertion = case.expected[0].model_copy(
+        update={"origin": "inferred", "requirement_refs": ()}
+    )
+    inferred = case.model_copy(update={"expected": (inferred_assertion,)})
+    inferred_plan = plan.model_copy(update={"cases": (inferred,)})
+    assert not grounded_failure(inferred, inferred_plan, plan.scope)
 
 
 @pytest.mark.parametrize("fault", ["artifact_step", "artifact_owner", "step_owner", "observed",

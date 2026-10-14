@@ -4,7 +4,13 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
-from markettwin_database.models import AgentExecution, PersonaJourney, Report, RunEvent
+from markettwin_database.models import (
+    AgentExecution,
+    ExecutionStep,
+    PersonaJourney,
+    Report,
+    RunEvent,
+)
 from markettwin_shared.deep_testing import CaseExecutionResult
 from markettwin_shared.feature_plan import DeepFeaturePlan
 from pydantic import ValidationError
@@ -84,6 +90,28 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
         except ValidationError:
             continue
         recorded[parsed.case_id] = (parsed, row[1])
+    step_ids = [
+        step_id
+        for observed, _journey in recorded.values()
+        for step_id in (
+            *observed.action_step_ids,
+            *(item.step_id for item in observed.assertion_results),
+        )
+    ]
+    statuses: dict[int, str] = {}
+    if step_ids:
+        status_rows = (
+            await session.execute(
+                select(ExecutionStep.id, ExecutionStep.status)
+                .join(AgentExecution, AgentExecution.id == ExecutionStep.execution_id)
+                .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
+                .where(
+                    PersonaJourney.test_run_id == run_id,
+                    ExecutionStep.id.in_(step_ids),
+                )
+            )
+        ).all()
+        statuses = {int(row[0]): str(row[1]) for row in status_rows}
     rows: list[dict[str, object]] = []
     for ordinal, case in enumerate(plan.cases, start=1):
         final = completed.get(case.case_id, {})
@@ -99,7 +127,7 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
                     {
                         "step_id": step_id,
                         "action": actions[index] if index < len(actions) else "recorded",
-                        "result": "completed",
+                        "result": statuses.get(step_id, "unavailable"),
                     }
                     for index, step_id in enumerate(observed.action_step_ids)
                 ),

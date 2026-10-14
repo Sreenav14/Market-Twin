@@ -101,6 +101,7 @@ async def test_recorded_result_is_visible_but_not_confirmed() -> None:
         execute=AsyncMock(side_effect=[
             SimpleNamespace(all=lambda: []),
             SimpleNamespace(all=lambda: [(recorded.model_dump(mode="json"), journey_id)]),
+            SimpleNamespace(all=lambda: [(11, "policy_blocked")]),
         ]),
     )
     response = await deep_cases.case_view(session, uuid4())
@@ -109,7 +110,7 @@ async def test_recorded_result_is_visible_but_not_confirmed() -> None:
     assert shown["verdict"] == "awaiting_verification"
     assert shown["recorded_verdict"] == "unverified"
     assert shown["journey_id"] == str(journey_id)
-    assert shown["steps"] == [{"step_id": 11, "action": "navigate", "result": "completed"}]
+    assert shown["steps"] == [{"step_id": 11, "action": "navigate", "result": "policy_blocked"}]
 
 
 async def test_case_steps_reject_invalid_pages(monkeypatch) -> None:
