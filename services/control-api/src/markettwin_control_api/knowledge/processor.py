@@ -87,7 +87,7 @@ class IngestionProcessor:
                 await KnowledgeSourceStorage(self.settings).download(
                     bucket=bucket, key=key, stream=stream
                 )
-                result = await KnowledgeWorkerClient(self.settings).preview(
+                result = await self._preview_with_retry(
                     filename=filename, content_type=content_type, stream=stream
                 )
         except KnowledgeWorkerError as error:
@@ -100,6 +100,30 @@ class IngestionProcessor:
             )
         else:
             await self._save(connection, workspace_id, entry_id, result=result)
+
+    async def _preview_with_retry(
+        self, *, filename: str, content_type: str | None, stream: BinaryIO,
+    ) -> KnowledgePreviewResponse:
+        client = KnowledgeWorkerClient(self.settings)
+        for attempt in range(3):
+            stream.seek(0)
+            try:
+                return await client.preview(
+                    filename=filename, content_type=content_type, stream=stream,
+                )
+            except KnowledgeWorkerError as error:
+                terminal = (
+                    error.status_code not in {502, 503, 504}
+                    or error.message.startswith("Knowledge generation reached its output limit.")
+                )
+                if terminal or attempt == 2:
+                    raise
+                logger.warning(
+                    "Knowledge worker returned %s; retrying attempt %s of 3",
+                    error.status_code, attempt + 2,
+                )
+                await asyncio.sleep(2 ** (attempt + 1))
+        raise RuntimeError("Knowledge preview exhausted its retry attempts.")
 
     @staticmethod
     async def _save(

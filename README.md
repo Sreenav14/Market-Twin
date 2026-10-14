@@ -12,13 +12,23 @@
 
 MarketTwin is an **evidence-grounded agentic product-testing platform**.
 
+**Current implementation:** See [MKT.md](MKT.md) for the active V1 plan and
+[docs/CURRENT_STATE.md](docs/CURRENT_STATE.md) for the verified checkpoint.
+`deep_feature_v1` is an opt-in feature-case mode with deterministic assertions.
+It does not replace legacy persona runs, and model/budget experiments plus
+authorized multi-feature benchmarks remain unmeasured.
+The sections below also describe target architecture; they are not all delivered
+capabilities. Interactive human-assisted authentication, production deployment,
+and expanded infrastructure are deferred. Automatic detection accuracy remains
+an unresolved release gate. See [the current evidence contract](docs/V1_PRODUCT_CONTRACT.md).
+
 A user teaches MarketTwin how a product is intended to work by creating a **Product Blueprint** and uploading multiple videos, documents, spreadsheets, screenshots, business rules, test files, expected outputs, and safety policies. MarketTwin converts those sources into structured evidence, product knowledge, reusable Skills, editable Agent Blueprints, and Mission Templates.
 
 The user then creates an **Application Target** for an authorized public, staging, QA, demo, local, or production application. A version-pinned **Test Plan** connects the approved Blueprint, target, mission, agents, persona policy, test assets, safety rules, and execution limits.
 
-MarketTwin executes the approved mission using Google ADK, Playwright MCP, direct Playwright, Kafka, and deterministic policy enforcement. Public pages can be tested automatically. Protected flows use **human-in-the-loop authentication**: the agent pauses, the user completes login, signup, password reset, OTP, MFA, SSO, magic-link, or CAPTCHA steps in the same isolated browser, MarketTwin verifies success, and the agent resumes in that same browser context.
+Current execution uses Google ADK agents and controlled browser tools backed by the Python Playwright BrowserController, with Kafka orchestration and deterministic target/network policy enforcement. Public, authorized targets can be tested automatically. Interactive login, OTP, MFA, SSO, CAPTCHA and browser takeover are deferred; the design for them later in this document is a roadmap.
 
-Every report is backed by exact evidence such as source timestamps, document pages, spreadsheet rows, browser steps, screenshots, accessibility snapshots, console errors, network failures, traces, and deterministic assertions.
+Reports preserve links to available recorded evidence. Missing or inconclusive evidence keeps observations under Needs Verification. Repeated synthetic-persona claims do not confirm a product defect or contribute to confirmed bug totals.
 
 ---
 

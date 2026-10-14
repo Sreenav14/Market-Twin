@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 test("ingest, review, and select approved knowledge before test creation", async ({ page }, testInfo) => {
-  test.setTimeout(60000);
+  test.setTimeout(90000);
   const entry = {
     id: "knowledge-one", workspace_id: "workspace", name: "Product requirements", source_name: "requirements.txt",
     status: "draft", roles: ["product_knowledge"], created_at: "2026-10-03T10:00:00Z", approved_at: null,
@@ -59,11 +59,16 @@ test("ingest, review, and select approved knowledge before test creation", async
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
     const audit = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
     expect(audit.violations).toEqual([]);
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      window.scrollTo(0, 0);
+    });
     await page.screenshot({ path: testInfo.outputPath(`${name}.png`), fullPage: true });
   }
   await page.goto("/ingestion");
   await expect(page.getByRole("heading", { name: "Ingestion", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Ingestion", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Knowledge", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Workspace navigation", includeHidden: true }).getByRole("link", { name: "Ingestion", exact: true, includeHidden: true })).toHaveCount(1);
   await inspect("ingestion");
   await page.getByLabel("Source file", { exact: true }).setInputFiles({ name: "requirements.txt", mimeType: "text/plain", buffer: Buffer.from("Account creation requires an email address.") });
   await page.getByLabel("Source purpose").selectOption("product_knowledge");
@@ -79,6 +84,8 @@ test("ingest, review, and select approved knowledge before test creation", async
   await expect(page.getByText("Account requirements", { exact: true })).toBeVisible();
   await expect(page.getByText("Lines 1–4 · text", { exact: true })).toBeVisible();
   expect((await page.getByText("Lines 1–4 · text", { exact: true }).boundingBox())!.width).toBeGreaterThan(100);
+  await page.locator(".knowledge-grounding").getByRole("link", { name: "Evidence 1", exact: true }).click();
+  await expect(page.getByText("Account creation requires an email address.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve knowledge" })).toBeDisabled();
   await inspect("review");
   await page.getByRole("checkbox").check();
@@ -91,6 +98,14 @@ test("ingest, review, and select approved knowledge before test creation", async
   await page.goto("/knowledge/review");
   await expect(page.locator(".row-primary strong").filter({ hasText: "Unreviewed source" })).toBeVisible();
   await inspect("review-list");
+  await page.getByLabel("Knowledge status").selectOption("approved");
+  await expect(page.getByRole("link", { name: "Product requirements", exact: true })).toBeVisible();
+  await expect(page.getByText("Unreviewed source", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Search knowledge").fill("missing source");
+  await expect(page.getByRole("heading", { name: "No matching knowledge" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page.getByRole("link", { name: "Unreviewed source", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Knowledge status")).toHaveValue("all");
   await page.goto("/ingestion");
   await expect(page.locator(".row-primary strong").filter({ hasText: "Product requirements" })).toBeVisible();
   await inspect("sources-list");

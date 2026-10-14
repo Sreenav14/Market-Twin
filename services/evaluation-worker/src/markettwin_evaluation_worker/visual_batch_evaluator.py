@@ -206,6 +206,7 @@ async def evaluate_visual_criteria_for_run(
                     criterion=reference.criterion,
                     evidence=explicit_visual_evidence,
                     storage=storage,
+                    execution_context=evidence,
                 )
             )
 

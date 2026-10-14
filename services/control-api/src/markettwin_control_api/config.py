@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     s3_endpoint_url: str = "http://localhost:9000"
     s3_bucket: str = "markettwin-local"
     s3_region: str = "us-east-1"
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: SecretStr | None = None
+    aws_session_token: SecretStr | None = None
     
     model_config = SettingsConfigDict(
         env_file = ".env",

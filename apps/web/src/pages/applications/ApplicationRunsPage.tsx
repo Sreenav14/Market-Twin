@@ -11,7 +11,7 @@ import {
 } from "../../components/ui/StateViews";
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
 import { api } from "../../lib/api";
-import { testBrief, textValue } from "../../lib/format";
+import { testTitle, textValue } from "../../lib/format";
 import { canDeleteTest } from "../../lib/results";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
@@ -83,7 +83,7 @@ export function ApplicationRunsPage() {
                   <Icon name="runs" size={16} />
                 </span>
                 <div className="row-primary">
-                  <strong>{testBrief(run.configuration_snapshot)}</strong>
+                  <strong>{testTitle(run)}</strong>
                   <span>
                     {textValue(
                       run.target_snapshot.name,
@@ -98,7 +98,7 @@ export function ApplicationRunsPage() {
                 <DeleteAction
                   kind="test"
                   id={run.id}
-                  name={testBrief(run.configuration_snapshot)}
+                  name={testTitle(run)}
                   disabled={!canDeleteTest(run.status)}
                   onDeleted={() => {
                     setRevision((value) => value + 1);

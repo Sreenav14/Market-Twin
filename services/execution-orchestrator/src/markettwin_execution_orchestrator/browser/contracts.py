@@ -8,6 +8,18 @@ from uuid import UUID
 MAX_MODEL_ARIA_SNAPSHOT_CHARS = 2_000
 
 NetworkPolicy = Literal["public_only", "local_development"]
+ScopeRole = Literal["form", "region", "dialog", "listitem", "navigation"]
+
+
+@dataclass(frozen=True, slots=True)
+class FormFieldState:
+    label: str
+    input_type: str
+    required: bool
+    enabled: bool
+    checked: bool | None
+    selected_options: tuple[int, ...]
+    valid: bool | None
 BrowserSessionState = Literal[
     "starting",
     "open",
@@ -102,12 +114,17 @@ class BrowserObservation:
     action_number: int = 0
     screenshot_path: str | None = None
     focused_screenshot_path: str | None = None
+    form_fields: tuple[FormFieldState, ...] = ()
+    truncated: bool = False
+    more_available: bool = False
 
 
     def to_dict(self) -> dict[str, object]:
         """Return an ADK/tool-safe dictionary."""
         result = asdict(self)
         if len(self.aria_snapshot) > MAX_MODEL_ARIA_SNAPSHOT_CHARS:
+            result["truncated"] = True
+            result["more_available"] = True
             result["aria_snapshot"] = (
                 self.aria_snapshot[:MAX_MODEL_ARIA_SNAPSHOT_CHARS]
                 + "\n# Snapshot truncated for model context; full snapshot is stored as evidence."

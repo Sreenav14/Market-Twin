@@ -6,7 +6,7 @@ import { FindingListItem } from "../../components/markettwin/FindingListItem";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { EmptyState } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
-import { severityOrder, sortFindings } from "../../lib/results";
+import { findingClassification, isConfirmedFinding, severityOrder, sortFindings } from "../../lib/results";
 
 export function RunFindingsPage() {
   const { run, results } = useOutletContext<RunContext>();
@@ -52,7 +52,7 @@ export function RunFindingsPage() {
               Prioritize what matters, then inspect the references behind it.
             </p>
           </div>
-          <span className="muted">{findings.length} total</span>
+          <span className="muted">{findings.filter(isConfirmedFinding).length} confirmed · {findings.length} total records</span>
         </div>
         {findings.length > 0 ? (
           <>
@@ -121,15 +121,24 @@ export function RunFindingsPage() {
               {filtered.length} of {findings.length} findings
             </p>
             {filtered.length ? (
-              <ul className="finding-list">
-                {filtered.map((finding) => (
-                  <FindingListItem
-                    key={finding.id}
-                    finding={finding}
-                    runId={run.id}
-                  />
-                ))}
-              </ul>
+              <>
+                {([
+                  ["Confirmed issues", "Visually verified issue"],
+                  ["Needs Verification", "Needs Verification"],
+                  ["Test execution issues", "Test execution issue"],
+                ] as const).map(([heading, classification]) => {
+                  const items = filtered.filter((finding) => findingClassification(finding) === classification);
+                  return items.length ? (
+                    <section key={heading} aria-label={heading}>
+                      <h3>{heading}</h3>
+                      {heading === "Needs Verification" ? <p className="muted">These observations require relevant browser evidence. Agreement between synthetic personas is not independent proof.</p> : null}
+                      <ul className="finding-list">
+                        {items.map((finding) => <FindingListItem key={finding.id} finding={finding} runId={run.id} />)}
+                      </ul>
+                    </section>
+                  ) : null;
+                })}
+              </>
             ) : (
               <EmptyState
                 title="No matching findings"

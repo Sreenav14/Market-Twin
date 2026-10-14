@@ -1,0 +1,14 @@
+.journey-evidence-grid { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.2fr); gap: 24px; margin-block: 28px; align-items: start; }
+.journey-step-list { display: grid; gap: 10px; list-style: none; padding: 0; }
+.journey-step { width: 100%; display: grid; gap: 8px; text-align: left; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; }
+.journey-step > span:first-child { color: var(--text-3); font-size: 12px; }
+.journey-step strong { overflow-wrap: anywhere; }
+.journey-step .status-badge { justify-self: start; }
+.journey-step.selected { border-color: var(--primary); box-shadow: inset 3px 0 var(--primary); background: var(--info-bg); }
+.journey-step[data-status="failed"], .journey-step[data-status="policy_blocked"] { border-left: 3px solid var(--danger); }
+.journey-selected-evidence { position: sticky; top: 20px; min-width: 0; }
+.journey-selected-evidence .monospace { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; }
+.journey-selected-evidence details { margin-top: 18px; }
+.journey-selected-evidence img { max-width: 100%; }
+.outcome-counts { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-block: 20px; color: var(--text-2); text-transform: capitalize; }
+@media (max-width: 760px) { .journey-evidence-grid { grid-template-columns: 1fr; }.journey-selected-evidence { position: static; }.journey-step-list { max-height: 360px; overflow-y: auto; padding: 5px; }.journey-evidence-grid > div { min-width: 0; } }

@@ -17,7 +17,8 @@ API calls the worker, and the worker reuses `extract_source()` and
 `KnowledgeBuilder.build()`. No second generator, prompt, extraction dispatcher,
 or source-specific UI pipeline was introduced.
 
-This is a bounded synchronous ingestion increment. It is not a new Kafka
+This is bounded V1 ingestion with persisted background processing. See
+[the follow-up implementation and verification](INGESTION_BACKGROUND_AND_EVALUATION_FIXES.md). It is not a new Kafka
 ingestion worker or a claim that arbitrary file types and arbitrarily large
 videos are supported. Existing extractor capabilities remain authoritative.
 
@@ -29,11 +30,13 @@ The revised journey uses task-oriented destinations:
 
 1. Open **Ingestion** from the workspace sidebar or Overview.
 2. Choose a source, name the knowledge set, and choose its purpose.
-3. Click **Ingest knowledge**. Processing stays on this page with a visible status.
+3. Click **Ingest knowledge**. After source upload, Review opens with progress;
+   processing continues if the user navigates away.
 4. Review the saved draft on its own page, including source locators and issues.
 5. Download the original source, check the generated content, confirm the source
    purpose, and explicitly approve the set.
-6. Open an Application and create a test. Choose one or more approved sets in the
+6. Attach the approved set to its Applications. Open an Application and create a
+   test. Choose one or more attached approved sets in the
    test form before creating the run and before agent planning begins.
 
 Task-oriented categories and descriptive destination labels improve
@@ -96,15 +99,18 @@ The request path is:
 ```text
 React multipart upload
   -> authenticated workspace Control API
+  -> private source storage + queued database entry
+  -> HTTP 202 + review UI with progress
+
+API-owned dispatcher
   -> private worker preview endpoint
   -> existing extractor + KnowledgeBuilder
-  -> typed result
-  -> private source storage + draft database transaction
-  -> review UI
+  -> saved typed result or safe failure
+  -> polling reveals reviewable knowledge
 ```
 
 The browser sets the multipart boundary itself. Uploads are read in chunks for
-size/hash validation and forwarded from the spooled file, without loading the
+size/hash validation and uploaded from the spooled file, without loading the
 whole original into a Python byte string. The worker writes the temporary source
 in chunks and removes its temporary directory on completion or failure. The
 builder retains ownership of its existing media/clip cleanup.
@@ -116,7 +122,11 @@ All routes below use `/api/v1/workspaces/{workspace_id}/ingestion`:
 | Method and suffix | Behavior |
 | --- | --- |
 | `GET` | List source/set summaries in the authenticated workspace. |
-| `POST` | Accept one multipart `file`, `name`, and one or more `roles`; generate and save a draft. |
+| `POST` | Accept multipart source/name/roles; save a queued draft and return 202. |
+| `PATCH /{entry_id}` | Rename the saved set. |
+| `DELETE /{entry_id}` | Archive the set while preserving saved run/source history. |
+| `POST /{entry_id}/retry` | Requeue a failed entry using its stored original. |
+| `PUT /{entry_id}/applications` | Attach approved knowledge to validated workspace Applications. |
 | `GET /{entry_id}` | Return one saved typed result for review. |
 | `POST /{entry_id}/approve` | Require write access and generated semantic content; approve under a database row lock. |
 | `GET /{entry_id}/source-access` | Authorize workspace access before signing the exact original object for download. |
@@ -126,7 +136,10 @@ cannot ingest or approve. Cross-workspace IDs are not accepted. Empty semantic
 results cannot be approved. Approval records the user and timestamp and confirms
 the pinned source roles.
 
-Errors remain actionable and safe: unavailable worker/storage 503, unsupported
+Upload errors remain actionable and safe. Background worker failures are saved
+for review; 502/503/504 receive bounded automatic retries, while unsupported,
+unreadable, and output-limit errors fail without repeated model calls. Private
+worker status mapping remains: unavailable worker/storage 503, unsupported
 format 415, empty/unsafe/unreadable source 422, size limit 413, model/provider
 failure 502, timeout 504, and duplicate set name 409. Provider details and stack
 traces stay in server logs. Failed database transactions trigger source-object
@@ -270,12 +283,13 @@ A new saved architecture-image draft contains one context item, no artifact,
 and no Skill; the original diagnostic draft remains unapproved and unchanged.
 
 Current limits are one source per new set, whole-set approval, one purpose in
-the UI (the API supports multiple roles), synchronous bounded processing, and
+the UI (the API supports multiple roles), bounded background processing, and
 existing format support. Multi-source revisions, item editing, durable Kafka
 processing/recovery, presigned direct uploads for large media, and normalization
-into individual Skill/Evidence records remain separate work. Closing the page
-does not turn synchronous processing into a background job, and retries should
-not be described as exactly-once ingestion.
+into individual Skill/Evidence records remain separate work. Processing survives
+page navigation. Recovery and retries are not exactly-once model execution.
+V1 approved knowledge is the IngestionEntry.preview snapshot; the experimental
+normalized-draft service is not a competing approved/test-selection path.
 
 Removed **14 temporary UI screenshots** after inspection, together with the
 temporary test directories created for these checks. Stored source files and

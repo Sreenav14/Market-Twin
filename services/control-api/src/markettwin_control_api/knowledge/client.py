@@ -48,6 +48,7 @@ class KnowledgeWorkerClient:
             415: "Unsupported source format.",
             422: "The source could not be read.",
             502: "Knowledge preview failed.",
+            503: "Knowledge processing is unavailable. Please try again.",
             504: "Knowledge preview timed out.",
         }
         if response.status_code >= 400:

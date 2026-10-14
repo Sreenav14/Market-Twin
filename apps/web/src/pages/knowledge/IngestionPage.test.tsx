@@ -52,6 +52,20 @@ async function selectSource() {
 }
 
 describe("workspace ingestion", () => {
+  it("submits a public research link and keeps generated knowledge under review", async () => {
+    const ingest = vi.spyOn(api, "ingestKnowledgeLink").mockResolvedValue(entry);
+    renderPage();
+    const user = userEvent.setup();
+    await user.selectOptions(await screen.findByLabelText("Source type"), "link");
+    expect(screen.queryByLabelText("Source file")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
+    await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
+    await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
+    await user.click(screen.getByRole("button", { name: "Ingest knowledge" }));
+    expect(ingest).toHaveBeenCalledWith("workspace", "https://example.com/docs", "Product docs", ["product_knowledge"]);
+    expect(await screen.findByText("A documented feature")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve knowledge" })).toBeDisabled();
+  });
   it("uploads a source, navigates to review, and requires review confirmation before approval", async () => {
     const ingest = vi.spyOn(api, "ingestKnowledge").mockResolvedValue(entry);
     const approve = vi.spyOn(api, "approveIngestion").mockResolvedValue({ ...entry, status: "approved" });

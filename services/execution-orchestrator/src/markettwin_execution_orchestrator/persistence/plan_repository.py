@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from markettwin_execution_orchestrator.agents.schemas.plan import (
     MetaAgentPlan,
 )
+from markettwin_execution_orchestrator.agents.schemas.test_case import DeepFeaturePlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +224,60 @@ class PlanRepository:
             personas=tuple(persisted_personas),
             missions=tuple(persisted_missions),
             journeys=tuple(persisted_journeys),
+        )
+
+    async def create_from_feature_cases(
+        self, *, test_run_id: UUID, plan: DeepFeaturePlan,
+    ) -> PersistedPlanRecord:
+        """One executor role, mission and independent journey per selected case.
+
+        Skipped candidates stay in the frozen event and have no executable rows.
+        The caller validates plan authority before persistence and owns commit.
+        """
+        if await self._session.get(TestRun, test_run_id) is None:
+            raise ValueError(f'TestRun "{test_run_id}" does not exist.')
+        await self._ensure_plan_not_persisted(test_run_id=test_run_id)
+        persona_id = uuid4()
+        persona_key = "feature_tester_v1"
+        persona = RunPersona(
+            id=persona_id, test_run_id=test_run_id, ordinal=1, name="Feature tester",
+            description="Bounded deterministic execution of approved feature cases.",
+            attributes={"persona_key": persona_key, "executor_role": True,
+                        "plan_schema_version": plan.schema_version},
+        )
+        missions: list[RunMission] = []
+        journeys: list[PersonaJourney] = []
+        mission_records: list[PersistedMissionRecord] = []
+        journey_records: list[PersistedJourneyRecord] = []
+        for ordinal, case in enumerate(plan.cases, start=1):
+            mission_id, journey_id = uuid4(), uuid4()
+            criteria = [f"{item.assertion_id}: {item.oracle} expected {item.expected_value}"
+                        for item in case.expected]
+            missions.append(RunMission(
+                id=mission_id, test_run_id=test_run_id, ordinal=ordinal,
+                title=case.title[:100], objective=case.title, success_criteria=criteria,
+                priority=case.priority,
+            ))
+            journeys.append(PersonaJourney(
+                id=journey_id, test_run_id=test_run_id, persona_id=persona_id,
+                mission_id=mission_id, ordinal=ordinal,
+            ))
+            mission_records.append(PersistedMissionRecord(
+                mission_id=mission_id, mission_key=case.case_id, ordinal=ordinal,
+            ))
+            journey_records.append(PersistedJourneyRecord(
+                journey_id=journey_id, persona_id=persona_id, mission_id=mission_id,
+                journey_key=f"{persona_key}__{case.case_id}", ordinal=ordinal,
+            ))
+        self._session.add_all([persona, *missions])
+        await self._session.flush()
+        self._session.add_all(journeys)
+        await self._session.flush()
+        return PersistedPlanRecord(
+            test_run_id=test_run_id,
+            personas=(PersistedPersonaRecord(persona_id=persona_id,
+                                            persona_key=persona_key, ordinal=1),),
+            missions=tuple(mission_records), journeys=tuple(journey_records),
         )
 
     async def _ensure_plan_not_persisted(

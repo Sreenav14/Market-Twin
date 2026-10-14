@@ -126,6 +126,7 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
         criterion: str,
         evidence: tuple[VisualEvidenceSet, ...],
         storage: VisualArtifactStorage,
+        execution_context: tuple[VisualEvidenceSet, ...] = (),
     ) -> VisualCriterionEvaluation:
         assert test_run_id == expected_test_run_id
         assert journey_id == repository.journey_id
@@ -137,6 +138,7 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
         )
 
         assert len(evidence) == 1
+        assert execution_context == evidence
         assert (
             evidence[0].action_type
             == "capture_element"

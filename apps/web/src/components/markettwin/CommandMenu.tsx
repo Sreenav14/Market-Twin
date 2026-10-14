@@ -31,6 +31,11 @@ const destinations = [
     href: "/runs",
   },
   {
+    title: "Agents",
+    description: "Inspect agent prompts and prepare a rerun",
+    href: "/agents",
+  },
+  {
     title: "Profile settings",
     description: "Your account and workspace",
     href: "/settings/profile",

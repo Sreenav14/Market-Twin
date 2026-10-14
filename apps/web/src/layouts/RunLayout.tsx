@@ -21,9 +21,10 @@ import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { canManageLifecycle } from "../lib/permissions";
 import { Button } from "../components/ui/button";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
-import { testBrief, textValue } from "../lib/format";
+import { testTitle, testReference, textValue } from "../lib/format";
 import { canDeleteTest, terminalTestStatuses } from "../lib/results";
 import { AppShellContext } from "./AppShell";
+import { RunFlowPanel } from "../components/markettwin/RunFlowPanel";
 
 export type ResultsState =
   | { status: "loading" | "waiting"; data: null; error: null }
@@ -120,11 +121,11 @@ export function RunLayout() {
           <ArrowLeft size={15} aria-hidden="true" />
           All tests
         </Link>
-        <span className="monospace">{run.id.slice(0, 8)}</span>
+        <span className="monospace">{testReference(run)}</span>
       </div>
       <PageHeader
         eyebrow="Test"
-        title={testBrief(run.configuration_snapshot)}
+        title={testTitle(run)}
         description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")}`}
         action={
           <div className="header-actions">
@@ -156,7 +157,7 @@ export function RunLayout() {
               <DeleteAction
                 kind="test"
                 id={run.id}
-                name={testBrief(run.configuration_snapshot)}
+                name={testTitle(run)}
                 disabled={!canDeleteTest(run.status)}
                 onDeleted={() => navigate("/runs")}
               />
@@ -178,14 +179,16 @@ export function RunLayout() {
           {startError}
         </p>
       ) : null}
+      <div className="run-workspace">
+      <div className="run-workspace-content">
       <nav className="tab-strip" aria-label="Test sections">
-        {["overview", "findings", "report"].map((tab) => (
+        {["overview", "journeys", "findings", "report"].map((tab) => (
           <NavLink
             key={tab}
             to={`/runs/${run.id}/${tab}`}
             className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}
           >
-            {tab[0].toUpperCase() + tab.slice(1)}
+            {tab === "overview" ? "Summary" : tab[0].toUpperCase() + tab.slice(1)}
             {tab === "findings" && results.status === "ready" ? (
               <span className="tab-count">{results.data.findings.length}</span>
             ) : null}
@@ -195,6 +198,9 @@ export function RunLayout() {
       <Outlet
         context={{ ...appContext, run, results, refresh } satisfies RunContext}
       />
+      </div>
+      <RunFlowPanel runId={run.id} userId={appContext.user.id} runStatus={run.status} reportReady={results.status === "ready"} />
+      </div>
     </>
   );
 }

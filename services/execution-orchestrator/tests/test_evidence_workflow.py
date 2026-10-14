@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -14,9 +16,16 @@ from markettwin_execution_orchestrator.agents.schemas.persona import PersonaSpec
 from markettwin_execution_orchestrator.agents.schemas.plan import MetaAgentPlan
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
 from markettwin_execution_orchestrator.browser.contracts import (
+    BrowserActionResult,
+    BrowserObservation,
     BrowserSessionArtifacts,
     BrowserSessionHandle,
 )
+from markettwin_execution_orchestrator.browser.mcp_tools import (
+    ControlledBrowserMCPTool,
+    connect_controlled_browser_tools,
+)
+from markettwin_execution_orchestrator.browser.tools import BrowserTool, create_browser_tools
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     RunEventRepository,
@@ -24,6 +33,7 @@ from markettwin_execution_orchestrator.persistence import (
     SessionArtifactRecorder,
 )
 from markettwin_execution_orchestrator.persistence.models import RunEvent
+from markettwin_execution_orchestrator.persistence.step_recorder import ExecutionStepRecorder
 from markettwin_execution_orchestrator.workflow import journey_executor, multi_persona_executor
 from markettwin_execution_orchestrator.workflow.journey_planner import build_persona_journeys
 from markettwin_execution_orchestrator.workflow.persona_result import (
@@ -31,7 +41,28 @@ from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyOutcome,
     PersonaJourneyResult,
 )
+from markettwin_shared.runtime_snapshot import AgentRuntimeSnapshotPayload
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@pytest.mark.parametrize("error", [RuntimeError("Upload failed"), asyncio.CancelledError()])
+async def test_failed_evidence_write_rolls_back_without_finishing_step(
+    error: BaseException,
+) -> None:
+    session = MagicMock(spec=AsyncSession)
+    recorder = ExecutionStepRecorder(session=session, execution_id=uuid4(), storage=MagicMock())
+    result = BrowserActionResult(
+        action="get_state",
+        observation=BrowserObservation(
+            url="https://example.com", title="Example", aria_snapshot="",
+            viewport_width=1280, viewport_height=720, scroll_y=0, document_height=720,
+        ),
+    )
+    with patch.object(recorder, "record_evidence", AsyncMock(side_effect=error)):
+        with pytest.raises(type(error)):
+            await recorder.record_failure_evidence(step_id=7, result=result)
+    session.rollback.assert_awaited_once()
+    session.commit.assert_not_awaited()
 
 
 @pytest.fixture
@@ -117,14 +148,8 @@ async def test_result_event_shares_final_execution_commit(
         run_id=uuid4(),
         plan=plan,
         journey_ids_by_key={journey.journey_key: uuid4() for journey in journeys},
-        persona_ids_by_key={
-            persona.persona_id: uuid4()
-            for persona in plan.personas
-        },
-        mission_ids_by_key={
-            mission.mission_id: uuid4()
-            for mission in plan.missions
-        },
+        persona_ids_by_key={persona.persona_id: uuid4() for persona in plan.personas},
+        mission_ids_by_key={mission.mission_id: uuid4() for mission in plan.missions},
         start_url="https://example.com",
         allowed_origins=(AllowedOrigin("https", "example.com"),),
     )
@@ -165,8 +190,20 @@ async def test_result_event_shares_final_execution_commit(
         )
 
     assert actual.journeys == tuple(results)
-    assert [call[0] for call in calls.mock_calls] == ["commit", "finish", "flush", "commit"] * 3
-    for index, call in enumerate(session.add.call_args_list):
+    assert [call[0] for call in calls.mock_calls] == (
+        ["commit", "finish", "flush", "commit"] * 3 + ["flush", "commit"]
+    )
+    assert len(session.add.call_args_list) == 4
+    collection = session.add.call_args_list[-1].args[0]
+    assert collection.event_type == "run.collection"
+    assert collection.journey_id is None and collection.execution_id is None
+    assert collection.payload == {
+        "journey_count": 3,
+        "completed_count": 3 if status == JourneyExecutionStatus.COMPLETED else 0,
+        "failed_count": 0 if status == JourneyExecutionStatus.COMPLETED else 3,
+        "journey_keys": [journey.journey_key for journey in journeys],
+    }
+    for index, call in enumerate(session.add.call_args_list[:-1]):
         event = call.args[0]
         assert isinstance(event, RunEvent)
         assert event.test_run_id == request.run_id
@@ -176,7 +213,11 @@ async def test_result_event_shares_final_execution_commit(
             == repository.finish_agent_execution.call_args_list[index].kwargs["execution_id"]
         )
         assert event.event_type == "journey.result"
-        assert event.payload == {
+    assert event.payload == {
+        "reported_outcome": None,
+        "reported_criterion_evidence": [],
+        "reported_unsatisfied_criteria": [],
+        "report_validation_issues": [],
             "journey_key": journeys[index].journey_key,
             "status": status.value,
             "outcome": outcome.value if outcome is not None else None,
@@ -193,7 +234,17 @@ async def test_result_event_shares_final_execution_commit(
 
 
 @pytest.mark.parametrize(
-    "failure", [None, "completed", "storage", "close", "persist_and_close", "upload"]
+    "failure",
+    [
+        None,
+        "completed",
+        "storage",
+        "close",
+        "persist_and_close",
+        "upload",
+        "mcp_close",
+        "runner_close",
+    ],
 )
 async def test_session_artifacts_after_browser_close(
     plan: MetaAgentPlan,
@@ -215,10 +266,19 @@ async def test_session_artifacts_after_browser_close(
     controller.create_session.return_value = handle
     controller.close_session.return_value = artifacts
     session = MagicMock(spec=AsyncSession)
+    session.scalars.return_value = MagicMock()
+    session.scalars.return_value.all.return_value = []
     repository = MagicMock(spec=ExecutionRepository)
     storage = MagicMock(spec=S3ArtifactStorage)
     recorder = MagicMock(spec=SessionArtifactRecorder)
     factory = MagicMock(spec=MetaAgentFactory)
+    factory.create_persona_runtime.return_value.browser_tools = create_browser_tools(
+        controller=controller, handle=handle
+    )
+    from google.adk.agents import LlmAgent
+    factory.create_persona_runtime.return_value.agent = LlmAgent(
+        name="Agent_2", model="openai/example", instruction="Preserve recorded evidence."
+    )
     runner = MagicMock()
     runner.close = AsyncMock()
     runner.session_service.create_session = AsyncMock()
@@ -226,15 +286,35 @@ async def test_session_artifacts_after_browser_close(
     snapshot_repository.create = AsyncMock()
 
     async def final_events() -> AsyncIterator[MagicMock]:
+        helper = MagicMock()
+        helper.author = "Agent_2_sub_1"
+        helper.is_final_response.return_value = True
+        helper.content.parts = [MagicMock(text="Helper notes are not the structured report.")]
+        yield helper
         event = MagicMock()
+        event.author = "Agent_2"
         event.is_final_response.return_value = True
         event.content.parts = [MagicMock(text='{"outcome":"passed","summary":"Order confirmed"}')]
         yield event
 
     runner.run_async.return_value = final_events()
     # Even a failed Journey must upload evidence once its browser closes successfully.
-    if failure != "completed":
+    if failure not in {"completed", "mcp_close", "runner_close"}:
         factory.create_persona_runtime.side_effect = RuntimeError("Agent failed")
+    if failure == "runner_close":
+        runner.close.side_effect = RuntimeError("Runner close failed")
+    mcp_closed: list[bool] = []
+
+    @asynccontextmanager
+    async def connected_tools(
+        tools: Sequence[BrowserTool],
+    ) -> AsyncIterator[list[ControlledBrowserMCPTool]]:
+        async with connect_controlled_browser_tools(tools) as connected:
+            yield connected
+        mcp_closed.append(True)
+        if failure == "mcp_close":
+            raise RuntimeError("MCP close failed")
+
     calls = MagicMock()
     calls.attach_mock(controller.close_session, "close")
     calls.attach_mock(repository.mark_browser_session_closed, "mark_closed")
@@ -257,9 +337,12 @@ async def test_session_artifacts_after_browser_close(
         patch.object(
             journey_executor,
             "build_persona_runtime_snapshot_payload",
-            return_value=MagicMock(),
+            return_value=AgentRuntimeSnapshotPayload(
+                agent_role="persona", runtime_kind="google_adk"
+            ),
         ),
         patch.object(journey_executor, "InMemoryRunner", return_value=runner),
+        patch.object(journey_executor, "connect_controlled_browser_tools", connected_tools),
         patch.object(
             journey_executor, "SessionArtifactRecorder", return_value=recorder
         ) as recorder_class,
@@ -267,8 +350,11 @@ async def test_session_artifacts_after_browser_close(
     ):
         if failure == "storage":
             from_env.side_effect = RuntimeError("S3_BUCKET must be configured.")
-        if failure in {"close", "persist_and_close", "upload"}:
-            with pytest.raises(RuntimeError, match="Close failed|Upload failed"):
+        if failure in {"close", "persist_and_close", "upload", "mcp_close", "runner_close"}:
+            with pytest.raises(
+                RuntimeError,
+                match="Close failed|Upload failed|MCP close failed|Runner close failed",
+            ):
                 await journey_executor.execute_persona_journey(
                     request=request,
                     browser_controller=controller,
@@ -287,13 +373,23 @@ async def test_session_artifacts_after_browser_close(
                 if failure == "completed"
                 else JourneyExecutionStatus.FAILED
             )
+            if failure == "completed":
+                assert all(
+                    isinstance(tool, ControlledBrowserMCPTool)
+                    for tool in factory.create_persona_runtime.return_value.agent.tools
+                )
+                payload = snapshot_repository.create.call_args.kwargs["payload"]
+                assert payload.metadata["browser_tool_transport"] == "mcp_memory"
 
     controller.close_session.assert_awaited_once_with(
         session_id=handle.session_id,
         execution_id=request.execution_id,
         journey_id=request.journey_id,
     )
-    if failure in {None, "completed", "upload"}:
+    if failure in {"mcp_close", "runner_close"}:
+        assert mcp_closed == [True]
+        runner.close.assert_awaited_once()
+    if failure in {None, "completed", "upload", "mcp_close", "runner_close"}:
         recorder_class.assert_called_once_with(
             session=session,
             execution_id=request.execution_id,

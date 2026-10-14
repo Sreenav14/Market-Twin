@@ -3,12 +3,35 @@ import {
   asRecord,
   canDeleteTest,
   countValue,
+  findingClassification,
+  isConfirmedFinding,
   reportMetrics,
   severityRank,
 } from "./results";
-import type { RunResults } from "./api";
+import type { Finding, RunResults } from "./api";
 
 describe("report data boundaries", () => {
+  it("keeps repeated and legacy claims out of confirmed issue counts", () => {
+    const finding: Finding = {
+      id: "claim", severity: "high", category: "cross_persona_pattern",
+      finding_kind: "not_verified", verification_status: "unverified",
+      title: "Repeated claim", summary: "Two personas reported failure", recommendation: null,
+      status: "open", journey_ids: ["one", "two"], evidence: { step_ids: [7], artifact_ids: ["image"] },
+    };
+    expect(findingClassification(finding)).toBe("Needs Verification");
+    expect(isConfirmedFinding(finding)).toBe(false);
+    const results: RunResults = {
+      test_run_id: "run", findings: [finding], report: {
+        id: "report", version: 1, status: "completed", executive_summary: null,
+        generated_at: null, payload: {},
+      },
+    };
+    expect(reportMetrics(results).criticalCount).toBe(0);
+    expect(isConfirmedFinding({ ...finding, finding_kind: undefined, verification_status: undefined })).toBe(false);
+    const verified = { ...finding, category: "visual_criterion", finding_kind: "observed_product_issue", verification_status: "verified_visual" };
+    expect(isConfirmedFinding(verified)).toBe(true);
+    expect(isConfirmedFinding({ ...verified, evidence: { step_ids: [], artifact_ids: [] } })).toBe(false);
+  });
   it("keeps absent or invalid metrics distinct from zero", () => {
     expect(countValue(undefined)).toBeNull();
     expect(countValue("3")).toBeNull();

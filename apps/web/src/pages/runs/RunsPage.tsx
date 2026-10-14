@@ -9,7 +9,7 @@ import {
 } from "../../components/ui/StateViews";
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
 import { Button } from "../../components/ui/button";
-import { testBrief, textValue } from "../../lib/format";
+import { testTitle, testBrief, textValue } from "../../lib/format";
 import { canDeleteTest } from "../../lib/results";
 import { useWorkspaceTests } from "../../lib/useWorkspaceTests";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
@@ -24,7 +24,7 @@ export function RunsPage() {
   const runs = (state.data?.runs || []).filter(
     (run) =>
       (status === "all" || run.status === status) &&
-      testBrief(run.configuration_snapshot)
+      `${testTitle(run)} ${testBrief(run.configuration_snapshot)}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
@@ -109,7 +109,7 @@ export function RunsPage() {
                 <div className="deletable-row" key={run.id}>
                   <Link className="study-row" to={`/runs/${run.id}/overview`}>
                     <span className="study-row-copy">
-                      <strong>{testBrief(run.configuration_snapshot)}</strong>
+                      <strong>{testTitle(run)}</strong>
                       <span>
                         {textValue(run.target_snapshot.name, "Target")}
                         <span className="monospace">{run.id.slice(0, 8)}</span>
@@ -122,7 +122,7 @@ export function RunsPage() {
                     <DeleteAction
                       kind="test"
                       id={run.id}
-                      name={testBrief(run.configuration_snapshot)}
+                      name={testTitle(run)}
                       disabled={!canDeleteTest(run.status)}
                       onDeleted={() => {
                         void state.refetch();

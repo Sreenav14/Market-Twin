@@ -15,6 +15,7 @@ const app = {
 };
 const run = {
   id: runId,
+  test_number: 42,
   workspace_id: "workspace",
   application_id: appId,
   target_id: targetId,
@@ -26,6 +27,7 @@ const run = {
     requires_auth: false,
   },
   configuration_snapshot: {
+    test_name: "Checkout confidence",
     study_brief: "Can first-time shoppers complete checkout with confidence?",
   },
 };
@@ -140,10 +142,11 @@ async function mockApi(
           : options.emptyRuns
             ? []
             : [{ ...run, status: options.listRunStatus || "completed",
-                configuration_snapshot: { study_brief: options.brief || run.configuration_snapshot.study_brief } }];
+                configuration_snapshot: { ...run.configuration_snapshot, study_brief: options.brief || run.configuration_snapshot.study_brief } }];
     else if (path === `/api/v1/test-runs/${runId}`)
       data = { ...run, status: options.runStatus || "completed",
-        configuration_snapshot: { study_brief: options.brief || run.configuration_snapshot.study_brief } };
+        configuration_snapshot: { ...run.configuration_snapshot, study_brief: options.brief || run.configuration_snapshot.study_brief } };
+    else if (path === `/api/v1/test-runs/${runId}/flow`) data = { nodes: [], edges: [], revision: "fixture", execution_policy: "once_per_journey" };
     else if (path === `/api/v1/test-runs/${runId}/results`) {
       status = options.resultsStatus || 200;
       data =
@@ -176,6 +179,64 @@ async function checkLayoutAndAccessibility(page: Page) {
     .analyze();
   expect(audit.violations).toEqual([]);
 }
+
+test("repeated persona claims stay under Needs Verification and out of confirmed totals", async ({ page }, testInfo) => {
+  await mockApi(page);
+  const observations = [
+    { ...finding, id: "repeated-claim", category: "cross_persona_pattern", severity: "info",
+      finding_kind: "not_verified", verification_status: "unverified",
+      title: "Repeated agent-reported unmet criterion: Confirmation visible",
+      summary: "Two personas reported the same unmet criterion. Agreement between synthetic personas is not independent verification.",
+      journey_ids: ["journey-one", "journey-two"] },
+    { ...finding, id: "missing-evidence", title: "Agent reported failure without evidence",
+      finding_kind: "not_verified", verification_status: "unverified",
+      evidence: { step_ids: [], artifact_ids: [] } },
+    { ...finding, id: "visual-issue", category: "visual_criterion", severity: "medium",
+      finding_kind: "observed_product_issue", verification_status: "verified_visual",
+      title: "Visual criterion not satisfied: Heading readable",
+      summary: "Visual verification found the heading clipped in the cited screenshot." },
+  ];
+  await page.route(`**/api/v1/test-runs/${runId}/results`, (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({ ...results,
+      report: { ...results.report, executive_summary: "One visually verified issue and two observations needing verification." },
+      findings: observations,
+    }),
+  }));
+  await page.route(`**/api/v1/test-runs/${runId}/flow`, (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({
+      nodes: [
+        { id: "meta", kind: "meta", label: "Meta Agent", status: "completed" },
+        { id: "journey:one", kind: "journey", label: "First-time buyer · Checkout", status: "completed" },
+        { id: "journey:two", kind: "journey", label: "Returning buyer · Checkout", status: "completed" },
+        { id: "journey:three", kind: "journey", label: "Guest shopper · Checkout", status: "completed" },
+        { id: "collector", kind: "collector", label: "Collector", status: "completed" },
+        { id: "evaluation", kind: "evaluation", label: "Evaluation", status: "completed" },
+        { id: "report", kind: "report", label: "Report", status: "completed" },
+      ], edges: [
+        { source: "meta", target: "journey:one" },
+        { source: "journey:one", target: "journey:two" },
+        { source: "journey:two", target: "journey:three" },
+        { source: "journey:three", target: "collector" },
+        { source: "collector", target: "evaluation" },
+        { source: "evaluation", target: "report" },
+      ], execution_policy: "once_per_journey", revision: "verification-test-fixture",
+    }),
+  }));
+  await page.goto(`/runs/${runId}/findings`);
+  await expect(page.getByText("1 confirmed · 3 total records")).toBeVisible();
+  const unverified = page.getByRole("region", { name: "Needs Verification" });
+  await expect(unverified.getByRole("heading", { name: observations[0].title })).toBeVisible();
+  await expect(unverified.getByRole("heading", { name: observations[1].title })).toBeVisible();
+  await expect(unverified.getByRole("heading", { name: observations[2].title })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Confirmed issues" }).getByRole("heading", { name: observations[2].title })).toBeVisible();
+  await checkLayoutAndAccessibility(page);
+  await page.screenshot({ path: `../../artifacts/v1/needs-verification-${testInfo.project.name}.png`, fullPage: true });
+  await unverified.getByRole("heading", { name: observations[1].title }).click();
+  await expect(page.getByText(/No evidence references were attached/)).toBeVisible();
+  await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report" }).click();
+  await expect(page.getByText("1 confirmed issues. Severity totals below include confirmed issues only.")).toBeVisible();
+  await expect(page.locator(".severity-summary").getByText("0", { exact: true })).toHaveCount(4);
+});
 
 test("completed test: triage, detail and report", async ({
   page,
@@ -235,7 +296,7 @@ test("409 is an evaluation waiting state", async ({ page }) => {
   await mockApi(page, { resultsStatus: 409 });
   await page.goto(`/runs/${runId}/findings`);
   await expect(
-    page.getByRole("heading", { name: "Evaluation is not available yet" }),
+    page.getByRole("heading", { name: "Preparing evaluation" }),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
@@ -253,7 +314,7 @@ test("a waiting evaluation can recover or surface a later permission error", asy
   await mockApi(page, { resultsStatus: 409 });
   await page.goto(`/runs/${runId}/findings`);
   await expect(
-    page.getByRole("heading", { name: "Evaluation is not available yet" }),
+    page.getByRole("heading", { name: "Preparing evaluation" }),
   ).toBeVisible();
   await page.route(`**/api/v1/test-runs/${runId}/results`, (route) =>
     route.fulfill({
@@ -282,6 +343,10 @@ test("test creation sends a real request with the chosen brief", async ({
   await mockApi(page);
   await page.goto(`/applications/${appId}/runs/new`);
   await expect(page.getByLabel("Your testing goal")).toBeVisible();
+  await page.getByLabel("Test name", { exact: false }).fill("Pricing clarity");
+  await expect(page.getByLabel("Testing depth")).toHaveValue("medium");
+  await page.getByLabel("Testing depth").selectOption("low");
+  await expect(page.locator("#testing-depth-help")).toContainText("1 mission (3 journeys)");
   await page
     .getByRole("button", { name: "Pricing clarity", exact: true })
     .click();
@@ -301,10 +366,13 @@ test("test creation sends a real request with the chosen brief", async ({
   expect((await request).postDataJSON()).toEqual({
     target_id: targetId,
     knowledge_entry_ids: [],
+    testing_depth: "low",
+    name: "Pricing clarity",
     study_brief:
       "Can a first-time customer understand our pricing and confidently choose the right plan?",
   });
   await expect(page).toHaveURL(new RegExp(`/runs/${runId}/overview`));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("MT-000042 · Checkout confidence");
 });
 
 test("target fetch failure cannot trap the test form in loading", async ({

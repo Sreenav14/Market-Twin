@@ -1,0 +1,32 @@
+.agent-prompts-layout { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.agent-prompts-layout > * { min-width: 0; }
+.agent-prompt-list { padding: 16px; display: flex; flex-direction: column; height: min(760px, calc(100dvh - 180px)); min-height: 420px; }
+.agent-flow-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.agent-flow-stage { min-width: 0; padding: 12px 0; }
+.agent-flow-stage + .agent-flow-stage { border-top: 1px solid var(--border); }
+.agent-flow-stage h3 { font-size: 14px; margin: 0 0 8px; }
+.agent-flow-stage > .muted { font-size: 12px; }
+.agent-prompt-list h2 { font-size: 15px; margin-bottom: 16px; }
+.agent-prompt-choice { width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px; border: 1px solid transparent; border-radius: 6px; color: var(--text); background: transparent; cursor: pointer; }
+.agent-prompt-choice > * { min-width: 0; overflow-wrap: anywhere; }
+.agent-prompt-heading > div { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.agent-prompt-choice span { color: var(--text-2); font-size: 12px; }
+.agent-prompt-choice:hover { background: var(--surface-hover); }
+.agent-prompt-choice.is-selected { background: var(--surface-muted); border-color: var(--border-strong); }
+.agent-prompt-heading, .agent-prompt-actions { display: flex; align-items: start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.agent-prompt-heading h2 { font-size: 18px; }
+.agent-prompt-heading p { font-size: 13px; margin: 6px 0 16px; }
+.agent-yaml-input { width: 100%; height: 420px; min-height: 240px; margin: 8px 0 16px; resize: vertical; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; tab-size: 2; white-space: pre; }
+.agent-prompt-history { margin: 16px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.agent-date-filters { display: grid; gap: 10px; margin-bottom: 16px; }
+.agent-date-filters label { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
+.agent-date-filters input, .agent-date-filters select { width: 100%; min-width: 0; }
+.agent-workspace-filters { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 20px; }
+.agent-workspace-filters label { display: grid; gap: 6px; min-width: 180px; font-size: 13px; color: var(--text-2); }
+.agent-workspace-time { display: grid; gap: 5px; font-size: 12px; color: var(--text-2); }
+@container (max-width: 680px) {
+  .agent-prompts-layout { grid-template-columns: 1fr; }
+  .agent-prompt-list { height: 420px; min-height: 0; }
+}
+@media (max-width: 760px) { .agent-workspace-filters label { flex: 1 1 100%; } }
+@media (max-width: 760px) { .agent-prompts-layout { grid-template-columns: 1fr; } .agent-prompt-list { height: 420px; min-height: 0; } }

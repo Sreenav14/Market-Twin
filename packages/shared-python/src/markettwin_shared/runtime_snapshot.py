@@ -12,6 +12,7 @@ AgentRole = Literal[
     "meta",
     "persona",
     "visual_verifier",
+    "evaluator",
 ]
 
 type SnapshotValue = (

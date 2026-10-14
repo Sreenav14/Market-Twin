@@ -21,7 +21,7 @@ def test_persona_agent_builds_json_response_instruction(
     monkeypatch.setattr(
         persona_agents,
         "create_model",
-        lambda: "openai/gpt-4o-mini",
+        lambda **kwargs: "openai/gpt-4o-mini",
     )
 
     journey = PersonaJourneySpec(
@@ -50,10 +50,10 @@ def test_persona_agent_builds_json_response_instruction(
     instruction = agent.instruction
 
     assert isinstance(instruction, str)
-    assert '"outcome": "passed | failed | partial | inconclusive"' in (
+    assert '"outcome": "inconclusive"' in (
         instruction
     )
-    assert '"final_url": "final browser URL or null"' in (
+    assert '"final_url": null' in (
         instruction
     )
 
@@ -93,7 +93,7 @@ def test_persona_agent_builds_json_response_instruction(
     assert '"criterion_evidence": [' in instruction
 
     assert (
-        '"status": "satisfied | unsatisfied | unverified"'
+        '"status": "unverified"'
         in instruction
     )
 
@@ -116,3 +116,5 @@ def test_persona_agent_builds_json_response_instruction(
         "Use browser_take_screenshot when a visual criterion"
         in instruction
     )
+    assert agent.output_schema is persona_agents.PersonaAgentReport
+    assert "never to the overall outcome" in instruction

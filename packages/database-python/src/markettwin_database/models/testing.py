@@ -4,11 +4,13 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     String,
@@ -227,6 +229,7 @@ class TestRun(Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    test_number: Mapped[int] = mapped_column(BigInteger, Identity(always=True), unique=True)
     workspace_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
     application_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     target_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)

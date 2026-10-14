@@ -20,14 +20,18 @@ from markettwin_evaluation_worker.visual_artifact_storage import (
     VisualArtifactStorage,
 )
 from markettwin_evaluation_worker.visual_batch_evaluator import (
+    JourneyVisualEvaluation,
     VisualBatchEvaluationResult,
 )
+from markettwin_evaluation_worker.visual_evaluation import VisualCriterionEvaluation
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("visual_status", [None, "satisfied", "unsatisfied", "unverified"])
 async def test_workflow_runs_visual_evaluation_before_report(
     monkeypatch: pytest.MonkeyPatch,
+    visual_status,
 ) -> None:
     """Visual verification must run before final report generation."""
 
@@ -45,12 +49,7 @@ async def test_workflow_runs_visual_evaluation_before_report(
     ) -> DeterministicEvaluationResult:
         events.append("deterministic")
 
-        return DeterministicEvaluationResult(
-            test_run_id=test_run_id,
-            finding_ids=(
-                finding_id,
-            )
-        )
+        return DeterministicEvaluationResult(test_run_id=test_run_id, finding_ids=(finding_id,))
 
     async def fake_visual(
         *,
@@ -64,9 +63,25 @@ async def test_workflow_runs_visual_evaluation_before_report(
 
         return VisualBatchEvaluationResult(
             test_run_id=test_run_id,
-            evaluations=(),
+            evaluations=()
+            if visual_status is None
+            else (
+                JourneyVisualEvaluation(
+                    journey_id=test_run_id,
+                    execution_id=visual_snapshot_id,
+                    reported_status="satisfied",
+                    evaluation=VisualCriterionEvaluation(
+                        criterion="The heading is visible",
+                        status=visual_status,
+                        rationale="A recorded pixel-based explanation",
+                        observed_details=("A visible heading",),
+                        evidence_step_id=42,
+                        artifact_ids=(finding_id,),
+                    ),
+                ),
+            ),
         )
-        
+
     async def fake_visual_findings(
         *,
         test_run_id: UUID,
@@ -80,14 +95,34 @@ async def test_workflow_runs_visual_evaluation_before_report(
         *,
         test_run_id: UUID,
         session: AsyncSession,
+        evaluation_records: tuple[dict[str, object], ...],
+        assessment: dict[str, object],
     ) -> GeneratedReportResult:
         events.append("report")
+        assert assessment == {"status": "completed", "test_run_id": str(test_run_id)}
+        if visual_status is None:
+            assert evaluation_records == ()
+        else:
+            assert len(evaluation_records) == 1
+            assert evaluation_records[0]["status"] == visual_status
+            assert evaluation_records[0]["reported_status"] == "satisfied"
+            assert evaluation_records[0]["evidence"] == {
+                "step_ids": [42],
+                "artifact_ids": [str(finding_id)],
+            }
 
         return GeneratedReportResult(
             report_id=report_id,
             test_run_id=test_run_id,
         )
 
+    async def fake_assessment(**kwargs):
+        events.append("assessment")
+        assert kwargs["test_run_id"] == test_run_id
+        assert len(kwargs["evaluation_records"]) == (0 if visual_status is None else 1)
+        return {"status": "completed", "test_run_id": str(test_run_id)}
+
+    monkeypatch.setattr(workflow, "assess_completed_run", fake_assessment)
     monkeypatch.setattr(
         workflow,
         "evaluate_completed_run",
@@ -145,6 +180,7 @@ async def test_workflow_runs_visual_evaluation_before_report(
     )
 
     session = SimpleNamespace(
+        get=AsyncMock(return_value=None),
         commit=AsyncMock(),
         rollback=AsyncMock(),
     )
@@ -154,36 +190,30 @@ async def test_workflow_runs_visual_evaluation_before_report(
         object(),
     )
 
-    result = (
-        await workflow.evaluate_and_generate_report(
-            test_run_id=test_run_id,
-            session=cast(
-                AsyncSession,
-                session,
-            ),
-            visual_storage=storage,
-        )
+    result = await workflow.evaluate_and_generate_report(
+        test_run_id=test_run_id,
+        session=cast(
+            AsyncSession,
+            session,
+        ),
+        visual_storage=storage,
     )
 
     assert events == [
         "deterministic",
         "visual",
         "visual_findings",
+        "assessment",
         "report",
     ]
 
     assert result.test_run_id == test_run_id
 
-    assert result.finding_ids == (
-        finding_id,
-    )
+    assert result.finding_ids == (finding_id,)
 
     assert result.report_id == report_id
 
-    assert (
-        result.visual_evaluation_count
-        == 0
-    )
+    assert result.visual_evaluation_count == (0 if visual_status is None else 1)
 
     assert session.commit.await_count == 2
     session.rollback.assert_not_awaited()

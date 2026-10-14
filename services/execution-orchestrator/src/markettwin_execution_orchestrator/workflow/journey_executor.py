@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from contextlib import AsyncExitStack
+from dataclasses import dataclass, replace
+from typing import cast
 from uuid import UUID, uuid4
 
 from google.adk.runners import InMemoryRunner
@@ -15,6 +17,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from markettwin_execution_orchestrator.agents.configuration import configure_agent
 from markettwin_execution_orchestrator.agents.meta_agent_factory import (
     MetaAgentFactory,
 )
@@ -35,6 +38,7 @@ from markettwin_execution_orchestrator.browser.contracts import NetworkPolicy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserPolicyError,
 )
+from markettwin_execution_orchestrator.browser.mcp_tools import connect_controlled_browser_tools
 from markettwin_execution_orchestrator.persistence import (
     AgentRuntimeSnapshotRepository,
     ExecutionRepository,
@@ -47,6 +51,7 @@ from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyOutcome,
     PersonaJourneyResult,
 )
+from markettwin_execution_orchestrator.workflow.report_validation import validate_execution_report
 
 JOURNEY_APP_NAME = "markettwin_persona_journey"
 
@@ -68,6 +73,8 @@ class PersonaJourneyExecutionRequest:
 
     network_policy: NetworkPolicy = "public_only"
     max_duration_seconds: int = 180
+    prompt_override: dict[str, str] | None = None
+    agent_number: int = 2
 
 
 def _build_journey_prompt(
@@ -130,6 +137,7 @@ async def execute_persona_journey(
     browser_session = None
     runner: InMemoryRunner | None = None
     artifact_storage: S3ArtifactStorage | None = None
+    mcp_resources = AsyncExitStack()
 
     try:
         browser_session = await browser_controller.create_session(
@@ -162,9 +170,35 @@ async def execute_persona_journey(
             browser_session=browser_session,
             step_recorder=step_recorder,
         )
+        snapshot_id = uuid4()
+        # MCP background handlers inherit context when their tasks are created.
+        with use_observability_correlation(
+            test_run_id=request.test_run_id,
+            journey_id=request.journey_id,
+            execution_id=request.execution_id,
+            agent_snapshot_id=snapshot_id,
+            persona_id=request.persona_id,
+            mission_id=request.mission_id,
+            agent_role="persona",
+        ):
+            async with asyncio.timeout(10):
+                mcp_tools = await mcp_resources.enter_async_context(
+                    connect_controlled_browser_tools(runtime.browser_tools)
+                )
+        runtime.agent.tools = list(mcp_tools)
         
-        runtime_prompt = _build_journey_prompt(request)
+        if request.prompt_override is not None:
+            runtime.agent.instruction = request.prompt_override["instruction"]
+        runtime_prompt = (
+            request.prompt_override["runtime_prompt"]
+            if request.prompt_override is not None
+            else _build_journey_prompt(request)
+        )
         
+        root_agent, structure, primary_configuration = configure_agent(
+            runtime.agent, request.prompt_override,
+            name=f"Agent_{request.agent_number}", max_tokens=2048, browser_allowed=True,
+        )
         snapshot_payload = (
             build_persona_runtime_snapshot_payload(
                 journey=request.journey,
@@ -173,9 +207,17 @@ async def execute_persona_journey(
                 runtime_prompt=runtime_prompt,
             )
         )
+        snapshot_payload = replace(
+            snapshot_payload,
+            runtime_agent_name=root_agent.name,
+            model_configuration=cast(
+                dict[str, object], primary_configuration["model_configuration"],
+            ),
+            tools=tuple(cast(list[str], primary_configuration["tools"])),
+            metadata={**snapshot_payload.metadata, "browser_tool_transport": "mcp_memory",
+                      "agent_structure": structure},
+        )
         
-        snapshot_id = uuid4()
-
         await snapshot_repository.create(
             snapshot_id=snapshot_id,
             test_run_id=request.test_run_id,
@@ -187,7 +229,7 @@ async def execute_persona_journey(
         await session.commit()
 
         runner = InMemoryRunner(
-            agent=runtime.agent,
+            agent=root_agent,
             app_name=JOURNEY_APP_NAME,
         )
 
@@ -230,6 +272,7 @@ async def execute_persona_journey(
                 ):
                     if (
                         event.is_final_response()
+                        and event.author == runtime.agent.name
                         and event.content
                         and event.content.parts
                     ):
@@ -242,13 +285,24 @@ async def execute_persona_journey(
         if not final_response_parts:
             raise RuntimeError("Persona Agent returned no final Journey response.")
 
-        report = _parse_persona_report("\n".join(final_response_parts))
+        reported = _parse_persona_report("\n".join(final_response_parts))
+        validation = await validate_execution_report(
+            report=reported, success_criteria=request.journey.mission.success_criteria,
+            execution_id=request.execution_id, session=session,
+        )
+        report = validation.report
 
         return PersonaJourneyResult(
             journey=request.journey,
-            status=JourneyExecutionStatus.COMPLETED,
-            outcome=JourneyOutcome(report.outcome),
-            summary=report.summary,
+            status=(JourneyExecutionStatus.POLICY_BLOCKED if validation.policy_blocked
+                    else JourneyExecutionStatus.COMPLETED),
+            outcome=None if validation.policy_blocked else JourneyOutcome(report.outcome),
+            reported_outcome=JourneyOutcome(reported.outcome),
+            reported_criterion_evidence=reported.criterion_evidence,
+            reported_unsatisfied_criteria=reported.unsatisfied_criteria,
+            report_validation_issues=validation.issues,
+            summary=("Journey blocked by browser policy; the reported outcome was not accepted."
+                     if validation.policy_blocked else report.summary),
             actions=report.actions,
             observations=report.observations,
             friction_points=report.friction_points,
@@ -296,40 +350,44 @@ async def execute_persona_journey(
         )
 
     finally:
-        if runner is not None:
-            await runner.close()
-
-        if browser_session is not None:
+        try:
             try:
-                session_artifacts = await browser_controller.close_session(
-                    session_id=browser_session.session_id,
-                    execution_id=request.execution_id,
-                    journey_id=request.journey_id,
-                )
-
-            except Exception:
-                if browser_session_persisted:
-                    await session.rollback()
-
-                    await execution_repository.mark_browser_session_failed(
-                        browser_session_id=browser_session.session_id,
-                    )
-
-                    await session.commit()
-                raise
-
-            else:
-                if browser_session_persisted:
-                    await execution_repository.mark_browser_session_closed(
-                        browser_session_id=browser_session.session_id,
-                    )
-
-                    await session.commit()
-
-                if artifact_storage is not None:
-                    session_artifact_recorder = SessionArtifactRecorder(
-                        session=session,
+                if runner is not None:
+                    await runner.close()
+            finally:
+                await mcp_resources.aclose()
+        finally:
+            if browser_session is not None:
+                try:
+                    session_artifacts = await browser_controller.close_session(
+                        session_id=browser_session.session_id,
                         execution_id=request.execution_id,
-                        storage=artifact_storage,
+                        journey_id=request.journey_id,
                     )
-                    await session_artifact_recorder.record(session_artifacts)
+
+                except Exception:
+                    if browser_session_persisted:
+                        await session.rollback()
+
+                        await execution_repository.mark_browser_session_failed(
+                            browser_session_id=browser_session.session_id,
+                        )
+
+                        await session.commit()
+                    raise
+
+                else:
+                    if browser_session_persisted:
+                        await execution_repository.mark_browser_session_closed(
+                            browser_session_id=browser_session.session_id,
+                        )
+
+                        await session.commit()
+
+                    if artifact_storage is not None:
+                        session_artifact_recorder = SessionArtifactRecorder(
+                            session=session,
+                            execution_id=request.execution_id,
+                            storage=artifact_storage,
+                        )
+                        await session_artifact_recorder.record(session_artifacts)

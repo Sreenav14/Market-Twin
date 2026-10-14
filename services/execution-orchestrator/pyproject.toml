@@ -17,6 +17,7 @@ dependencies = [
     "pillow>=11,<13",
     "markettwin-shared-python",
     "openinference-instrumentation-google-adk==0.1.28",
+    "mcp>=1.26,<2",
 ]
 
 [tool.uv.sources]

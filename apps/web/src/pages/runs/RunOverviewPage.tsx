@@ -4,8 +4,8 @@ import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { FindingListItem } from "../../components/markettwin/FindingListItem";
 import { CopyButton } from "../../components/markettwin/CopyButton";
-import { reportMetrics, sortFindings } from "../../lib/results";
-import { textValue } from "../../lib/format";
+import { reportMetrics, sortFindings, findingClassification, isConfirmedFinding } from "../../lib/results";
+import { textValue, testBrief } from "../../lib/format";
 
 export function RunOverviewPage() {
   const { run, results } = useOutletContext<RunContext>();
@@ -87,12 +87,15 @@ export function RunOverviewPage() {
                 </Link>
               </div>
               <dl className="result-metrics">
+                <div><dt>Confirmed issues</dt><dd>{results.data.findings.filter(isConfirmedFinding).length}</dd></div>
+                <div><dt>Needs Verification</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Needs Verification").length}</dd></div>
+                <div><dt>Execution issues</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Test execution issue").length}</dd></div>
                 <div>
                   <dt>Journeys evaluated</dt>
                   <dd>{metrics.journeyTotal ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>High priority findings</dt>
+                  <dt>High priority confirmed issues</dt>
                   <dd>{metrics.criticalCount}</dd>
                 </div>
                 <div>
@@ -101,6 +104,7 @@ export function RunOverviewPage() {
                 </div>
               </dl>
             </div>
+            <div className="outcome-counts" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : outcome.replaceAll("_", " ")}: {count}</span>)}</div>
             {results.data.findings.length > 0 ? (
               <section className="section-block">
                 <div className="section-heading">
@@ -143,6 +147,8 @@ export function RunOverviewPage() {
       <details className="study-details">
         <summary>Test configuration</summary>
         <dl className="definition-list">
+          <div><dt>Testing goal</dt><dd>{testBrief(run.configuration_snapshot)}</dd></div>
+          <div><dt>Testing depth</dt><dd>{typeof run.configuration_snapshot.testing_depth === "string" ? run.configuration_snapshot.testing_depth[0].toUpperCase() + run.configuration_snapshot.testing_depth.slice(1) : "Legacy coverage (up to 4 missions)"}</dd></div>
           <div>
             <dt>Target</dt>
             <dd>{textValue(run.target_snapshot.name, "Target")}</dd>
@@ -163,7 +169,7 @@ export function RunOverviewPage() {
             <dt>Knowledge</dt>
             <dd>{Array.isArray(run.configuration_snapshot.knowledge) && run.configuration_snapshot.knowledge.length
               ? run.configuration_snapshot.knowledge.map((entry: unknown) => typeof entry === "object" && entry !== null ? textValue((entry as Record<string, unknown>).name, "Knowledge set") : "Knowledge set").join(", ")
-              : "No knowledge selected"}</dd>
+              : run.configuration_snapshot.knowledge === undefined || Array.isArray(run.configuration_snapshot.knowledge) ? "No knowledge selected" : "Knowledge metadata unavailable"}</dd>
           </div>
           <div>
             <dt>Test identifier</dt>

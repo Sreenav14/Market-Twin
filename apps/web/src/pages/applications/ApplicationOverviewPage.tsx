@@ -10,7 +10,7 @@ import {
 } from "../../components/ui/StateViews";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { api } from "../../lib/api";
-import { testBrief, textValue } from "../../lib/format";
+import { testTitle, textValue } from "../../lib/format";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
 import { AppShellContext } from "../../layouts/AppShell";
@@ -161,7 +161,7 @@ export function ApplicationOverviewPage() {
                   <Icon name="runs" size={16} />
                 </span>
                 <div className="row-primary">
-                  <strong>{testBrief(run.configuration_snapshot)}</strong>
+                  <strong>{testTitle(run)}</strong>
                   <span>
                     {textValue(
                       run.target_snapshot.name,

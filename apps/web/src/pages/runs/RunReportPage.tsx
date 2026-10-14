@@ -4,15 +4,19 @@ import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { RunAssessmentView } from "../../components/markettwin/RunAssessmentView";
+import { FeatureCases } from "../../components/markettwin/FeatureCases";
 import {
   formatDate,
+  findingClassification,
+  isConfirmedFinding,
   reportMetrics,
   severityOrder,
   sortFindings,
 } from "../../lib/results";
 
 export function RunReportPage() {
-  const { run, results } = useOutletContext<RunContext>();
+  const { run, results, user } = useOutletContext<RunContext>();
   const data = results.status === "ready" ? results.data : null;
   const metrics = data ? reportMetrics(data) : null;
   return (
@@ -23,6 +27,7 @@ export function RunReportPage() {
             <span className="section-label">In this report</span>
             <a href="#report-summary">Executive summary</a>
             <a href="#report-outcomes">Journey outcomes</a>
+            <a href="#report-assessment">Overall assessment</a>
             <a href="#report-findings">Findings</a>
             <a href="#report-scope">Scope & provenance</a>
           </nav>
@@ -50,6 +55,8 @@ export function RunReportPage() {
                   "No executive summary was included in this report."}
               </p>
             </section>
+            <RunAssessmentView assessment={data.report.payload.assessment} runId={run.id} />
+            {data.report.payload.mode === "deep_feature_v1" ? <FeatureCases runId={run.id} userId={user.id} /> : null}
             <section id="report-outcomes">
               <h3>Journey outcomes</h3>
               <p>
@@ -77,10 +84,11 @@ export function RunReportPage() {
             </section>
             <section id="report-findings">
               <h3>Findings</h3>
+              <p>{data.findings.filter(isConfirmedFinding).length} confirmed issues. Severity totals below include confirmed issues only.</p>
               <div className="severity-summary">
                 {severityOrder.map((severity) => {
                   const count = data.findings.filter(
-                    (finding) => finding.severity === severity,
+                    (finding) => isConfirmedFinding(finding) && finding.severity === severity,
                   ).length;
                   return (
                     <span key={severity}>
@@ -101,6 +109,7 @@ export function RunReportPage() {
                     <div>
                       <StatusBadge status={finding.severity} />
                       <span className="category-label">
+                        {findingClassification(finding)} ·{" "}
                         {finding.category.replaceAll("_", " ")}
                       </span>
                     </div>

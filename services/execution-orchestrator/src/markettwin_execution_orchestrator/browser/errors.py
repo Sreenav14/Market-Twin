@@ -36,6 +36,10 @@ class BrowserSessionStateError(BrowserRuntimeError):
 class BrowserActionError(BrowserRuntimeError):
     """Raised when an approved browser action cannot be completed."""
 
+    def __init__(self, message: str, *, reason_code: str = "action_failed") -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+
 
 class BrowserNavigationError(BrowserActionError):
     """Raised when navigation fails after policy approval."""

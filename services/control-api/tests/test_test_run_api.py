@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -366,8 +366,10 @@ async def test_create_test_run_rejects_target_without_active_authorization(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("testing_depth", ["low", "medium", "high"])
 async def test_create_test_run_snapshots_active_authorization(
     monkeypatch: pytest.MonkeyPatch,
+    testing_depth: str,
 ) -> None:
     """A successful Test Run records the authorization active at creation."""
 
@@ -390,6 +392,7 @@ async def test_create_test_run_snapshots_active_authorization(
     )
 
     expected_configuration: dict[str, object] = {
+        "testing_depth": testing_depth,
         "study_brief": (
             "Evaluate the shopping and checkout experience."
         ),
@@ -427,6 +430,7 @@ async def test_create_test_run_snapshots_active_authorization(
         application.application_id,
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
+            testing_depth=cast(Literal["low", "medium", "high"], testing_depth),
             study_brief=(
                 "Evaluate the shopping and checkout experience."
             ),

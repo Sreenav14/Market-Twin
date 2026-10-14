@@ -109,10 +109,14 @@ async def test_unsatisfied_visual_result_creates_finding() -> None:
 
     assert evidence == (
         EvidenceReference(
+            step_id=7,
             artifact_id=viewport_id,
+            execution_id=execution_id,
         ),
         EvidenceReference(
+            step_id=7,
             artifact_id=crop_id,
+            execution_id=execution_id,
         ),
     )
 

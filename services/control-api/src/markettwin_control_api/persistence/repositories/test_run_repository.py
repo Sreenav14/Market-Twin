@@ -30,6 +30,7 @@ class TestRunRecord:
     updated_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+    test_number: int | None = None
 
 
 def _to_record(
@@ -50,6 +51,7 @@ def _to_record(
         updated_at=test_run.updated_at,
         started_at=test_run.started_at,
         completed_at=test_run.completed_at,
+        test_number=test_run.test_number,
     )
 
 

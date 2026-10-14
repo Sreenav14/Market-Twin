@@ -46,6 +46,8 @@ async def test_evaluation_claim_retry_and_completion(
     else:
         evaluate.assert_not_awaited()
     if state != "busy":
+        query = session.scalar.await_args.args[0]
+        assert "completed" in query.compile().params.values()
         connection.rollback.assert_awaited_once()
         assert "pg_advisory_unlock" in str(connection.execute.await_args.args[0])
     else:

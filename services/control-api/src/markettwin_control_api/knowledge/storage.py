@@ -31,7 +31,13 @@ class S3SourceSession(Protocol):
 class KnowledgeSourceStorage:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.s3_bucket
-        self._client = cast(S3SourceSession, Session()).client(
+        self._client = cast(S3SourceSession, Session(
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=(settings.aws_secret_access_key.get_secret_value()
+                                   if settings.aws_secret_access_key else None),
+            aws_session_token=(settings.aws_session_token.get_secret_value()
+                               if settings.aws_session_token else None),
+        ) if settings.aws_access_key_id else Session()).client(
             "s3",
             endpoint_url=settings.s3_endpoint_url,
             region_name=settings.s3_region,

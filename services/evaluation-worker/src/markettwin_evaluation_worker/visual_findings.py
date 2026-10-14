@@ -36,7 +36,9 @@ async def persist_visual_findings(
 
         evidence = tuple(
             EvidenceReference(
+                step_id=evaluation.evidence_step_id,
                 artifact_id=artifact_id,
+                execution_id=item.execution_id,
             )
             for artifact_id in evaluation.artifact_ids
         )

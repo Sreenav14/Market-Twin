@@ -3,15 +3,48 @@
 from pathlib import Path
 from typing import TypedDict, cast
 
+from playwright.async_api import Locator
+
 from markettwin_execution_orchestrator.browser.contracts import (
     BrowserObservation,
     ElementBoundingBox,
+    FormFieldState,
     VisibleElement,
 )
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 MAX_VISIBLE_ELEMENTS = 80
 MAX_VISIBLE_ELEMENT_NAME_CHARS = 160
+MAX_FORM_FIELDS = 40
+
+
+async def inspect_form_fields(root: Locator) -> tuple[tuple[FormFieldState, ...], bool]:
+    controls = root.locator("input:not([type=hidden]), select, textarea")
+    count = await controls.count()
+    fields: list[FormFieldState] = []
+    for index in range(min(count, MAX_FORM_FIELDS)):
+        control = controls.nth(index)
+        raw = cast(dict[str, object], await control.evaluate("""element => ({
+            label: (element.getAttribute('aria-label') || Array.from(element.labels || [])
+                .map(label => label.textContent).join(' ') || '').slice(0,160),
+            input_type: element.type || element.tagName.toLowerCase(),
+            required: !!element.required, enabled: !element.matches(':disabled') &&
+                element.getAttribute('aria-disabled') !== 'true',
+            checked: ['checkbox','radio'].includes(element.type) ? element.checked : null,
+            valid: element.validity ? element.validity.valid : null
+        })"""))
+        # Values and validationMessage are deliberately never read. Selection is
+        # represented as option positions rather than potentially sensitive text.
+        selected = tuple(cast(list[int], await control.evaluate(
+            "element => Array.from(element.selectedOptions || []).map(option => option.index)"
+        )))
+        fields.append(FormFieldState(
+            label=str(raw["label"]), input_type=str(raw["input_type"]),
+            required=bool(raw["required"]), enabled=bool(raw["enabled"]),
+            checked=cast(bool | None, raw["checked"]), selected_options=selected,
+            valid=cast(bool | None, raw["valid"]),
+        ))
+    return tuple(fields), count > MAX_FORM_FIELDS
 
 
 class RawElementBox(TypedDict):
@@ -44,13 +77,18 @@ async def build_observation(
     *,
     screenshot_path: Path | None = None,
     focused_screenshot_path: Path | None = None,
+    aria_snapshot_override: str | None = None,
+    form_fields: tuple[FormFieldState, ...] = (),
+    more_available: bool = False,
 ) -> BrowserObservation:
     """Return current page state and drain per-action error buffers."""
 
     try:
-        aria_snapshot = await session.page.locator("body").aria_snapshot(
-            timeout=session.timeout_ms,
-        )
+        aria_snapshot = aria_snapshot_override
+        if aria_snapshot is None:
+            aria_snapshot = await session.page.locator("body").aria_snapshot(
+                timeout=session.timeout_ms,
+            )
     except Exception:
         aria_snapshot = ""
 
@@ -80,7 +118,7 @@ async def build_observation(
         await session.page.evaluate(
             f"""
             () => {{
-                const MAX_ELEMENTS = {MAX_VISIBLE_ELEMENTS};
+                const MAX_ELEMENTS = {MAX_VISIBLE_ELEMENTS + 1};
                 const MAX_NAME = {MAX_VISIBLE_ELEMENT_NAME_CHARS};
 
                 const selectors = [
@@ -314,7 +352,7 @@ async def build_observation(
                 height=element["bounding_box"]["height"],
             ),
         )
-        for element in raw_visible_elements
+        for element in raw_visible_elements[:MAX_VISIBLE_ELEMENTS]
     )
 
     observation = BrowserObservation(
@@ -348,6 +386,9 @@ async def build_observation(
             if focused_screenshot_path
             else None
         ),
+        form_fields=form_fields,
+        truncated=more_available or len(raw_visible_elements) > MAX_VISIBLE_ELEMENTS,
+        more_available=more_available or len(raw_visible_elements) > MAX_VISIBLE_ELEMENTS,
     )
     session.event_buffer.console_errors.clear()
     session.event_buffer.page_errors.clear()

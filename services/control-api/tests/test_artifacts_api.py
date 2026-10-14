@@ -256,6 +256,9 @@ async def test_authorized_artifact_returns_temporary_url(
         lambda: SimpleNamespace(
             s3_region="us-east-1",
             s3_endpoint_url="http://localhost:9000",
+            aws_access_key_id=None,
+            aws_secret_access_key=None,
+            aws_session_token=None,
         ),
     )
     monkeypatch.setattr(

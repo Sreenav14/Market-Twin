@@ -1,4 +1,4 @@
-"""DOCX source order and the exact NumPy efficiency regression."""
+"""DOCX source order and complete extraction of a document with many source parts."""
 
 from pathlib import Path
 
@@ -34,12 +34,26 @@ def test_docx_keeps_tables_between_paragraphs(tmp_path: Path) -> None:
     assert result.source_item_count == result.processed_item_count == 4
 
 
-def test_numpy_docx_retains_every_meaningful_part() -> None:
-    path = Path(__file__).resolve().parents[3] / "numpy.docx"
-    document = Document(str(path))
+def test_large_docx_retains_every_meaningful_part(tmp_path: Path) -> None:
+    path = tmp_path / "many-source-parts.docx"
+    document = Document()
+    document.add_heading("Application reference", level=1)
+    for ordinal in range(1, 77):
+        document.add_paragraph(
+            f"Source section {ordinal}: Preserve this independently numbered requirement "
+            "and its context when packing the document into bounded evidence chunks."
+        )
+        if ordinal in (25, 50):
+            table = document.add_table(rows=2, cols=2)
+            table.cell(0, 0).text = f"Section {ordinal}"
+            table.cell(0, 1).text = "Expected behavior"
+            table.cell(1, 0).text = f"Requirement {ordinal}"
+            table.cell(1, 1).text = "Preserve the table in its original position"
+    document.save(str(path))
     result = DocxExtractor().extract(path)
     assert 1 <= len(result.units) <= 3
     assert not result.issues
+    assert result.source_item_count == result.processed_item_count == 79
     text = "\n".join(unit.content_text or "" for unit in result.units)
     for item in document.iter_inner_content():
         if isinstance(item, Paragraph) and item.text.strip():

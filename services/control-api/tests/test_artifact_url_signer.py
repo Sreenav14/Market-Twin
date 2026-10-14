@@ -7,6 +7,17 @@ from markettwin_control_api.evidence.artifact_url_signer import (
 )
 
 
+def test_signer_uses_configured_storage_credentials(monkeypatch) -> None:
+    from markettwin_control_api.evidence import artifact_url_signer as module
+    session = Mock()
+    factory = Mock(return_value=session)
+    monkeypatch.setattr(module, "Session", factory)
+    module.ArtifactUrlSigner(region="us-east-1", endpoint_url="http://localhost:9000",
+                            access_key_id="local-test-key", secret_access_key="local-test-secret")
+    factory.assert_called_once_with(aws_access_key_id="local-test-key",
+                                    aws_secret_access_key="local-test-secret", aws_session_token=None)
+
+
 def test_create_download_url_signs_exact_object() -> None:
     """The signer should grant temporary read access to one exact object."""
 

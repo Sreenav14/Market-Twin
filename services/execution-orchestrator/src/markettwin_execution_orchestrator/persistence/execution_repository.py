@@ -30,13 +30,14 @@ class ExecutionRepository:
         execution_id: UUID,
         journey_id: UUID,
         attempt_number: int = 1,
+        runtime_name: str = "google_adk",
     ) -> None:
         execution = AgentExecution(
             id=execution_id,
             journey_id=journey_id,
             attempt_number=attempt_number,
             status="running",
-            runtime_name="google_adk",
+            runtime_name=runtime_name,
             started_at=_utc_now(),
         )
 

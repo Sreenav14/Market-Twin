@@ -56,6 +56,7 @@ async def test_visual_evidence_is_grouped_by_step_and_kind() -> None:
     step = SimpleNamespace(
         id=7,
         action_type="capture_element",
+        status="completed",
     )
 
     artifact_result = SimpleNamespace(
@@ -95,6 +96,7 @@ async def test_visual_evidence_is_grouped_by_step_and_kind() -> None:
 
     assert evidence_step.step_id == 7
     assert evidence_step.action_type == "capture_element"
+    assert evidence_step.step_status == "completed"
     assert (
         evidence_step.explicitly_requests_visual_verification
         is True

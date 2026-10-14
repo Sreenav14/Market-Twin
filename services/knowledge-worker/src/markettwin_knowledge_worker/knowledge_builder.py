@@ -366,7 +366,10 @@ class KnowledgeBuilder:
                 api_key=api_key,
                 messages=[{"role": "system", "content": instruction}, *messages],
                 response_format=KnowledgeBuildResult,
-                **completion_parameters(model, config.model_max_output_tokens, temperature=0),
+                # LiteLLM types enumerate old effort values; forward the configured API value.
+                **completion_parameters(  # pyright: ignore[reportArgumentType]
+                    model, config.model_max_output_tokens, temperature=0,
+                ),
                 timeout=config.model_timeout_seconds,
                 num_retries=config.model_num_retries,
             ),

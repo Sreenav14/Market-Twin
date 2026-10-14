@@ -34,6 +34,7 @@ def test_create_model_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> Non
         "model": DEFAULT_OPENAI_MODEL_NAME,
         "max_completion_tokens": DEFAULT_MAX_TOKENS,
         "num_retries": DEFAULT_OPENAI_NUM_RETRIES,
+        "temperature": 0.05,
     }
 
 
@@ -81,6 +82,7 @@ def test_create_model_uses_ollama_when_requested(
         "max_tokens": DEFAULT_MAX_TOKENS,
         "num_ctx": DEFAULT_OLLAMA_NUM_CTX,
         "reasoning_effort": "none",
+        "temperature": 0.05,
     }
 
 
@@ -136,6 +138,8 @@ def test_resolved_openai_configuration_is_safe(
     assert configuration.snapshot_parameters() == {
         "max_tokens": 512,
         "num_retries": 2,
+        "requested_temperature": 0.05,
+        "temperature": 0.05,
     }
 
     assert "super-secret-key" not in str(

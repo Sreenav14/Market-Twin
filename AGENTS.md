@@ -63,3 +63,10 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## MarketTwin session continuity
+
+Before continuing the MKT plan, read `docs/CURRENT_STATE.md` for the latest
+checkpoint and `docs/SESSION_HANDOFF.md` for decisions, evidence, and reference
+documents. Preserve the user's sequential plan and existing workspace changes.
+Update these records before ending a session or approaching its token limit.

@@ -97,7 +97,7 @@ class AgentRuntimeSnapshot(Base):
     __tablename__ = "agent_runtime_snapshots"
     __table_args__ = (
         CheckConstraint(
-            "agent_role IN ('meta', 'persona', 'visual_verifier')",
+            "agent_role IN ('meta', 'persona', 'visual_verifier', 'evaluator')",
             name="ck_agent_runtime_snapshots_role_allowed",
         ),
         CheckConstraint(
@@ -421,6 +421,26 @@ class PolicyDecision(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AgentPromptDraft(Base):
+    """A user's saved edit; the original runtime snapshot stays immutable."""
+
+    __tablename__ = "agent_prompt_drafts"
+    __table_args__ = {"schema": "execution"}
+
+    snapshot_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.agent_runtime_snapshots.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("core.users.id", ondelete="CASCADE"), primary_key=True,
+    )
+    prompt_yaml: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
 
 

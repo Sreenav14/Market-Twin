@@ -38,7 +38,7 @@ def test_build_visual_runtime_snapshot_payload(
 
     assert (
         payload.runtime_agent_name
-        == "markettwin_visual_verifier"
+        == "Agent_VisualVerifier_1"
     )
 
     assert payload.model_provider == "openai"

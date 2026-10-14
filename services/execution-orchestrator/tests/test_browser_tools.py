@@ -106,6 +106,11 @@ class FakeRecorder:
     ) -> None:
         self.evidence.append((step_id, result))
 
+    async def record_failure_evidence(
+        self, *, step_id: int, result: BrowserActionResult,
+    ) -> None:
+        await self.record_evidence(step_id=step_id, result=result)
+
 
 @pytest.mark.asyncio
 async def test_concurrent_tools_serialize_recording_and_browser_actions() -> None:
@@ -172,6 +177,25 @@ class PolicyBlockedController(FakeController):
         raise BrowserPolicyError("Target is outside the allowlist.")
 
 
+@pytest.mark.parametrize("name", ["Check contact address", "x" * 161])
+async def test_click_target_summary_is_bounded_and_does_not_record_fill_values(name: str) -> None:
+    recorder = FakeRecorder()
+    tools = create_browser_tools(
+        controller=cast(BrowserController, FakeController()),
+        handle=BrowserSessionHandle(uuid4(), uuid4(), uuid4()),
+        step_recorder=cast(BrowserStepRecorder, recorder),
+    )
+    by_name = {tool.__name__: tool for tool in tools}
+    await by_name["browser_click"](role="button", name=name)
+    await by_name["browser_fill"](label="Contact address", value="private@example.test")
+    summary = recorder.started[0][1]
+    assert summary == (
+        'Click semantic target {"role": "button", "name": "Check contact address"}.'
+        if len(name) <= 160 else "Click a semantic page element."
+    )
+    assert "private@example.test" not in str(recorder.started)
+
+
 class FailingClickController(FakeController):
     def __init__(self, error: Exception) -> None:
         super().__init__()
@@ -179,6 +203,46 @@ class FailingClickController(FakeController):
 
     async def click(self, **kwargs: object) -> BrowserActionResult:
         raise self.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capture_fails", [False, True])
+async def test_failure_evidence_preserves_original_error_and_exact_step(
+    capture_fails: bool,
+) -> None:
+    class CaptureController(FailingClickController):
+        async def get_state(self, **kwargs: object) -> BrowserActionResult:
+            if capture_fails:
+                raise BrowserSessionStateError("Human control or session unavailable.")
+            return await super().get_state(**kwargs)
+
+    controller = CaptureController(BrowserActionError("Original click failure."))
+    recorder = FakeRecorder()
+    handle = BrowserSessionHandle(uuid4(), uuid4(), uuid4())
+    tools = create_browser_tools(
+        controller=cast(BrowserController, controller), handle=handle,
+        step_recorder=cast(BrowserStepRecorder, recorder),
+    )
+    result = await next(tool for tool in tools if tool.__name__ == "browser_click")(
+        role="button", name="Continue",
+    )
+    assert result["status"] == "failed"
+    assert result["error"] == "Original click failure."
+    assert recorder.finished == [(1, "failed", "Original click failure.")]
+    assert recorder.started == [
+        ("click", 'Click semantic target {"role": "button", "name": "Continue"}.'),
+    ]
+    assert result["evidence_status"] == ("unavailable" if capture_fails else "captured")
+    if capture_fails:
+        assert recorder.evidence == []
+        assert "observation" not in result
+    else:
+        assert [step_id for step_id, _ in recorder.evidence] == [1]
+        assert controller.calls == [("get_state", {
+            "session_id": handle.session_id,
+            "execution_id": handle.execution_id,
+            "journey_id": handle.journey_id,
+        })]
 
 
 @pytest.mark.asyncio
@@ -279,6 +343,11 @@ def test_tool_surface_is_least_privilege() -> None:
         "browser_wait",
         "browser_capture_element",
         "browser_take_screenshot",
+        "browser_get_form_state",
+        "browser_focus_next",
+        "browser_set_viewport",
+        "browser_check",
+        "browser_uncheck",
     }
     assert "page_evaluate" not in names
     assert "browser_context_new" not in names

@@ -94,8 +94,10 @@ def test_build_persona_runtime_snapshot_payload(
     assert payload.model_name == "openai/gpt-4o-mini"
 
     assert payload.model_configuration == {
-        "max_tokens": 512,
+        "max_tokens": 2048,
         "num_retries": 2,
+        "requested_temperature": 0.05,
+        "temperature": 0.05,
     }
 
     assert payload.effective_instruction == (

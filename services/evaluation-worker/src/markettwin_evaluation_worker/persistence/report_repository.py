@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from markettwin_database.models import (
+    AgentExecution,
+    Artifact,
+    ExecutionStep,
     Finding,
+    FindingEvidence,
     FindingJourney,
     Report,
     TestRun,
@@ -27,6 +31,7 @@ class ReportFindingRecord:
     summary: str
     recommendation: str | None
     journey_ids: tuple[UUID, ...]
+    has_visual_evidence: bool = False
 
 
 class ReportRepository:
@@ -115,6 +120,19 @@ class ReportRepository:
             list[UUID],
         ] = {}
 
+        visual_evidence_ids = set((await self._session.scalars(
+            select(FindingEvidence.finding_id)
+            .join(Artifact, Artifact.id == FindingEvidence.artifact_id)
+            .join(ExecutionStep, (ExecutionStep.id == Artifact.step_id)
+                  & (ExecutionStep.execution_id == Artifact.execution_id))
+            .join(AgentExecution, AgentExecution.id == Artifact.execution_id)
+            .join(FindingJourney, (FindingJourney.finding_id == FindingEvidence.finding_id)
+                  & (FindingJourney.journey_id == AgentExecution.journey_id))
+            .where(
+                FindingEvidence.finding_id.in_(finding_ids), Artifact.artifact_type == "screenshot",
+            )
+        )).all())
+
         for link in journey_links:
             journeys_by_finding.setdefault(
                 link.finding_id,
@@ -131,6 +149,7 @@ class ReportRepository:
                 recommendation=(
                     finding.recommendation
                 ),
+                has_visual_evidence=finding.id in visual_evidence_ids,
                 journey_ids=tuple(
                     journeys_by_finding.get(
                         finding.id,
@@ -148,18 +167,18 @@ class ReportRepository:
         executive_summary: str,
         report_payload: dict[str, object],
     ) -> UUID:
-        report = Report(
-            test_run_id=test_run_id,
-            version=1,
-            status="completed",
-            executive_summary=executive_summary,
-            report_payload=report_payload,
-            generated_at=datetime.now(
-                UTC
-            ),
-        )
-
-        self._session.add(report)
+        report = await self._session.scalar(select(Report).where(
+            Report.test_run_id == test_run_id, Report.version == 1,
+        ))
+        if report is not None and report.status == "completed":
+            return report.id
+        if report is None:
+            report = Report(test_run_id=test_run_id, version=1)
+            self._session.add(report)
+        report.status = "completed"
+        report.executive_summary = executive_summary
+        report.report_payload = report_payload
+        report.generated_at = datetime.now(UTC)
         await self._session.flush()
 
         return report.id

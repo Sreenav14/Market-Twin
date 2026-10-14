@@ -41,13 +41,14 @@ class DeterministicEvaluationResult:
 
 @dataclass(frozen=True, slots=True)
 class CrossJourneyFindingDraft:
-    """Deterministic issue reproduced across multiple personas."""
+    """Unverified claim repeated across multiple synthetic personas."""
 
     severity: str
     category: str
     title: str
     summary: str
     recommendation: str
+    criterion: str
 
     journey_ids: tuple[UUID, ...]
     execution_ids: tuple[UUID, ...]
@@ -139,12 +140,42 @@ def _journey_summary(
         )
 
     if not parts:
-        return (
+        parts.append(
             "The Journey did not produce additional "
             "descriptive details."
         )
 
-    return "\n".join(parts)
+    return "Agent-reported details; not a verified product defect.\n" + "\n".join(parts)
+
+
+def _reported_step_ids(
+    payload: dict[str, object],
+    criterion: str | None = None,
+) -> tuple[int, ...]:
+    """Extract exact cited steps, without inferring evidence from execution recency."""
+    entries: list[object] = []
+    for key in ("criterion_evidence", "reported_criterion_evidence"):
+        raw_entries = payload.get(key)
+        if isinstance(raw_entries, list):
+            entries.extend(cast(list[object], raw_entries))
+    step_ids: list[int] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        item = cast(dict[str, object], entry)
+        text = item.get("criterion")
+        if item.get("status") not in {"unsatisfied", "unverified"}:
+            continue
+        if criterion is not None and (
+            not isinstance(text, str)
+            or _normalize_issue_text(text) != _normalize_issue_text(criterion)
+        ):
+            continue
+        references = item.get("evidence_step_ids")
+        if isinstance(references, list):
+            step_ids.extend(value for value in cast(list[object], references)
+                            if type(value) is int and value > 0)
+    return tuple(dict.fromkeys(step_ids))
 
 
 def build_deterministic_finding(
@@ -220,7 +251,7 @@ def build_deterministic_finding(
             severity="high",
             category="journey_outcome",
             title=(
-                "Journey failed: "
+                "Agent reported journey failure: "
                 f"{journey_key}"
             ),
             summary=_journey_summary(payload),
@@ -236,7 +267,7 @@ def build_deterministic_finding(
             severity="medium",
             category="journey_outcome",
             title=(
-                "Journey only partially completed: "
+                "Agent reported partial completion: "
                 f"{journey_key}"
             ),
             summary=_journey_summary(payload),
@@ -303,13 +334,14 @@ def build_cross_journey_findings(
             result.payload,
             "outcome",
         )
+        reported_outcome = _text(result.payload, "reported_outcome") or outcome
 
         # Infrastructure problems and inconclusive
         # Journeys must not become product-pattern
         # findings.
         if (
             status != "completed"
-            or outcome not in {
+            or reported_outcome not in {
                 "failed",
                 "partial",
             }
@@ -318,7 +350,9 @@ def build_cross_journey_findings(
 
         criteria = _strings(
             result.payload,
-            "unsatisfied_criteria",
+            "reported_unsatisfied_criteria"
+            if isinstance(result.payload.get("reported_unsatisfied_criteria"), list)
+            else "unsatisfied_criteria",
         )
 
         # Prevent one malformed result from counting the
@@ -370,12 +404,6 @@ def build_cross_journey_findings(
 
         criterion = display_text[key]
 
-        severity = (
-            "high"
-            if affected_count == total_count
-            else "medium"
-        )
-
         title_criterion = criterion
 
         if len(title_criterion) > 180:
@@ -386,10 +414,10 @@ def build_cross_journey_findings(
 
         findings.append(
             CrossJourneyFindingDraft(
-                severity=severity,
+                severity="info",
                 category="cross_persona_pattern",
                 title=(
-                    "Repeated unmet criterion: "
+                    "Repeated agent-reported unmet criterion: "
                     f"{title_criterion}"
                 ),
                 summary=(
@@ -397,17 +425,16 @@ def build_cross_journey_findings(
                     f"{total_count} personas testing "
                     "this mission reported the same "
                     "unmet success criterion: "
-                    f'"{criterion}"'
+                    f'"{criterion}". Agreement between synthetic personas '
+                    "is not independent verification. Needs verification; "
+                    "this is not a confirmed product defect."
                 ),
                 recommendation=(
-                    "Review the linked Journeys and "
-                    "their evidence together. Because "
-                    "the same criterion was unmet by "
-                    "multiple personas, prioritize "
-                    "investigating the shared product "
-                    "flow before treating it as an "
-                    "isolated Persona-specific issue."
+                    "Verify this criterion against the cited browser steps. "
+                    "If evidence is unavailable or inconclusive, retain this "
+                    "observation as unverified."
                 ),
+                criterion=criterion,
                 journey_ids=tuple(
                     result.journey_id
                     for result
@@ -454,10 +481,11 @@ async def evaluate_completed_run(
             continue
 
         evidence = (
-            await repository.find_preferred_evidence(
+            await repository.find_reported_evidence(
                 execution_id=(
                     journey_result.execution_id
                 ),
+                step_ids=_reported_step_ids(journey_result.payload),
             )
         )
 
@@ -467,7 +495,10 @@ async def evaluate_completed_run(
             severity=draft.severity,
             category=draft.category,
             title=draft.title,
-            summary=draft.summary,
+            summary=draft.summary + (
+                "\nEvidence unavailable: no valid cited execution steps were found."
+                if not evidence else ""
+            ),
             recommendation=draft.recommendation,
             evidence=evidence,
         )
@@ -485,26 +516,18 @@ async def evaluate_completed_run(
             EvidenceReference
         ] = []
 
+        results_by_execution = {result.execution_id: result for result in journey_results}
         for execution_id in draft.execution_ids:
             evidence = (
-                await repository.find_preferred_evidence(
+                await repository.find_reported_evidence(
                     execution_id=execution_id,
+                    step_ids=_reported_step_ids(
+                        results_by_execution[execution_id].payload, draft.criterion,
+                    ),
                 )
             )
 
-            if (
-                evidence.step_id is None
-                and evidence.artifact_id is None
-            ):
-                raise RuntimeError(
-                    "Cross-persona Finding is missing "
-                    "evidence for execution "
-                    f'"{execution_id}".'
-                )
-
-            evidence_references.append(
-                evidence
-            )
+            evidence_references.extend(evidence)
 
         finding_id = (
             await repository.create_linked_finding(
@@ -513,7 +536,10 @@ async def evaluate_completed_run(
                 severity=draft.severity,
                 category=draft.category,
                 title=draft.title,
-                summary=draft.summary,
+                summary=draft.summary + (
+                    "\nEvidence unavailable: no valid cited execution steps were found."
+                    if not evidence_references else ""
+                ),
                 recommendation=(
                     draft.recommendation
                 ),

@@ -55,6 +55,26 @@ def test_report_counts_journey_outcomes() -> None:
     assert "2 passed" in summary
 
 
+def test_report_retains_success_failure_and_unverified_evidence_records() -> None:
+    artifact_id = str(uuid4())
+    records = tuple(
+        {
+            "status": status,
+            "criterion": "Visible heading",
+            "rationale": "Exact evidence-based rationale",
+            "evidence": {"step_ids": [42], "artifact_ids": [artifact_id]},
+        }
+        for status in ("satisfied", "unsatisfied", "unverified")
+    )
+    _, payload = build_report_payload(
+        test_run_id=uuid4(),
+        journey_results=(),
+        findings=(),
+        evaluation_records=records,
+    )
+    assert payload["evaluation_records"] == list(records)
+
+
 def test_report_orders_high_severity_first() -> None:
     test_run_id = uuid4()
 
@@ -83,9 +103,7 @@ def test_report_orders_high_severity_first() -> None:
 
     _, payload = build_report_payload(
         test_run_id=test_run_id,
-        journey_results=(
-            _journey(outcome="failed"),
-        ),
+        journey_results=(_journey(outcome="failed"),),
         findings=(
             low,
             high,
@@ -123,7 +141,5 @@ def test_clean_run_report_has_no_findings() -> None:
     assert isinstance(findings, dict)
     assert findings["total"] == 0
 
-    assert (
-        "No evidence-backed issue findings"
-        in summary
-    )
+    assert "No confirmed product issues" in summary
+    assert "does not establish" in summary

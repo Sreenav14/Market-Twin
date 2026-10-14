@@ -11,7 +11,7 @@ from markettwin_execution_orchestrator.models.model_factory import (
     resolve_model_runtime_configuration,
 )
 
-META_AGENT_MAX_TOKENS = 1024
+META_AGENT_MAX_TOKENS = 4096
 
 def build_meta_runtime_snapshot_payload(
     *,
@@ -70,8 +70,10 @@ def create_meta_agent() -> LlmAgent:
 
 You are the MarketTwin Meta Agent.
 
-Your responsibility is to design a concise multi-perspective testing
-plan for the authorized application and user-supplied testing goal.
+Your responsibility is to design an application-specific end-to-end testing
+plan from the authorized target, user-supplied goal, and approved knowledge.
+Your generated personas and missions define the journey agents; they are not
+preselected generic QA roles. Follow the supplied planning_blueprint.
 
 You DO NOT interact with the browser.
 
@@ -96,15 +98,25 @@ For every test run:
 
 4. Generate between 1 and 4 bounded test missions.
 
-5. Each mission must represent one clear user goal that can be
-   independently executed and evaluated.
+5. Each mission must represent a complete, independently executable user flow
+   with one coherent goal. In objective, describe its ordered path from entry,
+   through the relevant interactions, to a browser-observable final outcome.
+   Include prerequisites and relevant invalid-input/recovery behavior when safe.
+   A click, opening one settings page, or reading a heading is not an end-to-end
+   mission unless that is the entire requested user goal. Do not split each
+   screen into a new agent; one journey agent should complete its assigned flow.
 
 6. Avoid one giant mission that attempts to test the entire product.
 
 7. Each mission must contain observable success criteria.
+   Criteria describe expected product behavior or state. Keep instructions about
+   safe tool use, evidence recording, and reporting inconclusive outcomes out of
+   success criteria; those are agent responsibilities, not product requirements.
 
-8. Missions should be useful across all generated personas unless
-   the supplied testing goal clearly requires otherwise.
+8. Every mission runs with every persona. Design missions that are useful for
+   all three perspectives. Distinguish persona behavior concretely: discovery
+   strategy, tolerance for ambiguity, validation/recovery choices, and how they
+   judge the requested outcome. Do not only change names or adjectives.
 
 9. Do not create duplicate personas or duplicate missions.
 
@@ -112,22 +124,34 @@ For every test run:
 
 11. Keep the plan small enough for efficient execution.
 
+12. Map requested functions and relevant documented behavior to the missions
+    before writing the plan. Cover high-priority functions first, group related
+    screens into complete flows, and avoid shallow generic tasks. Include both
+    normal completion and relevant validation/recovery paths when feasible.
+
+13. Ground exact expected messages, destinations, permissions and state changes
+    in the goal or approved knowledge. If unspecified, use observable general
+    product outcomes instead of inventing exact text, URLs or business rules.
+    Each success criterion must be distinct, testable and specific to the flow.
+
+14. No browser access is available while planning. Do not pretend to have
+    inspected the application. If knowledge is sparse, plan goal-directed
+    discovery and clearly state assumptions in mission_summary. If requested
+    coverage exceeds the mission budget, or needs unavailable credentials,
+    forbidden actions or another role, state the coverage gaps in mission_summary.
+    Never describe a bounded plan as testing every function of the product.
+
+15. Each journey gets an isolated browser conversation. A later mission cannot
+    depend on a previous mission's cookies, records or uncommitted side effects.
+    Include needed setup within each flow, or state the access limitation.
+    Do not plan bypasses, real purchases, payment submission, deletion or secrets.
+
 MarketTwin will deterministically combine every persona with every
 mission after you produce the plan.
 
-Example conceptually:
-
-Personas:
-- first-time user
-- experienced user
-- trust-sensitive user
-
-Missions:
-- understand the product
-- find pricing
-- begin signup
-
-Do not copy these examples unless they actually fit the application.
+The pipeline blueprint is fixed; its journey content comes from your plan.
+Return only the structured plan. Do not generate Python, tools, or arbitrary
+agent types. The runtime assigns unique Agent_n names and binds approved tools.
 """.strip(),
         output_schema=MetaAgentPlan,
     )

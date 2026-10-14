@@ -43,12 +43,19 @@ class ArtifactUrlSigner:
         region: str,
         endpoint_url: str | None,
         client: S3PresignClient | None = None,
+        access_key_id: str | None = None,
+        secret_access_key: str | None = None,
+        session_token: str | None = None,
     ) -> None:
         if client is not None:
             self._client = client
             return
 
-        session = cast(S3Session, Session())
+        session = cast(S3Session, Session(
+            aws_access_key_id=access_key_id,
+            aws_secret_access_key=secret_access_key,
+            aws_session_token=session_token,
+        ) if access_key_id is not None else Session())
         self._client = session.client(
             "s3",
             region_name=region,

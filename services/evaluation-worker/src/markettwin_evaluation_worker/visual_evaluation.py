@@ -65,6 +65,7 @@ async def evaluate_visual_criterion_from_evidence(
     criterion: str,
     evidence: tuple[VisualEvidenceSet, ...],
     storage: VisualArtifactStorage,
+    execution_context: tuple[VisualEvidenceSet, ...] = (),
 ) -> VisualCriterionEvaluation:
     """Verify one criterion from already-selected visual evidence."""
 
@@ -119,6 +120,13 @@ async def evaluate_visual_criterion_from_evidence(
                 criterion=criterion,
                 viewport_path=viewport_path,
                 focused_path=focused_path,
+                execution_context=tuple(
+                    {"step_id": item.step_id, "action_type": item.action_type,
+                     "status": item.step_status,
+                     **({"target": item.action_summary} if item.action_summary is not None else {})}
+                    for item in sorted(execution_context or evidence, key=lambda item: item.step_id)
+                    if item.step_id <= selected.step_id
+                ),
             )
 
     artifact_ids = [
@@ -130,10 +138,19 @@ async def evaluate_visual_criterion_from_evidence(
             selected.element_crop.artifact_id
         )
 
+    status = verification.status
+    rationale = verification.rationale
+    if status == "unsatisfied" and selected.element_crop is None:
+        status = "unverified"
+        rationale = (
+            "Confirmation requires focused evidence of the relevant result region; "
+            "a general viewport is insufficient. Visual observation: " + rationale
+        )
+
     return VisualCriterionEvaluation(
         criterion=criterion,
-        status=verification.status,
-        rationale=verification.rationale,
+        status=status,
+        rationale=rationale,
         observed_details=(
             verification.observed_details
         ),

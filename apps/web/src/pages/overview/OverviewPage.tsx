@@ -10,7 +10,7 @@ import { TestStatusBadge } from "../../components/ui/StatusBadge";
 import { Button } from "../../components/ui/button";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { useWorkspaceTests } from "../../lib/useWorkspaceTests";
-import { testBrief, textValue } from "../../lib/format";
+import { testTitle, textValue } from "../../lib/format";
 import { AppShellContext } from "../../layouts/AppShell";
 
 export function OverviewPage() {
@@ -57,6 +57,16 @@ export function OverviewPage() {
           ) : undefined
         }
       />
+      <section className="workspace-process" aria-labelledby="test-process-heading">
+        <div className="section-heading"><h2 id="test-process-heading">How a test runs</h2><Link className="text-link" to="/runs">View tests</Link></div>
+        <ol className="workspace-process-list">
+          <li><span aria-hidden="true">1</span><div><h3>Plan</h3><p>Create personas and missions for your testing goal.</p></div></li>
+          <li><span aria-hidden="true">2</span><div><h3>Execute</h3><p>Agents carry out the planned journeys in your application.</p></div></li>
+          <li><span aria-hidden="true">3</span><div><h3>Supervisor collection</h3><p>Collect agent outputs, journey records, and evidence.</p></div></li>
+          <li><span aria-hidden="true">4</span><div><h3>Evaluate</h3><p>Review findings and the report after execution finishes.</p></div></li>
+        </ol>
+        <p className="workspace-process-note">Creating a test saves a draft. Start it to run the agents. Journey results and evaluation are separate views inside each test.</p>
+      </section>
       {state.isError ? (
         <p className="inline-note" role="alert">
           Could not refresh tests. Showing the last loaded data.{" "}
@@ -65,10 +75,6 @@ export function OverviewPage() {
           </Button>
         </p>
       ) : null}
-      <section className="panel knowledge-intro" aria-label="Prepare knowledge for testing">
-        <div><h2>Prepare knowledge for your tests</h2><p className="muted">Ingest source material, review what MarketTwin learns, then select approved knowledge when creating a test.</p></div>
-        <div className="inline-actions"><Link className="secondary-button" to="/ingestion">Ingest knowledge</Link><Link className="text-link" to="/knowledge/review">Review knowledge</Link></div>
-      </section>
       {applications.length === 0 ? (
         <EmptyState
           title="Add your first application"
@@ -100,7 +106,7 @@ export function OverviewPage() {
               </dd>
             </div>
             <div>
-              <dt>Completed</dt>
+              <dt>Execution completed</dt>
               <dd>{completed.length}</dd>
             </div>
           </dl>
@@ -139,7 +145,7 @@ export function OverviewPage() {
                       key={run.id}
                     >
                       <span className="study-row-copy">
-                        <strong>{testBrief(run.configuration_snapshot)}</strong>
+                        <strong>{testTitle(run)}</strong>
                         <span>
                           {textValue(run.target_snapshot.name, "Target")}
                         </span>
@@ -178,6 +184,10 @@ export function OverviewPage() {
           </div>
         </>
       )}
+      <section className="overview-knowledge-tools" aria-label="Prepare knowledge for testing">
+        <div><h2>Knowledge for tests <span className="muted">Optional</span></h2><p className="muted">Ingest a source, review and approve its knowledge, then attach it to an application before selecting it for a test.</p></div>
+        <div className="inline-actions"><Link className="text-link" to="/ingestion">Ingest knowledge</Link><Link className="text-link" to="/knowledge/review">Review knowledge</Link></div>
+      </section>
     </>
   );
 }

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from markettwin_database.models import (
+    AgentExecution,
     Artifact,
     ExecutionStep,
     Finding,
@@ -32,10 +33,11 @@ class JourneyResultRecord:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceReference:
-    """Best deterministic evidence available for one execution."""
+    """An exact step/artifact reference, optionally pinned to its execution."""
 
     step_id: int | None = None
     artifact_id: UUID | None = None
+    execution_id: UUID | None = None
 
 @dataclass(frozen=True, slots=True)
 class VisualArtifactRecord:
@@ -57,6 +59,8 @@ class VisualEvidenceSet:
     
     step_id: int
     action_type: str | None = None
+    step_status: str | None = None
+    action_summary: str | None = None
     viewport: VisualArtifactRecord | None = None
     element_crop: VisualArtifactRecord | None = None
     
@@ -242,9 +246,15 @@ class EvaluationRepository:
             step.id: step.action_type
             for step in steps
         }
+        status_by_step = {step.id: step.status for step in steps}
+        click_target_by_step = {
+            step.id: step.action_summary for step in steps
+            if step.action_type == "click"
+            and step.action_summary.startswith("Click semantic target ")
+        }
         
         for artifact in artifacts:
-            if artifact.step_id is None:
+            if artifact.step_id not in action_by_step:
                 continue
 
             raw_kind = artifact.metadata_json.get(
@@ -280,6 +290,8 @@ class EvaluationRepository:
                 action_type=action_by_step.get(
                     step_id
                 ),
+                step_status=status_by_step.get(step_id),
+                action_summary=click_target_by_step.get(step_id),
                 viewport=grouped.get(
                     step_id,
                     {},
@@ -290,60 +302,33 @@ class EvaluationRepository:
                 ).get("element_crop"),
             )
             for step_id in step_ids
+            if step_id in action_by_step
         )
 
-    async def find_preferred_evidence(
+    async def find_reported_evidence(
         self,
         *,
         execution_id: UUID,
-    ) -> EvidenceReference:
-        screenshot = await self._session.scalar(
-            select(Artifact)
-            .where(
-                Artifact.execution_id == execution_id,
-                Artifact.artifact_type
-                == "screenshot",
-            )
-            .order_by(Artifact.created_at.desc())
-            .limit(1)
+        step_ids: tuple[int, ...],
+    ) -> tuple[EvidenceReference, ...]:
+        """Link recorded steps cited by a claim; linkage alone does not verify it."""
+        evidence_sets = await self.list_visual_evidence(
+            execution_id=execution_id, step_ids=step_ids,
         )
-
-        if screenshot is not None:
-            return EvidenceReference(
-                step_id=screenshot.step_id,
-                artifact_id=screenshot.id,
-            )
-
-        trace = await self._session.scalar(
-            select(Artifact)
-            .where(
-                Artifact.execution_id == execution_id,
-                Artifact.artifact_type == "trace",
-            )
-            .order_by(Artifact.created_at.desc())
-            .limit(1)
-        )
-
-        if trace is not None:
-            return EvidenceReference(
-                artifact_id=trace.id,
-            )
-
-        step_id = await self._session.scalar(
-            select(ExecutionStep.id)
-            .where(
-                ExecutionStep.execution_id
-                == execution_id
-            )
-            .order_by(
-                ExecutionStep.step_number.desc()
-            )
-            .limit(1)
-        )
-
-        return EvidenceReference(
-            step_id=step_id,
-        )
+        references: list[EvidenceReference] = []
+        for evidence in evidence_sets:
+            images = tuple(image for image in (evidence.viewport, evidence.element_crop)
+                           if image is not None)
+            if images:
+                references.extend(EvidenceReference(
+                    step_id=evidence.step_id, artifact_id=image.artifact_id,
+                    execution_id=execution_id,
+                ) for image in images)
+            else:
+                references.append(EvidenceReference(
+                    step_id=evidence.step_id, execution_id=execution_id,
+                ))
+        return tuple(references)
 
     async def create_finding(
         self,
@@ -355,7 +340,7 @@ class EvaluationRepository:
         title: str,
         summary: str,
         recommendation: str,
-        evidence: EvidenceReference,
+        evidence: tuple[EvidenceReference, ...],
     ) -> UUID:
         return await self.create_linked_finding(
             test_run_id=test_run_id,
@@ -365,7 +350,7 @@ class EvaluationRepository:
             title=title,
             summary=summary,
             recommendation=recommendation,
-            evidence=(evidence,),
+            evidence=evidence,
         )
 
     async def create_linked_finding(
@@ -400,11 +385,71 @@ class EvaluationRepository:
             )
         )
 
-        if not valid_evidence:
+        owned_journey_ids = set((await self._session.scalars(
+            select(PersonaJourney.id).where(
+                PersonaJourney.test_run_id == test_run_id,
+                PersonaJourney.id.in_(unique_journey_ids),
+            )
+        )).all())
+        if owned_journey_ids != set(unique_journey_ids):
+            raise ValueError("Finding journeys must belong to the specified TestRun.")
+
+        if not valid_evidence and category == "visual_criterion":
             raise RuntimeError(
                 "Cannot create an authoritative Finding "
                 "without execution evidence."
             )
+
+        if valid_evidence:
+            execution_ids = set((await self._session.scalars(
+                select(AgentExecution.id).where(
+                    AgentExecution.journey_id.in_(unique_journey_ids),
+                )
+            )).all())
+            artifact_ids = {
+                ref.artifact_id for ref in valid_evidence if ref.artifact_id is not None
+            }
+            artifacts = {artifact.id: artifact for artifact in (await self._session.scalars(
+                select(Artifact).where(Artifact.id.in_(artifact_ids))
+            )).all()}
+            if set(artifacts) != artifact_ids:
+                raise ValueError("Finding references a nonexistent artifact.")
+            step_ids = {ref.step_id for ref in valid_evidence if ref.step_id is not None}
+            step_ids.update(artifact.step_id for artifact in artifacts.values()
+                            if artifact.step_id is not None)
+            steps = {step.id: step for step in (await self._session.scalars(
+                select(ExecutionStep).where(ExecutionStep.id.in_(step_ids))
+            )).all()}
+            if set(steps) != step_ids:
+                raise ValueError("Finding references a nonexistent execution step.")
+            for ref in valid_evidence:
+                step = steps.get(ref.step_id) if ref.step_id is not None else None
+                artifact = artifacts.get(ref.artifact_id) if ref.artifact_id is not None else None
+                if step is not None and step.execution_id not in execution_ids:
+                    raise ValueError("Finding step belongs to another journey execution.")
+                if artifact is not None:
+                    if artifact.execution_id not in execution_ids:
+                        raise ValueError("Finding artifact belongs to another journey execution.")
+                    if artifact.step_id is not None:
+                        if steps[artifact.step_id].execution_id != artifact.execution_id:
+                            raise ValueError(
+                                "Finding artifact and step belong to different executions."
+                            )
+                    if step is not None and (
+                        artifact.step_id != step.id or artifact.execution_id != step.execution_id
+                    ):
+                        raise ValueError("Finding artifact does not belong to the specified step.")
+                if ref.execution_id is not None and (
+                    ref.execution_id not in execution_ids
+                    or (step is not None and step.execution_id != ref.execution_id)
+                    or (artifact is not None and artifact.execution_id != ref.execution_id)
+                ):
+                    raise ValueError("Finding evidence does not belong to the specified execution.")
+                if category == "visual_criterion" and (
+                    artifact is None or artifact.artifact_type != "screenshot"
+                    or artifact.step_id is None
+                ):
+                    raise ValueError("Visual findings require screenshots of exact recorded steps.")
 
         finding = Finding(
             test_run_id=test_run_id,

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MarketTwin controlled benchmark</title>
+<style>
+  body { font: 18px/1.6 system-ui; max-width: 760px; margin: 48px auto; padding: 24px; color: #17233b; }
+  section { padding: 24px 0; border-top: 1px solid #ccd4df; }
+  button, input { font: inherit; padding: 12px; margin: 8px 0; }
+  label { display: block; }
+  a { color: #2453cc; }
+  [role="status"], [role="alert"] { font-weight: 600; }
+</style>
+<h1>Controlled product journey</h1>
+<p>A local fixture with predetermined behavior. All actions are read-only or update this page only.</p>
+<section>
+  <h2>Working navigation</h2>
+  <a href="?page=guide">Open help guide</a>
+</section>
+<section>
+  <h2>Working form</h2>
+  <form id="working-form">
+    <label for="display-name">Display name</label><input id="display-name" required>
+    <button>Save display name</button>
+  </form>
+  <p id="saved" role="status" hidden>Display name saved successfully.</p>
+</section>
+<section>
+  <h2>Primary action</h2>
+  <p>Continue should reveal the next step.</p>
+  <button disabled>Continue to next step</button>
+</section>
+<section>
+  <h2>Required validation</h2>
+  <p>Submitting an empty contact address should display “Contact address is required”.</p>
+  <form id="validation-form" novalidate>
+    <label for="contact-address">Contact address</label><input id="contact-address">
+    <button>Check contact address</button>
+  </form>
+</section>
+<section>
+  <h2>Navigation destination</h2>
+  <p>The billing link should open a page headed “Billing settings”.</p>
+  <a href="?page=profile">Open billing settings</a>
+</section>
+<section>
+  <h2>Expected confirmation</h2>
+  <p>Preview should display “Preview ready”.</p>
+  <button id="preview">Generate preview</button>
+</section>
+<section>
+  <h2>Ambiguous service state</h2>
+  <p>Delivery status: awaiting external confirmation. This fixture provides no final delivery evidence.</p>
+</section>
+<section>
+  <h2>Restricted destination</h2>
+  <p>This link is outside the authorized origin and must be blocked.</p>
+  <a href="http://127.0.0.1:5192/restricted">Open restricted destination</a>
+</section>
+<script>
+  const page = new URLSearchParams(location.search).get('page');
+  if (page === 'guide' || page === 'profile') {
+    document.body.innerHTML = page === 'guide'
+      ? '<h1>Help guide</h1><p>You reached the correct help page.</p>'
+      : '<h1>Profile settings</h1><p>This page manages your profile.</p>';
+  } else {
+    document.getElementById('working-form').addEventListener('submit', event => {
+      event.preventDefault(); document.getElementById('saved').hidden = false;
+    });
+    document.getElementById('validation-form').addEventListener('submit', event => event.preventDefault());
+    document.getElementById('preview').addEventListener('click', () => {});
+  }
+</script>
+</html>

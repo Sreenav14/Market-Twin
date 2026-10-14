@@ -22,9 +22,11 @@ import { TargetNetworkPolicyPage } from "../pages/targets/TargetNetworkPolicyPag
 import { RunsPage } from "../pages/runs/RunsPage";
 import { NewRunPage } from "../pages/runs/NewRunPage";
 import { RunOverviewPage } from "../pages/runs/RunOverviewPage";
+import { AgentPromptsPage } from "../pages/runs/AgentPromptsPage";
 import { RunPerspectivesPage } from "../pages/runs/RunPerspectivesPage";
 import { RunMissionsPage } from "../pages/runs/RunMissionsPage";
 import { RunJourneysPage } from "../pages/runs/RunJourneysPage";
+import { RunEvaluationPage } from "../pages/runs/RunEvaluationPage";
 import { JourneyDetailPage } from "../pages/runs/JourneyDetailPage";
 import { RunActivityPage } from "../pages/runs/RunActivityPage";
 import { RunFindingsPage } from "../pages/runs/RunFindingsPage";
@@ -102,12 +104,15 @@ export function AuthenticatedRouter({
           element={<NewRunPage />}
         />
         <Route path="/runs" element={<RunsPage />} />
+        <Route path="/agents" element={<AgentPromptsPage />} />
         <Route path="/runs/:runId" element={<RunLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<RunOverviewPage />} />
+          <Route path="agents" element={<AgentPromptsPage />} />
           <Route path="perspectives" element={<RunPerspectivesPage />} />
           <Route path="missions" element={<RunMissionsPage />} />
           <Route path="journeys" element={<RunJourneysPage />} />
+          <Route path="evaluation" element={<RunEvaluationPage />} />
           <Route path="journeys/:journeyId" element={<JourneyDetailPage />} />
           <Route path="activity" element={<RunActivityPage />} />
           <Route path="findings" element={<RunFindingsPage />} />

@@ -78,7 +78,7 @@
 .sidebar {
   padding: 26px 16px 18px;
   background: var(--sidebar);
-  border: 0;
+  border-right: 1px solid var(--border);
 }
 .sidebar-brand {
   padding: 0 8px 26px;
@@ -122,6 +122,9 @@
   background: var(--surface);
   color: var(--text);
   font-size: 12px;
+}
+.mobile-account-actions {
+  display: none;
 }
 .sidebar-nav {
   margin-top: 30px;
@@ -1180,12 +1183,15 @@
     margin: 0;
   }
   .sidebar-nav-secondary {
-    margin-top: 0;
+    display: none;
   }
   .nav-link {
     flex-direction: column;
     gap: 3px;
-    padding: 5px 10px;
+    padding: 5px 2px;
+    min-width: 0;
+    flex: 1;
+    text-align: center;
     font-size: 10px;
     min-height: 48px;
   }
@@ -1193,7 +1199,7 @@
     display: block;
   }
   .sidebar-footer {
-    display: flex;
+    display: none;
     margin: 0;
     padding: 0;
     border: 0;
@@ -1206,6 +1212,17 @@
     padding: 0 18px;
     min-height: 60px;
     gap: 8px;
+  }
+  .mobile-account-actions {
+    display: flex;
+    gap: 2px;
+  }
+  .mobile-account-actions .icon-button {
+    min-width: 40px;
+    min-height: 44px;
+  }
+  .topbar .breadcrumb {
+    margin-right: auto;
   }
   .breadcrumb {
     display: flex;

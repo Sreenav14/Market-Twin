@@ -52,19 +52,20 @@ export function KnowledgeReviewPage() {
     } finally { setBusy(false); }
   }
   if (state.isPending) return <LoadingPanel label="Loading knowledge for review" />;
-  if (state.isError) return <ErrorPanel message={state.error.message} action={<Button variant="secondary" onClick={() => void state.refetch()}>Try again</Button>} />;
+  if (!state.data) return <ErrorPanel message={state.error?.message || "Could not load knowledge."} action={<Button variant="secondary" onClick={() => void state.refetch()}>Try again</Button>} />;
   const entry = state.data;
   const hasKnowledge = Boolean(entry.knowledge_count + entry.artifact_count + entry.skill_count);
   const pending = isIngestionPending(entry);
   const failed = entry.processing_status === "failed";
   return (
-    <>
+    <div className="knowledge-review-page">
       <Link className="back-link" to="/knowledge/review">Back to review knowledge</Link>
       <PageHeader eyebrow={pending ? "In progress" : failed ? "Processing failed" : entry.status === "approved" ? "Approved knowledge" : "Needs review"} title={entry.name} description={entry.source_name} action={<div className="knowledge-row-actions">
         {source.data ? <a className="secondary-button" href={source.data.url} target="_blank" rel="noreferrer">Open original source</a> : null}
         {canWriteWorkspace(workspace.role) ? <RenameKnowledge entry={entry} onSaved={saved} /> : null}
         {canWriteWorkspace(workspace.role) ? <DeleteAction kind="knowledge" workspaceId={workspace.id} id={entry.id} name={entry.name} disabled={busy} onDeleted={() => navigate("/knowledge/review")} /> : null}
       </div>} />
+      {state.isError ? <p className="inline-note" role="alert">Could not refresh knowledge. Showing the last loaded data. <Button variant="ghost" size="sm" onClick={() => void state.refetch()}>Try again</Button></p> : null}
       {source.isError ? <p className="form-error" role="alert">Could not open the original source. <Button variant="ghost" size="sm" onClick={() => void source.refetch()}>Try again</Button></p> : null}
       <p className="muted">Source purpose: {entry.roles.map((role) => sourceRoles.find(([value]) => value === role)?.[1] ?? role).join(", ")}</p>
       {pending ? <section className="panel section-block">
@@ -74,19 +75,23 @@ export function KnowledgeReviewPage() {
         <p className="form-error" role="alert">{entry.processing_error || "Knowledge processing failed."}</p>
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         {canWriteWorkspace(workspace.role) ? <Button variant="secondary" disabled={busy} onClick={() => void retry()}>{busy ? "Retrying…" : "Retry processing"}</Button> : null}
-      </section> : <KnowledgeResult preview={entry.preview} />}
-      {pending || failed ? null : entry.status === "approved" ? (
-        <><section className="panel section-block"><h2>Available for tests</h2><p>This knowledge set is approved. Attach it to an application to make it available when creating tests.</p></section><KnowledgeApplications key={`${entry.id}:${entry.application_ids?.join()}`} entry={entry} onSaved={saved} /></>
-      ) : canWriteWorkspace(workspace.role) ? (
-        <section className="panel form-grid section-block">
+      </section> : <div className="knowledge-review-layout">
+        <KnowledgeResult preview={entry.preview} />
+        <aside className="knowledge-review-rail" aria-label="Knowledge approval and applications">
+        {entry.status === "approved" ? (
+          <><p className="knowledge-approved-status"><span className="status-badge status-success">Available for tests</span></p><KnowledgeApplications key={`${entry.id}:${entry.application_ids?.join()}`} entry={entry} onSaved={saved} /></>
+        ) : canWriteWorkspace(workspace.role) ? (
+        <section className="panel form-grid knowledge-approval">
           <h2>Approve for use in tests</h2>
-          <p className="muted">Check the facts, procedures, Skills, and source purpose. Leave this set unapproved if any item is incorrect.</p>
+          <p className="muted">Check each item against the original source before approving.</p>
           <label className="knowledge-confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmedFor(event.target.checked ? reviewKey : null)} disabled={busy || !hasKnowledge} />I reviewed this knowledge against its source and confirmed the source purpose.</label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {!hasKnowledge ? <p className="form-note">This source produced no knowledge to approve.</p> : null}
           <div className="form-actions"><Button disabled={!confirmed || busy || !hasKnowledge} onClick={() => void approve()}>{busy ? <><Spinner /> Approving…</> : "Approve knowledge"}</Button></div>
         </section>
-      ) : <p className="muted">Your workspace role can review this set. Write access is required to approve it.</p>}
-    </>
+        ) : <p className="muted">Your workspace role can review this set. Write access is required to approve it.</p>}
+        </aside>
+      </div>}
+    </div>
   );
 }

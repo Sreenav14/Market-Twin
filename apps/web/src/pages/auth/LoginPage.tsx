@@ -4,7 +4,8 @@ import { BrandMark } from "../../components/ui/BrandMark";
 import { Spinner } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { CurrentUser, api } from "../../lib/api";
+import { ApiError, CurrentUser, api } from "../../lib/api";
+import { Link } from "react-router-dom";
 
 export function LoginPage({
   onAuthenticated,
@@ -28,7 +29,9 @@ export function LoginPage({
       onAuthenticated(await api.login(email.trim()));
     } catch (loginError) {
       setError(
-        loginError instanceof Error
+        loginError instanceof ApiError && loginError.status >= 500
+          ? "The login service is unavailable. Please try again when your workspace service is running."
+          : loginError instanceof Error
           ? loginError.message
           : "Unable to sign in. Please try again.",
       );
@@ -40,10 +43,10 @@ export function LoginPage({
   return (
     <main className="signin-page">
       <section className="signin-story" aria-labelledby="signin-title">
-        <div className="signin-brand">
+        <Link className="signin-brand" to="/" aria-label="MarketTwin home">
           <BrandMark />
           <span>MarketTwin</span>
-        </div>
+        </Link>
         <div className="signin-story-content">
           <p className="signin-kicker">Product readiness testing</p>
           <h1 id="signin-title">
@@ -145,7 +148,7 @@ export function LoginPage({
           </p>
         </div>
         <footer className="signin-access-footer">
-          Use an account approved by your workspace administrator.
+          <Link to="/how-it-works">How MarketTwin works</Link>
         </footer>
       </section>
     </main>

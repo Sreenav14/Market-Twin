@@ -78,6 +78,42 @@ class FakeStorage:
         return path
 
 
+@pytest.mark.parametrize("focused", [False, True])
+@pytest.mark.parametrize("status", ["unsatisfied", "satisfied"])
+async def test_viewport_only_failure_cannot_confirm_a_product_defect(
+    monkeypatch: pytest.MonkeyPatch, focused: bool, status: str,
+) -> None:
+    viewport = VisualArtifactRecord(
+        artifact_id=uuid4(), step_id=7, kind="viewport", storage_provider="minio",
+        bucket="markettwin", object_key="viewport.png", content_type="image/png",
+    )
+    crop = VisualArtifactRecord(
+        artifact_id=uuid4(), step_id=7, kind="element_crop", storage_provider="minio",
+        bucket="markettwin", object_key="crop.png", content_type="image/png",
+    )
+
+    async def verify(**_: object) -> VisualVerificationResult:
+        return VisualVerificationResult(
+            status=cast(visual_evaluation.VisualVerificationStatus, status),
+            rationale="Expected destination heading is absent.", observed_details=(),
+        )
+
+    monkeypatch.setattr(visual_evaluation, "verify_visual_criterion", verify)
+    result = await visual_evaluation.evaluate_visual_criterion_from_evidence(
+        test_run_id=uuid4(), journey_id=uuid4(), execution_id=uuid4(),
+        agent_snapshot_id=uuid4(), criterion="Billing settings heading is visible.",
+        evidence=(VisualEvidenceSet(
+            step_id=7, viewport=viewport, element_crop=crop if focused else None,
+        ),), storage=cast(VisualArtifactStorage, FakeStorage()),
+    )
+    assert result.status == (
+        "unverified" if status == "unsatisfied" and not focused else status
+    )
+    assert result.evidence_step_id == 7
+    assert result.artifact_ids == ((viewport.artifact_id, crop.artifact_id)
+                                   if focused else (viewport.artifact_id,))
+
+
 @pytest.mark.asyncio
 async def test_visual_evaluation_uses_viewport_and_crop(
     monkeypatch: pytest.MonkeyPatch,
@@ -111,8 +147,15 @@ async def test_visual_evaluation_uses_viewport_and_crop(
 
     repository = FakeRepository(
         evidence=(
+            VisualEvidenceSet(step_id=8, action_type="click", step_status="completed"),
+            VisualEvidenceSet(
+                step_id=6, action_type="click", step_status="failed",
+                action_summary='Click semantic target {"name": "Continue"}.',
+            ),
             VisualEvidenceSet(
                 step_id=7,
+                action_type="capture_element",
+                step_status="completed",
                 viewport=viewport,
                 element_crop=crop,
             ),
@@ -130,10 +173,16 @@ async def test_visual_evaluation_uses_viewport_and_crop(
         criterion: str,
         viewport_path: Path,
         focused_path: Path | None = None,
+        execution_context: tuple[dict[str, object], ...] = (),
     ) -> VisualVerificationResult:
         assert (
             criterion
             == "Software testing heading is readable."
+        )
+        assert execution_context == (
+            {"step_id": 6, "action_type": "click", "status": "failed",
+             "target": 'Click semantic target {"name": "Continue"}.'},
+            {"step_id": 7, "action_type": "capture_element", "status": "completed"},
         )
 
         seen_images.append(
@@ -174,7 +223,7 @@ async def test_visual_evaluation_uses_viewport_and_crop(
             ),
             execution_id=execution_id,
             agent_snapshot_id=uuid4(),
-            step_ids=(7,),
+            step_ids=(6, 7, 8),
             repository=cast(
                 EvaluationRepository,
                 repository,
@@ -198,7 +247,7 @@ async def test_visual_evaluation_uses_viewport_and_crop(
     assert repository.calls == [
         (
             execution_id,
-            (7,),
+            (6, 7, 8),
         )
     ]
 

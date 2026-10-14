@@ -8,9 +8,7 @@ from markettwin_database import (
     create_session_factory,
 )
 from markettwin_database.models.testing import TestRun
-from markettwin_evaluation_worker.workflow import (
-    evaluate_and_generate_report,
-)
+from markettwin_evaluation_worker.worker import process_run
 from markettwin_execution_orchestrator.workflow.run_executor import (
     execute_markettwin_run,
 )
@@ -73,10 +71,10 @@ async def main() -> None:
             )
 
             print("\nGenerating evaluation findings and report...")
-            evaluation = await evaluate_and_generate_report(
-                test_run_id=request.run_id,
-                session=session,
-            )
+            evaluation = await process_run(engine, request.run_id)
+            if evaluation is None:
+                print("Evaluation is already complete or owned by the evaluation worker.")
+                return
 
             print("MarketTwin evaluation finished.")
             print(f"Findings: {len(evaluation.finding_ids)}")

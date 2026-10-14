@@ -25,6 +25,7 @@ function breadcrumbItems(path: string) {
   const section = parts[0];
   if (section === "overview") return [{ label: "Overview", href: "/overview" }];
   if (section === "ingestion") return [{ label: "Ingestion", href: "/ingestion" }];
+  if (section === "agents") return [{ label: "Agents", href: "/agents" }];
   if (section === "knowledge") return [
     { label: "Review knowledge", href: "/knowledge/review" },
     ...(parts[2] ? [{ label: "Knowledge set", href: path }] : []),
@@ -130,6 +131,12 @@ export function AppShell({
       </div>
     );
   const crumbs = breadcrumbItems(location.pathname);
+  const signOut = () => {
+    setLogoutError(null);
+    void onLogout().catch(() =>
+      setLogoutError("Could not sign out. Please try again."),
+    );
+  };
   return (
     <div className="enterprise-shell">
       <a className="skip-link" href="#main-content">
@@ -180,28 +187,12 @@ export function AppShell({
         </div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <NavLink
-            to="/overview"
-            aria-label="Overview"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="home" />
-            <span>Overview</span>
-          </NavLink>
-          <NavLink
-            to="/ingestion"
-            aria-label="Ingestion"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="ingestion" />
-            <span>Ingestion</span>
-          </NavLink>
-          <NavLink
             to="/knowledge/review"
-            aria-label="Review knowledge"
+            aria-label="Knowledge"
             className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
           >
             <Icon name="knowledge" />
-            <span>Review knowledge</span>
+            <span>Knowledge</span>
           </NavLink>
           <NavLink
             to="/applications"
@@ -224,6 +215,10 @@ export function AppShell({
           className="sidebar-nav sidebar-nav-secondary"
           aria-label="Workspace navigation"
         >
+          <NavLink to="/overview" aria-label="Overview" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="home" /><span>Overview</span></NavLink>
+          <NavLink to="/ingestion" aria-label="Ingestion" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="ingestion" /><span>Add knowledge</span></NavLink>
+          <NavLink to="/agents" aria-label="Agents" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="user" /><span>Agent settings</span></NavLink>
+          <Link to="/how-it-works" className="nav-link"><Icon name="knowledge" /><span>How it works</span></Link>
           <NavLink
             to="/settings/profile"
             aria-label="Settings"
@@ -244,12 +239,7 @@ export function AppShell({
           <button
             className="icon-button"
             type="button"
-            onClick={() => {
-              setLogoutError(null);
-              void onLogout().catch(() =>
-                setLogoutError("Could not sign out. Please try again."),
-              );
-            }}
+            onClick={signOut}
             aria-label="Sign out"
           >
             <Icon name="logout" />
@@ -272,6 +262,14 @@ export function AppShell({
             ))}
           </nav>
           <CommandMenu />
+          <div className="mobile-account-actions">
+            <Link className="icon-button" to="/settings/profile" aria-label="Settings">
+              <Icon name="settings" />
+            </Link>
+            <button className="icon-button" type="button" onClick={signOut} aria-label="Sign out">
+              <Icon name="logout" />
+            </button>
+          </div>
         </header>
         <main className="page-container" id="main-content" tabIndex={-1}>
           {logoutError ? (

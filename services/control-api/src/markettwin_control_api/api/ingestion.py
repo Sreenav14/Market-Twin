@@ -1,8 +1,10 @@
 """Workspace ingestion, review, and approval of source-backed knowledge."""
 
+import asyncio
 import hashlib
 import logging
 from datetime import datetime
+from io import BytesIO
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
@@ -16,12 +18,14 @@ from markettwin_shared.knowledge_preview import (
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from starlette.datastructures import Headers
 
 from markettwin_control_api.api.auth import get_database_runtime
 from markettwin_control_api.api.dependencies import get_authenticated_user_id
 from markettwin_control_api.api.permissions import WORKSPACE_WRITE_ROLES
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.evidence.artifact_url_signer import ArtifactUrlSigner
+from markettwin_control_api.knowledge.link_research import research_link
 from markettwin_control_api.knowledge.repository import IngestionRecord, IngestionRepository
 from markettwin_control_api.knowledge.storage import KnowledgeSourceStorage
 from markettwin_control_api.persistence.repositories import WorkspaceRepository
@@ -86,6 +90,36 @@ class AttachKnowledgeRequest(BaseModel):
         if len(value) != len(set(value)):
             raise ValueError("Select each application once.")
         return value
+
+
+class LinkKnowledgeRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+    name: str = Field(min_length=1, max_length=200)
+    roles: list[str] = Field(min_length=1, max_length=9)
+
+
+@router.post("/link", response_model=IngestionEntryResponse, status_code=202)
+async def ingest_link(
+    workspace_id: UUID, payload: LinkKnowledgeRequest, request: Request,
+) -> IngestionEntryResponse:
+    await require_ingestion_access(request, workspace_id, write=True)
+    if (not payload.name.strip() or len(set(payload.roles)) != len(payload.roles)
+            or not set(payload.roles) <= SOURCE_ROLES):
+        raise HTTPException(422, "Enter a name and valid source purposes.")
+    try:
+        filename, content = await asyncio.to_thread(research_link, payload.url.strip())
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    except OSError as error:
+        raise HTTPException(
+            502, "The linked source could not be reached. Check the link or upload a document.",
+        ) from error
+    source = UploadFile(filename=filename, file=BytesIO(content),
+                        headers=Headers({"content-type": "text/plain"}))
+    try:
+        return await ingest_source(workspace_id, request, source, payload.name, payload.roles)
+    finally:
+        await source.close()
 
 
 def ingestion_response(record: IngestionRecord) -> IngestionEntryResponse:
@@ -363,7 +397,12 @@ async def source_access(workspace_id: UUID, entry_id: UUID, request: Request) ->
         if record is None:
             raise HTTPException(status_code=404, detail="Knowledge set not found.")
         settings = get_settings()
-        signer = ArtifactUrlSigner(region=settings.s3_region, endpoint_url=settings.s3_endpoint_url)
+        signer = ArtifactUrlSigner(region=settings.s3_region, endpoint_url=settings.s3_endpoint_url,
+            access_key_id=settings.aws_access_key_id,
+            secret_access_key=(settings.aws_secret_access_key.get_secret_value()
+                               if settings.aws_secret_access_key else None),
+            session_token=(settings.aws_session_token.get_secret_value()
+                           if settings.aws_session_token else None))
         return {
             "url": signer.create_download_url(
                 bucket=record.asset.bucket,

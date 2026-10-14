@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MissionPriority = Literal["low", "medium", "high"]
 
@@ -37,3 +37,11 @@ class TestMissionSpec(BaseModel):
     )
 
     priority: MissionPriority = "medium"
+
+    @field_validator("success_criteria")
+    @classmethod
+    def distinct_observable_criteria(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = [" ".join(criterion.split()).casefold() for criterion in value]
+        if any(not criterion for criterion in normalized) or len(set(normalized)) != len(value):
+            raise ValueError("Success criteria must be nonblank and distinct.")
+        return value

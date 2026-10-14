@@ -8,6 +8,7 @@ export type TestRunStatus =
   | "cancelled";
 
 export type JourneyOutcome = "passed" | "failed" | "partial" | "inconclusive";
+export type TestingDepth = "low" | "medium" | "high";
 export type FindingSeverity = "critical" | "high" | "medium" | "low" | "info";
 
 export interface CurrentUser {
@@ -149,6 +150,7 @@ export interface TargetAuthorization {
 }
 
 export interface TestRun {
+  test_number?: number | null;
   id: string;
   workspace_id: string;
   application_id: string;
@@ -169,6 +171,8 @@ export interface Finding {
   id: string;
   severity: FindingSeverity;
   category: string;
+  finding_kind?: string;
+  verification_status?: string;
   title: string;
   summary: string;
   recommendation: string | null;
@@ -200,7 +204,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
     credentials: "include",
@@ -211,6 +215,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   return readResponse<T>(response);
+}
+
+export interface JourneyExecution {
+  id: string;
+  ordinal: number;
+  persona_name: string;
+  persona_perspective: string;
+  mission_title: string;
+  mission_objective: string;
+  step_count: number;
+  artifact_count: number;
+  evidence_available: boolean;
+  summary: string | null;
+  success_criteria: string[];
+  execution_id: string | null;
+  attempt_number: number | null;
+  execution_status: string | null;
+  outcome: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+  result: Record<string, unknown> | null;
+}
+
+export interface JourneyDetail {
+  journey: JourneyExecution;
+  steps: { id: number; step_number: number; action_type: string; action_summary: string;
+    observation_summary: string | null; status: string; started_at: string | null;
+    completed_at: string | null }[];
+  artifacts: { id: string; step_id: number | null; artifact_type: string;
+    content_type: string; size_bytes: number | null; created_at: string; kind: string | null }[];
+  findings: Finding[];
+  next_after_step: number | null;
+  artifacts_truncated: boolean;
 }
 
 async function requestForm<T>(path: string, form: FormData, signal?: AbortSignal): Promise<T> {
@@ -246,6 +284,10 @@ async function readResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 export const api = {
+  ingestKnowledgeLink: (workspaceId: string, url: string, name: string, roles: string[]) =>
+    request<IngestionEntry>(`/api/v1/workspaces/${workspaceId}/ingestion/link`, {
+      method: "POST", body: JSON.stringify({ url, name, roles }),
+    }),
   ingestKnowledge: (
     workspaceId: string,
     file: File,
@@ -356,6 +398,8 @@ export const api = {
     request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
   getRunResults: (runId: string, signal?: AbortSignal) =>
     request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
+  getRunJourneys: (runId: string, signal?: AbortSignal) =>
+    request<JourneyExecution[]>(`/api/v1/test-runs/${runId}/journeys`, { signal }),
   startRun: (runId: string) =>
     request<TestRun>(
       `/api/v1/test-runs/${runId}/start`,
@@ -363,9 +407,9 @@ export const api = {
         method: "POST",
       },
     ),
-  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = []) =>
+    createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "legacy_persona") =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",
-      body: JSON.stringify({ target_id: targetId, study_brief: testBrief, knowledge_entry_ids: knowledgeIds }),
+        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(executionMode === "deep_feature_v1" ? { execution_mode: executionMode } : {}) }),
     }),
 };

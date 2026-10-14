@@ -11,6 +11,30 @@ from litellm.exceptions import RateLimitError
 from markettwin_evaluation_worker import visual_verifier
 
 
+@pytest.mark.parametrize("preconditions_met", [False, None, "true", True])
+async def test_unestablished_precondition_cannot_confirm_a_product_defect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, preconditions_met: object,
+) -> None:
+    image = tmp_path / "pending.png"
+    image.write_bytes(b"pending-image")
+
+    async def fake_acompletion(**_kwargs: object) -> object:
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+            content=json.dumps({
+                "status": "unsatisfied", "preconditions_met": preconditions_met,
+                "rationale": "No final delivery evidence is displayed.",
+                "observed_details": ["Awaiting external confirmation"],
+            }),
+        ))])
+
+    monkeypatch.setattr(visual_verifier.litellm, "acompletion", fake_acompletion)
+    result = await visual_verifier.verify_visual_criterion(
+        criterion="When final delivery evidence is present, a final confirmation is displayed.",
+        viewport_path=image,
+    )
+    assert result.status == ("unsatisfied" if preconditions_met is True else "unverified")
+
+
 def test_visual_model_uses_selected_model_unless_overridden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

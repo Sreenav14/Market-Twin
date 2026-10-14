@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from google.adk.models.lite_llm import LiteLlm
+from markettwin_shared.agent_configuration import DEFAULT_TEMPERATURE
 from markettwin_shared.model_parameters import completion_parameters
 
 DEFAULT_MODEL_PROVIDER: Final[str] = "openai"
@@ -28,12 +29,17 @@ class ModelRuntimeConfiguration:
     num_retries: int | None = None
     num_ctx: int | None = None
     reasoning_effort: str | None = None
+    temperature: float = DEFAULT_TEMPERATURE
 
     def snapshot_parameters(self) -> dict[str, object]:
         """Return safe model parameters suitable for runtime snapshots."""
 
         parameters: dict[str, object] = {
             "max_tokens": self.max_tokens,
+            "requested_temperature": self.temperature,
+            "temperature": completion_parameters(
+                self.model_name, self.max_tokens, temperature=self.temperature,
+            ).get("temperature"),
         }
 
         if self.num_retries is not None:
@@ -53,6 +59,7 @@ class ModelRuntimeConfiguration:
 def resolve_model_runtime_configuration(
     *,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    temperature: float = DEFAULT_TEMPERATURE,
 ) -> ModelRuntimeConfiguration:
     """Resolve the safe semantic configuration for the active model."""
 
@@ -80,6 +87,7 @@ def resolve_model_runtime_configuration(
             provider="openai",
             model_name=model_name,
             max_tokens=max_tokens,
+            temperature=temperature,
             num_retries=DEFAULT_OPENAI_NUM_RETRIES,
             reasoning_effort=(os.getenv("MODEL_REASONING_EFFORT") or "").strip() or None,
         )
@@ -104,6 +112,7 @@ def resolve_model_runtime_configuration(
             provider="ollama",
             model_name=model_name,
             max_tokens=max_tokens,
+            temperature=temperature,
             num_ctx=num_ctx,
             reasoning_effort="none",
         )
@@ -114,6 +123,7 @@ def resolve_model_runtime_configuration(
         )
         return ModelRuntimeConfiguration(
             provider=provider, model_name=model_name, max_tokens=max_tokens,
+            temperature=temperature,
             num_retries=DEFAULT_OPENAI_NUM_RETRIES,
         )
     raise ValueError(f'MODEL_NAME is required for MODEL_PROVIDER "{provider}".')
@@ -122,11 +132,13 @@ def resolve_model_runtime_configuration(
 def create_model(
     *,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    temperature: float = DEFAULT_TEMPERATURE,
 ) -> LiteLlm:
     """Create the configured LLM used by MarketTwin agents."""
 
     configuration = resolve_model_runtime_configuration(
         max_tokens=max_tokens,
+        temperature=temperature,
     )
 
     if configuration.provider == "openai":
@@ -144,13 +156,17 @@ def create_model(
             return LiteLlm(
                 model=configuration.model_name,
                 api_key=api_key,
-                **completion_parameters(configuration.model_name, configuration.max_tokens),
+                **completion_parameters(
+                    configuration.model_name, configuration.max_tokens, temperature=temperature,
+                ),
                 num_retries=configuration.num_retries,
             )
 
         return LiteLlm(
             model=configuration.model_name,
-            **completion_parameters(configuration.model_name, configuration.max_tokens),
+            **completion_parameters(
+                configuration.model_name, configuration.max_tokens, temperature=temperature,
+            ),
             num_retries=configuration.num_retries,
         )
 
@@ -174,11 +190,14 @@ def create_model(
             model=configuration.model_name,
             api_base=api_base,
             max_tokens=configuration.max_tokens,
+            temperature=temperature,
             num_ctx=configuration.num_ctx,
             reasoning_effort=configuration.reasoning_effort,
         )
 
-    parameters = completion_parameters(configuration.model_name, configuration.max_tokens)
+    parameters = completion_parameters(
+        configuration.model_name, configuration.max_tokens, temperature=temperature,
+    )
     api_key = os.getenv("MODEL_API_KEY")
     return LiteLlm(
         model=configuration.model_name, api_key=api_key,

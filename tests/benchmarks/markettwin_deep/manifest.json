@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "fixture_version": "deep-fixture-v1",
+  "fixture_path": "services/execution-orchestrator/tests/fixtures/deep_testing_app/index.html",
+  "variants": ["good", "bad"],
+  "reset": "Navigate to index.html?variant=<variant> before every independent case; all state is page-local.",
+  "cases": [
+    {
+      "id": "valid", "category": "positive",
+      "actions": [{"kind":"fill","selector":"#name","value":"Visitor"},{"kind":"fill","selector":"#email","value":"fixture@example.test"},{"kind":"click","selector":"#registration button"}],
+      "assertions": [{"kind":"text","selector":"#result","expected":"Fixture profile registered."},{"kind":"visible","selector":"#result","expected":true},{"kind":"visible","selector":"#draft-result","expected":false}],
+      "expected_verdict": {"good":"satisfied","bad":"satisfied"}
+    },
+    {
+      "id": "empty", "category": "negative",
+      "actions": [{"kind":"click","selector":"#registration button"}],
+      "assertions": [{"kind":"text","selector":"#error","expected":"Display name is required."},{"kind":"visible","selector":"#error","expected":true},{"kind":"visible","selector":"#result","expected":false}],
+      "expected_verdict": {"good":"satisfied","bad":"not_satisfied"}
+    },
+    {
+      "id": "invalid_email", "category": "negative",
+      "actions": [{"kind":"fill","selector":"#name","value":"Visitor"},{"kind":"fill","selector":"#email","value":"invalid"},{"kind":"click","selector":"#registration button"}],
+      "assertions": [{"kind":"text","selector":"#error","expected":"Enter a valid email."},{"kind":"visible","selector":"#error","expected":true}],
+      "expected_verdict": {"good":"satisfied","bad":"not_satisfied"}
+    },
+    {
+      "id": "name_boundary", "category": "boundary",
+      "actions": [{"kind":"fill","selector":"#name","value":"ABCDEFGHIJKLM"},{"kind":"fill","selector":"#email","value":"fixture@example.test"},{"kind":"click","selector":"#registration button"}],
+      "assertions": [{"kind":"text","selector":"#error","expected":"Display name must be at most 12 characters."},{"kind":"visible","selector":"#error","expected":true}],
+      "expected_verdict": {"good":"satisfied","bad":"not_satisfied"}
+    },
+    {
+      "id": "dependent_role", "category": "state_transition",
+      "actions": [{"kind":"select","selector":"#team","value":"research"}],
+      "assertions": [{"kind":"enabled","selector":"#role","expected":true}],
+      "expected_verdict": {"good":"satisfied","bad":"not_satisfied"}
+    },
+    {
+      "id": "recovery", "category": "recovery",
+      "actions": [{"kind":"click","selector":"#registration button"},{"kind":"fill","selector":"#name","value":"Visitor"},{"kind":"fill","selector":"#email","value":"fixture@example.test"},{"kind":"click","selector":"#registration button"}],
+      "assertions": [{"kind":"visible","selector":"#error","expected":false},{"kind":"text","selector":"#result","expected":"Fixture profile registered."},{"kind":"visible","selector":"#result","expected":true}],
+      "expected_verdict": {"good":"satisfied","bad":"satisfied"}
+    },
+    {
+      "id": "async_address", "category": "asynchronous",
+      "actions": [{"kind":"click","selector":"#check"},{"kind":"wait","selector":"#address-status[data-state='complete']"}],
+      "assertions": [{"kind":"text","selector":"#address-status","expected":"Address available."}],
+      "expected_verdict": {"good":"satisfied","bad":"not_satisfied"}
+    },
+    {
+      "id": "navigation", "category": "navigation",
+      "actions": [{"kind":"click","selector":"#help"}],
+      "assertions": [{"kind":"text","selector":"h1","expected":"Registration guide"}],
+      "expected_verdict": {"good":"satisfied","bad":"not_satisfied"}
+    }
+  ],
+  "diagnostic_probes": [
+    {"id":"policy_blocked","selector":"a[href='http://127.0.0.1:1/restricted']","expected_verdict":"blocked","reason":"Outside the single authorized fixture origin; an execution restriction, never a product defect."},
+    {"id":"unsupported_upload","selector":"#document","expected_verdict":"unverified","reason":"The current agent browser tool allowlist does not support file upload. Do not fabricate an upload attempt or outcome."},
+    {"id":"ambiguous_delivery","selector":"#delivery","expected_verdict":"unverified","reason":"Pending external confirmation supplies neither completion nor failure evidence."}
+  ]
+}

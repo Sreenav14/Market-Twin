@@ -1,0 +1,144 @@
+{
+  "scope": "stdlib/SQLite mechanism tests, not SAM or PostgreSQL validation",
+  "python": "3.12.12",
+  "os": "Windows",
+  "crash_without_provider_dedup": {
+    "child_exit": 23,
+    "effects_before_replay": 1,
+    "receipts_before_replay": 0,
+    "effects_after_replay": 2
+  },
+  "crash_with_provider_dedup": {
+    "child_exit": 23,
+    "effects_before_replay": 1,
+    "receipts_before_replay": 0,
+    "effects_after_replay": 1
+  },
+  "budget_without_atomic_admission": [
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    },
+    {
+      "accepted": 8,
+      "remaining_units": -140,
+      "reserved_units": 240
+    }
+  ],
+  "budget_with_atomic_admission": [
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    },
+    {
+      "accepted": 3,
+      "remaining_units": 10,
+      "reserved_units": 90
+    }
+  ],
+  "cost_scenarios": [
+    {
+      "name": "low",
+      "tasks_per_month": 60,
+      "input_mtokens": 1.5,
+      "output_mtokens": 0.24,
+      "text_usd": 7.35
+    },
+    {
+      "name": "medium",
+      "tasks_per_month": 300,
+      "input_mtokens": 24.0,
+      "output_mtokens": 3.6,
+      "text_usd": 114.0
+    },
+    {
+      "name": "high",
+      "tasks_per_month": 900,
+      "input_mtokens": 225.0,
+      "output_mtokens": 31.5,
+      "text_usd": 1035.0
+    }
+  ]
+}

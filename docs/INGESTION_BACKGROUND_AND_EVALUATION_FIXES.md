@@ -17,7 +17,9 @@ October 4, 2026. This extends [the workspace ingestion implementation](INGESTION
 The existing tracing flag, content-capture setting, LangSmith endpoint, and OTLP
 headers were already configured locally. Missing LANGSMITH_* SDK variables were
 not the cause: this project uses OpenTelemetry export rather than the LangSmith
-SDK. No credentials or model selection were changed.
+SDK. No credentials were changed. The subsequent explicit model request selected
+openai/gpt-6-luna through the existing .env model setting; compatibility and
+verification are described below.
 
 ## Background ingestion
 
@@ -91,10 +93,13 @@ All ingestion endpoints have prefix /api/v1/workspaces/{workspace_id}/ingestion:
 
 KNOWLEDGE_MODEL_MAX_OUTPUT_TOKENS defaults to 16384 instead of the former fixed
 8192. It must be positive and can be lowered for a replacement model's limits.
-The configured gpt-4o-mini supports up to 16,384 output tokens, according to its
+The previous gpt-4o-mini model supports up to 16,384 output tokens, according to its
 [official model documentation](https://developers.openai.com/api/docs/models/gpt-4o-mini).
-A larger budget reduces this particular truncation risk; it does not guarantee
-every document will fit or every generated claim will be correct.
+The initial default increase to 16K addressed observed truncation. A later
+32K trial during model migration was reverted: Luna's successful document output
+fit within 16K. Current local KNOWLEDGE_MODEL_MAX_OUTPUT_TOKENS is 16384.
+If output grows again, inspect duplicate/noisy selection before increasing the
+budget. A token limit never establishes semantic correctness.
 
 Knowledge and evaluation reuse MARKETTWIN_OBSERVABILITY_ENABLED,
 MARKETTWIN_OBSERVABILITY_CAPTURE_CONTENT, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
@@ -137,8 +142,7 @@ reveals the report when it is ready.
 Verification covers ordinary Python regressions, real PostgreSQL attachment and
 archive behavior inside a rolled-back transaction, UI unit tests, desktop/mobile
 workflow and accessibility checks, focused type/lint checks, and a production
-web build. Exact final results and live evaluation results are recorded below
-after the checks complete.
+web build. Final check results are recorded below.
 
 The live synthetic ingestion check returned 202 in 1.06 seconds, transitioned
 queued -> processing -> ready, and finished in 10.38 seconds without errors.
@@ -153,7 +157,8 @@ The diagram relationship-quality limitation is deliberately deferred at the
 user's request. The live relationship evaluation reproduced omitted directed
 edges even though categories and evidence ordinals were correct. Its opt-in
 regression is retained for a later model change; no source-specific relation
-patch or model swap was added.
+patch was added. The subsequent requested Luna migration verifies transport
+and real outputs, but does not establish complete diagram relationship recall.
 
 Existing supported formats remain unchanged. This remains one-source ingestion
 with whole-set approval, not arbitrary binary-format support, multi-source
@@ -161,3 +166,147 @@ revision editing, or normalized per-item persistence. The execution worker's
 one-owner browser recovery policy remains unchanged and is not horizontally
 scalable without execution leases. Evaluation and ingestion use PostgreSQL
 ownership for their own read-only processing jobs.
+
+
+## Canonical persistence decision
+
+For V1, IngestionEntry.preview is the canonical generated and approved knowledge
+snapshot. Approval metadata belongs to BlueprintVersion; test creation freezes
+the approved snapshot into each test configuration. The legacy
+KnowledgeIngestionService/persist_pdf_skills.py path writes experimental
+normalized drafts and is explicitly labeled as such. It is not invoked by the
+public ingestion, approval, attachment, or planning flow. Existing normalized
+Evidence/Skill tables and regression tests are retained. Before adding incremental
+reconciliation or version updates, either migrate approval into that domain or
+retire the experiment; do not mix both as canonical production writes.
+
+## Transient failure handling
+
+A dispatch attempts the private worker at most three times. HTTP 502, 503, and
+504 retry after two and four seconds; each attempt rewinds the same downloaded
+source stream. The entry remains processing throughout, retaining the advisory
+lock without an open row transaction. Unsupported/unreadable/oversized sources
+fail immediately. A known output-limit failure is also terminal: repeating the
+same bounded request does not repair selection or truncation. The final failure
+is saved for review and manual Retry. Attempts are bounded per dispatch; process
+crash recovery can start a new dispatch, not a lifetime-global retry counter.
+
+## Environment-driven model selection
+
+MODEL_NAME is a provider-qualified LiteLLM identifier. Text knowledge, Meta and
+Persona agents, reconciliation, and visual evaluation use it. IMAGE_MODEL_NAME,
+VIDEO_MODEL_NAME, and VISUAL_MODEL_NAME are optional explicit workload overrides;
+when absent, their paths use MODEL_NAME. Provider-qualified agent models determine
+the provider, while the existing Ollama connection/context settings remain
+supported. Provider credentials and media capabilities must match the selected
+model; selecting a text/image model does not give it native video support.
+
+The active local model is openai/gpt-6-luna. The installed LiteLLM version did
+not recognize its reasoning parameter and initially sent an unsupported
+max_tokens request. Shared completion_parameters now sends
+max_completion_tokens for OpenAI, forwards the explicitly configured
+MODEL_REASONING_EFFORT through allowed_openai_params, and omits temperature when
+reasoning is enabled. Other providers keep their own max_tokens parameter and
+do not inherit the OpenAI reasoning override. Current local effort is none,
+required for Luna function calling on the existing Chat Completions agent path.
+No endpoint/tool-handler migration or source-specific semantic patch was needed.
+See [official Luna documentation](https://developers.openai.com/api/docs/models/gpt-6-luna)
+and [GPT-6 compatibility guidance](https://developers.openai.com/api/docs/guides/latest-model).
+
+Restart affected workers after editing .env; existing processes retain their
+startup environment. Historic runtime snapshots and existing reports keep their
+original model/configuration rather than being rewritten. Knowledge and evaluation
+workers are running locally with Luna. Evaluation visual snapshots record actual
+request parameters; agent snapshots retain their semantic max_tokens budget and
+record configured reasoning effort.
+
+The failed MARKETTWIN_COMPLETE_PROJECT entry (25dcb61c-9803-431d-8f5d-661bc7730a9a)
+was retried through the live UI after worker reload. It is now ready with seven
+knowledge items, three artifacts, three Skills, and no processing error. LangSmith
+shows its successful knowledge.preview trace f246fbcdd712392ed0a8196574c0cf8d
+with 17.74 seconds latency and 14.39K total tokens. Total usage already includes
+input, so its output fit below the restored 16K output budget. The user's subsequent
+img.Test source also became ready with one context item and no forced artifact
+or Skill; its trace is 9205e299fba67effb0e38f306718d7d0.
+
+A separate synthetic function-call check returned model gpt-6-luna,
+finish_reason=tool_calls, and verify_setup({ready:true}). No browser action was
+executed by that check.
+
+## Frontend/API port consistency
+
+Vite reads CONTROL_API_PORT from the repository-root environment rather than
+hardcoding 8001. Its fallback, .env.example, and Control API Settings all use
+8000. The current local .env deliberately uses 8001, matching the verified running
+API and avoiding interruption of the separate existing 8000 process. No credentials
+are exposed to the browser; the proxy reads only CONTROL_API_ variables. Restart
+Vite after changing these server settings; explicit uvicorn --port must match.
+
+## Completed report recovery
+
+The evaluation worker completed the three previously missing reports:
+
+| TestRun | Report |
+| --- | --- |
+| 6c88583f-78fa-4016-bfe3-e52785c5c71f | ac088886-93b5-4578-b092-f3f153d8b81f |
+| d5ee75e6-df5e-4d14-94a8-ed6e466d0f32 | 3802a64c-172b-44ec-99d3-360f67052d17 |
+| 94a72bdf-33e7-4ed7-a0d8-0b34c1ecb606 | ca481640-c935-4979-9894-0c6a1c883153 |
+
+All three authenticated results endpoints returned 200. Their evaluation.run
+traces are visible in the existing LangSmith project, with trace IDs
+4c4fc09d566fde9183668402504b284d, 242a30ade9247a6c21d726bbfed502f0, and
+48f845d7bf35b06a18955db435507e46. No browser executions were replayed.
+
+## Remaining production boundaries
+
+V1 bounded ingestion works, including the streamed 50 MB upload limit.
+Production upload hardening remains: presigned direct browser-to-object-storage
+upload and API completion confirmation. This change does not implement it.
+
+Planning can currently select up to ten attached knowledge sets and includes
+their full approved JSON. Before larger deployments, add goal-based relevant-item
+selection and a character/token budget. RAG is not required for that next step.
+This is documented follow-up work, not added orchestration in this increment.
+
+
+## Final verification
+
+- Full ordinary Python suite: **315 passed, 12 skipped** (52.41 seconds). Skips
+  are explicitly opt-in database/model checks, not silently ignored failures.
+- Real PostgreSQL attachment/archive regression: **1 passed**, with test data
+  rolled back. Cross-workspace attachment rejection was verified.
+- UI unit suite: **23 passed**. Final frontend TypeScript check passed and
+  production build passed (5.28 seconds).
+- Desktop and mobile ingestion/review/attachment/test-selection E2E: **2 passed**
+  sequentially. Seven states in each browser passed accessibility and horizontal
+  overflow assertions. The expanded workflow has a 60-second total test budget;
+  individual expectations retain their normal timeouts.
+- Transient-retry/client suite: **15 passed**. It verifies source rewind,
+  recovery from 502/503/504, terminal 415/422/output-limit handling, and exhaustion.
+- Focused runtime type check: **0 errors**. Focused Ruff check and git diff
+  whitespace check passed. Whole-repository typing still has pre-existing errors
+  outside this scope; this is not a claim that the entire repository is type clean.
+- Executed Vite configuration checks returned 8001 for the local setting, 8123
+  for an override, and 8000 when unset/empty.
+- Live ingestion, model function calling, three report endpoints, and both
+  LangSmith trace families were verified as described above.
+
+## Separate Kafka diagnostic
+
+After the final API reload, the outbox relay logged SSL record-layer failures
+for advertised broker 1. A read-only metadata and TLS check established:
+bootstrap hostname TLS succeeds; advertised broker 2 TLS succeeds; broker 1's
+advertised IP fails TLS when used as the server name, but succeeds when the
+configured bootstrap hostname is used as TLS SNI. This points to a broker
+advertisement/SNI routing mismatch; it is not evidence that Luna or ingestion
+broke Kafka. Kafka server/advertised-name configuration needs correction before
+claiming execution delivery is healthy. This change does not disable certificate
+verification, change broker settings, or hide the connection error.
+
+
+## Cleanup
+
+Removed the explicitly identified temporary pytest work directories and the
+desktop/mobile E2E output directory after inspection. Its 14 UI screenshots were
+test artifacts only. Original uploaded files, stored knowledge sources, runtime
+evidence, durable regression tests, and implementation documentation are retained.

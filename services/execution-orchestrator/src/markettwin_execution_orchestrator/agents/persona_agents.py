@@ -1,16 +1,20 @@
 """MarketTwin Persona Agent construction."""
 
+import json
 from collections.abc import Sequence
 
 from google.adk.agents import LlmAgent
 from markettwin_shared.runtime_snapshot import AgentRuntimeSnapshotPayload
 
 from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
+from markettwin_execution_orchestrator.agents.schemas.persona_report import PersonaAgentReport
 from markettwin_execution_orchestrator.browser.tools import BrowserTool
 from markettwin_execution_orchestrator.models.model_factory import (
     create_model,
     resolve_model_runtime_configuration,
 )
+
+PERSONA_AGENT_MAX_TOKENS = 2_048
 
 
 def create_persona_agent(
@@ -50,11 +54,18 @@ Priorities:
 {", ".join(journey.persona.priorities)}
 
 Success criteria:
-{", ".join(journey.mission.success_criteria)}
+{json.dumps(journey.mission.success_criteria, ensure_ascii=False)}
 
 BEHAVIOR
 
 - Make decisions as this persona would.
+- Complete the ordered end-to-end flow in MISSION OBJECTIVE, including relevant
+  setup, validation/recovery and final outcome checks. Do not stop merely because
+  an intermediate page opened or one criterion passed. Plan steps from observed
+  controls and adapt to the interface; do not invent selectors or product rules.
+- This journey starts independently. Do not assume a previous agent supplied
+  cookies, account data or application changes. If required access is unavailable,
+  record the blocker and leave unsupported criteria unverified.
 - Do not behave like another persona.
 - Do not optimize merely to make the application pass.
 - Record genuine confusion, friction, missing information, and failures.
@@ -97,6 +108,9 @@ BEHAVIOR
   - Browser tool responses may include a step_id. Preserve relevant step IDs as
   evidence references for mission success criteria.
 - For each success criterion, return a criterion_evidence entry.
+- Copy each assigned criterion exactly once; do not add or rename criteria.
+- Keep satisfied_criteria and unsatisfied_criteria consistent with those entries.
+- Synthetic preferences and friction are observations, not measured human sentiment.
 - Use status "satisfied" only when the observed browser evidence supports it.
 - Use status "unsatisfied" only when browser evidence contradicts it.
 - Use status "unverified" when available evidence cannot establish either.
@@ -111,6 +125,17 @@ BEHAVIOR
   established from semantic browser state alone.
 - When requesting visual verification, include that tool call's returned
   step_id in the criterion's evidence_step_ids.
+- If an expected on-page message, heading, or control state appears absent or
+  incorrect, use browser_capture_element on an existing result container or
+  nearby observed control and cite that capture alongside the triggering action.
+  Do not try to capture the missing expected text. Capture after the action, not
+  before it. A screenshot of an unrelated region cannot establish absence.
+- After navigation, inspect the resulting browser state and capture the actual
+  destination heading with browser_capture_element, even when it differs from
+  the expected heading. This tool scrolls the observed element into view. Do not
+  substitute the page's top heading, the original link, or the expected missing
+  heading for the actual destination. If the destination cannot be located, keep
+  the criterion unverified rather than guessing.
 
 Return a concise Journey result describing:
 
@@ -124,15 +149,27 @@ Return a concise Journey result describing:
 
 FINAL RESPONSE
 
-After you finish using browser tools, return ONLY one JSON object.
+Copy every string from this assigned criterion list verbatim into exactly one
+criterion_evidence entry, even when its status is unverified:
+{json.dumps(journey.mission.success_criteria, ensure_ascii=False)}
+The mission objective is not a substitute for these individual criteria.
+
+After you finish using browser tools, submit the final structured response
+through set_model_response when that tool is available. Otherwise return
+ONLY one JSON object matching the response schema.
 
 Do not wrap it in Markdown.
 Do not include text before or after the JSON.
 
-Use exactly this structure:
+Overall outcome must be exactly one of: passed, failed, partial, inconclusive.
+The values satisfied, unsatisfied, and unverified belong ONLY to a criterion's
+status, never to the overall outcome. Use inconclusive if evidence is insufficient.
+Escape quotation marks and line breaks inside JSON strings. Keep the report concise.
+
+Use this structure, replacing example values with observed evidence:
 
 {{
-  "outcome": "passed | failed | partial | inconclusive",
+  "outcome": "inconclusive",
   "summary": "short explanation of what happened",
   "actions": [
     "important user actions performed"
@@ -155,11 +192,11 @@ Use exactly this structure:
   "criterion_evidence": [
     {{
       "criterion": "exact success criterion text",
-      "status": "satisfied | unsatisfied | unverified",
+      "status": "unverified",
       "evidence_step_ids": [1, 2]
     }}
   ],
-  "final_url": "final browser URL or null"
+  "final_url": null
 }}
 
 Base the report only on what you actually observed through the browser.
@@ -171,13 +208,14 @@ Never claim an action succeeded unless browser state showed that it succeeded.
 
     return LlmAgent(
         name=persona_name,
-        model=create_model(),
+        model=create_model(max_tokens=PERSONA_AGENT_MAX_TOKENS),
         description=(
             f"Simulates the MarketTwin user perspective '{journey.persona.name}' "
             "while testing one authorized Journey."
         ),
         instruction=instruction,
         tools=list(browser_tools),
+        output_schema=PersonaAgentReport,
     )
 def build_persona_runtime_snapshot_payload(
     *,
@@ -195,7 +233,7 @@ def build_persona_runtime_snapshot_payload(
         )
 
     model_configuration = (
-        resolve_model_runtime_configuration()
+        resolve_model_runtime_configuration(max_tokens=PERSONA_AGENT_MAX_TOKENS)
     )
 
     return AgentRuntimeSnapshotPayload(

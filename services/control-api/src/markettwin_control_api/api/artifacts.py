@@ -94,6 +94,11 @@ async def get_artifact_access(
     signer = ArtifactUrlSigner(
         region=settings.s3_region,
         endpoint_url=settings.s3_endpoint_url or None,
+        access_key_id=settings.aws_access_key_id,
+        secret_access_key=(settings.aws_secret_access_key.get_secret_value()
+                           if settings.aws_secret_access_key else None),
+        session_token=(settings.aws_session_token.get_secret_value()
+                       if settings.aws_session_token else None),
     )
 
     url = signer.create_download_url(

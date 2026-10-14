@@ -13,7 +13,12 @@ uv run --env-file .env python services/knowledge-worker/scripts/generate_pdf_ski
 
 The script reads a local PDF, extracts numbered page evidence, and makes one structured model call.
 It prints the extracted evidence, extraction issues and validated Skill drafts as JSON.
-It does not use Kafka or write database rows. The empty persistence package remains unused.
+It does not use Kafka or write database rows.
+
+The V1 UI uses `IngestionEntry.preview` as its canonical approved knowledge snapshot.
+The older `persist_pdf_skills.py` / `KnowledgeIngestionService` path is an experimental
+normalized-draft proof, not an approval or test-selection path. Do not wire
+reconciliation into production before explicitly migrating that approval boundary.
 
 Set `MODEL_NAME` to a LiteLLM model identifier (default: `openai/gpt-4o-mini`) and set
 `MODEL_API_KEY` or `OPENAI_API_KEY` in `.env`. Generated Skills are drafts requiring human review.

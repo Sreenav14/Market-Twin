@@ -1,5 +1,6 @@
 """Test Run HTTP endpoints."""
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import (
@@ -26,6 +27,7 @@ from markettwin_control_api.api.dependencies import (
 from markettwin_control_api.api.permissions import (
     WORKSPACE_WRITE_ROLES,
 )
+from markettwin_control_api.knowledge.repository import IngestionRepository
 from markettwin_control_api.persistence.repositories import (
     ApplicationRepository,
     TargetAuthorizationRepository,
@@ -39,7 +41,6 @@ from markettwin_control_api.services import (
     RunDispatchService,
     RunNotQueueableError,
 )
-from markettwin_control_api.knowledge.repository import IngestionRepository
 
 router = APIRouter(
     tags=["Test Runs"],
@@ -50,7 +51,20 @@ class CreateTestRunRequest(BaseModel):
     """Request for creating a MarketTwin test run."""
 
     target_id: UUID
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    testing_depth: Literal["low", "medium", "high"] = "medium"
+    execution_mode: Literal["legacy_persona", "deep_feature_v1"] = "legacy_persona"
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("Test name cannot be blank.")
+        return value
 
     @field_validator("knowledge_entry_ids")
     @classmethod
@@ -86,6 +100,7 @@ class TestRunResponse(BaseModel):
     """Test run returned by the Control API."""
 
     id: UUID
+    test_number: int | None
     workspace_id: UUID
     application_id: UUID
     target_id: UUID
@@ -128,6 +143,7 @@ def test_run_response(
 
     return TestRunResponse(
         id=test_run.test_run_id,
+        test_number=test_run.test_number,
         workspace_id=test_run.workspace_id,
         application_id=test_run.application_id,
         target_id=test_run.target_id,
@@ -244,16 +260,22 @@ async def create_test_run(
 
             configuration_snapshot: dict[str, object] = {
                 "study_brief": payload.study_brief,
+                "testing_depth": payload.testing_depth,
                 "authorization_id_at_creation": str(
                     authorization.authorization_id
                 ),
             }
+            if payload.name is not None:
+                configuration_snapshot["test_name"] = payload.name
+            if payload.execution_mode == "deep_feature_v1":
+                configuration_snapshot["execution_mode"] = payload.execution_mode
             if payload.knowledge_entry_ids:
                 knowledge_repository = IngestionRepository(database_session)
                 selected_knowledge: list[dict[str, object]] = []
                 for entry_id in payload.knowledge_entry_ids:
                     record = await knowledge_repository.get(
-                        application.workspace_id, entry_id, application_id=application.application_id
+                        application.workspace_id, entry_id,
+                        application_id=application.application_id,
                     )
                     if record is None:
                         raise HTTPException(

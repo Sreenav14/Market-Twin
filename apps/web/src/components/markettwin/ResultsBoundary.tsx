@@ -39,17 +39,21 @@ export function ResultsBoundary({ children }: { children: ReactNode }) {
         </span>
         <h2>
           {completed
-            ? "Evaluation is not available yet"
+            ? "Preparing evaluation"
             : stopped
               ? "This test ended without a report"
               : "Results will appear here"}
         </h2>
         <p>
           {completed
-            ? "Execution is complete. This view will update when the evaluation becomes available."
+            ? "Browser execution is complete. Evaluation is still pending, so product findings are not ready. This page checks automatically. If it continues waiting, ask your workspace operator to check the evaluation worker; its status is also shown in the test flow."
             : stopped
               ? "Review the test status and target configuration before starting another test."
-              : "The test is still in progress. Findings and the final report become available after completion."}
+              : run.status === "draft"
+                ? "Start this draft to create agents and execute its journeys. Evaluation follows execution."
+                : run.status === "queued"
+                  ? "This test is waiting for an execution worker. Evaluation starts after its journeys finish."
+                  : "Agents are still planning or executing journeys. Evaluation follows execution; findings and the final report are not ready yet."}
         </p>
         <Button variant="secondary" onClick={refresh}>
           Check again

@@ -1,0 +1,22 @@
+.run-records { display: grid; gap: 16px; }
+.run-record { min-width: 0; overflow-wrap: anywhere; }
+.run-record + .evaluation-records-heading { margin-top: 28px; }
+.run-record h3 { font-size: 16px; }
+.run-record details { margin-top: 16px; }
+.run-record summary { cursor: pointer; color: var(--text); }
+.run-record h4 { margin: 16px 0 8px; text-transform: capitalize; }
+.run-record-badges, .run-evidence-links { display: flex; flex-wrap: wrap; gap: 12px; }
+.run-record-badges > span { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.run-evidence-links { margin-top: 12px; }
+.run-assessment-details { margin: 20px 0; }
+.run-assessment-details > summary { cursor: pointer; margin-bottom: 12px; }
+#report-assessment { margin: 24px 0; overflow-wrap: anywhere; }
+.run-assessment > h3 { margin-bottom: 12px; }
+.run-assessment > h4 { margin: 20px 0 8px; }
+.run-assessment > p, .run-assessment > ul { margin: 12px 0; }
+.run-assessment > ul { padding-left: 20px; }
+.run-assessment .section-heading h4 { text-transform: none; }
+.run-evaluator-instruction { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+@media (max-width: 640px) {
+  .run-record .section-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+}

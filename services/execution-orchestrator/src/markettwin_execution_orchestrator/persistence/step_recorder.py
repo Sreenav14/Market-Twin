@@ -70,6 +70,17 @@ class ExecutionStepRecorder:
         
         await self.session.commit()
 
+    async def record_failure_evidence(
+        self, *, step_id: int, result: BrowserActionResult,
+    ) -> None:
+        """Isolate best-effort evidence writes from the committed action failure."""
+        try:
+            await self.record_evidence(step_id=step_id, result=result)
+        except BaseException:
+            # Also roll back on timeout cancellation so the session remains usable.
+            await self.session.rollback()
+            raise
+
     async def record_evidence(
         self,
         *,

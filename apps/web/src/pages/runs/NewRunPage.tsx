@@ -15,7 +15,7 @@ import {
   Spinner,
 } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
-import { ApiError, api } from "../../lib/api";
+import { ApiError, api, type TestingDepth } from "../../lib/api";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { AppShellContext } from "../../layouts/AppShell";
 
@@ -42,6 +42,9 @@ export function NewRunPage() {
   const { workspace, user } = useOutletContext<AppShellContext>();
   const [targetId, setTargetId] = useState("");
   const [brief, setBrief] = useState("");
+  const [name, setName] = useState("");
+  const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
+  const [executionMode, setExecutionMode] = useState("legacy_persona");
   const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ export function NewRunPage() {
     setBusy(true);
     setError(null);
     try {
-      const run = await api.createRun(applicationId, target.id, brief.trim(), knowledgeIds);
+      const run = await api.createRun(applicationId, target.id, brief.trim(), knowledgeIds, testingDepth, name, executionMode);
       setBrief("");
       navigate(`/runs/${run.id}/overview`);
     } catch (error) {
@@ -224,6 +227,11 @@ export function NewRunPage() {
       {header}
       <div className="study-create-layout">
         <form className="study-composer" onSubmit={submit}>
+          <div className="composer-knowledge form-grid">
+            <label htmlFor="test-name">Test name <span className="muted">Optional</span></label>
+            <input className="text-input" id="test-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} placeholder="For example, Pricing clarity" aria-describedby="test-name-help" />
+            <p className="form-help" id="test-name-help">A short label for lists and activity. A unique incremental ID is assigned automatically. Your testing goal stays separate below.</p>
+          </div>
           <div className="composer-target">
             <label htmlFor="test-target">Application target</label>
             <select
@@ -259,6 +267,21 @@ export function NewRunPage() {
               </fieldset>
             ) : <p className="muted">No approved knowledge attached yet. <Link className="text-link" to="/knowledge/review" target="_blank" rel="noreferrer">Review knowledge</Link> and attach a set to this application, or continue without knowledge.</p>}
           </section>
+          <div className="composer-knowledge form-grid">
+            <label htmlFor="testing-depth">Testing depth</label>
+            <label htmlFor="execution-mode">Testing mode</label>
+            <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
+              <option value="legacy_persona">Persona journeys</option>
+              <option value="deep_feature_v1">Feature cases — experimental</option>
+            </select>
+            {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unverified.</p> : null}
+            <select id="testing-depth" value={testingDepth} disabled={busy || executionMode === "deep_feature_v1"} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
+              <option value="low">Low — focused coverage</option>
+              <option value="medium">Medium — balanced coverage</option>
+              <option value="high">High — broader coverage</option>
+            </select>
+            <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? "Feature cases use a separate bounded budget of up to eight cases." : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
+          </div>
           <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
               Your testing goal

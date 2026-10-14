@@ -29,6 +29,8 @@ export function IngestionPage() {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [file, setFile] = useState<File | null>(null);
+  const [sourceType, setSourceType] = useState("file");
+  const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,11 +44,13 @@ export function IngestionPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!file || !name.trim() || !role || busy) return;
+    if ((sourceType === "file" ? !file : !url.trim()) || !name.trim() || !role || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await api.ingestKnowledge(workspace.id, file, name.trim(), [role]);
+      const result = sourceType === "link"
+        ? await api.ingestKnowledgeLink(workspace.id, url.trim(), name.trim(), [role])
+        : await api.ingestKnowledge(workspace.id, file!, name.trim(), [role]);
       queryClient.setQueryData(["knowledge-review", user.id, workspace.id, result.id], result);
       void queryClient.invalidateQueries({ queryKey: ["ingestion", user.id, workspace.id] });
       if (mounted.current) navigate(`/knowledge/review/${result.id}`);
@@ -59,10 +63,17 @@ export function IngestionPage() {
 
   return (
     <>
-      <PageHeader title="Ingestion" description="Add source material to your workspace, then review the knowledge it produces." />
+      <PageHeader title="Ingestion" description="Upload a file or research a public link to generate draft knowledge and skills. Review and approve them before using them in a test." />
       {canWrite ? (
         <form className="panel form-grid form-card" onSubmit={(event) => void submit(event)} aria-busy={busy}>
           <h2>Ingest knowledge</h2>
+          <label className="field-label" htmlFor="source-type">Source type</label>
+          <select id="source-type" value={sourceType} onChange={(event) => { setSourceType(event.target.value); setError(null); }} disabled={busy}><option value="file">Upload a file</option><option value="link">Research a link</option></select>
+          {sourceType === "link" ? <>
+            <label className="field-label" htmlFor="source-url">Public source link</label>
+            <input id="source-url" type="url" className="text-input" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/docs" maxLength={2048} required disabled={busy} aria-describedby="link-help" />
+            <p className="form-help" id="link-help">MarketTwin opens the site in a browser, follows connected pages, and expands menus, tabs and readable sections. It inspects up to 30 public pages within two minutes, saves source URLs and coverage limits, then proposes knowledge and skills for your review. Login, form submissions and private pages require a separate approved source.</p>
+          </> : <>
           <label className="field-label" htmlFor="source-file">Source file</label>
           <input id="source-file" type="file" disabled={busy} required onChange={(event) => {
             const selected = event.target.files?.[0] ?? null;
@@ -70,7 +81,8 @@ export function IngestionPage() {
             if (selected && !name) setName(selected.name.replace(/\.[^.]+$/, ""));
             setError(null);
           }} aria-describedby="source-help" />
-          <p className="form-help" id="source-help">Choose one document, image, or video. You can add more sources after this one.</p>
+          <p className="form-help" id="source-help">Choose one document, image, or video. Processing continues in the background after the upload finishes.</p>
+          </>}
           <label className="field-label" htmlFor="knowledge-name">Knowledge set name</label>
           <input id="knowledge-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={200} required disabled={busy} />
           <label className="field-label" htmlFor="source-role">Source purpose</label>
@@ -80,10 +92,10 @@ export function IngestionPage() {
           </select>
           <p className="form-help">This helps MarketTwin understand how to use the source. You’ll confirm it during review.</p>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
-          {busy ? <p className="form-note" role="status">Uploading source. Knowledge processing will continue in the background.</p> : null}
+          {busy ? <p className="form-note" role="status">{sourceType === "link" ? "Researching linked pages and saving their sources." : "Uploading source."} Knowledge and skill generation will continue in the background.</p> : null}
           <div className="form-actions">
-            <Button type="submit" disabled={!file || !name.trim() || !role || busy}>
-              {busy ? <><Spinner /> Uploading source…</> : "Ingest knowledge"}
+            <Button type="submit" disabled={(sourceType === "file" ? !file : !url.trim()) || !name.trim() || !role || busy}>
+              {busy ? <><Spinner /> {sourceType === "link" ? "Researching source…" : "Uploading source…"}</> : "Ingest knowledge"}
             </Button>
           </div>
         </form>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ArrowLeft, Paperclip, Route, ScanSearch } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
@@ -6,23 +6,27 @@ import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { EmptyState } from "../../components/ui/StateViews";
-import { reportMetrics } from "../../lib/results";
+import { findingClassification } from "../../lib/results";
 import { api, type ArtifactAccess } from "../../lib/api";
 
-function ArtifactEvidence({
+export function ArtifactEvidence({
   runId,
   artifactId,
+  autoLoad = false,
 }: {
   runId: string;
   artifactId: string;
+  autoLoad?: boolean;
 }) {
   const [access, setAccess] = useState<ArtifactAccess | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { if (autoLoad) void loadEvidence(); }, [autoLoad, runId, artifactId]);
 
   async function loadEvidence() {
     setLoading(true);
     setError(null);
+    setAccess(null);
 
     try {
       const result = await api.getArtifactAccess(runId, artifactId);
@@ -72,7 +76,8 @@ function ArtifactEvidence({
           <img
             className="artifact-preview"
             src={access.url}
-            alt={`${access.artifact_type} evidence for this finding`}
+            alt={`Recorded ${access.artifact_type} evidence`}
+            onError={() => { setAccess(null); setError("Evidence unavailable. Refresh access to try again."); }}
           />
         </a>
       ) : null}
@@ -111,6 +116,7 @@ export function FindingDetailPage() {
               <div className="finding-title-meta">
                 <StatusBadge status={finding.severity} />
                 <span className="category-label">
+                  {findingClassification(finding)} ·{" "}
                   {finding.category.replaceAll("_", " ")}
                 </span>
               </div>
@@ -135,9 +141,8 @@ export function FindingDetailPage() {
                   Supporting references
                 </h3>
                 <p className="muted">
-                  These references link this finding to recorded steps and
-                  artifacts. Load an artifact to inspect the recorded evidence
-                  for this finding.
+                  These references link to the cited browser steps and artifacts.
+                  A reference alone does not establish that an agent's claim is correct.
                 </p>
                 {finding.evidence.step_ids.length +
                   finding.evidence.artifact_ids.length ===
@@ -178,13 +183,12 @@ export function FindingDetailPage() {
                   Affected journeys
                 </h3>
                 <p className="muted">
-                  Journey identifiers connect this finding to its evaluation
-                  context. Detailed playback is not available here yet.
+                  Open a journey to review its persona, mission, and reported criteria.
                 </p>
                 <ul className="reference-list">
                   {finding.journey_ids.map((id) => (
                     <li key={id}>
-                      <code>{id}</code>
+                      <Link to={`/runs/${run.id}/journeys/${id}`}><code>{id}</code></Link>
                       <CopyButton text={id} label="Copy journey ID" />
                     </li>
                   ))}
@@ -200,10 +204,9 @@ export function FindingDetailPage() {
                 <div>
                   <dt>Evaluation</dt>
                   <dd>
-                    {results.status === "ready" &&
-                    reportMetrics(results.data).deterministic
-                      ? "Deterministic checks"
-                      : "Recorded evaluation"}
+                    {findingClassification(finding) === "Visually verified issue"
+                      ? "Visual verification"
+                      : "Agent report / execution diagnostic"}
                   </dd>
                 </div>
                 <div>

@@ -117,7 +117,7 @@ def test_repeated_unsatisfied_criterion_is_aggregated() -> None:
 
     finding = findings[0]
 
-    assert finding.severity == "medium"
+    assert finding.severity == "info"
     assert (
         finding.category
         == "cross_persona_pattern"
@@ -129,7 +129,7 @@ def test_repeated_unsatisfied_criterion_is_aggregated() -> None:
     assert "2 of 3 personas" in finding.summary
 
 
-def test_all_personas_reproducing_issue_is_high_severity() -> None:
+def test_all_personas_repeating_claim_does_not_raise_severity() -> None:
     mission_id = uuid4()
 
     results = tuple(
@@ -154,4 +154,20 @@ def test_all_personas_reproducing_issue_is_high_severity() -> None:
     )
 
     assert len(findings) == 1
-    assert findings[0].severity == "high"
+    assert findings[0].severity == "info"
+    assert "not independent verification" in findings[0].summary
+
+
+def test_validation_downgrade_preserves_repeated_original_claims_as_unverified() -> None:
+    mission_id = uuid4()
+    results = tuple(JourneyResultRecord(
+        journey_id=uuid4(), persona_id=uuid4(), mission_id=mission_id, execution_id=uuid4(),
+        payload={
+            "status": "completed", "outcome": "inconclusive", "reported_outcome": "failed",
+            "unsatisfied_criteria": [], "reported_unsatisfied_criteria": ["Confirmation visible"],
+        },
+    ) for _ in range(2))
+    findings = build_cross_journey_findings(results)
+    assert len(findings) == 1
+    assert findings[0].severity == "info"
+    assert "not a confirmed product defect" in findings[0].summary

@@ -10,13 +10,14 @@ Run it continuously from the repository root:
 uv run --env-file .env python -m markettwin_evaluation_worker.worker
 ```
 
-The worker discovers completed tests without a version-1 report in PostgreSQL.
+The worker discovers completed tests without a completed version-1 report in PostgreSQL.
 It runs the existing deterministic and visual evaluation workflow, then persists
 findings and the report. Evaluation runs independently of the Kafka execution
 consumer. The UI already polls until the completed report becomes available.
 
 A database advisory lock owns each evaluation while it runs. An existing report
-prevents duplicate evaluation. Failures roll back uncommitted findings/report
+prevents duplicate evaluation. Incomplete or failed report rows can be completed
+by a later retry. Failures roll back uncommitted findings/report
 data and are retried; browser execution is never replayed by this worker.
 The current worker checks every five seconds and evaluates one test at a time.
 The existing one-shot script reuses the same ownership/completion path, so it

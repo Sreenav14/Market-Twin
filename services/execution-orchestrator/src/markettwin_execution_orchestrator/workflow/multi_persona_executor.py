@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from markettwin_execution_orchestrator.agents.meta_agent_factory import (
     MetaAgentFactory,
 )
+from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
 from markettwin_execution_orchestrator.agents.schemas.plan import (
     MetaAgentPlan,
 )
@@ -25,6 +26,11 @@ from markettwin_execution_orchestrator.browser.contracts import (
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     RunEventRepository,
+)
+from markettwin_execution_orchestrator.workflow.adk_workflow import (
+    WorkflowPlan,
+    create_run_workflow,
+    run_workflow,
 )
 from markettwin_execution_orchestrator.workflow.journey_executor import (
     PersonaJourneyExecutionRequest,
@@ -58,6 +64,9 @@ class MultiPersonaExecutionRequest:
 
     network_policy: NetworkPolicy = "public_only"
     max_duration_seconds_per_journey: int = 180
+    agent_prompt_overrides: dict[str, dict[str, str]] = field(
+        default_factory=dict[str, dict[str, str]]
+    )
 
 
 async def execute_multi_persona_plan(
@@ -75,123 +84,178 @@ async def execute_multi_persona_plan(
     if request.max_duration_seconds_per_journey <= 0:
         raise ValueError("max_duration_seconds_per_journey must be positive.")
 
-    journeys = build_persona_journeys(request.plan)
+    async def prepare() -> WorkflowPlan:
+        return WorkflowPlan(
+            plan=request.plan,
+            journey_ids_by_key=dict(request.journey_ids_by_key),
+            persona_ids_by_key=dict(request.persona_ids_by_key),
+            mission_ids_by_key=dict(request.mission_ids_by_key),
+        )
 
+    async def execute(prepared: WorkflowPlan, journey: PersonaJourneySpec) -> PersonaJourneyResult:
+        return await execute_one_planned_journey(
+            request=request,
+            journey=journey,
+            browser_controller=browser_controller,
+            session=session,
+            factory=factory,
+        )
+
+    async def collect(result: MultiPersonaExecutionResult) -> None:
+        await persist_run_collection(run_id=request.run_id, result=result, session=session)
+
+    return await run_workflow(
+        run_id=request.run_id,
+        workflow=create_run_workflow(
+            prepare_plan=prepare,
+            execute_journey=execute,
+            collect_results=collect,
+            max_journeys=len(build_persona_journeys(request.plan)),
+        ),
+    )
+
+
+async def execute_one_planned_journey(
+    *,
+    request: MultiPersonaExecutionRequest,
+    journey: PersonaJourneySpec,
+    browser_controller: BrowserController,
+    session: AsyncSession,
+    factory: MetaAgentFactory | None = None,
+) -> PersonaJourneyResult:
+    """Execute and commit one journey exactly once before ADK advances its index."""
     runtime_factory = factory or MetaAgentFactory()
     execution_repository = ExecutionRepository(session)
     run_event_repository = RunEventRepository(session)
-    results: list[PersonaJourneyResult] = []
+    execution_id = uuid4()
 
-    for journey in journeys:
-        execution_id = uuid4()
+    journey_id = request.journey_ids_by_key.get(journey.journey_key)
 
-        journey_id = request.journey_ids_by_key.get(journey.journey_key)
+    if journey_id is None:
+        raise RuntimeError(f'No persisted PersonaJourney exists for"{journey.journey_key}".')
 
-        if journey_id is None:
-            raise RuntimeError(f'No persisted PersonaJourney exists for"{journey.journey_key}".')
+    persona_id = request.persona_ids_by_key.get(journey.persona.persona_id)
+    mission_id = request.mission_ids_by_key.get(journey.mission.mission_id)
 
-        persona_id = request.persona_ids_by_key.get(
-            journey.persona.persona_id
-        )
-        mission_id = request.mission_ids_by_key.get(
-            journey.mission.mission_id
-        )
+    if persona_id is None or mission_id is None:
+        raise RuntimeError(f'No persisted persona or mission exists for "{journey.journey_key}".')
 
-        if persona_id is None or mission_id is None:
-            raise RuntimeError(
-                "No persisted persona or mission exists for "
-                f'"{journey.journey_key}".'
-            )
+    await execution_repository.create_agent_execution(
+        execution_id=execution_id,
+        journey_id=journey_id,
+    )
+    await session.commit()
 
-        await execution_repository.create_agent_execution(
-            execution_id=execution_id,
-            journey_id=journey_id,
-        )
-        await session.commit()
-
-        try:
-            result = await execute_persona_journey(
-                request=PersonaJourneyExecutionRequest(
-                    test_run_id=request.run_id,
-                    execution_id=execution_id,
-                    journey_id=journey_id,
-                    persona_id=persona_id,
-                    mission_id=mission_id,
-                    journey=journey,
-                    start_url=request.start_url,
-                    allowed_origins=request.allowed_origins,
-                    network_policy=request.network_policy,
-                    max_duration_seconds=(request.max_duration_seconds_per_journey),
-                ),
-                browser_controller=browser_controller,
-                session=session,
-                factory=runtime_factory,
-            )
-
-        except Exception as exc:
-            await session.rollback()
-
-            await execution_repository.finish_agent_execution(
+    try:
+        result = await execute_persona_journey(
+            request=PersonaJourneyExecutionRequest(
+                test_run_id=request.run_id,
                 execution_id=execution_id,
-                status="failed",
-                error_code=type(exc).__name__[:100],
-                error_message=str(exc),
-            )
+                journey_id=journey_id,
+                persona_id=persona_id,
+                mission_id=mission_id,
+                journey=journey,
+                start_url=request.start_url,
+                allowed_origins=request.allowed_origins,
+                network_policy=request.network_policy,
+                max_duration_seconds=(request.max_duration_seconds_per_journey),
+                prompt_override=request.agent_prompt_overrides.get(journey.journey_key),
+                agent_number=next(
+                    index + 2 for index, item in enumerate(build_persona_journeys(request.plan))
+                    if item.journey_key == journey.journey_key
+                ),
+            ),
+            browser_controller=browser_controller,
+            session=session,
+            factory=runtime_factory,
+        )
 
-            await session.commit()
-            raise
-
-        error_code: str | None = None
-        error_message: str | None = None
-
-        if result.status != JourneyExecutionStatus.COMPLETED:
-            error_code = result.status.value
-            error_message = result.summary
+    except Exception as exc:
+        await session.rollback()
 
         await execution_repository.finish_agent_execution(
             execution_id=execution_id,
-            status=result.status.value,
-            outcome=(result.outcome.value if result.outcome is not None else None),
-            error_code=error_code,
-            error_message=error_message,
+            status="failed",
+            error_code=type(exc).__name__[:100],
+            error_message=str(exc),
         )
-        await run_event_repository.create(
-            test_run_id=request.run_id,
-            journey_id=journey_id,
-            execution_id=execution_id,
-            event_type="journey.result",
-            payload={
-                "journey_key": journey.journey_key,
-                "status": result.status.value,
-                "outcome": result.outcome.value if result.outcome is not None else None,
-                "summary": result.summary,
-                "actions": list(result.actions),
-                "observations": list(result.observations),
-                "friction_points": list(result.friction_points),
-                "blockers": list(result.blockers),
-                "satisfied_criteria": list(result.satisfied_criteria),
-                "unsatisfied_criteria": list(result.unsatisfied_criteria),
-                "criterion_evidence":[
-                    {
-                        "criterion": item.criterion,
-                        "status": item.status,
-                        "evidence_step_ids": list(
-                            item.evidence_step_ids
-                        ),
-                    }
-                    for item in result.criterion_evidence
-                ],
-                "final_url": _safe_final_url(result.final_url),
-            },
-        )
+
         await session.commit()
+        raise
 
-        results.append(result)
+    error_code: str | None = None
+    error_message: str | None = None
 
-    return MultiPersonaExecutionResult(
-        plan=request.plan,
-        journeys=tuple(results),
+    if result.status != JourneyExecutionStatus.COMPLETED:
+        error_code = result.status.value
+        error_message = result.summary
+
+    await execution_repository.finish_agent_execution(
+        execution_id=execution_id,
+        status=result.status.value,
+        outcome=(result.outcome.value if result.outcome is not None else None),
+        error_code=error_code,
+        error_message=error_message,
     )
+    await run_event_repository.create(
+        test_run_id=request.run_id,
+        journey_id=journey_id,
+        execution_id=execution_id,
+        event_type="journey.result",
+        payload={
+            "journey_key": journey.journey_key,
+            "status": result.status.value,
+            "outcome": result.outcome.value if result.outcome is not None else None,
+            "reported_outcome": result.reported_outcome.value
+            if result.reported_outcome is not None else None,
+            "report_validation_issues": list(result.report_validation_issues),
+            "reported_criterion_evidence": [
+                item.model_dump(mode="json") for item in result.reported_criterion_evidence
+            ],
+            "reported_unsatisfied_criteria": list(result.reported_unsatisfied_criteria),
+            "summary": result.summary,
+            "actions": list(result.actions),
+            "observations": list(result.observations),
+            "friction_points": list(result.friction_points),
+            "blockers": list(result.blockers),
+            "satisfied_criteria": list(result.satisfied_criteria),
+            "unsatisfied_criteria": list(result.unsatisfied_criteria),
+            "criterion_evidence": [
+                {
+                    "criterion": item.criterion,
+                    "status": item.status,
+                    "evidence_step_ids": list(item.evidence_step_ids),
+                }
+                for item in result.criterion_evidence
+            ],
+            "final_url": _safe_final_url(result.final_url),
+        },
+    )
+    await session.commit()
+
+    return result
+
+
+async def persist_run_collection(
+    *,
+    run_id: UUID,
+    result: MultiPersonaExecutionResult,
+    session: AsyncSession,
+) -> None:
+    """Persist deterministic collection metadata; evaluation still owns reports."""
+    await RunEventRepository(session).create(
+        test_run_id=run_id,
+        event_type="run.collection",
+        journey_id=None,
+        execution_id=None,
+        payload={
+            "journey_count": len(result.journeys),
+            "completed_count": result.completed_count,
+            "failed_count": result.failed_count,
+            "journey_keys": [item.journey.journey_key for item in result.journeys],
+        },
+    )
+    await session.commit()
 
 
 def _safe_final_url(

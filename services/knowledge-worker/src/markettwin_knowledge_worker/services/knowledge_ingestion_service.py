@@ -20,7 +20,11 @@ class KnowledgeIngestionResult:
 
 
 class KnowledgeIngestionService:
-    """Generate and persist draft product Skills from extracted evidence."""
+    """Legacy normalized-draft experiment; not the V1 approved ingestion path.
+
+    V1 approval and test selection use IngestionEntry.preview. Do not wire this
+    service or reconciliation into that path without a normalized approval migration.
+    """
 
     def __init__(
         self,

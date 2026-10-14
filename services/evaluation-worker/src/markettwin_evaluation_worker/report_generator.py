@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import cast
 from uuid import UUID
 
+from markettwin_shared.finding_classification import classify_finding
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
@@ -54,6 +55,14 @@ def _severity_rank(
     }.get(severity, 0)
 
 
+def _classification(finding: ReportFindingRecord) -> tuple[str, str]:
+    return classify_finding(finding.category, has_visual_evidence=finding.has_visual_evidence)
+
+
+def _severity(finding: ReportFindingRecord) -> str:
+    return "info" if finding.category == "cross_persona_pattern" else finding.severity
+
+
 def _build_executive_summary(
     *,
     journey_results: tuple[
@@ -98,7 +107,7 @@ def _build_executive_summary(
             "journey(s)."
         ),
         (
-            f"{passed} passed, "
+            f"Recorded journey outcomes: {passed} passed, "
             f"{partial} partially completed, "
             f"{failed} failed, and "
             f"{inconclusive} were inconclusive."
@@ -113,42 +122,18 @@ def _build_executive_summary(
 
     if not findings:
         parts.append(
-            "No evidence-backed issue findings "
-            "were produced."
+            "No confirmed product issues were produced. "
+            "This does not establish that the application is defect-free."
         )
 
         return " ".join(parts)
 
-    severity_counts = Counter(
-        finding.severity
-        for finding in findings
-    )
-
-    highest = max(
-        (
-            finding.severity
-            for finding in findings
-        ),
-        key=_severity_rank,
-    )
-
+    classifications = Counter(_classification(finding)[0] for finding in findings)
     parts.append(
-        f"Evaluation produced "
-        f"{len(findings)} evidence-backed "
-        f"finding(s); the highest severity "
-        f"was {highest}."
+        f"{classifications['observed_product_issue']} visually verified product issue(s), "
+        f"{classifications['not_verified']} unverified observation(s), and "
+        f"{classifications['test_execution_issue']} test execution diagnostic(s)."
     )
-
-    high_or_critical = (
-        severity_counts["high"]
-        + severity_counts["critical"]
-    )
-
-    if high_or_critical:
-        parts.append(
-            f"{high_or_critical} finding(s) "
-            "were high or critical severity."
-        )
 
     return " ".join(parts)
 
@@ -164,6 +149,7 @@ def build_report_payload(
         ReportFindingRecord,
         ...,
     ],
+    evaluation_records: tuple[dict[str, object], ...] = (),
 ) -> tuple[str, dict[str, object]]:
     """Build a deterministic MarketTwin report."""
 
@@ -180,7 +166,7 @@ def build_report_payload(
     )
 
     severity_counts = Counter(
-        finding.severity
+        _severity(finding)
         for finding in findings
     )
 
@@ -193,7 +179,7 @@ def build_report_payload(
         findings,
         key=lambda finding: (
             -_severity_rank(
-                finding.severity
+                _severity(finding)
             ),
             finding.category,
             finding.title.casefold(),
@@ -210,8 +196,10 @@ def build_report_payload(
                 "finding_id": str(
                     finding.finding_id
                 ),
-                "severity": finding.severity,
+                "severity": _severity(finding),
                 "category": finding.category,
+                "finding_kind": _classification(finding)[0],
+                "verification_status": _classification(finding)[1],
                 "title": finding.title,
                 "summary": finding.summary,
                 "recommendation": (
@@ -234,6 +222,7 @@ def build_report_payload(
             "deterministic_evaluation_v1"
         ),
         "test_run_id": str(test_run_id),
+        "evaluation_records": list(evaluation_records),
         "journeys": {
             "total": len(journey_results),
             "status_counts": dict(
@@ -245,6 +234,17 @@ def build_report_payload(
         },
         "findings": {
             "total": len(findings),
+            "confirmed_issue_count": sum(
+                _classification(finding)[0] == "observed_product_issue"
+                for finding in findings
+            ),
+            "unverified_observation_count": sum(
+                _classification(finding)[0] == "not_verified" for finding in findings
+            ),
+            "execution_diagnostic_count": sum(
+                _classification(finding)[0] == "test_execution_issue"
+                for finding in findings
+            ),
             "severity_counts": dict(
                 sorted(
                     severity_counts.items()
@@ -279,6 +279,8 @@ async def generate_deterministic_report(
     *,
     test_run_id: UUID,
     session: AsyncSession,
+    evaluation_records: tuple[dict[str, object], ...] = (),
+    assessment: dict[str, object] | None = None,
 ) -> GeneratedReportResult:
     """Generate and persist report version 1."""
 
@@ -314,7 +316,11 @@ async def generate_deterministic_report(
         test_run_id=test_run_id,
         journey_results=journey_results,
         findings=findings,
+        evaluation_records=evaluation_records,
     )
+
+    if assessment is not None:
+        report_payload["assessment"] = assessment
 
     report_id = (
         await report_repository

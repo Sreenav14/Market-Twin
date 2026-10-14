@@ -7,11 +7,8 @@ from uuid import UUID
 
 from markettwin_database import (
     create_database_engine,
-    create_session_factory,
 )
-from markettwin_evaluation_worker.workflow import (
-    evaluate_and_generate_report,
-)
+from markettwin_evaluation_worker.worker import process_run
 
 
 def database_url() -> str:
@@ -27,19 +24,16 @@ def database_url() -> str:
 
 async def main(test_run_id: UUID) -> None:
     engine = create_database_engine(database_url())
-    session_factory = create_session_factory(engine)
 
     try:
-        async with session_factory() as session:
-            result = await evaluate_and_generate_report(
-                test_run_id=test_run_id,
-                session=session,
-            )
-
-            print("MarketTwin evaluation finished.")
-            print(f"TestRun: {result.test_run_id}")
-            print(f"Findings: {len(result.finding_ids)}")
-            print(f"Report: {result.report_id}")
+        result = await process_run(engine, test_run_id)
+        if result is None:
+            print("Evaluation is already complete, already owned, or the TestRun is not completed.")
+            return
+        print("MarketTwin evaluation finished.")
+        print(f"TestRun: {result.test_run_id}")
+        print(f"Findings: {len(result.finding_ids)}")
+        print(f"Report: {result.report_id}")
 
     finally:
         await engine.dispose()

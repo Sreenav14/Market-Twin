@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urljoin, urlsplit
 from uuid import UUID, uuid4
 
 from playwright.async_api import (
     Browser,
     Dialog,
+    Locator,
     Page,
     Playwright,
     Request,
@@ -21,11 +25,20 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from markettwin_execution_orchestrator.agents.schemas.test_case import ExpectedAssertion
 from markettwin_execution_orchestrator.browser.action_policy import (
     ensure_low_risk_click_target,
     ensure_non_sensitive_fill,
 )
-from markettwin_execution_orchestrator.browser.actions import semantic_locator
+from markettwin_execution_orchestrator.browser.actions import (
+    require_unique,
+    scoped_root,
+    semantic_locator,
+)
+from markettwin_execution_orchestrator.browser.assertions import (
+    AssertionObservation,
+    evaluate_assertion,
+)
 from markettwin_execution_orchestrator.browser.contracts import (
     AllowedOrigin,
     BrowserActionResult,
@@ -34,6 +47,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     ElementBoundingBox,
     FailedRequestRecord,
     NetworkPolicy,
+    ScopeRole,
 )
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserActionError,
@@ -58,7 +72,10 @@ from markettwin_execution_orchestrator.browser.human_control import (
     end_human_control,
 )
 from markettwin_execution_orchestrator.browser.network import resolve_and_validate_host
-from markettwin_execution_orchestrator.browser.observations import build_observation
+from markettwin_execution_orchestrator.browser.observations import (
+    build_observation,
+    inspect_form_fields,
+)
 from markettwin_execution_orchestrator.browser.policy import (
     validate_target_url,
     validate_websocket_url,
@@ -351,6 +368,108 @@ class BrowserController:
                 observation=await build_observation(session, screenshot_path=screenshot),
             )
 
+    async def get_form_state(
+        self, *, session_id: UUID, scope_role: ScopeRole, scope_name: str,
+        execution_id: UUID | None = None, journey_id: UUID | None = None,
+    ) -> BrowserActionResult:
+        """Inspect bounded form metadata without returning entered values."""
+        session = self._get_session(
+            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+        )
+        self._ensure_agent_control(session)
+        async with session.lock:
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
+            # A named scope was required above, so this is a Locator.
+            assert isinstance(root, Locator)
+            fields, more_available = await inspect_form_fields(root)
+            session.next_action_number()
+            screenshot = await capture_screenshot(session, label="form-state")
+            snapshot = json.dumps([asdict(field) for field in fields])
+            return BrowserActionResult(
+                action="get_form_state", observation=await build_observation(
+                    session, screenshot_path=screenshot, aria_snapshot_override=snapshot,
+                    form_fields=fields, more_available=more_available,
+                ),
+            )
+
+    async def read_assertion(
+        self, *, session_id: UUID, assertion: ExpectedAssertion, timeout_ms: int = 1500,
+        execution_id: UUID | None = None, journey_id: UUID | None = None,
+    ) -> tuple[BrowserActionResult, AssertionObservation]:
+        """Read an assertion under the same origin, ownership and control guards."""
+        if timeout_ms < 1 or timeout_ms > 5000:
+            raise BrowserActionError("Assertion timeout must be between 1 and 5000 milliseconds.")
+        session = self._get_session(
+            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+        )
+        self._ensure_agent_control(session)
+        async with session.lock:
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            session.next_action_number()
+            if assertion.target is not None:
+                target = assertion.target
+                root = await scoped_root(
+                    session.page, scope_role=target.scope_role, scope_name=target.scope_name,
+                )
+                locator = semantic_locator(
+                    root, role=target.role, name=target.name, label=target.label, text=target.text,
+                )
+                if await locator.count() == 1 and await locator.is_visible():
+                    await locator.scroll_into_view_if_needed()
+                elif isinstance(root, Locator) and await root.is_visible():
+                    await root.scroll_into_view_if_needed()
+            outcome = await evaluate_assertion(session.page, assertion, timeout_ms=timeout_ms)
+            screenshot = await capture_screenshot(session, label="assertion")
+            result = BrowserActionResult(
+                action="assertion", observation=await build_observation(
+                    session, screenshot_path=screenshot,
+                ),
+            )
+            return result, outcome
+
+    async def focus_next(
+        self, *, session_id: UUID, reverse: bool = False,
+        execution_id: UUID | None = None, journey_id: UUID | None = None,
+    ) -> BrowserActionResult:
+        """Move keyboard focus one stop; no activation keys are accepted."""
+        session = self._get_session(
+            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+        )
+        self._ensure_agent_control(session)
+        async with session.lock:
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            session.next_action_number()
+            await session.page.keyboard.press("Shift+Tab" if reverse else "Tab")
+            screenshot = await capture_screenshot(session, label="focus-next")
+            return BrowserActionResult(
+                action="focus_next",
+                observation=await build_observation(session, screenshot_path=screenshot),
+            )
+
+    async def set_viewport(
+        self, *, session_id: UUID, preset: Literal["mobile320", "desktop1280"],
+        execution_id: UUID | None = None, journey_id: UUID | None = None,
+    ) -> BrowserActionResult:
+        """Use a fixed fixture-tested viewport preset."""
+        if preset not in {"mobile320", "desktop1280"}:
+            raise BrowserActionError("Viewport preset must be mobile320 or desktop1280.")
+        session = self._get_session(
+            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+        )
+        self._ensure_agent_control(session)
+        async with session.lock:
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            session.next_action_number()
+            await session.page.set_viewport_size({
+                "width": 320 if preset == "mobile320" else 1280, "height": 800,
+            })
+            screenshot = await capture_screenshot(session, label="viewport")
+            return BrowserActionResult(
+                action="set_viewport",
+                observation=await build_observation(session, screenshot_path=screenshot),
+            )
+
     async def navigate(
         self,
         *,
@@ -412,6 +531,8 @@ class BrowserController:
         name: str | None = None,
         label: str | None = None,
         text: str | None = None,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
     ) -> BrowserActionResult:
@@ -425,16 +546,27 @@ class BrowserController:
         self._ensure_agent_control(session)
         async with session.lock:
             ensure_low_risk_click_target(name, label, text)
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = semantic_locator(
-                session.page,
+                root,
                 role=role,
                 name=name,
                 label=label,
                 text=text,
             )
+            await require_unique(locator)
             session.next_action_number()
             try:
+                href = await locator.get_attribute("href")
+                if href:
+                    destination = urljoin(session.page.url, href)
+                    if urlsplit(destination).scheme in {"http", "https"}:
+                        validate_target_url(
+                            destination, session.allowed_origins, session.network_policy,
+                        )
                 await locator.click(timeout=session.timeout_ms)
+            except BrowserPolicyError:
+                raise
             except PlaywrightTimeoutError as exc:
                 raise BrowserTimeoutError("Click timed out.") from exc
             except Exception as exc:
@@ -452,6 +584,8 @@ class BrowserController:
         session_id: UUID,
         label: str,
         value: str,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
     ) -> BrowserActionResult:
@@ -464,7 +598,9 @@ class BrowserController:
         )
         self._ensure_agent_control(session)
         async with session.lock:
-            locator = session.page.get_by_label(label, exact=True)
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
+            locator = root.get_by_label(label, exact=True)
+            await require_unique(locator)
             input_type = await locator.get_attribute("type")
             autocomplete = await locator.get_attribute("autocomplete")
             ensure_non_sensitive_fill(
@@ -492,6 +628,8 @@ class BrowserController:
         session_id: UUID,
         label: str,
         value: str,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
     ) -> BrowserActionResult:
@@ -504,9 +642,12 @@ class BrowserController:
         )
         self._ensure_agent_control(session)
         async with session.lock:
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
+            locator = root.get_by_label(label, exact=True)
+            await require_unique(locator)
             session.next_action_number()
             try:
-                await session.page.get_by_label(label, exact=True).select_option(
+                await locator.select_option(
                     value=value,
                     timeout=session.timeout_ms,
                 )
@@ -518,6 +659,43 @@ class BrowserController:
             screenshot = await capture_screenshot(session, label="select")
             return BrowserActionResult(
                 action="select",
+                observation=await build_observation(session, screenshot_path=screenshot),
+            )
+
+    async def set_checked(
+        self, *, session_id: UUID, label: str, checked: bool,
+        scope_role: ScopeRole | None = None, scope_name: str | None = None,
+        execution_id: UUID | None = None, journey_id: UUID | None = None,
+    ) -> BrowserActionResult:
+        """Set an exactly labeled checkbox; no radio/file/payment activation."""
+        session = self._get_session(
+            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+        )
+        self._ensure_agent_control(session)
+        async with session.lock:
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            ensure_low_risk_click_target(label)
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
+            locator = root.get_by_label(label, exact=True)
+            await require_unique(locator)
+            input_type = await locator.get_attribute("type")
+            ensure_non_sensitive_fill(
+                label=label, input_type=input_type,
+                autocomplete=await locator.get_attribute("autocomplete"),
+            )
+            if input_type != "checkbox":
+                raise BrowserActionError("Check/uncheck requires a checkbox control.")
+            session.next_action_number()
+            try:
+                await locator.set_checked(checked, timeout=session.timeout_ms)
+            except PlaywrightTimeoutError as exc:
+                raise BrowserTimeoutError("Checkbox action timed out.") from exc
+            except Exception as exc:
+                raise BrowserActionError("Checkbox action could not be completed.") from exc
+            action = "check" if checked else "uncheck"
+            screenshot = await capture_screenshot(session, label=action)
+            return BrowserActionResult(
+                action=action,
                 observation=await build_observation(session, screenshot_path=screenshot),
             )
 
@@ -627,10 +805,12 @@ class BrowserController:
         name: str | None = None,
         label: str | None = None,
         text: str | None = None,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
     ) -> BrowserActionResult:
-        """Capture viewport and focused evidence for one visible element."""
+        """Scroll a rendered element into view and capture viewport and crop."""
         session = self._get_session(
             session_id=session_id,
             execution_id=execution_id,
@@ -639,18 +819,21 @@ class BrowserController:
         self._ensure_agent_control(session)
 
         async with session.lock:
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = semantic_locator(
-                session.page,
+                root,
                 role=role,
                 name=name,
                 label=label,
                 text=text,
             )
+            await require_unique(locator)
             if not await locator.is_visible():
                 raise BrowserActionError(
-                    "Element is not visible in the current viewport."
+                    "Element is not rendered visibly."
                 )
 
+            await locator.scroll_into_view_if_needed()
             raw_box = await locator.bounding_box()
             if raw_box is None:
                 raise BrowserActionError("Element has no visible bounding box.")

@@ -37,6 +37,7 @@ async def process_run(engine: AsyncEngine, test_run_id: UUID) -> EvaluationWorkf
                     return None
                 report_id = await session.scalar(select(Report.id).where(
                     Report.test_run_id == test_run_id, Report.version == 1,
+                    Report.status == "completed",
                 ))
                 if report_id is not None:
                     return None
@@ -66,6 +67,7 @@ async def run_worker(engine: AsyncEngine) -> None:
                     TestRun.status == "completed",
                     ~select(Report.id).where(
                         Report.test_run_id == TestRun.id, Report.version == 1,
+                        Report.status == "completed",
                     ).exists(),
                 ).order_by(TestRun.completed_at).limit(20))).all()
             for test_run_id in pending:

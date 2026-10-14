@@ -43,6 +43,27 @@ export function sortFindings(findings: Finding[], sort = "severity") {
   );
 }
 
+export function findingClassification(finding: Finding) {
+  if (finding.finding_kind === "observed_product_issue" &&
+    finding.verification_status === "verified_deterministic" &&
+    finding.evidence.step_ids.length > 0 && finding.evidence.artifact_ids.length > 0)
+    return "Verified assertion issue";
+  if (
+    finding.finding_kind === "observed_product_issue" &&
+    finding.verification_status === "verified_visual" &&
+    finding.evidence.artifact_ids.length > 0
+  ) return "Visually verified issue";
+  if (
+    finding.finding_kind === "test_execution_issue" ||
+    ["policy", "execution_reliability"].includes(finding.category)
+  ) return "Test execution issue";
+  return "Needs Verification";
+}
+
+export function isConfirmedFinding(finding: Finding) {
+  return ["Visually verified issue", "Verified assertion issue"].includes(findingClassification(finding));
+}
+
 export function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -66,7 +87,7 @@ export function reportMetrics(results: RunResults) {
       (entry): entry is [string, number] => countValue(entry[1]) !== null,
     ),
     criticalCount: results.findings.filter(
-      (f) => f.severity === "critical" || f.severity === "high",
+      (f) => isConfirmedFinding(f) && (f.severity === "critical" || f.severity === "high"),
     ).length,
     artifactCount: new Set(
       results.findings.flatMap((f) => f.evidence.artifact_ids),

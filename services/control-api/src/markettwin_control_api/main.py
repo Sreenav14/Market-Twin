@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from markettwin_shared.messaging import KafkaProducer
 from pydantic import BaseModel
 
+from markettwin_control_api.api.agent_prompts import router as agent_prompts_router
 from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.artifacts import router as artifacts_router
 from markettwin_control_api.api.auth import router as auth_router
@@ -19,6 +20,7 @@ from markettwin_control_api.api.target_authorizations import router as target_au
 from markettwin_control_api.api.targets import router as targets_router
 from markettwin_control_api.api.test_run import router as test_run_router
 from markettwin_control_api.api.test_run_results import router as test_run_results_router
+from markettwin_control_api.api.deep_cases import router as deep_cases_router
 from markettwin_control_api.api.workspaces import router as workspaces_router
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.database import DatabaseRuntime
@@ -165,8 +167,10 @@ def create_app() -> FastAPI:
     application.include_router(target_authorizations_router)
     application.include_router(test_run_router)
     application.include_router(test_run_results_router)
+    application.include_router(deep_cases_router)
     application.include_router(artifacts_router)
     application.include_router(runtime_snapshots_router)
+    application.include_router(agent_prompts_router)
     return application
 
 

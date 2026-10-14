@@ -1,6 +1,6 @@
 """ structured final report returned by one MarketTwin Persona Agent."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -30,7 +30,7 @@ class CriterionEvidence(BaseModel):
         "unverified",
     ]
     
-    evidence_step_ids: tuple[int, ...] = ()
+    evidence_step_ids: tuple[Annotated[int, Field(strict=True, gt=0)], ...] = ()
 
 class PersonaAgentReport(BaseModel):
     """Model-produced observations for one completed Persona Journey."""

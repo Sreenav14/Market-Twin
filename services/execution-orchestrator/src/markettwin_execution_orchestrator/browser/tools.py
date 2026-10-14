@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol
 from urllib.parse import urlsplit, urlunsplit
@@ -10,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 from markettwin_execution_orchestrator.browser.contracts import (
     BrowserActionResult,
     BrowserSessionHandle,
+    ScopeRole,
 )
 from markettwin_execution_orchestrator.browser.controller import BrowserController
 from markettwin_execution_orchestrator.browser.errors import (
@@ -85,6 +87,8 @@ def create_browser_tools(
                 "action": action_type,
                 "status": "failed",
                 "error": str(exc),
+                "error_code": exc.reason_code,
+                "evidence_status": "unavailable",
                 "recovery": (
                     "The action did not complete successfully. Call browser_get_state "
                     "to inspect the current page before choosing another action. "
@@ -95,6 +99,25 @@ def create_browser_tools(
 
             if step_id is not None:
                 payload["step_id"] = step_id
+
+            # The original failure is committed first. Observe this same bound
+            # session without retrying the action; controller guards still apply.
+            if step_recorder is not None and step_id is not None:
+                try:
+                    async with asyncio.timeout(5):
+                        observation = await controller.get_state(
+                            session_id=handle.session_id,
+                            execution_id=handle.execution_id,
+                            journey_id=handle.journey_id,
+                        )
+                        await step_recorder.record_failure_evidence(
+                            step_id=step_id, result=observation,
+                        )
+                    payload["observation"] = observation.observation.to_dict()
+                    payload["evidence_status"] = "captured"
+                except Exception:
+                    # Best-effort capture must not replace the original error.
+                    pass
 
             return payload
 
@@ -156,12 +179,21 @@ def create_browser_tools(
         name: str | None = None,
         label: str | None = None,
         text: str | None = None,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
     ) -> dict[str, object]:
         """Click one exact semantic element by role+name, label, or visible text."""
+        target = {key: value for key, value in {
+            "role": role, "name": name, "label": label, "text": text,
+        }.items() if value is not None}
+        summary = "Click a semantic page element."
+        if target and all(len(value) <= 160 for value in target.values()):
+            summary = f"Click semantic target {json.dumps(target)}."
         return await run_recorded_action(
             action_type="click",
-            action_summary="Click a semantic page element.",
+            action_summary=summary,
             operation=lambda: controller.click(
+                scope_role=scope_role, scope_name=scope_name,
                 session_id=handle.session_id,
                 execution_id=handle.execution_id,
                 journey_id=handle.journey_id,
@@ -172,12 +204,16 @@ def create_browser_tools(
             ),
         )
 
-    async def browser_fill(label: str, value: str) -> dict[str, object]:
+    async def browser_fill(
+        label: str, value: str, scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
+    ) -> dict[str, object]:
         """Fill non-secret text into one exactly labelled input field."""
         return await run_recorded_action(
             action_type="fill",
             action_summary="Fill an approved non-secret text field.",
             operation=lambda: controller.fill(
+                scope_role=scope_role, scope_name=scope_name,
                 session_id=handle.session_id,
                 execution_id=handle.execution_id,
                 journey_id=handle.journey_id,
@@ -186,12 +222,16 @@ def create_browser_tools(
             ),
         )
 
-    async def browser_select(label: str, value: str) -> dict[str, object]:
+    async def browser_select(
+        label: str, value: str, scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
+    ) -> dict[str, object]:
         """Choose one value from an exactly labelled select control."""
         return await run_recorded_action(
             action_type="select",
             action_summary="Select an option from a labelled control.",
             operation=lambda: controller.select(
+                scope_role=scope_role, scope_name=scope_name,
                 session_id=handle.session_id,
                 execution_id=handle.execution_id,
                 journey_id=handle.journey_id,
@@ -247,12 +287,15 @@ def create_browser_tools(
         name: str | None = None,
         label: str | None = None,
         text: str | None = None,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
     ) -> dict[str, object]:
-        """Capture focused evidence for one currently visible element."""
+        """Scroll a rendered element into view and capture focused evidence."""
         return await run_recorded_action(
             action_type="capture_element",
-            action_summary="Capture focused evidence for a visible element.",
+            action_summary="Scroll requested element into view and capture focused evidence.",
             operation=lambda: controller.capture_element(
+                scope_role=scope_role, scope_name=scope_name,
                 session_id=handle.session_id,
                 execution_id=handle.execution_id,
                 journey_id=handle.journey_id,
@@ -275,6 +318,66 @@ def create_browser_tools(
             ),
         )
 
+    async def browser_get_form_state(
+        scope_role: ScopeRole, scope_name: str,
+    ) -> dict[str, object]:
+        """Inspect required/enabled/checked/selection/validity metadata; never field values."""
+        return await run_recorded_action(
+            action_type="get_form_state", action_summary="Inspect scoped form metadata.",
+            operation=lambda: controller.get_form_state(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, scope_role=scope_role, scope_name=scope_name,
+            ),
+        )
+
+    async def browser_check(
+        label: str, scope_role: ScopeRole | None = None, scope_name: str | None = None,
+    ) -> dict[str, object]:
+        """Check one labeled non-sensitive checkbox."""
+        return await run_recorded_action(
+            action_type="check", action_summary="Check a labeled checkbox.",
+            operation=lambda: controller.set_checked(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, label=label, checked=True,
+                scope_role=scope_role, scope_name=scope_name,
+            ),
+        )
+
+    async def browser_uncheck(
+        label: str, scope_role: ScopeRole | None = None, scope_name: str | None = None,
+    ) -> dict[str, object]:
+        """Uncheck one labeled non-sensitive checkbox."""
+        return await run_recorded_action(
+            action_type="uncheck", action_summary="Uncheck a labeled checkbox.",
+            operation=lambda: controller.set_checked(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, label=label, checked=False,
+                scope_role=scope_role, scope_name=scope_name,
+            ),
+        )
+
+    async def browser_focus_next(reverse: bool = False) -> dict[str, object]:
+        """Move focus once using Tab or Shift+Tab without activating a control."""
+        return await run_recorded_action(
+            action_type="focus_next", action_summary="Move keyboard focus one stop.",
+            operation=lambda: controller.focus_next(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, reverse=reverse,
+            ),
+        )
+
+    async def browser_set_viewport(
+        preset: Literal["mobile320", "desktop1280"],
+    ) -> dict[str, object]:
+        """Set only a fixed mobile (320px) or desktop (1280px) viewport."""
+        return await run_recorded_action(
+            action_type="set_viewport", action_summary=f"Use {preset} viewport preset.",
+            operation=lambda: controller.set_viewport(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, preset=preset,
+            ),
+        )
+
     return [
         browser_get_state,
         browser_navigate,
@@ -286,6 +389,11 @@ def create_browser_tools(
         browser_wait,
         browser_capture_element,
         browser_take_screenshot,
+        browser_get_form_state,
+        browser_focus_next,
+        browser_set_viewport,
+        browser_check,
+        browser_uncheck,
     ]
 
 class BrowserStepRecorder(Protocol):
@@ -315,6 +423,10 @@ class BrowserStepRecorder(Protocol):
         *,
         step_id: int,
         result: BrowserActionResult,
+    ) -> None: ...
+
+    async def record_failure_evidence(
+        self, *, step_id: int, result: BrowserActionResult,
     ) -> None: ...
 
 def _safe_url_summary(url: str) -> str:

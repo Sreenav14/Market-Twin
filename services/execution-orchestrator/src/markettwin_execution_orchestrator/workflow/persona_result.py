@@ -44,6 +44,10 @@ class PersonaJourneyResult(BaseModel):
 
     journey: PersonaJourneySpec
     criterion_evidence: tuple[CriterionEvidence, ...] = ()
+    reported_criterion_evidence: tuple[CriterionEvidence, ...] = ()
+    reported_unsatisfied_criteria: tuple[str, ...] = ()
+    reported_outcome: JourneyOutcome | None = None
+    report_validation_issues: tuple[str, ...] = ()
     status: JourneyExecutionStatus
     outcome: JourneyOutcome | None = None
 
