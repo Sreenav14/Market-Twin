@@ -10,6 +10,7 @@ from playwright.async_api import Locator
 from markettwin_execution_orchestrator.browser.contracts import (
     ElementBoundingBox,
 )
+from markettwin_execution_orchestrator.browser.errors import HumanControlActiveError
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 FOCUSED_CROP_PADDING_PX = 48
@@ -36,7 +37,7 @@ def bounding_box_intersects_viewport(
 async def start_trace(session: JourneyBrowserSession) -> None:
     """Start a new trace segment when evidence capture is allowed."""
 
-    if session.tracing_active or not session.capture_enabled:
+    if session.tracing_active or not session.capture_enabled or session.authenticated_session:
         return
     session.trace_segment += 1
     await session.context.tracing.start(
@@ -74,12 +75,23 @@ async def capture_screenshot(
     path = session.artifact_directory / (
         f"action-{session.action_number:04d}-{safe_label}.png"
     )
-    await session.page.screenshot(path=path, full_page=False)
+    if session.authenticated_session:
+        await session.page.screenshot(
+            path=path, full_page=False,
+            mask=[session.page.locator(
+                "input, textarea, [contenteditable], pre, code, [data-sensitive], [data-secret]"
+            )],
+        )
+    else:
+        await session.page.screenshot(path=path, full_page=False)
     return path
 
 
 async def write_event_logs(session: JourneyBrowserSession) -> tuple[Path, Path, Path]:
     """Persist safe browser-error metadata collected for the Journey."""
+
+    if not session.capture_enabled or session.control_mode != "agent":
+        raise HumanControlActiveError("Browser logs are disabled during handoff.")
 
     console_path = session.artifact_directory / "console-errors.json"
     page_path = session.artifact_directory / "page-errors.json"
@@ -114,10 +126,15 @@ async def capture_element_screenshot(
         f"action-{session.action_number:04d}-element.png"
     )
 
-    await locator.screenshot(
-        path=path,
-        timeout=session.timeout_ms,
-    )
+    if session.authenticated_session:
+        await locator.screenshot(
+            path=path, timeout=session.timeout_ms,
+            mask=[session.page.locator(
+                "input, textarea, [contenteditable], pre, code, [data-sensitive], [data-secret]"
+            )],
+        )
+    else:
+        await locator.screenshot(path=path, timeout=session.timeout_ms)
 
     return path
 

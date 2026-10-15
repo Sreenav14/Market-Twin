@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Awaitable, Callable
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 from urllib.parse import urlsplit, urlunsplit
+from uuid import UUID
 
 from markettwin_execution_orchestrator.browser.contracts import (
     BrowserActionResult,
@@ -15,8 +15,12 @@ from markettwin_execution_orchestrator.browser.contracts import (
 )
 from markettwin_execution_orchestrator.browser.controller import BrowserController
 from markettwin_execution_orchestrator.browser.errors import (
+    BrowserActionBlockedError,
     BrowserActionError,
     BrowserPolicyError,
+)
+from markettwin_execution_orchestrator.browser.sensitive_action_policy import (
+    SensitiveActionIntent,
 )
 
 BrowserTool = Callable[..., Awaitable[dict[str, object]]]
@@ -38,12 +42,14 @@ def create_browser_tools(
         action_type: str,
         action_summary: str,
         operation: Callable[[], Awaitable[BrowserActionResult]],
+        click_preflight: Callable[[], Awaitable[SensitiveActionIntent | None]] | None = None,
     ) -> dict[str, object]:
         async with action_lock:
             return await execute_recorded_action(
                 action_type=action_type,
                 action_summary=action_summary,
                 operation=operation,
+                click_preflight=click_preflight,
             )
 
     async def execute_recorded_action(
@@ -54,8 +60,11 @@ def create_browser_tools(
             [],
             Awaitable[BrowserActionResult],
         ],
+        click_preflight: Callable[[], Awaitable[SensitiveActionIntent | None]] | None = None,
     ) -> dict[str, object]:
         step_id: int | None = None
+
+        controller.require_agent_control(handle)
 
         if step_recorder is not None:
             step_id = await step_recorder.start_step(
@@ -63,10 +72,45 @@ def create_browser_tools(
                 action_summary=action_summary,
             )
 
-        try:
-            result = await operation()
+        approval_id: UUID | None = None
 
+        async def finish_approval(outcome: str) -> None:
+            if approval_id is None:
+                return
+            finish = getattr(step_recorder, "finish_sensitive_action", None)
+            if callable(finish):
+                await asyncio.shield(cast(Callable[..., Awaitable[None]], finish)(
+                    approval_id=approval_id, outcome=outcome,
+                ))
+
+        try:
+            intent = await click_preflight() if click_preflight is not None else None
+            if intent is not None:
+                begin = getattr(step_recorder, "begin_sensitive_action", None)
+                if step_id is None or not callable(begin):
+                    raise BrowserActionBlockedError(
+                        "This action requires the configured human approval workflow."
+                    )
+                origin = await controller.current_origin(
+                    session_id=handle.session_id,
+                    execution_id=handle.execution_id,
+                    journey_id=handle.journey_id,
+                )
+                approval_id = await cast(Callable[..., Awaitable[UUID]], begin)(
+                    step_id=step_id,
+                    intent=intent,
+                    current_origin=origin,
+                    browser_session_id=handle.session_id,
+                    revalidate_origin=lambda: controller.current_origin(
+                        session_id=handle.session_id,
+                        execution_id=handle.execution_id,
+                        journey_id=handle.journey_id,
+                    ),
+                )
+
+            result = await operation()
         except BrowserPolicyError as exc:
+            await finish_approval("uncertain")
             if step_recorder is not None and step_id is not None:
                 await step_recorder.finish_step(
                     step_id=step_id,
@@ -76,6 +120,7 @@ def create_browser_tools(
             raise
 
         except BrowserActionError as exc:
+            await finish_approval("uncertain")
             if step_recorder is not None and step_id is not None:
                 await step_recorder.finish_step(
                     step_id=step_id,
@@ -121,7 +166,20 @@ def create_browser_tools(
 
             return payload
 
+        except asyncio.CancelledError:
+            await finish_approval("uncertain")
+            if step_recorder is not None and step_id is not None:
+                await asyncio.shield(
+                    step_recorder.finish_step(
+                        step_id=step_id,
+                        status="failed",
+                        observation_summary="Browser action was interrupted.",
+                    )
+                )
+            raise
+
         except Exception as exc:
+            await finish_approval("uncertain")
             if step_recorder is not None and step_id is not None:
                 await step_recorder.finish_step(
                     step_id=step_id,
@@ -129,6 +187,9 @@ def create_browser_tools(
                     observation_summary=str(exc),
                 )
             raise
+
+        else:
+            await finish_approval("completed")
 
         if step_recorder is not None and step_id is not None:
             await step_recorder.record_evidence(
@@ -183,12 +244,24 @@ def create_browser_tools(
         scope_name: str | None = None,
     ) -> dict[str, object]:
         """Click one exact semantic element by role+name, label, or visible text."""
-        target = {key: value for key, value in {
-            "role": role, "name": name, "label": label, "text": text,
-        }.items() if value is not None}
         summary = "Click a semantic page element."
-        if target and all(len(value) <= 160 for value in target.values()):
-            summary = f"Click semantic target {json.dumps(target)}."
+        approval_state: dict[str, SensitiveActionIntent | None] = {"intent": None}
+
+        async def preflight() -> SensitiveActionIntent | None:
+            intent = await controller.inspect_click_approval(
+                session_id=handle.session_id,
+                execution_id=handle.execution_id,
+                journey_id=handle.journey_id,
+                role=role,
+                name=name,
+                label=label,
+                text=text,
+                scope_role=scope_role,
+                scope_name=scope_name,
+            )
+            approval_state["intent"] = intent
+            return intent
+
         return await run_recorded_action(
             action_type="click",
             action_summary=summary,
@@ -201,7 +274,13 @@ def create_browser_tools(
                 name=name,
                 label=label,
                 text=text,
+                approval_fingerprint=(
+                    approval_state["intent"].fingerprint
+                    if approval_state["intent"] is not None
+                    else None
+                ),
             ),
+            click_preflight=preflight,
         )
 
     async def browser_fill(

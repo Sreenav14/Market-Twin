@@ -27,6 +27,9 @@ from markettwin_execution_orchestrator.browser.tools import (
 class FakeController:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def require_agent_control(self, handle: BrowserSessionHandle) -> None:
+        pass
         
     async def _call(self, name: str, /, **kwargs: object) -> BrowserActionResult:
         self.calls.append((name, kwargs))
@@ -48,6 +51,9 @@ class FakeController:
 
     async def navigate(self, **kwargs: object) -> BrowserActionResult:
         return await self._call("navigate", **kwargs)
+
+    async def inspect_click_approval(self, **kwargs: object) -> None:
+        return None
 
     async def click(self, **kwargs: object) -> BrowserActionResult:
         return await self._call("click", **kwargs)
@@ -189,10 +195,7 @@ async def test_click_target_summary_is_bounded_and_does_not_record_fill_values(n
     await by_name["browser_click"](role="button", name=name)
     await by_name["browser_fill"](label="Contact address", value="private@example.test")
     summary = recorder.started[0][1]
-    assert summary == (
-        'Click semantic target {"role": "button", "name": "Check contact address"}.'
-        if len(name) <= 160 else "Click a semantic page element."
-    )
+    assert summary == "Click a semantic page element."
     assert "private@example.test" not in str(recorder.started)
 
 
@@ -230,7 +233,7 @@ async def test_failure_evidence_preserves_original_error_and_exact_step(
     assert result["error"] == "Original click failure."
     assert recorder.finished == [(1, "failed", "Original click failure.")]
     assert recorder.started == [
-        ("click", 'Click semantic target {"role": "button", "name": "Continue"}.'),
+        ("click", "Click a semantic page element."),
     ]
     assert result["evidence_status"] == ("unavailable" if capture_fails else "captured")
     if capture_fails:

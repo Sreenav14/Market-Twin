@@ -14,22 +14,45 @@ from markettwin_execution_orchestrator.browser.session import JourneyBrowserSess
 async def begin_human_control(session: JourneyBrowserSession) -> None:
     """Disable agent evidence/tool capture before a human enters secrets."""
 
-    if session.state != "open":
+    if session.state != "open" or session.control_mode != "agent":
         raise BrowserSessionStateError(
-            f"Human control requires an open session; current state is {session.state}."
+            "Human control requires an open session under agent authority."
         )
-    await stop_trace(session)
+    session.control_mode = "quiescing"
     session.capture_enabled = False
-    session.state = "human_control"
+    session.authenticated_session = True
+    session.event_buffer.clear_all()
+    try:
+        await stop_trace(session)
+    except Exception:
+        session.control_mode = "none"
+        raise
+    session.control_mode = "human"
 
 
-async def end_human_control(session: JourneyBrowserSession) -> None:
-    """Return the same BrowserContext to the agent after verified handoff."""
+async def end_human_control(
+    session: JourneyBrowserSession,
+    *,
+    verified: bool = False,
+    safe_to_capture: bool = False,
+) -> None:
+    """Resume only after trusted verification and a reviewed safe page."""
 
-    if session.state != "human_control":
+    if session.state != "open" or session.control_mode not in {"human", "verifying"}:
         raise BrowserSessionStateError(
             "Cannot resume agent control because human control is not active."
         )
+    session.control_mode = "verifying"
+    if not verified or not safe_to_capture:
+        session.control_mode = "none"
+        raise BrowserSessionStateError(
+            "Agent control requires verified authentication and a reviewed safe page."
+        )
     session.capture_enabled = True
-    session.state = "open"
-    await start_trace(session)
+    try:
+        await start_trace(session)
+    except Exception:
+        session.capture_enabled = False
+        session.control_mode = "none"
+        raise
+    session.control_mode = "agent"

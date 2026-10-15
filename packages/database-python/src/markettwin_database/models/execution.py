@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Identity,
+    Index,
     Integer,
     String,
     Text,
@@ -91,6 +92,8 @@ class AgentExecution(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AgentRuntimeSnapshot(Base):
     """Immutable semantic configuration used for an agent execution."""
 
@@ -283,12 +286,21 @@ class AgentRuntimeSnapshot(Base):
         server_default=func.now(),
     )
 
+
 class BrowserSession(Base):
     __tablename__ = "browser_sessions"
     __table_args__ = (
         CheckConstraint(
             "state IN ('starting', 'open', 'closed', 'failed')",
             name="ck_browser_sessions_state_allowed",
+        ),
+        CheckConstraint(
+            "control_mode IN ('agent', 'human_pending', 'human', 'verifying', 'none')",
+            name="ck_browser_sessions_control_mode_allowed",
+        ),
+        CheckConstraint(
+            "control_generation >= 0",
+            name="ck_browser_sessions_generation_nonnegative",
         ),
         UniqueConstraint(
             "execution_id",
@@ -322,6 +334,19 @@ class BrowserSession(Base):
         nullable=False,
         default="starting",
         server_default=text("'starting'"),
+    )
+
+    control_mode: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="agent",
+        server_default=text("'agent'"),
+    )
+    control_generation: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
     )
 
     context_reference: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -435,12 +460,17 @@ class AgentPromptDraft(Base):
         ForeignKey("execution.agent_runtime_snapshots.id", ondelete="CASCADE"),
         primary_key=True,
     )
+
     user_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("core.users.id", ondelete="CASCADE"), primary_key=True,
+        Uuid(as_uuid=True),
+        ForeignKey("core.users.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     prompt_yaml: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(),
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )
 
 
@@ -510,6 +540,13 @@ class HumanActionRequest(Base):
             "id",
             name="uq_human_action_requests_browser_id",
         ),
+        Index(
+            "uq_human_action_requests_execution_idempotency",
+            "execution_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
         {"schema": "execution"},
     )
 
@@ -517,6 +554,7 @@ class HumanActionRequest(Base):
     execution_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     browser_session_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     requested_by_step_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     request_type: Mapped[str] = mapped_column(String(32), nullable=False)
 
@@ -551,6 +589,13 @@ class HumanControlLease(Base):
             "lease_token_hash",
             name="uq_human_control_leases_token_hash",
         ),
+        CheckConstraint("generation >= 0", name="ck_human_control_leases_generation_nonnegative"),
+        Index(
+            "uq_active_human_lease_per_browser",
+            "browser_session_id",
+            unique=True,
+            postgresql_where=text("released_at IS NULL"),
+        ),
         {"schema": "execution"},
     )
 
@@ -572,9 +617,213 @@ class HumanControlLease(Base):
     )
 
     lease_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    generation: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
 
     acquired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ActionApprovalRequest(Base):
+    """One explicit human decision bound to one immutable proposed action."""
+
+    __tablename__ = "action_approval_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'expired', 'consumed', 'cancelled')",
+            name="ck_action_approval_requests_status_allowed",
+        ),
+        CheckConstraint(
+            "length(action_fingerprint) = 64", name="ck_action_approval_fingerprint_sha256"
+        ),
+        CheckConstraint(
+            "length(resource_fingerprint) = 64", name="ck_action_approval_resource_sha256"
+        ),
+        CheckConstraint("policy_version >= 1", name="ck_action_approval_policy_positive"),
+        CheckConstraint(
+            "control_generation >= 0", name="ck_action_approval_generation_nonnegative"
+        ),
+        ForeignKeyConstraint(
+            ["execution_id", "step_id"],
+            ["execution.execution_steps.execution_id", "execution.execution_steps.id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "uq_active_action_approval_per_step",
+            "execution_id",
+            "step_id",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'approved')"),
+        ),
+        {"schema": "execution"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    test_run_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    execution_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.agent_executions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    browser_session_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.browser_sessions.id", ondelete="SET NULL"),
+    )
+    step_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("core.users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    decision_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("core.users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    action_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    control_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    action_summary: Mapped[str] = mapped_column(String(300), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+        server_default=text("'pending'"),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ActionApprovalReceipt(Base):
+    """Durable no-replay fence written before a sensitive action is dispatched."""
+
+    __tablename__ = "action_approval_receipts"
+    __table_args__ = (
+        CheckConstraint(
+            "dispatch_state IN ('claimed', 'completed', 'failed_before_effect', 'uncertain')",
+            name="ck_action_approval_receipts_state_allowed",
+        ),
+        {"schema": "execution"},
+    )
+
+    approval_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.action_approval_requests.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    dispatch_state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="claimed",
+        server_default=text("'claimed'"),
+    )
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ExecutionSuspension(Base):
+    """Durable, token-free continuation cursor for a paused execution."""
+
+    __tablename__ = "execution_suspensions"
+    __table_args__ = (
+        CheckConstraint("checkpoint_version >= 1", name="ck_suspensions_version_positive"),
+        CheckConstraint("owner_generation >= 0", name="ck_suspensions_generation_nonnegative"),
+        CheckConstraint("planned_step_index >= 0", name="ck_suspensions_step_nonnegative"),
+        CheckConstraint("resume_count >= 0", name="ck_suspensions_resume_nonnegative"),
+        CheckConstraint(
+            "active_deadline_remaining_ms >= 0",
+            name="ck_suspensions_deadline_nonnegative",
+        ),
+        CheckConstraint(
+            "status IN ('waiting', 'ready', 'consumed', 'abandoned')",
+            name="ck_suspensions_status_allowed",
+        ),
+        CheckConstraint(
+            "phase IN ('auth_preflight', 'case_action', 'assertion')",
+            name="ck_suspensions_phase_allowed",
+        ),
+        ForeignKeyConstraint(
+            ["execution_id", "browser_session_id"],
+            ["execution.browser_sessions.execution_id", "execution.browser_sessions.id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "uq_active_suspension_per_run",
+            "test_run_id",
+            unique=True,
+            postgresql_where=text("status IN ('waiting', 'ready')"),
+        ),
+        UniqueConstraint("test_run_id", "checkpoint_version", name="uq_suspensions_run_version"),
+        {"schema": "execution"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    test_run_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    journey_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.persona_journeys.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    execution_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    browser_session_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    pending_request_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.human_action_requests.id", ondelete="SET NULL"),
+    )
+    pending_approval_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution.action_approval_requests.id", ondelete="SET NULL",
+                   name="fk_suspensions_pending_approval"),
+    )
+    last_durable_step_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("execution.execution_steps.id", ondelete="SET NULL"),
+    )
+    checkpoint_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    planned_step_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    active_deadline_remaining_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    suspended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    human_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resume_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="waiting",
+        server_default=text("'waiting'"),
+    )

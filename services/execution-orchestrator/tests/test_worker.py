@@ -121,7 +121,8 @@ async def test_failed_or_interrupted_run_is_finalized(
     run_id = uuid4()
     run = SimpleNamespace(id=run_id, status="planning")
     session = SimpleNamespace(
-        get=AsyncMock(return_value=run), rollback=AsyncMock(), commit=AsyncMock()
+        get=AsyncMock(return_value=run), rollback=AsyncMock(), commit=AsyncMock(),
+        execute=AsyncMock(),
     )
 
     def factory() -> SessionContext:

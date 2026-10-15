@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     
     control_api_host: str = "127.0.0.1"
     control_api_port: int = Field(default=8000, ge=1, le=65535)
+    web_origin: str = "http://localhost:5173"
+    hitl_worker_url: str = "http://127.0.0.1:8020"
+    hitl_internal_secret: SecretStr | None = None
+    hitl_worker_timeout_seconds: float = Field(default=5, gt=0, le=30)
     session_idle_timeout_minutes: int = Field(
     default = 30,
     ge=1,

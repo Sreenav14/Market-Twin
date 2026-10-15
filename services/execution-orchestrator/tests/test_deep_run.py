@@ -17,6 +17,7 @@ from markettwin_execution_orchestrator.workflow.test_case_planner import (
     fixture_feature_scope,
     select_feature_cases,
 )
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.deep_testing import AssertionResult, CaseExecutionResult
 
 
@@ -60,7 +61,7 @@ def test_missing_case_results_remain_not_run_and_blocks_do_not_become_failures()
 
 def test_authorized_scope_is_frozen_without_replacement() -> None:
     scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
-    snapshot = {"study_brief": "Test the form."}
+    snapshot: dict[str, object] = {"study_brief": "Test the form."}
     frozen = authorized_scope_snapshot(snapshot, scope)
     assert frozen["study_brief"] == "Test the form."
     assert authorized_scope_snapshot(frozen, scope) == frozen
@@ -142,3 +143,136 @@ def test_run_mode_is_opt_in_and_fixture_authority_not_loaded_from_configuration(
     run.configuration_snapshot = {**run.configuration_snapshot, "execution_mode": "unknown"}
     with pytest.raises(ValueError, match="Unsupported execution mode"):
         build_run_request(run)
+
+
+def test_fixture_authority_requires_dedicated_persisted_flag_and_loopback_target() -> None:
+    run = TestRun(
+        id=uuid4(),
+        created_by_user_id=uuid4(),
+        synthetic_fixture_approval_enabled=True,
+        target_snapshot={
+            "environment": "test",
+            "base_url": "http://127.0.0.1:5191/index.html",
+            "allowed_origins": [
+                {
+                    "scheme": "http",
+                    "hostname": "127.0.0.1",
+                    "port": 5191,
+                    "include_subdomains": False,
+                },
+            ],
+        },
+        configuration_snapshot={
+            "execution_mode": "deep_feature_v1",
+            "study_brief": "Test synthetic registration.",
+            "fixture_truth": False,
+        },
+    )
+    request = build_run_request(run)
+    assert request.fixture_truth is True
+    assert request.network_policy == "local_development"
+    assert request.synthetic_fixture_approval_enabled is True
+    assert request.created_by_user_id == run.created_by_user_id
+    run.target_snapshot = {
+        **run.target_snapshot,
+        "allowed_origins": [
+            {"scheme": "https", "hostname": "app.example.test", "port": None,
+             "include_subdomains": False},
+        ],
+    }
+    with pytest.raises(ValueError, match="all-loopback"):
+        build_run_request(run)
+
+
+def test_build_run_request_restores_frozen_auth_verification_policy() -> None:
+    policy = AuthVerificationPolicy(
+        origin="https://example.invalid",
+        marker_selector="[data-testid='signed-in-role']",
+        expected_marker="member",
+        role="member",
+        account_reference="fixture-member-1",
+    )
+    run = TestRun(
+        id=uuid4(),
+        target_snapshot={
+            "base_url": "https://example.invalid/",
+            "allowed_origins": [
+                {
+                    "scheme": "https",
+                    "hostname": "example.invalid",
+                    "port": None,
+                    "include_subdomains": False,
+                },
+            ],
+        },
+        configuration_snapshot={
+            "study_brief": "Test authenticated account behavior.",
+            "auth_verification": policy.model_dump(mode="json"),
+        },
+    )
+    assert build_run_request(run).auth_verification == policy
+
+
+def test_build_run_request_rejects_auth_policy_outside_frozen_allowlist() -> None:
+    policy = AuthVerificationPolicy(
+        origin="https://elsewhere.invalid",
+        marker_selector="[data-testid='signed-in-role']",
+        expected_marker="member",
+        role="member",
+        account_reference="fixture-member-1",
+    )
+    run = TestRun(
+        id=uuid4(),
+        target_snapshot={
+            "base_url": "https://example.invalid/",
+            "allowed_origins": [
+                {
+                    "scheme": "https",
+                    "hostname": "example.invalid",
+                    "port": None,
+                    "include_subdomains": False,
+                },
+            ],
+        },
+        configuration_snapshot={
+            "study_brief": "Test authenticated account behavior.",
+            "auth_verification": policy.model_dump(mode="json"),
+        },
+    )
+    with pytest.raises(ValueError, match="outside the authorized target"):
+        build_run_request(run)
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"origin": "https://example.invalid/path"},
+        {"origin": "https://user@example.invalid"},
+        {"account_reference": "production-password-value"},
+        {"unapproved_runtime_selector": "body"},
+    ],
+)
+def test_auth_verification_policy_rejects_unsafe_or_unknown_values(
+    updates: dict[str, str],
+) -> None:
+    values = {
+        "origin": "https://example.invalid",
+        "marker_selector": "[data-testid='signed-in-role']",
+        "expected_marker": "member",
+        "role": "member",
+        "account_reference": "fixture-member-1",
+    }
+    with pytest.raises(ValueError):
+        AuthVerificationPolicy.model_validate({**values, **updates})
+
+
+def test_auth_verification_policy_repr_redacts_exact_marker_and_account_reference() -> None:
+    policy = AuthVerificationPolicy(
+        origin="https://example.invalid",
+        marker_selector="[data-testid='signed-in-role']",
+        expected_marker="internal-marker-value",
+        role="member",
+        account_reference="fixture-member-1",
+    )
+    assert "internal-marker-value" not in repr(policy)
+    assert "fixture-member-1" not in repr(policy)

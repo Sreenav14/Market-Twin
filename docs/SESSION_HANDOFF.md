@@ -1,4 +1,77 @@
+# HITL documentation consolidation - 2026-10-14
+
+Use [docs/hitl/README.md](hitl/README.md) as the single HITL documentation entry
+point. The original master plan, transport decision, baseline and verification
+history are preserved inside its appendices. Old standalone HITL notes and 11
+files in three generated debug directories were removed. Code, migrations,
+regression tests, fixtures and unrelated project documents were preserved.
+
+---
+
+# Final HITL continuation handoff
+
+## Final HITL coding checkpoint ? 2026-10-14
+
+The bounded initial-pilot HITL feature implementation is in place. General
+sensitive-action approval no longer depends on the single registration fixture:
+it requires exact user-declared synthetic-effect rules and reset confirmation,
+binds browser/session/generation/page/form/resource/authorization/expiry, consumes
+one durable receipt, and exposes an exact-step review link. Opaque confirmations
+and hard-denied effects remain blocked. Generated protected discovery now verifies
+authentication first; SSO origins have explicit human-only access. Stale reusable
+state falls back to fresh HITL, and password/OTP/CAPTCHA challenges prevent resume.
+Worker interruptions cancel handoffs, fence browsers and mark claimed effects
+uncertain without replay. Human waiting is excluded from active case/run budgets.
+Authenticated contexts retain no raw Playwright traces/error payloads, mask input
+and marked-secret screenshot areas, and expose bounded metadata without raw ARIA
+page dumps or URL query/fragment. UI includes per-role/feature coverage and human
+contribution separately from evaluated feature results.
+
+Evidence: focused workflow/API suite 85 passed; browser/privacy/viewer suite 45
+passed; final rule/API/summary checks 27 passed (overlap, do not add these totals);
+final disposable PostgreSQL transaction test 1 passed; final fixture tests 3 passed.
+Strict backend Pyright and frontend typecheck/build passed. Focused viewer/coverage
+UI tests 3 passed before the final review-link/configuration-only UI edits; the
+final UI edits were compiled/typechecked. Ruff passes with E501 ignored; existing
+long-line baselines remain. Offline SQL chain renders and one Alembic head is
+f82e4160cb9d. Application migration not applied. git diff --check passes.
+
+Read [HITL implementation handoff](hitl/README.md) for exact setup,
+services/migration commands, file inventory, manual steps and limitations.
+Comprehensive UI?Kafka?viewer?verified resume?report E2E and H12 security/release
+verification are unexecuted and assigned to the user. Do not label H08/H12
+acceptance complete. HOSTED PRODUCTION NO-GO; single-worker local pilot only.
+No push, deployment, paid call, real credentials or external target access.
+All pre-existing work/deletion is preserved. Earlier checkpoint text below is
+historical and is superseded where it describes fixture-only approval or the
+missing pre-discovery/SSO integration.
+
+---
+
 # MarketTwin session handoff
+
+## Latest HITL continuation — 2026-10-14
+
+Execution recovered via supported escalated shell; default helper still fails.
+See [HITL phase evidence](hitl/README.md#phase-status-and-verification) for the current
+H00–H12 reconciliation, commands, files and acceptance gaps. This supersedes
+earlier shorthand phase-completion statements. This continuation wired the
+worker-side owner/WSS service and Control API signed lease bridge, React viewer,
+durable auth request/suspension, same-context identity verification and scoped
+cross-case session reuse. Focused worker/auth/viewer/workflow tests: 26 passed;
+Control API targeted tests: 12 passed and 1 PostgreSQL-gated skip; a separate
+reaper/API health/PostgreSQL repository suite passed 5 tests, including the
+database-backed lease test. A local/test-only synthetic fixture approval path now
+supports one fixed `registration_submit` action with worker receipt consumption,
+revalidation and completed/uncertain outcomes; focused worker (45), API (11),
+PostgreSQL receipt/replay (1), and combined fixture/auth/deep-run (17) checks pass.
+Frontend typecheck/build and strict Pyright pass. Ruff has one known pre-existing
+E501 at `workflow/deep_run.py:394`; new findings were fixed. Alembic has one head,
+`a1b2c3d4e5f6`, and offline SQL rendering passed. Full authenticated browser to
+report E2E and H12 adversarial/release trials remain unverified; hosted production
+is NO-GO. Existing changes preserved; no cleanup of user-owned or pre-existing
+artifacts was performed.
+
 
 For the authoritative current checkpoint, read [CURRENT_STATE.md](CURRENT_STATE.md)
 first. The checkpoint entries below preserve audit history and may be superseded.
@@ -8,6 +81,30 @@ record, not a production-readiness claim. Update it before ending a session or
 approaching its token/context limit; the user explicitly requested this.
 
 ## Latest checkpoint (read first)
+
+### MKT continuation and authorized public target check (2026-10-14)
+
+The user explicitly authorized continuing without waiting and testing the
+Supermemory target already in the approved list. The deep feature planner,
+case runner, evaluator, APIs, and result UI are implemented; see
+`docs/agent-quality/IMPLEMENTATION_ROADMAP_2026-10.md` and the current-state
+checkpoint for evidence and limits. This continuation fixed the deep-mode flow
+panel label from “Sequential Agent” to “Feature cases”; `npm run typecheck`
+passes.
+
+Supermemory target `b11546f2-2674-4491-9da2-99717ca54515` is the public
+`https://supermemory.ai/product/` page. Model planning returned HTTP 401 from the
+configured provider. The safe frozen navigation run yielded 3 pass, 1 blocked,
+1 inconclusive, 3 failed inferred URL assertions, and 0 verified findings. The
+failures are not product defects; inspect recorded URL expectations/observations
+before changing cases. Console remained blocked by scope. No login or account
+actions were attempted. Kafka/worker queue, T09 model comparison, T10 additional
+authorized applications, and T12 participant trial remain open; T13 stays NO-GO.
+Do not report release readiness.
+
+The pre-existing deletion of `MARKETTWIN_KNOWLEDGE_WORKER_UI_BRIDGE.md` and
+untracked `docs/hitl/README.md (Appendix A: original master plan)`
+were preserved.
 
 ### Deep-feature local gaps closed; release gates remain open (2026-10-14)
 
@@ -516,3 +613,10 @@ generic particles, or unrelated animation. Use existing components/fonts/tokens;
 smooth accessible transform/opacity motion, reduced-motion, mobile overflow,
 visible focus and clear forms. A dark navy/mint public presentation was considered
 but not finalized. Inspect actual rendered desktop/mobile pages and axe checks.
+# HITL continuation handoff — 2026-10-14
+
+Resume the HITL master-plan sequence at the H03 verification/H04 decision gate. The current working tree contains H00 reconciliation, H01 synthetic auth fixture, H02 additive lease/suspension schema and repository, and H03 browser-control fencing/privacy changes. Read the HITL checkpoint at the top of `docs/CURRENT_STATE.md` and the complete `docs/hitl/README.md (Appendix A: original master plan)` before continuing.
+
+Verified evidence from the prior implementation turn: H01 Chromium fixture tests 3 passed; H02 isolated PostgreSQL repository test 1 passed; H02 migration is at `d7f3c2a9b108`, with `alembic check` reporting no pending operations; H03 focused canary regression passed, Ruff passed with the existing E501 baseline ignored, and Pyright reported zero errors. The broader `test_browser_scoped_inspection.py` run did not return a result before the exec session disappeared; rerun it before claiming H03's phase gate.
+
+H04 is explicitly security-sensitive: compare the plan's noVNC/headful and restricted-CDP options using only the synthetic fixture and existing local resources, then stop for the user's transport decision before implementing the viewer. Do not install system-wide software, add paid infrastructure, use credentials, deploy, push, or browse unapproved sites. Preserve pre-existing edits/deletion and all untracked artifacts.

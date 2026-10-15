@@ -2,6 +2,14 @@
 
 from .application_repository import ApplicationRecord, ApplicationRepository
 from .authorization_repository import TargetAuthorizationRecord, TargetAuthorizationRepository
+from .human_action_repository import (
+    HumanActionConflictError,
+    HumanActionExpiredError,
+    HumanActionNotAuthorizedError,
+    HumanActionRecord,
+    HumanActionRepository,
+    HumanLeaseGrant,
+)
 from .identity_repository import IdentityRepository, ResolvedIdentity
 from .runtime_snapshot_repository import RuntimeSnapshotRecord, RuntimeSnapshotRepository
 from .target_repository import AllowedOriginRecord, TargetRecord, TargetRepository
@@ -17,6 +25,12 @@ from .workspace_repository import WorkspaceAccess, WorkspaceRepository
 __all__ = (
     "IdentityRepository",
     "ResolvedIdentity",
+    "HumanActionRepository",
+    "HumanActionRecord",
+    "HumanLeaseGrant",
+    "HumanActionNotAuthorizedError",
+    "HumanActionConflictError",
+    "HumanActionExpiredError",
     "WorkspaceRepository",
     "WorkspaceAccess",
     "ApplicationRepository",

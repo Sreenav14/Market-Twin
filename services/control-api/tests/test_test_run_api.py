@@ -20,6 +20,7 @@ from markettwin_control_api.persistence.repositories import (
     TestRunRecord,
     WorkspaceAccess,
 )
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 
 
 class AsyncContext:
@@ -115,6 +116,8 @@ class FakeTestRunRepository:
         created_by_user_id: UUID,
         target_snapshot: dict[str, object],
         configuration_snapshot: dict[str, object],
+        synthetic_fixture_approval_enabled: bool = False,
+        human_action_approvals_enabled: bool = False,
     ) -> TestRunRecord:
         self.create_arguments = {
             "workspace_id": workspace_id,
@@ -123,6 +126,8 @@ class FakeTestRunRepository:
             "created_by_user_id": created_by_user_id,
             "target_snapshot": target_snapshot,
             "configuration_snapshot": configuration_snapshot,
+            "synthetic_fixture_approval_enabled": synthetic_fixture_approval_enabled,
+            "human_action_approvals_enabled": human_action_approvals_enabled,
         }
         return self._test_run
     
@@ -447,6 +452,349 @@ async def test_create_test_run_snapshots_active_authorization(
         ]
         == expected_configuration
     )
+
+
+@pytest.mark.asyncio
+async def test_create_test_run_freezes_approved_auth_verification_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, raw_target = make_records()
+    target = replace(raw_target, requires_auth=True)
+    now = datetime.now(UTC)
+    authorization_id = uuid4()
+    test_run_id = uuid4()
+    authorization = TargetAuthorizationRecord(
+        authorization_id=authorization_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Owned local authenticated application.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    policy = AuthVerificationPolicy(
+        origin="http://localhost:3000",
+        marker_selector="[data-testid='signed-in-role']",
+        expected_marker="member",
+        role="member",
+        account_reference="fixture-member-1",
+    )
+    config: dict[str, object] = {
+        "execution_mode": "deep_feature_v1",
+        "testing_depth": "medium",
+        "study_brief": "Evaluate the shopping and checkout experience.",
+        "authorization_id_at_creation": str(authorization_id),
+        "auth_verification": policy.model_dump(mode="json"),
+    }
+    persisted = TestRunRecord(
+        test_run_id=test_run_id,
+        workspace_id=application.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="draft",
+        target_snapshot=test_run_api.build_target_snapshot(target),
+        configuration_snapshot=config,
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+    repository = FakeTestRunRepository(persisted)
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+        test_run_repository=repository,
+    )
+
+    response = await test_run_api.create_test_run(
+        application.application_id,
+        test_run_api.CreateTestRunRequest(
+            target_id=target.target_id,
+            study_brief="Evaluate the shopping and checkout experience.",
+            execution_mode="deep_feature_v1",
+            auth_verification=policy,
+        ),
+        make_request(),
+    )
+
+    assert response.configuration_snapshot["auth_verification"] == policy.model_dump(
+        mode="json"
+    )
+    assert repository.create_arguments is not None
+    assert repository.create_arguments["configuration_snapshot"] == config
+
+
+@pytest.mark.asyncio
+async def test_create_test_run_rejects_auth_verification_outside_target_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, raw_target = make_records()
+    target = replace(raw_target, requires_auth=True)
+    now = datetime.now(UTC)
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(),
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Owned local authenticated application.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+    )
+    policy = AuthVerificationPolicy(
+        origin="http://other.example.test",
+        marker_selector="[data-testid='signed-in-role']",
+        expected_marker="member",
+        role="member",
+        account_reference="fixture-member-1",
+    )
+    with pytest.raises(HTTPException) as error:
+        await test_run_api.create_test_run(
+            application.application_id,
+            test_run_api.CreateTestRunRequest(
+                target_id=target.target_id,
+                study_brief="Evaluate the shopping and checkout experience.",
+                execution_mode="deep_feature_v1",
+                auth_verification=policy,
+            ),
+            make_request(),
+        )
+    assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_test_run_requires_deep_mode_for_auth_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, raw_target = make_records()
+    target = replace(raw_target, requires_auth=True)
+    now = datetime.now(UTC)
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(),
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Owned local authenticated application.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+    )
+    with pytest.raises(HTTPException) as error:
+        await test_run_api.create_test_run(
+            application.application_id,
+            test_run_api.CreateTestRunRequest(
+                target_id=target.target_id,
+                study_brief="Evaluate the shopping and checkout experience.",
+                auth_verification=AuthVerificationPolicy(
+                    origin="http://localhost:3000",
+                    marker_selector="[data-testid='signed-in-role']",
+                    expected_marker="member",
+                    role="member",
+                    account_reference="fixture-member-1",
+                ),
+            ),
+            make_request(),
+        )
+    assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fixture_approval_opt_in_is_persisted_outside_config_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, target = make_records()
+    now = datetime.now(UTC)
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(),
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Loopback synthetic test fixture.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    persisted = TestRunRecord(
+        test_run_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="draft",
+        target_snapshot=test_run_api.build_target_snapshot(target),
+        configuration_snapshot={"study_brief": "Test synthetic registration."},
+        synthetic_fixture_approval_enabled=True,
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+    repository = FakeTestRunRepository(persisted)
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+        test_run_repository=repository,
+    )
+    response = await test_run_api.create_test_run(
+        application.application_id,
+        test_run_api.CreateTestRunRequest(
+            target_id=target.target_id,
+            study_brief="Test synthetic registration.",
+            execution_mode="deep_feature_v1",
+            synthetic_fixture_approval=True,
+        ),
+        make_request(),
+    )
+    assert repository.create_arguments is not None
+    assert repository.create_arguments["synthetic_fixture_approval_enabled"] is True
+    snapshot = repository.create_arguments["configuration_snapshot"]
+    assert isinstance(snapshot, dict)
+    assert "synthetic_fixture_approval" not in snapshot
+    assert response.synthetic_fixture_approval_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_general_action_approval_opt_in_is_persisted_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, target = make_records()
+    now = datetime.now(UTC)
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(),
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Authorized synthetic test target.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    persisted = TestRunRecord(
+        test_run_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="draft",
+        target_snapshot=test_run_api.build_target_snapshot(target),
+        configuration_snapshot={"study_brief": "Test an authorized form."},
+        human_action_approvals_enabled=True,
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+    repository = FakeTestRunRepository(persisted)
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+        test_run_repository=repository,
+    )
+    response = await test_run_api.create_test_run(
+        application.application_id,
+        test_run_api.CreateTestRunRequest(
+            target_id=target.target_id,
+            study_brief="Test an authorized form action.",
+            execution_mode="deep_feature_v1",
+            human_action_approvals=True,
+        ),
+        make_request(),
+    )
+    assert repository.create_arguments is not None
+    assert repository.create_arguments["human_action_approvals_enabled"] is True
+    assert repository.create_arguments["synthetic_fixture_approval_enabled"] is False
+    assert response.human_action_approvals_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_fixture_approval_rejects_remote_allowed_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, raw_target = make_records()
+    target = replace(
+        raw_target,
+        allowed_origins=(
+            AllowedOriginRecord(
+                scheme="https",
+                hostname="app.example.test",
+                port=None,
+                include_subdomains=False,
+            ),
+        ),
+    )
+    now = datetime.now(UTC)
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(),
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Authorized local target.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+    )
+    with pytest.raises(HTTPException) as error:
+        await test_run_api.create_test_run(
+            application.application_id,
+            test_run_api.CreateTestRunRequest(
+                target_id=target.target_id,
+                study_brief="Test synthetic registration.",
+                execution_mode="deep_feature_v1",
+                synthetic_fixture_approval=True,
+            ),
+            make_request(),
+        )
+    assert error.value.status_code == 422
 class FakeOutboxRepository:
     def __init__(self) -> None:
         self.messages: list[

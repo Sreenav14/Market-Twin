@@ -44,7 +44,7 @@ class RunStateRepository:
     ) -> None:
         run = await self._get_run(test_run_id)
         
-        if run.status not in {"planning", "queued"}:
+        if run.status not in {"planning", "queued", "awaiting_human"}:
             raise RuntimeError(
                 f'Cannot move TestRun from "{run.status}"'
                 'to "running".'
@@ -86,6 +86,7 @@ class RunStateRepository:
             "planning",
             "queued",
             "running",
+            "awaiting_human",
         }:
             raise RuntimeError(
                 f'Cannot move TestRun from "{run.status}"'

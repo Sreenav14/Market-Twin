@@ -25,6 +25,7 @@ from markettwin_execution_orchestrator.agents.schemas.test_case import (
     TestCaseSpec,
 )
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
+from markettwin_execution_orchestrator.browser.auth_session_broker import AuthSessionScope
 from markettwin_execution_orchestrator.browser.policy import validate_target_url
 from markettwin_execution_orchestrator.persistence import ExecutionRepository, PlanRepository
 from markettwin_execution_orchestrator.persistence.run_event_repository import RunEventRepository
@@ -34,8 +35,11 @@ from markettwin_execution_orchestrator.workflow.journey_executor import (
 )
 from markettwin_execution_orchestrator.workflow.test_case_planner import (
     DeepFeaturePlanningRequest,
+    fixture_case_candidates,
+    fixture_feature_scope,
     generate_feature_plan,
     persist_test_plan,
+    select_feature_cases,
     validate_feature_plan,
 )
 
@@ -189,7 +193,9 @@ async def execute_deep_feature_run(
     from markettwin_execution_orchestrator.workflow.case_execution import execute_test_case
 
     scope = (
-        FeatureScope.model_validate(request.feature_scope)
+        fixture_feature_scope(request.start_url)
+        if request.synthetic_fixture_approval_enabled
+        else FeatureScope.model_validate(request.feature_scope)
         if request.feature_scope is not None
         else default_scope(request)
     )
@@ -227,27 +233,62 @@ async def execute_deep_feature_run(
     executions = ExecutionRepository(session)
     await states.mark_planning(test_run_id=request.run_id)
     await session.commit()
+    auth_session_scope: AuthSessionScope | None = None
+    if request.auth_verification is not None:
+        raw_target_id = request.target_snapshot.get("target_id")
+        try:
+            target_id = UUID(str(raw_target_id))
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "A frozen target ID is required for authentication reuse."
+            ) from error
+        auth_session_scope = AuthSessionScope(
+            run_id=request.run_id,
+            target_id=target_id,
+            role=request.auth_verification.role,
+            account_reference=request.auth_verification.account_reference,
+            origin=request.auth_verification.origin,
+        )
+    controller = BrowserController()
     try:
-        if request.feature_plan is not None:
+        if request.synthetic_fixture_approval_enabled:
+            plan = select_feature_cases(
+                request=planning,
+                candidates=fixture_case_candidates(scope),
+            )
+            await persist_test_plan(session=session, request=planning, plan=plan)
+        elif request.feature_plan is not None:
             plan = DeepFeaturePlan.model_validate(request.feature_plan)
             validate_feature_plan(plan, planning)
             await persist_test_plan(session=session, request=planning, plan=plan)
         else:
-            async with BrowserController() as discovery:
-                handle = await discovery.create_session(
-                    execution_id=uuid4(),
-                    journey_id=uuid4(),
-                    allowed_origins=request.allowed_origins,
-                    network_policy=request.network_policy,
+            if request.auth_verification is not None:
+                from markettwin_execution_orchestrator.workflow.auth_bootstrap import (
+                    authenticated_discovery,
+                )
+
+                assert auth_session_scope is not None
+                page_context = await authenticated_discovery(
+                    request=request, controller=controller, session=session,
+                    auth_scope=auth_session_scope,
+                )
+                planning = replace(planning, page_context=page_context)
+                run = await session.get(TestRun, request.run_id)
+                assert run is not None
+                run.status = "planning"
+                await session.commit()
+            else:
+                handle = await controller.create_session(
+                    execution_id=uuid4(), journey_id=uuid4(),
+                    allowed_origins=request.allowed_origins, network_policy=request.network_policy,
                 )
                 try:
-                    state = await discovery.navigate(
-                        session_id=handle.session_id,
-                        url=scope.starting_url,
+                    state = await controller.navigate(
+                        session_id=handle.session_id, url=scope.starting_url,
                     )
                     planning = replace(planning, page_context=state.observation.to_dict())
                 finally:
-                    await discovery.close_session(session_id=handle.session_id)
+                    await controller.close_session(session_id=handle.session_id)
             plan = await generate_feature_plan(request=planning, session=session)
         persisted = await PlanRepository(session).create_from_feature_cases(
             test_run_id=request.run_id,
@@ -260,94 +301,101 @@ async def execute_deep_feature_run(
         journeys = {item.journey_key: item.journey_id for item in persisted.journeys}
         results: list[CaseExecutionResult] = []
         started = time.monotonic()
-        async with BrowserController() as controller:
-            for case in plan.cases:
-                remaining = budget.max_total_seconds - (time.monotonic() - started)
-                recorded_steps = await session.scalar(
-                    select(func.count())
-                    .select_from(ExecutionStep)
-                    .join(AgentExecution, AgentExecution.id == ExecutionStep.execution_id)
-                    .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
-                    .where(PersonaJourney.test_run_id == request.run_id)
-                )
-                remaining_steps = budget.max_steps - int(recorded_steps or 0)
-                reason = skip_reason(
-                    remaining_seconds=remaining,
-                    remaining_steps=remaining_steps,
-                    case=case,
-                )
-                if reason is not None:
-                    await events.create(
-                        test_run_id=request.run_id,
-                        event_type="test_case.skipped",
-                        journey_id=journeys[f"feature_tester_v1__{case.case_id}"],
-                        execution_id=None,
-                        payload={
-                            "schema_version": 1,
-                            "case_id": case.case_id,
-                            "reason": reason,
-                            "status": "not_run",
-                        },
-                    )
-                    continue
-                journey = case_journey(case)
-                journey_id, execution_id = journeys[journey.journey_key], uuid4()
-                await executions.create_agent_execution(
-                    execution_id=execution_id,
-                    journey_id=journey_id,
-                    runtime_name="deterministic_case_steps_v1",
-                )
-                await session.commit()
-                result = await execute_test_case(
-                    request=PersonaJourneyExecutionRequest(
-                        test_run_id=request.run_id,
-                        execution_id=execution_id,
-                        journey_id=journey_id,
-                        persona_id=persona_id,
-                        mission_id=missions[case.case_id],
-                        journey=journey,
-                        start_url=scope.starting_url,
-                        allowed_origins=request.allowed_origins,
-                        network_policy=request.network_policy,
-                        max_duration_seconds=max(
-                            1, min(int(remaining), request.max_duration_seconds_per_journey)
-                        ),
-                    ),
-                    case=case,
-                    scope=scope,
-                    budget=budget.model_copy(update={"max_steps": remaining_steps}),
-                    controller=controller,
-                    session=session,
-                )
-                outcome = {
-                    "satisfied": "passed",
-                    "not_satisfied": "failed",
-                    "unverified": "inconclusive",
-                }[result.verdict]
-                status = result.execution_status
-                await executions.finish_agent_execution(
-                    execution_id=execution_id,
-                    status="timed_out" if status == "budget_exhausted" else status,
-                    outcome=outcome if status == "completed" else None,
-                    error_code=result.blocker,
-                )
-                payload = result.model_dump(mode="json")
+        human_wait_seconds = 0.0
+        for case in plan.cases:
+            remaining = budget.max_total_seconds - (time.monotonic() - started - human_wait_seconds)
+            recorded_steps = await session.scalar(
+                select(func.count())
+                .select_from(ExecutionStep)
+                .join(AgentExecution, AgentExecution.id == ExecutionStep.execution_id)
+                .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
+                .where(PersonaJourney.test_run_id == request.run_id)
+            )
+            remaining_steps = budget.max_steps - int(recorded_steps or 0)
+            reason = skip_reason(
+                remaining_seconds=remaining,
+                remaining_steps=remaining_steps,
+                case=case,
+            )
+            if reason is not None:
                 await events.create(
                     test_run_id=request.run_id,
-                    event_type="journey.result",
-                    journey_id=journey_id,
-                    execution_id=execution_id,
+                    event_type="test_case.skipped",
+                    journey_id=journeys[f"feature_tester_v1__{case.case_id}"],
+                    execution_id=None,
                     payload={
-                        **payload,
-                        "mode": "deep_feature_v1",
-                        "status": status,
-                        "outcome": outcome if status == "completed" else None,
-                        "journey_key": journey.journey_key,
-                        "summary": f"Case {case.case_id}: {result.verdict}.",
+                        "schema_version": 1,
+                        "case_id": case.case_id,
+                        "reason": reason,
+                        "status": "not_run",
                     },
                 )
-                await session.commit()
-                results.append(result)
+                continue
+            journey = case_journey(case)
+            journey_id, execution_id = journeys[journey.journey_key], uuid4()
+            await executions.create_agent_execution(
+                execution_id=execution_id,
+                journey_id=journey_id,
+                runtime_name="deterministic_case_steps_v1",
+            )
+            await session.commit()
+            result = await execute_test_case(
+                request=PersonaJourneyExecutionRequest(
+                    test_run_id=request.run_id,
+                    execution_id=execution_id,
+                    journey_id=journey_id,
+                    persona_id=persona_id,
+                    mission_id=missions[case.case_id],
+                    journey=journey,
+                    start_url=scope.starting_url,
+                    allowed_origins=request.allowed_origins,
+                    network_policy=request.network_policy,
+                    max_duration_seconds=max(
+                        1, min(int(remaining), request.max_duration_seconds_per_journey)
+                    ),
+                ),
+                case=case,
+                scope=scope,
+                budget=budget.model_copy(update={"max_steps": remaining_steps}),
+                controller=controller,
+                session=session,
+                auth_verification=request.auth_verification,
+                auth_session_scope=auth_session_scope,
+                reuse_auth_session=bool(results) or (
+                    request.auth_verification is not None and request.feature_plan is None
+                    and not request.synthetic_fixture_approval_enabled
+                ),
+            )
+            outcome = {
+                "satisfied": "passed",
+                "not_satisfied": "failed",
+                "unverified": "inconclusive",
+            }[result.verdict]
+            status = result.execution_status
+            await executions.finish_agent_execution(
+                execution_id=execution_id,
+                status="timed_out" if status == "budget_exhausted" else status,
+                outcome=outcome if status == "completed" else None,
+                error_code=result.blocker,
+            )
+            payload = result.model_dump(mode="json")
+            await events.create(
+                test_run_id=request.run_id,
+                event_type="journey.result",
+                journey_id=journey_id,
+                execution_id=execution_id,
+                payload={
+                    **payload,
+                    "mode": "deep_feature_v1",
+                    "status": status,
+                    "outcome": outcome if status == "completed" else None,
+                    "journey_key": journey.journey_key,
+                    "summary": f"Case {case.case_id}: {result.verdict}.",
+                },
+            )
+            await session.commit()
+            results.append(result)
+            human_wait_seconds += result.human_wait_ms / 1000
         coverage = coverage_summary(plan, tuple(results))
         for event_type in ("test_run.coverage", "run.collection"):
             await events.create(
@@ -369,3 +417,5 @@ async def execute_deep_feature_run(
         await states.mark_failed(test_run_id=request.run_id)
         await session.commit()
         raise
+    finally:
+        await controller.close()

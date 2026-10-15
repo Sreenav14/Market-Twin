@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import TypedDict, cast
+from urllib.parse import urlsplit, urlunsplit
 
 from playwright.async_api import Locator
 
@@ -11,6 +12,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     FormFieldState,
     VisibleElement,
 )
+from markettwin_execution_orchestrator.browser.errors import HumanControlActiveError
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 MAX_VISIBLE_ELEMENTS = 80
@@ -83,11 +85,14 @@ async def build_observation(
 ) -> BrowserObservation:
     """Return current page state and drain per-action error buffers."""
 
+    if not session.capture_enabled or session.control_mode != "agent":
+        raise HumanControlActiveError("Browser observations are disabled during handoff.")
+
     try:
         aria_snapshot = aria_snapshot_override
         if aria_snapshot is None:
-            aria_snapshot = await session.page.locator("body").aria_snapshot(
-                timeout=session.timeout_ms,
+            aria_snapshot = "" if session.authenticated_session else (
+                await session.page.locator("body").aria_snapshot(timeout=session.timeout_ms)
             )
     except Exception:
         aria_snapshot = ""
@@ -118,6 +123,7 @@ async def build_observation(
         await session.page.evaluate(
             f"""
             () => {{
+                const authenticated = {str(session.authenticated_session).lower()};
                 const MAX_ELEMENTS = {MAX_VISIBLE_ELEMENTS + 1};
                 const MAX_NAME = {MAX_VISIBLE_ELEMENT_NAME_CHARS};
 
@@ -271,6 +277,11 @@ async def build_observation(
                     document.querySelectorAll(selectors)
                 )
                     .map(element => {{
+                        if (authenticated && (
+                            element.closest('pre, code, [data-sensitive], [data-secret]') ||
+                            !['button', 'link', 'heading', 'textbox', 'searchbox', 'combobox',
+                              'checkbox', 'radio'].includes(semanticRole(element))
+                        )) return null;
                         const rect =
                             element.getBoundingClientRect();
 
@@ -355,8 +366,12 @@ async def build_observation(
         for element in raw_visible_elements[:MAX_VISIBLE_ELEMENTS]
     )
 
+    observed_url = session.page.url
+    if session.authenticated_session:
+        parsed_url = urlsplit(observed_url)
+        observed_url = urlunsplit((parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", ""))
     observation = BrowserObservation(
-        url=session.page.url,
+        url=observed_url,
         title=await session.page.title(),
         aria_snapshot=aria_snapshot,
         console_errors_since_last_action=tuple(

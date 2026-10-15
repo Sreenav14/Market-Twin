@@ -74,6 +74,7 @@ class CaseExecutionResult(BaseModel):
     assertion_results: tuple[AssertionResult, ...] = Field(default=(), max_length=8)
     elapsed_ms: StrictInt = Field(ge=0)
     blocker: CaseBlocker | None = None
+    human_wait_ms: StrictInt = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_provenance_and_verdict(self) -> "CaseExecutionResult":

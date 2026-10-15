@@ -117,9 +117,16 @@ def validate_case(case: TestCaseSpec, request: DeepFeaturePlanningRequest) -> No
             raise ValueError("Assertion sources must belong to the case requirements.")
         if assertion.oracle == "url":
             ensure_scope_url(str(assertion.expected_value), scope)
-    for step in case.steps:
+    for step_index, step in enumerate(case.steps):
         if step.action not in request.supported_actions:
             raise ValueError("Case requires an unsupported action.")
+        if step.action_id is not None and not (
+            request.allow_fixture_truth
+            and case.case_id == "valid"
+            and step_index == len(case.steps) - 1
+            and step.action_id == "registration_submit"
+        ):
+            raise ValueError("Fixture approval action requires its exact authorized candidate.")
         if step.test_value_key is not None and step.test_value_key not in values:
             raise ValueError("Unknown safe test-data key.")
         if step.url is not None:
@@ -382,6 +389,11 @@ def fixture_case_candidates(scope: FeatureScope) -> FeatureCaseCandidates:
         return SemanticTarget(scope_role="form", scope_name="Registration", **kwargs)
 
     save = CaseAction(action="click", target=target(role="button", name="Save"))
+    approved_save = CaseAction(
+        action="click",
+        target=target(role="button", name="Save"),
+        action_id="registration_submit",
+    )
     name = CaseAction(action="fill", target=target(label="Display name"), test_value_key="name")
     email = CaseAction(action="fill", target=target(label="Email"), test_value_key="email")
     definitions: tuple[
@@ -415,7 +427,7 @@ def fixture_case_candidates(scope: FeatureScope) -> FeatureCaseCandidates:
         (
             "valid",
             "happy_path",
-            (name, email, save),
+            (name, email, approved_save),
             "visible_text",
             target(text="Fixture profile registered."),
             "Fixture profile registered.",

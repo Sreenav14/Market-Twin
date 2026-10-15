@@ -13,6 +13,9 @@ from markettwin_control_api.api.agent_prompts import router as agent_prompts_rou
 from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.artifacts import router as artifacts_router
 from markettwin_control_api.api.auth import router as auth_router
+from markettwin_control_api.api.deep_cases import router as deep_cases_router
+from markettwin_control_api.api.hitl_summary import router as hitl_summary_router
+from markettwin_control_api.api.human_actions import router as human_actions_router
 from markettwin_control_api.api.ingestion import router as ingestion_router
 from markettwin_control_api.api.lifecycle import router as lifecycle_router
 from markettwin_control_api.api.runtime_snapshots import router as runtime_snapshots_router
@@ -20,12 +23,15 @@ from markettwin_control_api.api.target_authorizations import router as target_au
 from markettwin_control_api.api.targets import router as targets_router
 from markettwin_control_api.api.test_run import router as test_run_router
 from markettwin_control_api.api.test_run_results import router as test_run_results_router
-from markettwin_control_api.api.deep_cases import router as deep_cases_router
 from markettwin_control_api.api.workspaces import router as workspaces_router
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.database import DatabaseRuntime
 from markettwin_control_api.knowledge.processor import run_ingestion_processor
-from markettwin_control_api.services import OutboxRelay, run_outbox_relay
+from markettwin_control_api.services import (
+    OutboxRelay,
+    run_human_action_reaper,
+    run_outbox_relay,
+)
 
 APP_NAME: Final[str] = "MarketTwin Control API"
 APP_VERSION: Final[str] = "0.1.0"
@@ -63,6 +69,9 @@ def create_app() -> FastAPI:
         ingestion_task = asyncio.create_task(
             run_ingestion_processor(database.engine, settings), name="markettwin-ingestion"
         )
+        hitl_reaper_task = asyncio.create_task(
+            run_human_action_reaper(database.session_factory), name="markettwin-hitl-reaper"
+        )
         relay_task: asyncio.Task[None] | None = None
 
         if settings.outbox_relay_enabled:
@@ -95,6 +104,11 @@ def create_app() -> FastAPI:
                     await relay_task
                 except asyncio.CancelledError:
                     pass
+            hitl_reaper_task.cancel()
+            try:
+                await hitl_reaper_task
+            except asyncio.CancelledError:
+                pass
             await database.close()
 
     application = FastAPI(
@@ -168,6 +182,8 @@ def create_app() -> FastAPI:
     application.include_router(test_run_router)
     application.include_router(test_run_results_router)
     application.include_router(deep_cases_router)
+    application.include_router(human_actions_router)
+    application.include_router(hitl_summary_router)
     application.include_router(artifacts_router)
     application.include_router(runtime_snapshots_router)
     application.include_router(agent_prompts_router)

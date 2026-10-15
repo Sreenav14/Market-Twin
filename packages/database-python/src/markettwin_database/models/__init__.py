@@ -9,11 +9,14 @@ from .evaluation import (
 )
 from .evidence import Artifact
 from .execution import (
+    ActionApprovalReceipt,
+    ActionApprovalRequest,
     AgentExecution,
     AgentPromptDraft,
     AgentRuntimeSnapshot,
     BrowserSession,
     ExecutionStep,
+    ExecutionSuspension,
     HumanActionRequest,
     HumanControlLease,
     PolicyDecision,
@@ -45,6 +48,8 @@ from .testing import (
 )
 
 __all__ = [
+    "ActionApprovalRequest",
+    "ActionApprovalReceipt",
     "User",
     "Workspace",
     "WorkspaceMember",
@@ -56,6 +61,7 @@ __all__ = [
     "BrowserSession",
     "AgentRuntimeSnapshot",
     "ExecutionStep",
+    "ExecutionSuspension",
     "Finding",
     "FindingEvidence",
     "FindingJourney",

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 from urllib.parse import urljoin, urlsplit
 from uuid import UUID, uuid4
 
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 from playwright.async_api import (
     Browser,
     Dialog,
@@ -39,6 +43,15 @@ from markettwin_execution_orchestrator.browser.assertions import (
     AssertionObservation,
     evaluate_assertion,
 )
+from markettwin_execution_orchestrator.browser.auth_session_broker import (
+    AuthSessionBroker,
+    AuthSessionScope,
+    AuthSessionSnapshot,
+)
+from markettwin_execution_orchestrator.browser.auth_verifier import (
+    VerifiedPrincipal,
+    verify_authenticated_role,
+)
 from markettwin_execution_orchestrator.browser.contracts import (
     AllowedOrigin,
     BrowserActionResult,
@@ -50,6 +63,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     ScopeRole,
 )
 from markettwin_execution_orchestrator.browser.errors import (
+    BrowserActionBlockedError,
     BrowserActionError,
     BrowserNavigationError,
     BrowserPolicyError,
@@ -80,6 +94,10 @@ from markettwin_execution_orchestrator.browser.policy import (
     validate_target_url,
     validate_websocket_url,
 )
+from markettwin_execution_orchestrator.browser.sensitive_action_policy import (
+    SensitiveActionIntent,
+    classify_click_action,
+)
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 
@@ -101,7 +119,9 @@ class BrowserController:
         self._max_pages_per_session = max_pages_per_session
         self._playwright: Playwright | None = None
         self._sessions: dict[UUID, JourneyBrowserSession] = {}
+        self._auth_session_broker = AuthSessionBroker()
         self._start_lock = asyncio.Lock()
+        self._approval_salt = secrets.token_hex(32)
 
     async def start(self) -> None:
         """Start the in-process Playwright driver once."""
@@ -124,6 +144,7 @@ class BrowserController:
         if self._playwright is not None:
             await self._playwright.stop()
             self._playwright = None
+        self._auth_session_broker.clear()
 
     async def __aenter__(self) -> BrowserController:
         await self.start()
@@ -139,6 +160,9 @@ class BrowserController:
         journey_id: UUID,
         allowed_origins: tuple[AllowedOrigin, ...] | list[AllowedOrigin],
         network_policy: NetworkPolicy,
+        auth_snapshot: AuthSessionSnapshot | None = None,
+        auth_only_origins: tuple[str, ...] = (),
+        authenticated_session: bool = False,
         timeout_ms: int = 30_000,
     ) -> BrowserSessionHandle:
         """Create one fresh Chromium + BrowserContext for one Journey."""
@@ -147,6 +171,14 @@ class BrowserController:
             raise ValueError("timeout_ms must be positive")
         if not allowed_origins:
             raise ValueError("At least one allowed origin is required")
+        for origin in auth_only_origins:
+            validate_target_url(origin, allowed_origins, network_policy)
+        if auth_snapshot is not None:
+            validate_target_url(
+                auth_snapshot.scope.origin,
+                allowed_origins,
+                network_policy,
+            )
 
         await self.start()
         assert self._playwright is not None
@@ -159,14 +191,16 @@ class BrowserController:
         try:
             browser = await self._playwright.chromium.launch(headless=self._headless)
             context = await browser.new_context(
-                viewport={
-                    "width": 1280,
-                    "height": 900
-                },
+                viewport={"width": 1280, "height": 900},
                 device_scale_factor=1,
                 accept_downloads=False,
                 service_workers="block",
             )
+            if auth_snapshot is not None:
+                await AuthSessionBroker.install_snapshot(
+                    snapshot=auth_snapshot,
+                    context=cast(Any, context),
+                )
             context.set_default_timeout(timeout_ms)
             context.set_default_navigation_timeout(timeout_ms)
 
@@ -182,6 +216,8 @@ class BrowserController:
                 context=context,
                 page=page,
                 artifact_directory=artifact_directory,
+                auth_only_origins=auth_only_origins,
+                authenticated_session=authenticated_session or auth_snapshot is not None,
             )
             self._sessions[session_id] = session
 
@@ -194,17 +230,23 @@ class BrowserController:
             await self._configure_page(session, page)
             await start_trace(session)
             session.state = "open"
+            handle = BrowserSessionHandle(
+                session_id=session_id,
+                execution_id=execution_id,
+                journey_id=journey_id,
+            )
+            from markettwin_execution_orchestrator.browser.owner_registry import (
+                browser_owner_registry,
+            )
+
+            browser_owner_registry.register(self, handle)
         except Exception:
             self._sessions.pop(session_id, None)
             if browser is not None:
                 await browser.close()
             raise
 
-        return BrowserSessionHandle(
-            session_id=session_id,
-            execution_id=execution_id,
-            journey_id=journey_id,
-        )
+        return handle
 
     def _get_session(
         self,
@@ -221,25 +263,41 @@ class BrowserController:
             ) from exc
 
         if execution_id is not None and session.execution_id != execution_id:
-            raise BrowserSessionOwnershipError(
-                "Browser session does not belong to this execution."
-            )
+            raise BrowserSessionOwnershipError("Browser session does not belong to this execution.")
         if journey_id is not None and session.journey_id != journey_id:
-            raise BrowserSessionOwnershipError(
-                "Browser session does not belong to this Journey."
-            )
+            raise BrowserSessionOwnershipError("Browser session does not belong to this Journey.")
         return session
 
     @staticmethod
     def _ensure_agent_control(session: JourneyBrowserSession) -> None:
-        if session.state == "human_control":
+        if session.control_mode != "agent":
             raise HumanControlActiveError(
-                "Agent browser tools are disabled while human control is active."
+                "Agent browser tools are disabled during human-control handoff."
             )
         if session.state != "open":
             raise BrowserSessionStateError(
                 f"Browser session is not open; current state is {session.state}."
             )
+        if session.is_auth_only_url(session.page.url):
+            raise BrowserActionBlockedError("Authentication-only origins require human control.")
+
+    def require_agent_control(self, handle: BrowserSessionHandle) -> None:
+        """Reject sensitive-phase tool calls before their summaries are recorded."""
+        self._ensure_agent_control(
+            self._get_session(
+                session_id=handle.session_id,
+                execution_id=handle.execution_id,
+                journey_id=handle.journey_id,
+            )
+        )
+
+    @asynccontextmanager
+    async def _agent_control_action(
+        self, session: JourneyBrowserSession
+    ) -> AsyncGenerator[None, None]:
+        async with session.lock:
+            self._ensure_agent_control(session)
+            yield
 
     async def _route_request(
         self,
@@ -247,6 +305,8 @@ class BrowserController:
         route: Route,
     ) -> None:
         try:
+            if session.control_mode != "human" and session.is_auth_only_url(route.request.url):
+                raise BrowserActionBlockedError("Authentication-only request blocked.")
             validated = validate_target_url(
                 route.request.url,
                 session.allowed_origins,
@@ -266,6 +326,9 @@ class BrowserController:
         route: WebSocketRoute,
     ) -> None:
         try:
+            http_url = route.url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+            if session.control_mode != "human" and session.is_auth_only_url(http_url):
+                raise BrowserActionBlockedError("Authentication-only socket blocked.")
             validated = validate_websocket_url(
                 route.url,
                 session.allowed_origins,
@@ -295,8 +358,8 @@ class BrowserController:
         page: Page,
     ) -> None:
         if len(session.context.pages) > self._max_pages_per_session:
-            session.event_buffer.record_page_error(
-                "Popup blocked: Journey exceeded the configured page limit."
+            self._record_page_error(
+                session, "Popup blocked: Journey exceeded the configured page limit."
             )
             await page.close()
             return
@@ -308,37 +371,46 @@ class BrowserController:
         )
         page.on(
             "pageerror",
-            lambda error: session.event_buffer.record_page_error(str(error)),
+            lambda error: self._record_page_error(session, str(error)),
         )
         page.on("requestfailed", lambda request: self._on_request_failed(session, request))
         page.on("dialog", lambda dialog: self._dismiss_dialog(session, dialog))
         page.on(
             "download",
-            lambda _download: session.event_buffer.record_page_error(
-                "Download blocked by MarketTwin policy."
+            lambda _download: self._record_page_error(
+                session, "Download blocked by MarketTwin policy."
             ),
         )
 
     @staticmethod
+    def _record_page_error(session: JourneyBrowserSession, message: str) -> None:
+        if (session.capture_enabled and session.control_mode == "agent"
+                and not session.authenticated_session):
+            session.event_buffer.record_page_error(message)
+
+    @staticmethod
     def _on_console(session: JourneyBrowserSession, kind: str, text: str) -> None:
-        if kind == "error":
+        if (kind == "error" and session.capture_enabled and session.control_mode == "agent"
+                and not session.authenticated_session):
             session.event_buffer.record_console_error(text)
 
     @staticmethod
     def _on_request_failed(session: JourneyBrowserSession, request: Request) -> None:
-        session.event_buffer.record_failed_request(
-            FailedRequestRecord(
-                url=request.url,
-                method=request.method,
-                resource_type=request.resource_type,
-                error_text=request.failure or "Unknown network error",
+        if (session.capture_enabled and session.control_mode == "agent"
+                and not session.authenticated_session):
+            session.event_buffer.record_failed_request(
+                FailedRequestRecord(
+                    url=request.url,
+                    method=request.method,
+                    resource_type=request.resource_type,
+                    error_text=request.failure or "Unknown network error",
+                )
             )
-        )
 
     @staticmethod
     def _dismiss_dialog(session: JourneyBrowserSession, dialog: Dialog) -> None:
-        session.event_buffer.record_page_error(
-            f'Unexpected browser dialog dismissed: "{dialog.message}"'
+        BrowserController._record_page_error(
+            session, f'Unexpected browser dialog dismissed: "{dialog.message}"'
         )
         asyncio.create_task(dialog.dismiss())
 
@@ -356,8 +428,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             session.next_action_number()
             screenshot = await capture_screenshot(
                 session,
@@ -369,15 +440,21 @@ class BrowserController:
             )
 
     async def get_form_state(
-        self, *, session_id: UUID, scope_role: ScopeRole, scope_name: str,
-        execution_id: UUID | None = None, journey_id: UUID | None = None,
+        self,
+        *,
+        session_id: UUID,
+        scope_role: ScopeRole,
+        scope_name: str,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
     ) -> BrowserActionResult:
         """Inspect bounded form metadata without returning entered values."""
         session = self._get_session(
-            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             # A named scope was required above, so this is a Locator.
@@ -387,33 +464,49 @@ class BrowserController:
             screenshot = await capture_screenshot(session, label="form-state")
             snapshot = json.dumps([asdict(field) for field in fields])
             return BrowserActionResult(
-                action="get_form_state", observation=await build_observation(
-                    session, screenshot_path=screenshot, aria_snapshot_override=snapshot,
-                    form_fields=fields, more_available=more_available,
+                action="get_form_state",
+                observation=await build_observation(
+                    session,
+                    screenshot_path=screenshot,
+                    aria_snapshot_override=snapshot,
+                    form_fields=fields,
+                    more_available=more_available,
                 ),
             )
 
     async def read_assertion(
-        self, *, session_id: UUID, assertion: ExpectedAssertion, timeout_ms: int = 1500,
-        execution_id: UUID | None = None, journey_id: UUID | None = None,
+        self,
+        *,
+        session_id: UUID,
+        assertion: ExpectedAssertion,
+        timeout_ms: int = 1500,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
     ) -> tuple[BrowserActionResult, AssertionObservation]:
         """Read an assertion under the same origin, ownership and control guards."""
         if timeout_ms < 1 or timeout_ms > 5000:
             raise BrowserActionError("Assertion timeout must be between 1 and 5000 milliseconds.")
         session = self._get_session(
-            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             session.next_action_number()
             if assertion.target is not None:
                 target = assertion.target
                 root = await scoped_root(
-                    session.page, scope_role=target.scope_role, scope_name=target.scope_name,
+                    session.page,
+                    scope_role=target.scope_role,
+                    scope_name=target.scope_name,
                 )
                 locator = semantic_locator(
-                    root, role=target.role, name=target.name, label=target.label, text=target.text,
+                    root,
+                    role=target.role,
+                    name=target.name,
+                    label=target.label,
+                    text=target.text,
                 )
                 if await locator.count() == 1 and await locator.is_visible():
                     await locator.scroll_into_view_if_needed()
@@ -422,22 +515,29 @@ class BrowserController:
             outcome = await evaluate_assertion(session.page, assertion, timeout_ms=timeout_ms)
             screenshot = await capture_screenshot(session, label="assertion")
             result = BrowserActionResult(
-                action="assertion", observation=await build_observation(
-                    session, screenshot_path=screenshot,
+                action="assertion",
+                observation=await build_observation(
+                    session,
+                    screenshot_path=screenshot,
                 ),
             )
             return result, outcome
 
     async def focus_next(
-        self, *, session_id: UUID, reverse: bool = False,
-        execution_id: UUID | None = None, journey_id: UUID | None = None,
+        self,
+        *,
+        session_id: UUID,
+        reverse: bool = False,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
     ) -> BrowserActionResult:
         """Move keyboard focus one stop; no activation keys are accepted."""
         session = self._get_session(
-            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             session.next_action_number()
             await session.page.keyboard.press("Shift+Tab" if reverse else "Tab")
@@ -448,22 +548,30 @@ class BrowserController:
             )
 
     async def set_viewport(
-        self, *, session_id: UUID, preset: Literal["mobile320", "desktop1280"],
-        execution_id: UUID | None = None, journey_id: UUID | None = None,
+        self,
+        *,
+        session_id: UUID,
+        preset: Literal["mobile320", "desktop1280"],
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
     ) -> BrowserActionResult:
         """Use a fixed fixture-tested viewport preset."""
         if preset not in {"mobile320", "desktop1280"}:
             raise BrowserActionError("Viewport preset must be mobile320 or desktop1280.")
         session = self._get_session(
-            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             session.next_action_number()
-            await session.page.set_viewport_size({
-                "width": 320 if preset == "mobile320" else 1280, "height": 800,
-            })
+            await session.page.set_viewport_size(
+                {
+                    "width": 320 if preset == "mobile320" else 1280,
+                    "height": 800,
+                }
+            )
             screenshot = await capture_screenshot(session, label="viewport")
             return BrowserActionResult(
                 action="set_viewport",
@@ -485,8 +593,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             validated = validate_target_url(
                 url,
                 session.allowed_origins,
@@ -507,20 +614,112 @@ class BrowserController:
                 )
                 await resolve_and_validate_host(final_url.hostname, session.network_policy)
             except PlaywrightTimeoutError as exc:
-                raise BrowserTimeoutError(
-                    f'Navigation to "{validated.origin}" timed out.'
-                ) from exc
+                raise BrowserTimeoutError(f'Navigation to "{validated.origin}" timed out.') from exc
             except Exception as exc:
                 if isinstance(exc, BrowserPolicyError):
                     raise
-                raise BrowserNavigationError(
-                    f'Navigation to "{validated.origin}" failed.'
-                ) from exc
+                raise BrowserNavigationError(f'Navigation to "{validated.origin}" failed.') from exc
 
             screenshot = await capture_screenshot(session, label="navigate")
             return BrowserActionResult(
                 action="navigate",
                 observation=await build_observation(session, screenshot_path=screenshot),
+            )
+
+    async def inspect_click_approval(
+        self,
+        *,
+        session_id: UUID,
+        role: str | None = None,
+        name: str | None = None,
+        label: str | None = None,
+        text: str | None = None,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
+    ) -> SensitiveActionIntent | None:
+        """Inspect an exact click target and classify approval policy without acting."""
+        session = self._get_session(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        async with self._agent_control_action(session):
+            ensure_low_risk_click_target(name, label, text)
+            root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
+            locator = semantic_locator(
+                root, role=role, name=name, label=label, text=text,
+            )
+            await require_unique(locator)
+            return await self._click_intent(
+                locator, role=role, name=name, label=label, text=text,
+                scope_role=scope_role, scope_name=scope_name,
+            )
+
+    async def _click_intent(
+        self, locator: Locator, *, role: str | None, name: str | None,
+        label: str | None, text: str | None, scope_role: ScopeRole | None,
+        scope_name: str | None,
+    ) -> SensitiveActionIntent | None:
+        # Hash page/form state inside the browser. Raw field values never cross
+        # Playwright's protocol or enter traces, approval rows, logs or prompts.
+        state = await locator.evaluate(
+            """async (element, salt) => {
+                const form = element.form || element.closest('form');
+                const fields = form ? Array.from(form.elements) : [];
+                const sensitive = fields.some(field =>
+                    ['password', 'file'].includes(field.type) ||
+                    /password|passcode|otp|one.time.code|captcha|card.number|cvv|cvc/i.test(
+                        [field.name, field.id, field.autocomplete,
+                         field.getAttribute('aria-label')].join(' ')));
+                const description = [element.textContent, element.getAttribute('aria-label'),
+                    element.getAttribute('title'), element.value].filter(Boolean).join(' ');
+                const payload = JSON.stringify({salt, url: location.href,
+                    element: element.outerHTML, action: form?.action, method: form?.method,
+                    fields: sensitive ? [] : fields.map(field => [field.name, field.type,
+                        field.value, field.checked, field.disabled])});
+                const digest = await crypto.subtle.digest('SHA-256',
+                    new TextEncoder().encode(payload));
+                return {sensitive, description: description.slice(0, 500),
+                    type: form ? element.type : null,
+                    digest: Array.from(new Uint8Array(digest))
+                        .map(value => value.toString(16).padStart(2, '0')).join('')};
+            }""",
+            self._approval_salt,
+        )
+        intent = classify_click_action(
+            role=role, name=name, label=label, text=text,
+            element_type=state.get("type"),
+            observed_description=state.get("description"),
+            state_digest=state.get("digest"),
+        )
+        if intent is not None:
+            if state.get("sensitive"):
+                raise BrowserActionBlockedError("Sensitive forms require human browser takeover.")
+            intent.action.update(scope_role=scope_role, scope_name=scope_name)
+        return intent
+
+    async def current_origin(
+        self,
+        *,
+        session_id: UUID,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
+    ) -> str:
+        """Return only the current HTTP(S) origin for approval resource binding."""
+        session = self._get_session(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        async with self._agent_control_action(session):
+            parsed = urlsplit(session.page.url)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise BrowserActionBlockedError("Sensitive actions require an authorized page.")
+            default_port = 443 if parsed.scheme == "https" else 80
+            return f"{parsed.scheme}://{parsed.hostname}" + (
+                f":{parsed.port}" if parsed.port and parsed.port != default_port else ""
             )
 
     async def click(
@@ -535,6 +734,7 @@ class BrowserController:
         scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        approval_fingerprint: str | None = None,
     ) -> BrowserActionResult:
         """Click one exact semantic element."""
 
@@ -543,8 +743,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             ensure_low_risk_click_target(name, label, text)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = semantic_locator(
@@ -555,6 +754,21 @@ class BrowserController:
                 text=text,
             )
             await require_unique(locator)
+            intent = await self._click_intent(
+                locator, role=role, name=name, label=label, text=text,
+                scope_role=scope_role, scope_name=scope_name,
+            )
+            if (intent is None and approval_fingerprint is not None) or (
+                intent is not None
+                and intent.fingerprint != approval_fingerprint
+            ):
+                raise BrowserActionBlockedError(
+                    "The click does not match its current one-time approval."
+                )
+            if intent is not None and approval_fingerprint is None:
+                raise BrowserActionBlockedError(
+                    "This action requires a valid one-time human approval."
+                )
             session.next_action_number()
             try:
                 href = await locator.get_attribute("href")
@@ -562,7 +776,9 @@ class BrowserController:
                     destination = urljoin(session.page.url, href)
                     if urlsplit(destination).scheme in {"http", "https"}:
                         validate_target_url(
-                            destination, session.allowed_origins, session.network_policy,
+                            destination,
+                            session.allowed_origins,
+                            session.network_policy,
                         )
                 await locator.click(timeout=session.timeout_ms)
             except BrowserPolicyError:
@@ -596,8 +812,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = root.get_by_label(label, exact=True)
             await require_unique(locator)
@@ -640,8 +855,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = root.get_by_label(label, exact=True)
             await require_unique(locator)
@@ -663,16 +877,23 @@ class BrowserController:
             )
 
     async def set_checked(
-        self, *, session_id: UUID, label: str, checked: bool,
-        scope_role: ScopeRole | None = None, scope_name: str | None = None,
-        execution_id: UUID | None = None, journey_id: UUID | None = None,
+        self,
+        *,
+        session_id: UUID,
+        label: str,
+        checked: bool,
+        scope_role: ScopeRole | None = None,
+        scope_name: str | None = None,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
     ) -> BrowserActionResult:
         """Set an exactly labeled checkbox; no radio/file/payment activation."""
         session = self._get_session(
-            session_id=session_id, execution_id=execution_id, journey_id=journey_id,
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             ensure_low_risk_click_target(label)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
@@ -680,7 +901,8 @@ class BrowserController:
             await require_unique(locator)
             input_type = await locator.get_attribute("type")
             ensure_non_sensitive_fill(
-                label=label, input_type=input_type,
+                label=label,
+                input_type=input_type,
                 autocomplete=await locator.get_attribute("autocomplete"),
             )
             if input_type != "checkbox":
@@ -718,8 +940,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             session.next_action_number()
             delta = amount if direction == "down" else -amount
             await session.page.mouse.wheel(0, delta)
@@ -744,8 +965,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             session.next_action_number()
             try:
                 await session.page.go_back(
@@ -787,8 +1007,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             session.next_action_number()
             await session.page.wait_for_timeout(milliseconds)
             screenshot = await capture_screenshot(session, label="wait")
@@ -816,9 +1035,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-
-        async with session.lock:
+        async with self._agent_control_action(session):
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = semantic_locator(
                 root,
@@ -829,9 +1046,7 @@ class BrowserController:
             )
             await require_unique(locator)
             if not await locator.is_visible():
-                raise BrowserActionError(
-                    "Element is not rendered visibly."
-                )
+                raise BrowserActionError("Element is not rendered visibly.")
 
             await locator.scroll_into_view_if_needed()
             raw_box = await locator.bounding_box()
@@ -910,8 +1125,7 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        self._ensure_agent_control(session)
-        async with session.lock:
+        async with self._agent_control_action(session):
             session.next_action_number()
             screenshot = await capture_screenshot(session, label="explicit")
             return BrowserActionResult(
@@ -936,12 +1150,29 @@ class BrowserController:
         async with session.lock:
             await begin_human_control(session)
 
+    async def ensure_human_control(self, *, handle: BrowserSessionHandle) -> None:
+        """Fence capture before a worker attaches the human viewer."""
+
+        session = self._get_session(
+            session_id=handle.session_id,
+            execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+        )
+        async with session.lock:
+            if session.state != "open":
+                raise BrowserSessionStateError("Browser session is unavailable.")
+            if session.control_mode == "human":
+                return
+            await begin_human_control(session)
+
     async def end_human_control(
         self,
         *,
         session_id: UUID,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        verified: bool = False,
+        safe_to_capture: bool = False,
     ) -> None:
         """Resume agent tools after higher layers verify human authentication."""
 
@@ -951,7 +1182,106 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with session.lock:
-            await end_human_control(session)
+            await end_human_control(
+                session,
+                verified=verified,
+                safe_to_capture=safe_to_capture,
+            )
+
+    async def verify_authenticated_role(
+        self,
+        *,
+        handle: BrowserSessionHandle,
+        policy: AuthVerificationPolicy,
+    ) -> VerifiedPrincipal | None:
+        """Verify the frozen target identity while evidence capture is fenced."""
+
+        session = self._get_session(
+            session_id=handle.session_id,
+            execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+        )
+        async with session.lock:
+            if session.state != "open" or session.control_mode not in {"agent", "verifying"}:
+                return None
+            allowed_origins = frozenset(
+                f"{origin.scheme}://{origin.hostname}"
+                + (
+                    f":{origin.port}"
+                    if origin.port is not None
+                    and origin.port != (443 if origin.scheme == "https" else 80)
+                    else ""
+                )
+                for origin in session.allowed_origins
+            )
+            return await verify_authenticated_role(
+                page=session.page,
+                policy=policy,
+                allowed_origins=allowed_origins,
+            )
+
+    async def capture_verified_auth_session(
+        self,
+        *,
+        handle: BrowserSessionHandle,
+        policy: AuthVerificationPolicy,
+        scope: AuthSessionScope,
+    ) -> VerifiedPrincipal | None:
+        """Capture in-memory auth state only after the exact role marker verifies."""
+
+        if (
+            scope.origin != policy.origin
+            or scope.role != policy.role
+            or scope.account_reference != policy.account_reference
+        ):
+            return None
+        session = self._get_session(
+            session_id=handle.session_id,
+            execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+        )
+        async with session.lock:
+            if session.state != "open" or session.control_mode not in {"agent", "verifying"}:
+                return None
+            allowed_origins = frozenset(
+                f"{origin.scheme}://{origin.hostname}"
+                + (
+                    f":{origin.port}"
+                    if origin.port is not None
+                    and origin.port != (443 if origin.scheme == "https" else 80)
+                    else ""
+                )
+                for origin in session.allowed_origins
+            )
+            principal = await verify_authenticated_role(
+                page=session.page,
+                policy=policy,
+                allowed_origins=allowed_origins,
+            )
+            if principal is None:
+                return None
+            await self._auth_session_broker.capture(
+                scope=scope,
+                principal=principal,
+                context=cast(Any, session.context),
+                page=session.page,
+            )
+            return principal
+
+    def take_auth_session_snapshot(
+        self,
+        *,
+        scope: AuthSessionScope,
+        case_id: str,
+    ) -> AuthSessionSnapshot:
+        """Consume the authenticated state once for one isolated case."""
+
+        return self._auth_session_broker.take(scope=scope, case_id=case_id)
+
+    def revoke_auth_session_snapshot(self, *, scope: AuthSessionScope) -> None:
+        """Discard reusable state when identity verification fails or is revoked."""
+
+        self._auth_session_broker.revoke(scope)
 
     async def close_session(
         self,
@@ -967,11 +1297,11 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
-        
+
         console_log_path: Path | None = None
         page_log_path: Path | None = None
         network_log_path: Path | None = None
-        
+
         async with session.lock:
             try:
                 if session.state not in {"closed", "failed"}:
@@ -980,25 +1310,37 @@ class BrowserController:
                         console_log_path,
                         page_log_path,
                         network_log_path,
-                    ) = await write_event_logs(session)
-                    
+                    ) = (
+                        await write_event_logs(session)
+                        if session.capture_enabled
+                        else (None, None, None)
+                    )
+
                     session.state = "closed"
-                    
-                trace_paths = tuple(
-                    sorted(session.artifact_directory.glob("trace-*.zip"))
-                )
-                
-            
+
+                trace_paths = tuple(sorted(session.artifact_directory.glob("trace-*.zip")))
+
             finally:
+                from markettwin_execution_orchestrator.browser.owner_registry import (
+                    browser_owner_registry,
+                )
+
+                browser_owner_registry.unregister(
+                    BrowserSessionHandle(
+                        session_id=session_id,
+                        execution_id=session.execution_id,
+                        journey_id=session.journey_id,
+                    )
+                )
                 try:
                     await session.context.close()
                 finally:
                     await session.browser.close()
                     self._sessions.pop(session_id, None)
-                    
+
         return BrowserSessionArtifacts(
             trace_paths=trace_paths,
-            console_log_path = console_log_path,
-            page_log_path = page_log_path,
-            network_log_path = network_log_path,
+            console_log_path=console_log_path,
+            page_log_path=page_log_path,
+            network_log_path=network_log_path,
         )

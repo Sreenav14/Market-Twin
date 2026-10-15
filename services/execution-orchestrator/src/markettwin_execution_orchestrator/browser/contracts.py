@@ -27,6 +27,9 @@ BrowserSessionState = Literal[
     "closed",
     "failed",
 ]
+BrowserControlMode = Literal[
+    "agent", "quiescing", "human_pending", "human", "verifying", "none",
+]
 
 @dataclass(frozen=True, slots=True)
 class BrowserSessionArtifacts:
@@ -182,6 +185,16 @@ class BrowserEventBuffer:
     def record_failed_request(self, request: FailedRequestRecord) -> None:
         self.failed_requests.append(request)
         self.all_failed_requests.append(request)
+
+    def clear_all(self) -> None:
+        """Discard every browser event that could contain authentication data."""
+
+        self.console_errors.clear()
+        self.page_errors.clear()
+        self.failed_requests.clear()
+        self.all_console_errors.clear()
+        self.all_page_errors.clear()
+        self.all_failed_requests.clear()
 
 
 @dataclass(frozen=True, slots=True)

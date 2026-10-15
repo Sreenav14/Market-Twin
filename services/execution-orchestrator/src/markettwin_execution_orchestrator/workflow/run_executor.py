@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
@@ -77,6 +78,10 @@ class MarketTwinRunRequest:
     feature_budget: dict[str, object] | None = None
     feature_plan: dict[str, object] | None = None
     fixture_truth: bool = False
+    auth_verification: AuthVerificationPolicy | None = None
+    synthetic_fixture_approval_enabled: bool = False
+    human_action_approvals_enabled: bool = False
+    created_by_user_id: UUID | None = None
 
 
 async def execute_markettwin_run(

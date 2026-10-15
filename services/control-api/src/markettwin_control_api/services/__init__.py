@@ -1,5 +1,6 @@
 """Application services for the MarketTwin Control API."""
 
+from .human_action_reaper import run_human_action_reaper
 from .outbox_relay import OutboxRelay
 from .outbox_relay_worker import run_outbox_relay
 from .run_dispatch import (
@@ -12,4 +13,5 @@ __all__ = [
     "RunNotQueueableError",
     "OutboxRelay",
     "run_outbox_relay",
+    "run_human_action_reaper",
 ]

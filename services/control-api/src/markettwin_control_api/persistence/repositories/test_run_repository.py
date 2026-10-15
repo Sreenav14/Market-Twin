@@ -31,6 +31,8 @@ class TestRunRecord:
     started_at: datetime | None
     completed_at: datetime | None
     test_number: int | None = None
+    synthetic_fixture_approval_enabled: bool = False
+    human_action_approvals_enabled: bool = False
 
 
 def _to_record(
@@ -47,6 +49,8 @@ def _to_record(
         status=test_run.status,
         target_snapshot=test_run.target_snapshot,
         configuration_snapshot=test_run.configuration_snapshot,
+        synthetic_fixture_approval_enabled=test_run.synthetic_fixture_approval_enabled,
+        human_action_approvals_enabled=test_run.human_action_approvals_enabled,
         created_at=test_run.created_at,
         updated_at=test_run.updated_at,
         started_at=test_run.started_at,
@@ -73,6 +77,8 @@ class TestRunRepository:
         created_by_user_id: UUID,
         target_snapshot: dict[str, object],
         configuration_snapshot: dict[str, object],
+        synthetic_fixture_approval_enabled: bool = False,
+        human_action_approvals_enabled: bool = False,
     ) -> TestRunRecord:
         """Create a draft test run."""
 
@@ -84,6 +90,8 @@ class TestRunRepository:
             status="draft",
             target_snapshot=target_snapshot,
             configuration_snapshot=configuration_snapshot,
+            synthetic_fixture_approval_enabled=synthetic_fixture_approval_enabled,
+            human_action_approvals_enabled=human_action_approvals_enabled,
         )
 
         self._session.add(test_run)

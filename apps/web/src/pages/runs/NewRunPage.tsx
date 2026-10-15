@@ -36,6 +36,12 @@ const examples = [
       "Can a shopper review the full cost and complete checkout without uncertainty?",
   },
 ];
+function isLoopbackHost(host: string) {
+  const normalized = host.replace(/^\[|\]$/g, "");
+  if (normalized === "localhost" || normalized === "::1") return true;
+  const octets = normalized.split(".").map(Number);
+  return octets.length === 4 && octets[0] === 127 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255);
+}
 export function NewRunPage() {
   const { applicationId = "" } = useParams();
   const navigate = useNavigate();
@@ -45,6 +51,16 @@ export function NewRunPage() {
   const [name, setName] = useState("");
   const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
   const [executionMode, setExecutionMode] = useState("legacy_persona");
+  const [humanActionApprovals, setHumanActionApprovals] = useState(false);
+  const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
+  const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
+  const [authVerificationEnabled, setAuthVerificationEnabled] = useState(false);
+  const [authOrigin, setAuthOrigin] = useState("");
+  const [authOnlyOrigins, setAuthOnlyOrigins] = useState("");
+  const [authMarkerSelector, setAuthMarkerSelector] = useState("");
+  const [authExpectedMarker, setAuthExpectedMarker] = useState("");
+  const [authRole, setAuthRole] = useState("");
+  const [authAccountReference, setAuthAccountReference] = useState("");
   const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +110,34 @@ export function NewRunPage() {
       .filter((item) => item.authorized)
       .map((item) => item.target) || [];
   const target = targets.find((item) => item.id === targetId) || targets[0];
+  const approvalsEligible = Boolean(
+    target && ["local", "development", "test", "staging"].includes(target.environment),
+  );
+  const fixtureApprovalEligible = Boolean(target && ["local", "test"].includes(target.environment) && target.allowed_origins.length > 0 && (() => {
+    try { if (!isLoopbackHost(new URL(target.base_url).hostname)) return false; } catch { return false; }
+    return target.allowed_origins.every((origin) => origin.scheme === "http" && !origin.include_subdomains && isLoopbackHost(origin.hostname));
+  })());
+  useEffect(() => {
+    if (!fixtureApprovalEligible || executionMode !== "deep_feature_v1") {
+      setSyntheticFixtureApproval(false);
+    }
+  }, [fixtureApprovalEligible, executionMode]);
+  useEffect(() => {
+    if (!approvalsEligible || executionMode !== "deep_feature_v1") {
+      setHumanActionApprovals(false);
+    }
+  }, [approvalsEligible, executionMode]);
+  useEffect(() => {
+    if (target?.requires_auth) {
+      setAuthVerificationEnabled(true);
+      setExecutionMode("deep_feature_v1");
+      try {
+        setAuthOrigin(new URL(target.base_url).origin);
+      } catch {
+        setAuthOrigin("");
+      }
+    }
+  }, [target?.id]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;
@@ -108,7 +152,29 @@ export function NewRunPage() {
     setBusy(true);
     setError(null);
     try {
-      const run = await api.createRun(applicationId, target.id, brief.trim(), knowledgeIds, testingDepth, name, executionMode);
+      const authVerification = authVerificationEnabled
+        ? {
+            origin: authOrigin.trim(),
+            auth_only_origins: authOnlyOrigins.split(",").map((origin) => origin.trim()).filter(Boolean),
+            marker_selector: authMarkerSelector.trim(),
+            expected_marker: authExpectedMarker,
+            role: authRole.trim(),
+            account_reference: authAccountReference.trim(),
+          }
+        : undefined;
+      const run = await api.createRun(
+        applicationId,
+        target.id,
+        brief.trim(),
+        knowledgeIds,
+        testingDepth,
+        name,
+        executionMode,
+        authVerification,
+        humanActionApprovals && approvalsEligible && executionMode === "deep_feature_v1",
+        syntheticFixtureApproval && fixtureApprovalEligible && executionMode === "deep_feature_v1",
+        humanActionApprovals ? JSON.parse(sensitiveActionRules) as unknown[] : [],
+      );
       setBrief("");
       navigate(`/runs/${run.id}/overview`);
     } catch (error) {
@@ -251,6 +317,58 @@ export function NewRunPage() {
               Authorized
             </span>
           </div>
+          {target?.requires_auth ? (
+            <section className="composer-knowledge form-grid" aria-labelledby="auth-verification-heading">
+              <h2 id="auth-verification-heading">Authentication assistance</h2>
+              <label className="knowledge-choice">
+                <input type="checkbox" checked={authVerificationEnabled} disabled={busy || Boolean(target?.requires_auth)} onChange={(event) => setAuthVerificationEnabled(event.target.checked)} />
+                <span>Allow a human to complete authentication, then verify this test identity before testing</span>
+              </label>
+              {authVerificationEnabled ? (
+                <>
+                  <p className="form-help">Provide an exact, read-only marker from the authenticated page. Never enter a password, token, cookie, one-time code, or other credential here.</p>
+                  <label htmlFor="auth-origin">Authorized authentication origin</label>
+                  <input className="text-input" id="auth-origin" type="url" value={authOrigin} onChange={(event) => setAuthOrigin(event.target.value)} disabled={busy} required />
+                  <label htmlFor="auth-only-origins">SSO origins for human authentication only (optional, comma separated)</label>
+                  <input className="text-input" id="auth-only-origins" value={authOnlyOrigins} onChange={(event) => setAuthOnlyOrigins(event.target.value)} disabled={busy} placeholder="https://idp.example.test" />
+                  <p className="form-help">Each exact origin must already be authorized on the target. Agents cannot inspect or interact with these origins.</p>
+                  <label htmlFor="auth-marker-selector">Unique visible marker selector</label>
+                  <input className="text-input" id="auth-marker-selector" value={authMarkerSelector} onChange={(event) => setAuthMarkerSelector(event.target.value)} disabled={busy} placeholder="[data-authenticated-role]" required maxLength={200} />
+                  <label htmlFor="auth-expected-marker">Exact marker text</label>
+                  <input className="text-input" id="auth-expected-marker" value={authExpectedMarker} onChange={(event) => setAuthExpectedMarker(event.target.value)} disabled={busy} placeholder="user" required maxLength={200} />
+                  <label htmlFor="auth-role">Expected role identifier</label>
+                  <input className="text-input" id="auth-role" value={authRole} onChange={(event) => setAuthRole(event.target.value)} disabled={busy} placeholder="user" required maxLength={64} />
+                  <label htmlFor="auth-account-reference">Nonsecret test account reference</label>
+                  <input className="text-input" id="auth-account-reference" value={authAccountReference} onChange={(event) => setAuthAccountReference(event.target.value)} disabled={busy} placeholder="synthetic-user-01" required maxLength={128} />
+                </>
+              ) : null}
+            </section>
+          ) : null}
+          {approvalsEligible && executionMode === "deep_feature_v1" ? (
+            <section className="composer-knowledge" aria-labelledby="action-approval-heading">
+              <h2 id="action-approval-heading">Sensitive action approval</h2>
+              <label className="knowledge-choice">
+                <input type="checkbox" checked={humanActionApprovals} disabled={busy} onChange={(event) => setHumanActionApprovals(event.target.checked)} />
+                <span>Pause for owner/admin approval before eligible Save, Create, Update, Publish, or form Submit actions</span>
+              </label>
+              <p className="form-help">Each approval is bound to one exact action and authorized target, expires after ten minutes, and can be used once. Delete, payment, messaging, role, permission, and data-export actions stay blocked.</p>
+              {humanActionApprovals ? <>
+                <label htmlFor="sensitive-action-rules">Declared synthetic effects and reset confirmation (JSON)</label>
+                <textarea className="text-input" id="sensitive-action-rules" value={sensitiveActionRules} onChange={(event) => setSensitiveActionRules(event.target.value)} disabled={busy} rows={5} />
+                <p className="form-help">Declare the exact button name, category, optional named scope, nonsecret resource reference, and test_data_reset_confirmed: true. Empty rules block all effects. Use dedicated synthetic test data only.</p>
+              </> : null}
+            </section>
+          ) : null}
+          {fixtureApprovalEligible && executionMode === "deep_feature_v1" ? (
+            <section className="composer-knowledge" aria-labelledby="fixture-approval-heading">
+              <h2 id="fixture-approval-heading">Synthetic fixture assertions</h2>
+              <label className="knowledge-choice">
+                <input type="checkbox" checked={syntheticFixtureApproval} disabled={busy} onChange={(event) => setSyntheticFixtureApproval(event.target.checked)} />
+                <span>Enable the local registration fixture and its one-time Save approval</span>
+              </label>
+              <p className="form-help">This enables fixture-grounded assertions and the synthetic Save approval on an all-loopback local/test target.</p>
+            </section>
+          ) : null}
           <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
             <h2 id="test-knowledge-heading">Knowledge for this test <span className="muted">Optional</span></h2>
             <p className="form-help">Select approved knowledge attached to this application before agents are created. You can select up to 10 sets.</p>

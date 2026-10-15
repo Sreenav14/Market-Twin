@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -10,9 +11,15 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.browser.contracts import BrowserActionResult
+from markettwin_execution_orchestrator.browser.sensitive_action_policy import (
+    SensitiveActionIntent,
+)
 from markettwin_execution_orchestrator.persistence.artifact_repository import ArtifactRepository
 from markettwin_execution_orchestrator.persistence.artifact_storage import S3ArtifactStorage
 from markettwin_execution_orchestrator.persistence.execution_repository import ExecutionRepository
+from markettwin_execution_orchestrator.persistence.sensitive_action_approval import (
+    SensitiveActionApproval,
+)
 
 StepStatus = Literal["policy_blocked", "completed", "failed"]
 
@@ -50,6 +57,38 @@ class ExecutionStepRecorder:
         await self.session.commit()
         
         return step_id
+
+    async def begin_sensitive_action(
+        self,
+        *,
+        step_id: int,
+        intent: SensitiveActionIntent,
+        current_origin: str,
+        browser_session_id: UUID,
+        revalidate_origin: Callable[[], Awaitable[str]],
+        planned_step_index: int = 0,
+        remaining_ms: int = 0,
+    ) -> UUID:
+        """Wait for and consume an exact approval before the browser mutation."""
+        return await SensitiveActionApproval(
+            self.session, execution_id=self.execution_id
+        ).dispatch_authorized(
+            step_id=step_id,
+            intent=intent,
+            current_origin=current_origin,
+            browser_session_id=browser_session_id,
+            revalidate_origin=revalidate_origin,
+            planned_step_index=planned_step_index,
+            remaining_ms=remaining_ms,
+        )
+
+    async def finish_sensitive_action(
+        self, *, approval_id: UUID, outcome: str
+    ) -> None:
+        """Persist success or an ambiguous effect without retrying it."""
+        await SensitiveActionApproval(
+            self.session, execution_id=self.execution_id
+        ).finish(approval_id=approval_id, outcome=outcome)
     
 
     async def finish_step(

@@ -212,7 +212,8 @@ class TestRun(Base):
     __table_args__ = (
         CheckConstraint(
             "status IN "
-            "('draft', 'planning', 'queued', 'running', 'completed', 'failed', 'cancelled')",
+            "('draft', 'planning', 'queued', 'running', 'awaiting_human', "
+            "'completed', 'failed', 'cancelled')",
             name="ck_test_runs_status_allowed",
         ),
         ForeignKeyConstraint(
@@ -253,6 +254,12 @@ class TestRun(Base):
         JSONB,
         nullable=False,
         server_default=text("'{}'::jsonb"),
+    )
+    synthetic_fixture_approval_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    human_action_approvals_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

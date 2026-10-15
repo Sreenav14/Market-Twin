@@ -60,6 +60,7 @@ class CaseAction(FrozenContract):
     url: str | None = Field(default=None, max_length=2048)
     preset: Literal["mobile320", "desktop1280"] | None = None
     milliseconds: int | None = Field(default=None, ge=0, le=2000, strict=True)
+    action_id: Literal["registration_submit"] | None = None
 
     @model_validator(mode="after")
     def action_arguments(self) -> Self:
@@ -81,6 +82,15 @@ class CaseAction(FrozenContract):
         }
         if actual != expected:
             raise ValueError("Arguments do not match the permitted action.")
+        if self.action_id is not None and not (
+            self.action == "click"
+            and self.target is not None
+            and self.target.role == "button"
+            and self.target.name == "Save"
+            and self.target.scope_role == "form"
+            and self.target.scope_name == "Registration"
+        ):
+            raise ValueError("The fixture action identity is valid only for Registration Save.")
         if self.action in {"fill", "select", "check", "uncheck"} and self.target is not None:
             if self.target.label is None:
                 raise ValueError("Form actions require a labeled field.")

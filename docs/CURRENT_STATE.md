@@ -1,5 +1,42 @@
 # Current MarketTwin checkpoint
 
+## Current HITL documentation
+
+All current HITL details and preserved original requirements are consolidated in
+[the HITL guide](hitl/README.md). It includes implementation status, architecture,
+setup, migrations, tests, limitations, manual verification and historical evidence.
+Six superseded HITL documents and three generated HITL debug directories were
+removed after consolidation. Regression tests, fixtures and unrelated project
+files are retained. Comprehensive E2E/release verification remains unexecuted.
+
+## Active MKT implementation checkpoint (2026-10-14)
+
+The user directed implementation to proceed autonomously and authorized the
+existing approved Supermemory target. Deep feature mode, shared plan/result
+contracts, browser scope/assertion actions, case execution/evaluation, case APIs,
+and result UI are implemented in the working tree. Fixture runs have persisted
+real browser evidence; the latest recorded eight-case good run passed 8/8 and the
+bad run reported six failed assertions before source-declared root grouping was
+added. Live UI verification confirmed owner auth, eight cases, exact MinIO
+screenshot retrieval, and no horizontal overflow at desktop/mobile widths.
+
+Supermemory public product-page testing is limited to recorded public navigation
+and read-only inspection. A model-planned run stopped at HTTP 401 from the
+configured OpenAI provider. A frozen, explicitly authored eight-case navigation
+run produced three passes, one blocked, one inconclusive, and three failed inferred
+URL assertions; those inferred mismatches are not confirmed product issues and
+need inspection. The Console path remained blocked as out of scope. No login,
+memory API, or account operation was attempted.
+
+This continuation corrected the deep-mode flow panel, which had labeled the
+deterministic feature cases as a Sequential Agent. Frontend TypeScript check passes.
+The API/worker queue is not verified because Kafka is unavailable; no model
+quality matrix or multi-application T10 evidence exists. Do not claim model
+autonomy or release readiness. The existing workspace deletion of
+MARKETTWIN_KNOWLEDGE_WORKER_UI_BRIDGE.md and untracked
+docs/hitl/README.md (Appendix A: original master plan) predate this
+continuation and were preserved.
+
 ## Latest checkpoint: new MKT deep-testing plan (2026-10-14)
 
 The user requested detailed analysis of the new root MKT.md and implementation,
@@ -275,3 +312,15 @@ skill output on a representative public documentation source before deployment.
 Vite localhost:5173, session 97555. API localhost:8001, PID 40924/session 8472.
 Default sandbox shell startup fails with helper setup refresh errors; reviewed
 escalated shell calls work. Never expose .env credentials or signed URLs in outputs.
+# HITL implementation checkpoint — 2026-10-14
+
+Work is in progress against `docs/hitl/README.md (Appendix A: original master plan)`.
+
+- H00 reconciliation and H01 synthetic authenticated fixture are implemented. H01 fixture tests: 3 passed (Chromium); Ruff and Pyright passed.
+- H02 additive schema and persistence repository are implemented. Local PostgreSQL migration head is `d7f3c2a9b108`; `alembic check` reported no pending operations. Repository integration test: 1 passed against isolated PostgreSQL schema.
+- H03 browser takeover privacy/fencing changes are implemented in the working tree. A canary test passed after dynamically constructing its canary so Playwright source tracing did not embed it. The broader `test_browser_scoped_inspection.py` run has not been confirmed in this continuation because command execution is failing intermittently; do not mark the H03 phase gate fully passed until it is rerun. Ruff (with existing E501 baseline ignored) and strict Pyright passed.
+- H04 is the next gate. The viewer transport must be selected between the plan's noVNC/headful and restricted-CDP alternatives after a local security/feasibility comparison. No viewer, external service, or additional infrastructure has been installed or selected. Stop here for the security-sensitive architecture decision; H05+ depend on it.
+- 2026-10-14 continuation attempt: the H03 regression command was started, but the execution runner returned `helper_unknown_error: setup refresh had errors` before pytest reported results. Multiple retries failed at process setup (including simple PowerShell/file-read commands). Treat this as an infrastructure/tooling failure, not a test pass or test failure. H04 local comparison is still pending; no transport decision is supported by new measurements.
+- Added `docs/hitl/README.md#appendix-c-historical-viewer-transport-review` with a preliminary threat-model comparison and explicit recommendation conditions. It is not a substitute for H04's required local synthetic-fixture measurements; do not mark H04 passed or proceed to H05.
+
+Prior workspace changes and the pre-existing deletion of `MARKETTWIN_KNOWLEDGE_WORKER_UI_BRIDGE.md` are preserved. No credentials, deployment, push, or unauthorized website testing were used.

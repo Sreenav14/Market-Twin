@@ -31,6 +31,7 @@ async def test_screenshot_capture_is_viewport_scoped(
         JourneyBrowserSession,
         SimpleNamespace(
             capture_enabled=True,
+            authenticated_session=False,
             artifact_directory=tmp_path,
             action_number=7,
             page=SimpleNamespace(

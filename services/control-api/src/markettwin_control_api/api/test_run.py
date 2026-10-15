@@ -1,6 +1,8 @@
 """Test Run HTTP endpoints."""
 
+from ipaddress import ip_address
 from typing import Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import (
@@ -12,6 +14,8 @@ from fastapi import (
 from markettwin_database.repositories import (
     OutboxRepository,
 )
+from markettwin_shared.action_approval import SensitiveActionRule
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 from pydantic import (
     BaseModel,
     Field,
@@ -55,6 +59,12 @@ class CreateTestRunRequest(BaseModel):
     testing_depth: Literal["low", "medium", "high"] = "medium"
     execution_mode: Literal["legacy_persona", "deep_feature_v1"] = "legacy_persona"
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
+    auth_verification: AuthVerificationPolicy | None = None
+    synthetic_fixture_approval: bool = False
+    human_action_approvals: bool = False
+    sensitive_action_rules: list[SensitiveActionRule] = Field(
+        default_factory=list[SensitiveActionRule], max_length=16,
+    )
 
     @field_validator("name")
     @classmethod
@@ -108,6 +118,8 @@ class TestRunResponse(BaseModel):
     status: str
     target_snapshot: dict[str, object]
     configuration_snapshot: dict[str, object]
+    synthetic_fixture_approval_enabled: bool = False
+    human_action_approvals_enabled: bool = False
 
 
 def build_target_snapshot(
@@ -153,6 +165,8 @@ def test_run_response(
         configuration_snapshot=(
             test_run.configuration_snapshot
         ),
+        synthetic_fixture_approval_enabled=test_run.synthetic_fixture_approval_enabled,
+        human_action_approvals_enabled=test_run.human_action_approvals_enabled,
     )
 
 
@@ -258,6 +272,66 @@ async def create_test_run(
                 target
             )
 
+            if target.requires_auth and payload.auth_verification is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Authenticated targets require an approved identity verification policy."
+                    ),
+                )
+
+            if payload.auth_verification is not None:
+                if payload.execution_mode != "deep_feature_v1":
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            "Authenticated verification currently requires "
+                            "deep_feature_v1 execution."
+                        ),
+                    )
+                if not target.requires_auth:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Authentication verification requires an authenticated target.",
+                    )
+                if not all(_auth_origin_is_allowed(origin, target) for origin in (
+                    payload.auth_verification.origin, *payload.auth_verification.auth_only_origins,
+                )):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            "Authentication and SSO origins must be authorized "
+                            "for this target."
+                        ),
+                    )
+
+            if payload.synthetic_fixture_approval:
+                loopback_origins = _all_origins_loopback(target)
+                if (
+                    payload.execution_mode != "deep_feature_v1"
+                    or target.environment not in {"local", "test"}
+                    or not loopback_origins
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            "Synthetic fixture approval requires a deep run on an all-loopback "
+                            "local/test target."
+                        ),
+                    )
+
+            if payload.human_action_approvals and (
+                payload.execution_mode != "deep_feature_v1"
+                or target.environment not in {"local", "development", "test", "staging"}
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Sensitive action approvals require an authorized local, test, "
+                        "development, or staging target and deep feature execution."
+                    ),
+                )
+
             configuration_snapshot: dict[str, object] = {
                 "study_brief": payload.study_brief,
                 "testing_depth": payload.testing_depth,
@@ -269,6 +343,14 @@ async def create_test_run(
                 configuration_snapshot["test_name"] = payload.name
             if payload.execution_mode == "deep_feature_v1":
                 configuration_snapshot["execution_mode"] = payload.execution_mode
+            if payload.auth_verification is not None:
+                configuration_snapshot["auth_verification"] = payload.auth_verification.model_dump(
+                    mode="json"
+                )
+            if payload.sensitive_action_rules:
+                configuration_snapshot["sensitive_action_rules"] = [
+                    rule.model_dump(mode="json") for rule in payload.sensitive_action_rules
+                ]
             if payload.knowledge_entry_ids:
                 knowledge_repository = IngestionRepository(database_session)
                 selected_knowledge: list[dict[str, object]] = []
@@ -314,9 +396,59 @@ async def create_test_run(
                 configuration_snapshot=(
                     configuration_snapshot
                 ),
+                synthetic_fixture_approval_enabled=payload.synthetic_fixture_approval,
+                human_action_approvals_enabled=(
+                    payload.human_action_approvals or payload.synthetic_fixture_approval
+                ),
             )
 
     return test_run_response(test_run)
+
+
+def _auth_origin_is_allowed(origin: str, target: TargetRecord) -> bool:
+    """Require exact origin membership, honoring only explicit subdomain grants."""
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(origin)
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    for allowed in target.allowed_origins:
+        if parsed.scheme != allowed.scheme or port != allowed.port:
+            continue
+        if parsed.hostname == allowed.hostname:
+            return True
+        if (
+            allowed.include_subdomains
+            and parsed.hostname is not None
+            and parsed.hostname.endswith("." + allowed.hostname)
+        ):
+            return True
+    return False
+
+
+def _all_origins_loopback(target: TargetRecord) -> bool:
+    if not target.allowed_origins:
+        return False
+    try:
+        base_host = urlsplit(target.base_url).hostname
+        if base_host != "localhost" and not ip_address(base_host or "").is_loopback:
+            return False
+    except ValueError:
+        return False
+    for origin in target.allowed_origins:
+        if origin.scheme != "http" or origin.include_subdomains:
+            return False
+        if origin.hostname == "localhost":
+            continue
+        try:
+            if ip_address(origin.hostname).is_loopback:
+                continue
+        except ValueError:
+            pass
+        return False
+    return True
 
 
 @router.get(

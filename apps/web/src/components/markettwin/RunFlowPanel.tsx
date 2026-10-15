@@ -31,6 +31,7 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
   });
   const journeyNodes = flow.data?.nodes.filter((node) => node.kind === "journey") ?? [];
   const journeyCount = journeyNodes.length;
+  const isFeaturePlan = flow.data?.nodes.some((node) => node.kind === "meta" && node.label === "Feature plan") ?? false;
 
   return (
     <aside className="run-flow" aria-label="Agent flow">
@@ -41,7 +42,7 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
             <div><p className="error-text" role="alert">Could not load agent flow: {flow.error.message}</p><button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button></div>
           ) : flow.data ? (
             <>
-              {flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
+              {isFeaturePlan ? <p className="run-flow-caption">Each planned feature case runs once. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
               <ol className="run-flow-nodes">
                 {flow.data.nodes.map((node, index) => {
                   const previous = flow.data.nodes[index - 1];
@@ -50,7 +51,7 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
                   if (node.id !== journeyNodes[0].id) return null;
                   return <li key="journey-agents" className={connected ? "run-flow-node connected" : "run-flow-node"}>
                     <details className="run-flow-journeys" open={journeysExpanded} onToggle={(event) => setJourneysExpanded(event.currentTarget.open)}>
-                      <summary>Sequential Agent <span className="muted">? {journeyCount} subagents</span></summary>
+                      <summary>{isFeaturePlan ? "Feature cases" : "Sequential Agent"} <span className="muted">· {journeyCount} {isFeaturePlan ? "cases" : "subagents"}</span></summary>
                       <ol className="run-flow-nodes">{journeyNodes.map((journey, journeyIndex) => <FlowStep key={journey.id} node={journey} connected={Boolean(journeyIndex && flow.data.edges.some((edge) => edge.source === journeyNodes[journeyIndex - 1].id && edge.target === journey.id))} />)}</ol>
                     </details>
                   </li>;

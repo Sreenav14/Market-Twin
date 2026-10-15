@@ -19,6 +19,9 @@ from markettwin_execution_orchestrator.agents.schemas.plan import (
 )
 from markettwin_execution_orchestrator.agents.schemas.test_case import DeepFeaturePlan
 
+# Reserved manual prerequisite record, outside the bounded feature-case ordinals.
+AUTH_BOOTSTRAP_ORDINAL = 10000
+
 
 @dataclass(frozen=True, slots=True)
 class PersistedPersonaRecord:
@@ -65,6 +68,28 @@ class PlanRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def create_auth_bootstrap(self, *, test_run_id: UUID) -> PersistedJourneyRecord:
+        """Persist manual login ownership before a generated feature plan exists."""
+        persona_id, mission_id, journey_id = uuid4(), uuid4(), uuid4()
+        self._session.add_all([
+            RunPersona(id=persona_id, test_run_id=test_run_id, ordinal=AUTH_BOOTSTRAP_ORDINAL,
+                       name="Human authentication prerequisite",
+                       description=("Manual authentication; excluded from feature test coverage."),
+                       attributes={"executor_role": False, "auth_bootstrap": True}),
+            RunMission(id=mission_id, test_run_id=test_run_id, ordinal=AUTH_BOOTSTRAP_ORDINAL,
+                       title="Verify identity before protected discovery",
+                       objective="Establish an approved test identity securely.",
+                       success_criteria=[], priority="low"),
+        ])
+        await self._session.flush()
+        self._session.add(PersonaJourney(
+            id=journey_id, test_run_id=test_run_id, persona_id=persona_id,
+            mission_id=mission_id, ordinal=AUTH_BOOTSTRAP_ORDINAL,
+        ))
+        await self._session.flush()
+        return PersistedJourneyRecord(journey_id, persona_id, mission_id,
+                                      "human_auth__auth_bootstrap", AUTH_BOOTSTRAP_ORDINAL)
 
     async def create_from_plan(
         self,
@@ -290,7 +315,8 @@ class PlanRepository:
         persona_id = await self._session.scalar(
             select(RunPersona.id)
             .where(
-                RunPersona.test_run_id == test_run_id
+                RunPersona.test_run_id == test_run_id,
+                RunPersona.ordinal != AUTH_BOOTSTRAP_ORDINAL,
             )
             .limit(1)
         )
@@ -298,7 +324,8 @@ class PlanRepository:
         mission_id = await self._session.scalar(
             select(RunMission.id)
             .where(
-                RunMission.test_run_id == test_run_id
+                RunMission.test_run_id == test_run_id,
+                RunMission.ordinal != AUTH_BOOTSTRAP_ORDINAL,
             )
             .limit(1)
         )
@@ -306,7 +333,8 @@ class PlanRepository:
         journey_id = await self._session.scalar(
             select(PersonaJourney.id)
             .where(
-                PersonaJourney.test_run_id == test_run_id
+                PersonaJourney.test_run_id == test_run_id,
+                PersonaJourney.ordinal != AUTH_BOOTSTRAP_ORDINAL,
             )
             .limit(1)
         )

@@ -3,6 +3,7 @@ export type TestRunStatus =
   | "planning"
   | "queued"
   | "running"
+  | "awaiting_human"
   | "completed"
   | "failed"
   | "cancelled";
@@ -32,6 +33,42 @@ export interface Application {
   name: string;
   description: string | null;
   status: string;
+}
+
+export interface HumanAction {
+  id: string;
+  test_run_id: string;
+  execution_id: string;
+  browser_session_id: string;
+  request_type: string;
+  status: "pending" | "leased" | "completed" | "cancelled" | "expired";
+  created_at: string;
+  expires_at: string | null;
+  control_generation: number;
+  lease_id: string | null;
+  lease_expires_at: string | null;
+}
+
+export interface HumanLeaseGrant {
+  request_id: string;
+  browser_session_id: string;
+  lease_id: string;
+  lease_token: string;
+  generation: number;
+  expires_at: string;
+  viewer_available: boolean;
+  viewer_url?: string;
+  viewer_ticket?: string;
+}
+
+export interface ActionApproval {
+  step_id?: number;
+  journey_id?: string;
+  id: string;
+  action_summary: string;
+  environment: string;
+  status: "pending" | "approved";
+  expires_at: string;
 }
 
 export type GroundingConfidence = "low" | "medium" | "high";
@@ -159,6 +196,7 @@ export interface TestRun {
   status: TestRunStatus;
   target_snapshot: Record<string, unknown>;
   configuration_snapshot: Record<string, unknown>;
+  human_action_approvals_enabled?: boolean;
 }
 export interface ArtifactAccess {
   artifact_id: string;
@@ -407,9 +445,37 @@ export const api = {
         method: "POST",
       },
     ),
-    createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "legacy_persona") =>
+  listHumanActions: (runId: string, signal?: AbortSignal) =>
+    request<HumanAction[]>(`/api/v1/test-runs/${runId}/human-actions`, { signal }),
+  claimHumanAction: (requestId: string) =>
+    request<HumanLeaseGrant>(`/api/v1/human-actions/${requestId}/claim`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ lease_seconds: 30 }),
+    }),
+  renewHumanAction: (requestId: string, lease: HumanLeaseGrant) =>
+    request<{ expires_at: string }>(`/api/v1/human-actions/${requestId}/renew`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ lease_id: lease.lease_id, lease_token: lease.lease_token, generation: lease.generation }),
+    }),
+  cancelHumanAction: (requestId: string) =>
+    request<{ id: string; status: string }>(`/api/v1/human-actions/${requestId}/cancel`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+    }),
+  releaseHumanAction: (requestId: string, lease: HumanLeaseGrant) =>
+    request<{ generation: number }>(`/api/v1/human-actions/${requestId}/release`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ lease_id: lease.lease_id, lease_token: lease.lease_token, generation: lease.generation }),
+    }),
+  listActionApprovals: (runId: string, signal?: AbortSignal) =>
+    request<ActionApproval[]>(`/api/v1/test-runs/${runId}/action-approvals`, { signal }),
+  decideActionApproval: (approvalId: string, approved: boolean) =>
+    request<{ id: string; status: string }>(`/api/v1/action-approvals/${approvalId}/decision`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ approved }),
+    }),
+  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "legacy_persona", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = []) =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",
-        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(executionMode === "deep_feature_v1" ? { execution_mode: executionMode } : {}) }),
+        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(executionMode === "deep_feature_v1" ? { execution_mode: executionMode } : {}), ...(authVerification ? { auth_verification: authVerification } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
     }),
 };

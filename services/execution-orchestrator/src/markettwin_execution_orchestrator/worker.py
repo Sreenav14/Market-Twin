@@ -4,10 +4,20 @@ import asyncio
 import logging
 import os
 from dataclasses import replace
+from datetime import UTC, datetime
 from uuid import UUID
 
 from markettwin_database import create_database_engine, create_session_factory
-from markettwin_database.models.testing import TestRun
+from markettwin_database.models.execution import (
+    ActionApprovalReceipt,
+    ActionApprovalRequest,
+    AgentExecution,
+    BrowserSession,
+    ExecutionSuspension,
+    HumanActionRequest,
+    HumanControlLease,
+)
+from markettwin_database.models.testing import PersonaJourney, TestRun
 from markettwin_shared.messaging import (
     EXECUTION_COMMANDS_TOPIC,
     EventEnvelope,
@@ -15,9 +25,12 @@ from markettwin_shared.messaging import (
     KafkaMessage,
     load_kafka_consumer_settings,
 )
+from sqlalchemy import select, update
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from markettwin_execution_orchestrator.browser.owner_registry import browser_owner_registry
+from markettwin_execution_orchestrator.browser.owner_service import HITLWorkerService
 from markettwin_execution_orchestrator.persistence import RunStateRepository
 from markettwin_execution_orchestrator.workflow.run_executor import execute_markettwin_run
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
@@ -28,6 +41,44 @@ from markettwin_execution_orchestrator.workflow.run_request_handler import (
 
 logger = logging.getLogger(__name__)
 EXECUTION_MAX_POLL_INTERVAL_MS = 86_400_000
+
+
+async def abandon_run_handoffs(session: AsyncSession, *, test_run_id: UUID) -> None:
+    """Fence lost live contexts and preserve uncertain effects; never replay them."""
+    executions = select(AgentExecution.id).join(
+        PersonaJourney, PersonaJourney.id == AgentExecution.journey_id
+    ).where(PersonaJourney.test_run_id == test_run_id)
+    requests = select(HumanActionRequest.id).where(
+        HumanActionRequest.execution_id.in_(executions)
+    )
+    approvals = select(ActionApprovalRequest.id).where(
+        ActionApprovalRequest.test_run_id == test_run_id
+    )
+    await session.execute(update(ActionApprovalReceipt).where(
+        ActionApprovalReceipt.approval_id.in_(approvals),
+        ActionApprovalReceipt.dispatch_state == "claimed",
+    ).values(dispatch_state="uncertain"))
+    await session.execute(update(ActionApprovalRequest).where(
+        ActionApprovalRequest.test_run_id == test_run_id,
+        ActionApprovalRequest.status.in_(("pending", "approved")),
+    ).values(status="cancelled"))
+    await session.execute(update(HumanControlLease).where(
+        HumanControlLease.request_id.in_(requests),
+        HumanControlLease.released_at.is_(None),
+    ).values(released_at=datetime.now(UTC)))
+    await session.execute(update(HumanActionRequest).where(
+        HumanActionRequest.execution_id.in_(executions),
+        HumanActionRequest.status.in_(("pending", "leased")),
+    ).values(status="cancelled"))
+    await session.execute(update(ExecutionSuspension).where(
+        ExecutionSuspension.test_run_id == test_run_id,
+        ExecutionSuspension.status.in_(("waiting", "ready")),
+    ).values(status="abandoned"))
+    await session.execute(update(BrowserSession).where(
+        BrowserSession.execution_id.in_(executions),
+        BrowserSession.state == "open",
+    ).values(state="failed", control_mode="none",
+             control_generation=BrowserSession.control_generation + 1))
 
 
 async def process_command(
@@ -47,7 +98,8 @@ async def process_command(
             # must not be used to recover deliveries across concurrent workers.
             # Do not replay potentially state-changing browser actions.
             run = await session.get(TestRun, UUID(str(envelope.payload["test_run_id"])))
-            if run is not None and run.status in {"planning", "running"}:
+            if run is not None and run.status in {"planning", "running", "awaiting_human"}:
+                await abandon_run_handoffs(session, test_run_id=run.id)
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
                 await session.commit()
                 logger.warning("Interrupted run %s marked failed", run.id)
@@ -61,13 +113,22 @@ async def process_command(
             logger.info("Executing TestRun %s", run.id)
             await execute_markettwin_run(request, session=session)
             logger.info("Completed TestRun %s", run.id)
-        except Exception:
+        except (Exception, asyncio.CancelledError) as error:
             await session.rollback()
             run = await session.get(TestRun, accepted.test_run_id)
-            if run is not None and run.status in {"planning", "queued", "running"}:
+            if run is not None:
+                await abandon_run_handoffs(session, test_run_id=run.id)
+            if run is not None and run.status in {
+                "planning", "queued", "running", "awaiting_human",
+            }:
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
+            if run is not None:
                 await session.commit()
-            logger.exception("Execution failed for TestRun %s", accepted.test_run_id)
+            logger.error(
+                "Execution failed for TestRun %s (%s)", accepted.test_run_id, type(error).__name__,
+            )
+            if isinstance(error, asyncio.CancelledError):
+                raise
 
 
 async def run_worker(
@@ -75,9 +136,17 @@ async def run_worker(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     retry_delay_seconds: float = 5.0,
+    hitl_service: HITLWorkerService | None = None,
 ) -> None:
     """Retry transport failures; commit only after a run reaches a terminal state."""
     try:
+        if hitl_service is not None:
+            await hitl_service.start(
+                host=os.environ.get("MARKETTWIN_HITL_VIEWER_BIND_HOST", "127.0.0.1"),
+                port=int(os.environ.get("MARKETTWIN_HITL_VIEWER_BIND_PORT", "8020")),
+                cert_file=os.environ.get("MARKETTWIN_HITL_VIEWER_TLS_CERT"),
+                key_file=os.environ.get("MARKETTWIN_HITL_VIEWER_TLS_KEY"),
+            )
         while True:
             try:
                 await consumer.start()
@@ -92,6 +161,46 @@ async def run_worker(
                 await asyncio.sleep(retry_delay_seconds)
     finally:
         await consumer.stop()
+        if hitl_service is not None:
+            await hitl_service.stop()
+
+
+def build_hitl_worker_service(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> HITLWorkerService | None:
+    """Enable worker takeover only with a complete internal and viewer config."""
+
+    names = (
+        "MARKETTWIN_HITL_INTERNAL_SECRET",
+        "MARKETTWIN_HITL_VIEWER_ORIGINS",
+        "MARKETTWIN_HITL_VIEWER_URL",
+    )
+    present = [bool(os.environ.get(name)) for name in names]
+    if not any(present):
+        return None
+    if not all(present):
+        raise RuntimeError("HITL worker configuration is incomplete.")
+    viewer_url = os.environ["MARKETTWIN_HITL_VIEWER_URL"]
+    allow_local_ws = (
+        viewer_url.startswith("ws://")
+        and os.environ.get("MARKETTWIN_ENV", os.environ.get("APP_ENV", "")).casefold()
+        in {"development", "local"}
+        and os.environ.get("MARKETTWIN_HITL_VIEWER_BIND_HOST", "127.0.0.1")
+        in {"127.0.0.1", "localhost", "::1"}
+    )
+    origins = frozenset(
+        origin.strip()
+        for origin in os.environ["MARKETTWIN_HITL_VIEWER_ORIGINS"].split(",")
+        if origin.strip()
+    )
+    return HITLWorkerService(
+        session_factory=session_factory,
+        registry=browser_owner_registry,
+        internal_secret=os.environ["MARKETTWIN_HITL_INTERNAL_SECRET"],
+        allowed_origins=origins,
+        viewer_url=viewer_url,
+        allow_local_ws=allow_local_ws,
+    )
 
 
 async def main() -> None:
@@ -116,7 +225,13 @@ async def main() -> None:
         max_poll_interval_ms=EXECUTION_MAX_POLL_INTERVAL_MS,
     )
     try:
-        await run_worker(KafkaConsumer(settings), create_session_factory(engine))
+        session_factory = create_session_factory(engine)
+        hitl_service = build_hitl_worker_service(session_factory)
+        await run_worker(
+            KafkaConsumer(settings),
+            session_factory,
+            hitl_service=hitl_service,
+        )
     finally:
         await engine.dispose()
 
