@@ -24,6 +24,14 @@ from markettwin_execution_orchestrator.persistence import (
 EXECUTION_CONSUMER_NAME = "markettwin-execution-worker"
 
 
+class MissingRunRequestError(ValueError):
+    """A successfully read command refers to a run that no longer exists."""
+
+    def __init__(self, test_run_id: UUID) -> None:
+        self.test_run_id = test_run_id
+        super().__init__(f'TestRun "{test_run_id}" not found.')
+
+
 @dataclass(frozen=True, slots=True)
 class AcceptedRunRequest:
     """A run durably accepted for execution."""
@@ -91,9 +99,7 @@ async def accept_run_requested(
         )
 
         if test_run is None:
-            raise ValueError(
-                f'TestRun "{test_run_id}" not found.'
-            )
+            raise MissingRunRequestError(test_run_id)
 
         if test_run.workspace_id != envelope.workspace_id:
             raise ValueError(

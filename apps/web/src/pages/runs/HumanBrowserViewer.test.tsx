@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
 
@@ -83,4 +84,36 @@ describe("HumanBrowserViewer", () => {
     expect(JSON.parse(second.sent[1]).sequence).toBe(1);
     expect(second.sent.join("")).not.toContain("first-ticket");
   });
+
+  it("lets a keyboard operator leave browser-page tab control and continue to Release", async () => {
+    const user = userEvent.setup();
+    render(<><HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="one-time" /><button>Release control for verification</button></>);
+    const canvas = screen.getByLabelText("Live protected browser");
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Escape", shiftKey: true });
+    const leave = screen.getByRole("button", { name: "Leave browser keyboard control" });
+    expect(leave).toHaveFocus();
+    expect(screen.getByText(/Press Shift\+Escape to leave browser keyboard control/)).toBeInTheDocument();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Release control for verification" })).toHaveFocus();
+  });
+  it("maps pointer input to the unchanged browser viewport after responsive resize", () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    render(<HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="synthetic-ticket" />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+    const canvas = screen.getByLabelText("Live protected browser") as HTMLCanvasElement;
+    canvas.width = 1280;
+    canvas.height = 720;
+    const bounds = vi.spyOn(canvas, "getBoundingClientRect");
+    bounds.mockReturnValue({ left: 10, top: 20, width: 640, height: 360 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 330, clientY: 200 });
+    expect(JSON.parse(socket.sent[1])).toEqual({ sequence: 1, event: "click", x: 640, y: 360 });
+    bounds.mockReturnValue({ left: 10, top: 20, width: 320, height: 180 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 90, clientY: 65 });
+    expect(JSON.parse(socket.sent[2])).toEqual({ sequence: 2, event: "click", x: 320, y: 180 });
+  });
+
 });

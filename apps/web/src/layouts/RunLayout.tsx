@@ -7,6 +7,7 @@ import {
   useOutletContext,
   useParams,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
 import { ArrowLeft, Play, RefreshCw } from "lucide-react";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -39,6 +40,7 @@ export interface RunContext extends AppShellContext {
 
 export function RunLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const appContext = useOutletContext<AppShellContext>();
   const { runId = "" } = useParams();
   const [starting, setStarting] = useState(false);
@@ -103,6 +105,9 @@ export function RunLayout() {
       />
     );
   const run = runQuery.data;
+  const executionMode = run.configuration_snapshot.execution_mode === "deep_feature_v1"
+    ? "Feature cases · deterministic execution"
+    : "Persona journeys";
   const results: ResultsState =
     run.status !== "completed"
       ? { status: "waiting", data: null, error: null }
@@ -126,7 +131,7 @@ export function RunLayout() {
       <PageHeader
         eyebrow="Test"
         title={testTitle(run)}
-        description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")}`}
+        description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")} · ${executionMode}`}
         action={
           <div className="header-actions">
             <TestStatusBadge status={run.status} />
@@ -179,27 +184,47 @@ export function RunLayout() {
           {startError}
         </p>
       ) : null}
+      {run.status === "awaiting_human" && !location.pathname.endsWith("/human-action") ? (
+        <section className="run-action-required" aria-labelledby="run-action-required-title">
+          <div>
+            <p className="section-label">Action required</p>
+            <h2 id="run-action-required-title">A human action is holding this test</h2>
+            <p>The agent is paused until an authorized operator completes or cancels the request.</p>
+          </div>
+          <Link className="primary-button" aria-label="Open Human Assistance for this test" to={`/runs/${run.id}/human-action`}>Open Human Assistance</Link>
+        </section>
+      ) : null}
       <div className="run-workspace">
       <div className="run-workspace-content">
       <nav className="tab-strip" aria-label="Test sections">
-        {["overview", "journeys", "findings", "report"].map((tab) => (
+        {["overview", "journeys", "findings", "evidence", "report", "human-action"].map((tab) => (
           <NavLink
             key={tab}
             to={`/runs/${run.id}/${tab}`}
             className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}
           >
-            {tab === "overview" ? "Summary" : tab[0].toUpperCase() + tab.slice(1)}
+            {tab === "overview" ? "Summary" : tab === "human-action" ? "Human Assistance" : tab[0].toUpperCase() + tab.slice(1)}
             {tab === "findings" && results.status === "ready" ? (
               <span className="tab-count">{results.data.findings.length}</span>
             ) : null}
           </NavLink>
         ))}
+        <details className="run-more-nav">
+          <summary>More</summary>
+          <div className="run-more-menu" aria-label="More test sections">
+            {["activity", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
+              <NavLink key={tab} to={`/runs/${run.id}/${tab}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>
+                {tab[0].toUpperCase() + tab.slice(1)}
+              </NavLink>
+            ))}
+          </div>
+        </details>
       </nav>
       <Outlet
         context={{ ...appContext, run, results, refresh } satisfies RunContext}
       />
       </div>
-      <RunFlowPanel runId={run.id} userId={appContext.user.id} runStatus={run.status} reportReady={results.status === "ready"} />
+      {!location.pathname.endsWith("/human-action") ? <RunFlowPanel runId={run.id} userId={appContext.user.id} runStatus={run.status} reportReady={results.status === "ready"} /> : null}
       </div>
     </>
   );

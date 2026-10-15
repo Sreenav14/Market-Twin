@@ -107,11 +107,16 @@ export function RunsPage() {
               </div>
               {runs.map((run) => (
                 <div className="deletable-row" key={run.id}>
-                  <Link className="study-row" to={`/runs/${run.id}/overview`}>
+                  <Link
+                    className={`study-row ${run.status === "awaiting_human" ? "awaiting-human-row" : ""}`}
+                    to={`/runs/${run.id}/${run.status === "awaiting_human" ? "human-action" : "overview"}`}
+                    aria-label={run.status === "awaiting_human" ? `Open Human Assistance for ${testTitle(run)}` : `Open ${testTitle(run)}`}
+                  >
                     <span className="study-row-copy">
                       <strong>{testTitle(run)}</strong>
                       <span>
                         {textValue(run.target_snapshot.name, "Target")}
+                        {` · ${textValue(run.target_snapshot.environment, "Environment")} · ${run.configuration_snapshot.execution_mode === "deep_feature_v1" ? "Feature cases" : "Persona journeys"}`}
                         <span className="monospace">{run.id.slice(0, 8)}</span>
                       </span>
                     </span>

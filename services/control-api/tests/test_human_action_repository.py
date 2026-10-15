@@ -366,11 +366,19 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
 
         # General approval dispatch uses the same session binding in a separate
         # worker transaction, while the owner decides in the API transaction.
-        from markettwin_execution_orchestrator.browser.sensitive_action_policy import classify_click_action
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from markettwin_control_api.api import human_actions
+        from markettwin_execution_orchestrator.browser.sensitive_action_policy import (
+            classify_click_action,
+        )
         from markettwin_execution_orchestrator.persistence.sensitive_action_approval import (
-            SensitiveActionApproval, SensitiveActionApprovalBlocked,
+            SensitiveActionApproval,
+            SensitiveActionApprovalBlocked,
         )
         from markettwin_execution_orchestrator.worker import abandon_run_handoffs
+        from starlette.requests import Request as StarletteRequest
         async with factory.begin() as session:
             general_run = await session.get(RunModel, run_id)
             assert general_run is not None
@@ -466,6 +474,105 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
             general_browser = await session.get(BrowserSession, browser_id)
             assert general_browser is not None
             general_browser.control_generation = 0
+
+        rejected_dispatches: list[UUID] = []
+
+        async def dispatch_with_spy() -> UUID:
+            approved_id = await dispatch()
+            # This is the dispatch boundary: the spy is called only when the
+            # worker has committed an exact approval receipt.
+            rejected_dispatches.append(approved_id)
+            return approved_id
+
+        rejected_task = asyncio.create_task(dispatch_with_spy())
+        rejected_id = await pending_general()
+        async with factory.begin() as session:
+            rejected_decision = await ActionApprovalRepository(session).decide(
+                approval_id=rejected_id, actor_id=user_id, approved=False,
+            )
+            assert rejected_decision.status == "rejected"
+        with pytest.raises(SensitiveActionApprovalBlocked):
+            await asyncio.wait_for(rejected_task, 5)
+        async with factory() as session:
+            rejected_row = await session.get(ActionApprovalRequest, rejected_id)
+            assert rejected_row is not None and rejected_row.status == "rejected"
+            assert await session.get(ActionApprovalReceipt, rejected_id) is None
+            rejected_suspension = await session.scalar(select(ExecutionSuspension).where(
+                ExecutionSuspension.pending_approval_id == rejected_id,
+            ))
+            assert rejected_suspension is not None
+            assert rejected_suspension.status == "abandoned"
+            rejected_run = await session.get(RunModel, run_id)
+            assert rejected_run is not None and rejected_run.status == "running"
+        assert rejected_dispatches == []
+
+        concurrent_task = asyncio.create_task(dispatch())
+        concurrent_id = await pending_general()
+        async with factory.begin() as session:
+            await ActionApprovalRepository(session).decide(
+                approval_id=concurrent_id, actor_id=user_id, approved=True,
+            )
+        assert await asyncio.wait_for(concurrent_task, 5) == concurrent_id
+        # Put the committed request back at the exact approved checkpoint to
+        # race two independent workers at the receipt-consumption boundary.
+        async with factory.begin() as session:
+            concurrent_row = await session.get(ActionApprovalRequest, concurrent_id)
+            assert concurrent_row is not None
+            concurrent_row.status = "approved"
+            receipt = await session.get(ActionApprovalReceipt, concurrent_id)
+            assert receipt is not None
+            await session.delete(receipt)
+            suspension = await session.scalar(select(ExecutionSuspension).where(
+                ExecutionSuspension.pending_approval_id == concurrent_id,
+            ))
+            assert suspension is not None
+            suspension.status = "waiting"
+            suspended_run = await session.get(RunModel, run_id)
+            assert suspended_run is not None
+            suspended_run.status = "awaiting_human"
+        async with factory() as session:
+            concurrent_row = await session.get(ActionApprovalRequest, concurrent_id)
+            assert concurrent_row is not None
+            expected_action = concurrent_row.action_fingerprint
+            expected_resource = concurrent_row.resource_fingerprint
+            expected_environment = concurrent_row.environment
+            authorization = await session.scalar(
+                select(TargetAuthorization).where(TargetAuthorization.target_id == target.id)
+            )
+            assert authorization is not None
+            expected_authorization = authorization.id
+        rejected_dispatches.clear()
+
+        async def exact_consume() -> UUID:
+            async with factory() as session:
+                consumed_id = await SensitiveActionApproval(
+                    session, execution_id=execution_id,
+                )._consume(
+                    approval_id=concurrent_id,
+                    action_fingerprint=expected_action,
+                    resource_fingerprint=expected_resource,
+                    environment=expected_environment,
+                    authorization_id=expected_authorization,
+                )
+                # Model the protected dispatch callback after the receipt has
+                # been acquired by this exact-consumption path.
+                rejected_dispatches.append(consumed_id)
+                return consumed_id
+
+        concurrent_results = await asyncio.wait_for(asyncio.gather(
+            exact_consume(), exact_consume(), return_exceptions=True,
+        ), 5)
+        assert sum(result == concurrent_id for result in concurrent_results) == 1
+        assert sum(isinstance(result, SensitiveActionApprovalBlocked)
+                   for result in concurrent_results) == 1
+        assert rejected_dispatches == [concurrent_id]
+        async with factory() as session:
+            concurrent_receipt = await session.get(ActionApprovalReceipt, concurrent_id)
+            assert concurrent_receipt is not None
+            assert concurrent_receipt.dispatch_state == "claimed"
+            concurrent_row = await session.get(ActionApprovalRequest, concurrent_id)
+            assert concurrent_row is not None and concurrent_row.status == "consumed"
+            await session.rollback()
 
         async def claim() -> HumanLeaseGrant:
             async with factory.begin() as session:
@@ -595,6 +702,35 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
             assert restored is not None and restored.control_mode == "agent"
             restored_request = await session.get(HumanActionRequest, failed_handoff.request_id)
             assert restored_request is not None and restored_request.status == "pending"
+
+        async with factory.begin() as session:
+            reclaimed_grant = await HumanActionRepository(session).claim(
+                request_id=failed_handoff.request_id, actor_id=user_id,
+            )
+        monkeypatch.setattr(
+            human_actions, "get_authenticated_user_id", AsyncMock(return_value=user_id),
+        )
+        monkeypatch.setattr(
+            human_actions, "get_database_runtime",
+            lambda _: SimpleNamespace(session_factory=factory),
+        )
+        list_request = StarletteRequest({"type": "http", "headers": []})
+        listed_actions = await human_actions.list_human_actions(
+            test_run_id=run_id, request=list_request,
+        )
+        reclaimed_rows = [
+            item for item in listed_actions if item.id == failed_handoff.request_id
+        ]
+        assert len(reclaimed_rows) == 1
+        assert reclaimed_rows[0].lease_id == reclaimed_grant.lease_id
+        async with factory.begin() as session:
+            await HumanActionRepository(session).abort_claim(
+                lease_id=reclaimed_grant.lease_id,
+                actor_id=user_id,
+                lease_token=reclaimed_grant.lease_token,
+                generation=reclaimed_grant.generation,
+                expected_request_id=failed_handoff.request_id,
+            )
 
         async with factory.begin() as session:
             repository = HumanActionRepository(session)

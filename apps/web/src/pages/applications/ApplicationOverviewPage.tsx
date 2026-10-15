@@ -134,7 +134,7 @@ export function ApplicationOverviewPage() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Activity</p>
-            <h2 id="recent-tests-heading">Recent tests</h2>
+            <h2 id="recent-tests-heading">Tests</h2>
           </div>
           <Link className="text-link" to="/runs">
             View all

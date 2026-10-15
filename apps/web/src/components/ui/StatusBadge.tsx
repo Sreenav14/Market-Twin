@@ -27,12 +27,15 @@ const warning = new Set([
   "awaiting_human",
   "human_action_required",
   "paused",
+  "blocked",
+  "inconclusive",
 ]);
 const info = new Set([
   "running",
   "planning",
   "queued",
   "evaluating",
+  "evaluation_pending",
   "generating",
   "low",
 ]);

@@ -1,12 +1,12 @@
 import { useDeferredValue } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
-import { FindingListItem } from "../../components/markettwin/FindingListItem";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { EmptyState } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { findingClassification, isConfirmedFinding, severityOrder, sortFindings } from "../../lib/results";
+import { StatusBadge } from "../../components/ui/StatusBadge";
 
 export function RunFindingsPage() {
   const { run, results } = useOutletContext<RunContext>();
@@ -17,6 +17,7 @@ export function RunFindingsPage() {
   const category = params.get("category") || "all";
   const sort = params.get("sort") || "severity";
   const findings = results.status === "ready" ? results.data.findings : [];
+  const selectedId = params.get("selected") || "";
   const categories = [
     ...new Set(findings.map((finding) => finding.category)),
   ].sort();
@@ -42,6 +43,14 @@ export function RunFindingsPage() {
     ),
     sort,
   );
+  const selected = filtered.find((finding) => finding.id === selectedId) ?? filtered[0];
+  function selectFinding(id: string) {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("selected", id);
+      return next;
+    }, { replace: true });
+  }
   return (
     <ResultsBoundary>
       <section aria-labelledby="findings-heading">
@@ -122,6 +131,8 @@ export function RunFindingsPage() {
             </p>
             {filtered.length ? (
               <>
+                <div className="findings-workbench">
+                <div className="findings-groups">
                 {([
                   ["Confirmed issues", "Visually verified issue"],
                   ["Needs Verification", "Needs Verification"],
@@ -132,12 +143,31 @@ export function RunFindingsPage() {
                     <section key={heading} aria-label={heading}>
                       <h3>{heading}</h3>
                       {heading === "Needs Verification" ? <p className="muted">These observations require relevant browser evidence. Agreement between synthetic personas is not independent proof.</p> : null}
-                      <ul className="finding-list">
-                        {items.map((finding) => <FindingListItem key={finding.id} finding={finding} runId={run.id} />)}
+                      <ul className="finding-list findings-list">
+                        {items.map((finding) => <li className="finding-item" key={finding.id}>
+                          <button type="button" className="finding-select" aria-pressed={selected?.id === finding.id} onClick={() => selectFinding(finding.id)}>
+                            <StatusBadge status={finding.severity} />
+                            <span className="category-label">{findingClassification(finding)} · {finding.category.replaceAll("_", " ")}</span>
+                            <strong>{finding.title}</strong><span>{finding.summary}</span>
+                            <small>{finding.evidence.step_ids.length} steps · {finding.evidence.artifact_ids.length} artifacts</small>
+                          </button>
+                        </li>)}
                       </ul>
                     </section>
                   ) : null;
                 })}
+                </div>
+                {selected ? <aside className="finding-inspector" aria-labelledby="finding-inspector-title" aria-live="polite">
+                  <div className="finding-title-meta"><StatusBadge status={selected.severity} /><span className="category-label">{findingClassification(selected)} · {selected.category.replaceAll("_", " ")}</span></div>
+                  <h3 id="finding-inspector-title">{selected.title}</h3><p>{selected.summary}</p>
+                  <p><strong>Recommendation</strong><br />{selected.recommendation || "No recommendation was included."}</p>
+                  <p className="muted">{selected.evidence.step_ids.length} cited steps · {selected.evidence.artifact_ids.length} artifacts · {selected.journey_ids.length} affected journeys</p>
+                  {selected.evidence.step_ids.length ? <p className="muted">Cited step IDs: {selected.evidence.step_ids.slice(0, 2).join(", ")}{selected.evidence.step_ids.length > 2 ? " …" : ""}. Journey links provide the saved step context.</p> : null}
+                  {selected.journey_ids.slice(0, 2).map((journeyId) => <Link className="text-link" key={journeyId} to={`/runs/${run.id}/journeys/${journeyId}`}>Open affected journey</Link>)}
+                  {selected.evidence.artifact_ids.slice(0, 2).map((artifactId) => <Link className="text-link" key={artifactId} to={`/runs/${run.id}/evidence/${artifactId}`}>Open evidence {artifactId.slice(0, 8)}</Link>)}
+                  <Link className="secondary-button" to={`/runs/${run.id}/findings/${selected.id}`}>Open finding details</Link>
+                </aside> : null}
+                </div>
               </>
             ) : (
               <EmptyState

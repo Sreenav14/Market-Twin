@@ -11,10 +11,13 @@ export function RunOverviewPage() {
   const { run, results } = useOutletContext<RunContext>();
   const ready = results.status === "ready";
   const stages = ["Created", "Planning", "Execution", "Evaluation"];
+  const pausedForHuman = run.status === "awaiting_human";
   const stage = ready
     ? 4
     : run.status === "completed"
       ? 3
+      : pausedForHuman
+        ? -1
       : run.status === "running"
         ? 2
         : ["planning", "queued"].includes(run.status)
@@ -29,6 +32,7 @@ export function RunOverviewPage() {
   const metrics = ready ? reportMetrics(results.data) : null;
   return (
     <>
+      {pausedForHuman ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
       <ol className="lifecycle-rail" aria-label="Test lifecycle">
         {stages.map((label, index) => (
           <li
@@ -53,6 +57,8 @@ export function RunOverviewPage() {
                   ? index === 0
                     ? "Test ended"
                     : "Not confirmed"
+                  : pausedForHuman
+                    ? "Not confirmed"
                   : index < stage
                     ? "Complete"
                     : index === stage

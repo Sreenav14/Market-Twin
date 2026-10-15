@@ -14,12 +14,14 @@ const permittedKeys = new Set([
 /** Volatile, ticket-authenticated view of the worker-owned browser. */
 export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const leaveControlRef = useRef<HTMLButtonElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const sequenceRef = useRef(0);
   const attemptedRef = useRef(false);
   const connectingRef = useRef(false);
   const mountedRef = useRef(true);
-  const [status, setStatus] = useState("Connecting to the protected browser…");
+  const [status, setStatus] = useState("Viewer not connected. Connect to begin browser control.");
 
   useEffect(() => {
     mountedRef.current = true;
@@ -115,6 +117,11 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
           send({ event: "scroll", delta: Math.max(-1000, Math.min(1000, Math.trunc(event.deltaY))) });
         }}
         onKeyDown={(event) => {
+          if (event.key === "Escape" && event.shiftKey) {
+            event.preventDefault();
+            leaveControlRef.current?.focus();
+            return;
+          }
           const key = event.key === "Tab" && event.shiftKey ? "Shift+Tab" : event.key;
           if (permittedKeys.has(key)) {
             event.preventDefault();
@@ -129,6 +136,7 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
       />
       <label className="visually-hidden" htmlFor="human-browser-text">Type into the protected browser</label>
       <input
+        ref={textInputRef}
         id="human-browser-text"
         type="password"
         autoComplete="off"
@@ -138,6 +146,11 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
           event.currentTarget.value = "";
         }}
         onKeyDown={(event) => {
+          if (event.key === "Escape" && event.shiftKey) {
+            event.preventDefault();
+            leaveControlRef.current?.focus();
+            return;
+          }
           const key = event.key === "Tab" && event.shiftKey ? "Shift+Tab" : event.key;
           if (permittedKeys.has(key)) {
             event.preventDefault();
@@ -145,6 +158,10 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
           }
         }}
       />
+      <p className="viewer-keyboard-help">Browser Tab navigation is forwarded to the test page. Press Shift+Escape to leave browser keyboard control.</p>
+      <button ref={leaveControlRef} type="button" className="secondary-button" onClick={() => { canvasRef.current?.blur(); textInputRef.current?.blur(); }}>
+        Leave browser keyboard control
+      </button>
     </div>
   );
 }

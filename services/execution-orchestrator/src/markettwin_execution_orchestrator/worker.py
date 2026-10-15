@@ -36,6 +36,7 @@ from markettwin_execution_orchestrator.workflow.run_executor import execute_mark
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
 from markettwin_execution_orchestrator.workflow.run_request_handler import (
     EXECUTION_CONSUMER_NAME,
+    MissingRunRequestError,
     accept_run_requested,
 )
 
@@ -88,11 +89,20 @@ async def process_command(
     """Execute an accepted run, or finalize an interrupted delivery as failed."""
     envelope = EventEnvelope.from_json(message.value.decode("utf-8"))
     async with session_factory() as session:
-        accepted = await accept_run_requested(
-            envelope=envelope,
-            message=message,
-            session=session,
-        )
+        try:
+            accepted = await accept_run_requested(
+                envelope=envelope,
+                message=message,
+                session=session,
+            )
+        except MissingRunRequestError as error:
+            # A deleted run cannot be executed. Acknowledge only this delivery;
+            # database/transport failures still escape and remain retryable.
+            logger.warning(
+                "Discarding stale run.requested event %s for missing TestRun %s",
+                envelope.event_id, error.test_run_id,
+            )
+            return
         if accepted is None:
             # In V1 only one worker owns execution. Without leases, this branch
             # must not be used to recover deliveries across concurrent workers.

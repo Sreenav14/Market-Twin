@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Link,
   NavLink,
@@ -6,7 +8,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Menu, X } from "lucide-react";
 import { BrandMark } from "../components/ui/BrandMark";
 import { ErrorPanel, LoadingPanel } from "../components/ui/StateViews";
 import { Icon } from "../components/ui/Icon";
@@ -85,6 +87,9 @@ export function AppShell({
   user: CurrentUser;
   onLogout: () => Promise<void>;
 }) {
+  const queryClient = useQueryClient();
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationChangedContext = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
   const workspaceState = useAsync(() => api.listWorkspaces(), []);
@@ -94,6 +99,8 @@ export function AppShell({
   useEffect(() => {
     if (previousPath.current !== location.pathname) {
       previousPath.current = location.pathname;
+      navigationChangedContext.current ||= navigationOpen;
+      setNavigationOpen(false);
       document.getElementById("main-content")?.focus({ preventScroll: true });
       window.scrollTo({ top: 0 });
     }
@@ -137,12 +144,8 @@ export function AppShell({
       setLogoutError("Could not sign out. Please try again."),
     );
   };
-  return (
-    <div className="enterprise-shell">
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <aside className="sidebar">
+  const navigation = (mobile: boolean) => (<>
+
         <Link
           to="/overview"
           className="sidebar-brand"
@@ -161,15 +164,21 @@ export function AppShell({
           <div className="workspace-copy">
             {workspaceState.data.length > 1 ? (
               <>
-                <label className="visually-hidden" htmlFor="workspace-select">
+                <label className="visually-hidden" htmlFor={mobile ? "mobile-workspace-select" : "workspace-select"}>
                   Workspace
                 </label>
                 <select
-                  id="workspace-select"
+                  id={mobile ? "mobile-workspace-select" : "workspace-select"}
                   value={workspace.id}
                   onChange={(event) => {
-                    setWorkspaceId(event.target.value);
-                    navigate("/overview");
+                    const nextWorkspace = event.target.value;
+                    void queryClient.cancelQueries().then(() => {
+                      queryClient.removeQueries();
+                      setWorkspaceId(nextWorkspace);
+                      navigationChangedContext.current = mobile;
+                      setNavigationOpen(false);
+                      navigate("/overview");
+                    });
                   }}
                 >
                   {workspaceState.data.map((item) => (
@@ -186,6 +195,8 @@ export function AppShell({
           </div>
         </div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
+          <NavLink to="/overview" aria-label="Overview" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="home" /><span>Overview</span></NavLink>
+
           <NavLink
             to="/knowledge/review"
             aria-label="Knowledge"
@@ -215,7 +226,6 @@ export function AppShell({
           className="sidebar-nav sidebar-nav-secondary"
           aria-label="Workspace navigation"
         >
-          <NavLink to="/overview" aria-label="Overview" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="home" /><span>Overview</span></NavLink>
           <NavLink to="/ingestion" aria-label="Ingestion" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="ingestion" /><span>Add knowledge</span></NavLink>
           <NavLink to="/agents" aria-label="Agents" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="user" /><span>Agent settings</span></NavLink>
           <Link to="/how-it-works" className="nav-link"><Icon name="knowledge" /><span>How it works</span></Link>
@@ -245,9 +255,20 @@ export function AppShell({
             <Icon name="logout" />
           </button>
         </div>
-      </aside>
+
+  </>);
+  return (
+    <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
+    <div className="enterprise-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <aside className="sidebar desktop-sidebar">{navigation(false)}</aside>
       <div className="content-shell">
         <header className="topbar">
+          <Dialog.Trigger asChild>
+            <button className="icon-button navigation-trigger" aria-label="Open navigation" type="button"><Menu size={20} aria-hidden="true" /></button>
+          </Dialog.Trigger>
           <nav className="breadcrumb" aria-label="Breadcrumb">
             <Link to="/overview">Workspace</Link>
             {crumbs.map((crumb, index) => (
@@ -284,5 +305,32 @@ export function AppShell({
         </main>
       </div>
     </div>
+    <Dialog.Portal>
+      <Dialog.Overlay className="dialog-overlay navigation-overlay" />
+      <Dialog.Content className="navigation-drawer"
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest("a[href]")) {
+            navigationChangedContext.current = true;
+            setNavigationOpen(false);
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          if (navigationChangedContext.current) {
+            event.preventDefault();
+            navigationChangedContext.current = false;
+            // Wait until the modal focus scope has detached before focusing the page.
+            window.requestAnimationFrame(() => {
+              document.getElementById("main-content")?.focus({ preventScroll: true });
+            });
+          }
+        }}
+      >
+        <Dialog.Title className="visually-hidden">Workspace navigation</Dialog.Title>
+        <Dialog.Description className="visually-hidden">Switch workspace or navigate MarketTwin.</Dialog.Description>
+        <Dialog.Close className="icon-button navigation-close" aria-label="Close navigation"><X size={20} aria-hidden="true" /></Dialog.Close>
+        {navigation(true)}
+      </Dialog.Content>
+    </Dialog.Portal>
+    </Dialog.Root>
   );
 }

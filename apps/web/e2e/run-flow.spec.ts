@@ -33,10 +33,8 @@ test("the simple agent map updates from the saved plan and keeps large plans com
   const flow = page.getByRole("complementary", { name: "Agent flow", exact: true });
   await expect(flow.getByText("0 journeys", { exact: true })).toBeVisible();
   const disclosure = flow.locator("details").first();
-  if (testInfo.project.name === "mobile-chromium") {
-    await expect(disclosure).not.toHaveAttribute("open", "");
-    await flow.locator("summary").first().click();
-  } else await expect(disclosure).toHaveAttribute("open", "");
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  await flow.locator("summary").first().click();
   await expect(flow.getByText("Meta Agent", { exact: true })).toBeVisible();
   await expect(flow.getByText("Each planned journey runs once. The supervisor collects outputs before evaluation.", { exact: true })).toBeVisible();
   count = 2;

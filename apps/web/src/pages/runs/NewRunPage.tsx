@@ -293,6 +293,8 @@ export function NewRunPage() {
       {header}
       <div className="study-create-layout">
         <form className="study-composer" onSubmit={submit}>
+          <section className="run-create-zone" aria-labelledby="what-to-test-heading">
+            <h2 id="what-to-test-heading">What to test</h2>
           <div className="composer-knowledge form-grid">
             <label htmlFor="test-name">Test name <span className="muted">Optional</span></label>
             <input className="text-input" id="test-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} placeholder="For example, Pricing clarity" aria-describedby="test-name-help" />
@@ -317,6 +319,87 @@ export function NewRunPage() {
               Authorized
             </span>
           </div>
+          <div className="composer-body">
+            <label className="composer-label" htmlFor="test-brief">
+              Your testing goal
+            </label>
+            <textarea
+              ref={textarea}
+              id="test-brief"
+              name="test-brief"
+              value={brief}
+              onChange={(event) => {
+                setBrief(event.target.value);
+                setError(null);
+              }}
+              placeholder="Can a first-time customer understand our pricing and choose the right plan?…"
+              maxLength={4000}
+              rows={6}
+              aria-describedby={error ? "brief-help brief-count brief-error" : "brief-help brief-count"}
+              aria-invalid={Boolean(error)}
+            />
+            <div className="composer-meta">
+              <span id="brief-help">
+                Describe an outcome, rather than a script of clicks.
+              </span>
+              <span id="brief-count">
+                {brief.length.toLocaleString()} / 4,000
+              </span>
+            </div>
+            <div className="brief-examples">
+              <span>Example briefs</span>
+              {examples.map((example) => (
+                <button
+                  key={example.title}
+                  type="button"
+                  onClick={() => {
+                    setBrief(example.brief);
+                    textarea.current?.focus();
+                  }}
+                >
+                  {example.title}
+                </button>
+              ))}
+            </div>
+          </div>
+          </section>
+          <section className="run-create-zone" aria-labelledby="how-to-execute-heading">
+            <h2 id="how-to-execute-heading">How to execute</h2>
+          <div className="composer-knowledge form-grid">
+            <label htmlFor="testing-depth">Testing depth</label>
+            <label htmlFor="execution-mode">Testing mode</label>
+            <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
+              <option value="legacy_persona">Persona journeys</option>
+              <option value="deep_feature_v1">Feature cases — experimental</option>
+            </select>
+            {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unverified.</p> : null}
+            <select id="testing-depth" value={testingDepth} disabled={busy || executionMode === "deep_feature_v1"} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
+              <option value="low">Low — focused coverage</option>
+              <option value="medium">Medium — balanced coverage</option>
+              <option value="high">High — broader coverage</option>
+            </select>
+            <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? "Feature cases use a separate bounded budget of up to eight cases." : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
+          </div>
+          <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
+            <h2 id="test-knowledge-heading">Knowledge for this test <span className="muted">Optional</span></h2>
+            <p className="form-help">Select approved knowledge attached to this application before agents are created. You can select up to 10 sets.</p>
+            {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
+              <p className="form-error" role="alert">Could not load knowledge. <Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button></p>
+            ) : knowledgeState.data.filter((entry) => entry.status === "approved").length ? (
+              <fieldset className="knowledge-choices"><legend className="visually-hidden">Select approved knowledge sets</legend>
+                {knowledgeState.data.filter((entry) => entry.status === "approved").map((entry) => (
+                  <div className="knowledge-choice" key={entry.id}>
+                    <label><input type="checkbox" checked={knowledgeIds.includes(entry.id)} disabled={busy || (knowledgeIds.length >= 10 && !knowledgeIds.includes(entry.id))} onChange={(event) => setKnowledgeIds((previous) => event.target.checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id))} /><span><strong>{entry.name}</strong><span className="muted">{entry.knowledge_count} knowledge items · {entry.artifact_count} artifacts · {entry.skill_count} Skills</span></span></label>
+                    <Link className="text-link" to={`/knowledge/review/${entry.id}`} target="_blank" rel="noreferrer">View<span className="visually-hidden"> {entry.name} in a new tab</span></Link>
+                  </div>
+                ))}
+              </fieldset>
+            ) : <p className="muted">No approved knowledge attached yet. <Link className="text-link" to="/knowledge/review" target="_blank" rel="noreferrer">Review knowledge</Link> and attach a set to this application, or continue without knowledge.</p>}
+          </section>
+          </section>
+          <section className="run-create-zone" aria-labelledby="run-security-heading">
+            <h2 id="run-security-heading">Security and authorization</h2>
+          <p className="form-help">Only controls permitted by the selected target and test mode are available here. Credentials never belong in the test brief or policy fields.</p>
           {target?.requires_auth ? (
             <section className="composer-knowledge form-grid" aria-labelledby="auth-verification-heading">
               <h2 id="auth-verification-heading">Authentication assistance</h2>
@@ -369,80 +452,7 @@ export function NewRunPage() {
               <p className="form-help">This enables fixture-grounded assertions and the synthetic Save approval on an all-loopback local/test target.</p>
             </section>
           ) : null}
-          <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
-            <h2 id="test-knowledge-heading">Knowledge for this test <span className="muted">Optional</span></h2>
-            <p className="form-help">Select approved knowledge attached to this application before agents are created. You can select up to 10 sets.</p>
-            {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
-              <p className="form-error" role="alert">Could not load knowledge. <Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button></p>
-            ) : knowledgeState.data.filter((entry) => entry.status === "approved").length ? (
-              <fieldset className="knowledge-choices"><legend className="visually-hidden">Select approved knowledge sets</legend>
-                {knowledgeState.data.filter((entry) => entry.status === "approved").map((entry) => (
-                  <div className="knowledge-choice" key={entry.id}>
-                    <label><input type="checkbox" checked={knowledgeIds.includes(entry.id)} disabled={busy || (knowledgeIds.length >= 10 && !knowledgeIds.includes(entry.id))} onChange={(event) => setKnowledgeIds((previous) => event.target.checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id))} /><span><strong>{entry.name}</strong><span className="muted">{entry.knowledge_count} knowledge items · {entry.artifact_count} artifacts · {entry.skill_count} Skills</span></span></label>
-                    <Link className="text-link" to={`/knowledge/review/${entry.id}`} target="_blank" rel="noreferrer">View<span className="visually-hidden"> {entry.name} in a new tab</span></Link>
-                  </div>
-                ))}
-              </fieldset>
-            ) : <p className="muted">No approved knowledge attached yet. <Link className="text-link" to="/knowledge/review" target="_blank" rel="noreferrer">Review knowledge</Link> and attach a set to this application, or continue without knowledge.</p>}
           </section>
-          <div className="composer-knowledge form-grid">
-            <label htmlFor="testing-depth">Testing depth</label>
-            <label htmlFor="execution-mode">Testing mode</label>
-            <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
-              <option value="legacy_persona">Persona journeys</option>
-              <option value="deep_feature_v1">Feature cases — experimental</option>
-            </select>
-            {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unverified.</p> : null}
-            <select id="testing-depth" value={testingDepth} disabled={busy || executionMode === "deep_feature_v1"} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
-              <option value="low">Low — focused coverage</option>
-              <option value="medium">Medium — balanced coverage</option>
-              <option value="high">High — broader coverage</option>
-            </select>
-            <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? "Feature cases use a separate bounded budget of up to eight cases." : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
-          </div>
-          <div className="composer-body">
-            <label className="composer-label" htmlFor="test-brief">
-              Your testing goal
-            </label>
-            <textarea
-              ref={textarea}
-              id="test-brief"
-              name="test-brief"
-              value={brief}
-              onChange={(event) => {
-                setBrief(event.target.value);
-                setError(null);
-              }}
-              placeholder="Can a first-time customer understand our pricing and choose the right plan?…"
-              maxLength={4000}
-              rows={6}
-              aria-describedby={error ? "brief-help brief-count brief-error" : "brief-help brief-count"}
-              aria-invalid={Boolean(error)}
-            />
-            <div className="composer-meta">
-              <span id="brief-help">
-                Describe an outcome, rather than a script of clicks.
-              </span>
-              <span id="brief-count">
-                {brief.length.toLocaleString()} / 4,000
-              </span>
-            </div>
-            <div className="brief-examples">
-              <span>Example briefs</span>
-              {examples.map((example) => (
-                <button
-                  key={example.title}
-                  type="button"
-                  onClick={() => {
-                    setBrief(example.brief);
-                    textarea.current?.focus();
-                  }}
-                >
-                  {example.title}
-                </button>
-              ))}
-            </div>
-          </div>
           {error ? (
             <p id="brief-error" className="composer-error" role="alert">
               {error}

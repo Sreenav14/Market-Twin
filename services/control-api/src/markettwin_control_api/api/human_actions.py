@@ -101,6 +101,7 @@ class ClaimResponse(BaseModel):
     lease_token: str = Field(repr=False)
     generation: int
     expires_at: datetime
+    viewer_available: bool = True
     viewer_url: str
     viewer_ticket: str = Field(repr=False)
 
@@ -246,7 +247,9 @@ async def list_human_actions(test_run_id: UUID, request: Request) -> list[HumanA
                         TargetAuthorization, TargetAuthorization.target_id == ApplicationTarget.id
                     )
                     .outerjoin(
-                        HumanControlLease, HumanControlLease.request_id == HumanActionRequest.id
+                        HumanControlLease,
+                        (HumanControlLease.request_id == HumanActionRequest.id)
+                        & HumanControlLease.released_at.is_(None),
                     )
                     .where(
                         TestRun.id == test_run_id,

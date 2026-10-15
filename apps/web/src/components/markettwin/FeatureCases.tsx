@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../lib/api";
 import { ArtifactEvidence } from "../../pages/runs/FindingDetailPage";
@@ -37,8 +38,8 @@ function AuthenticatedCoverage({ runId, userId }: { runId: string; userId: strin
   });
   if (!query.data) return query.isError ? <p>Human assistance summary is unavailable.</p> : null;
   const summary = query.data;
-  return <div className="panel" aria-label="Authenticated coverage">
-    <h3>Authentication and human contribution</h3>
+  return <details className="authenticated-coverage" aria-label="Authenticated coverage">
+    <summary><strong>Authentication and human contribution</strong><span>{summary.human_requests?.completed ?? 0} verified handoffs · {summary.reused_auth_cases ?? 0} reused cases · {summary.action_approvals?.consumed ?? 0} consumed approvals</span></summary>
     <p>{summary.executor_mode === "deterministic_case_steps" ? "Deterministic case execution" : "Agent journey execution"}.
       Human login and approval decisions are recorded separately from agent test steps.</p>
     <p>{summary.human_requests?.completed ?? 0} verified human handoffs · {summary.reused_auth_cases ?? 0} cases with reused authentication · {summary.action_approvals?.consumed ?? 0} consumed action approvals.</p>
@@ -49,10 +50,11 @@ function AuthenticatedCoverage({ runId, userId }: { runId: string; userId: strin
       Planned feature {item.feature_key}: {item.asserted_cases} cases with recorded assertions · {item.not_explored} cases not explored.
     </p>)}
     <p>These counts describe recorded execution; evaluated verdicts appear below. Authentication does not establish full application coverage. Separate browser contexts still require dedicated test data and a reset contract for server changes.</p>
-  </div>;
+  </details>;
 }
 
-export function FeatureCases({ runId, userId }: { runId: string; userId: string }) {
+export function FeatureCases({ runId, userId, id }: { runId: string; userId: string; id?: string }) {
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["feature-cases", userId, runId],
     queryFn: ({ signal }) => request<CaseResults>(`/api/v1/test-runs/${runId}/test-cases`, { signal }),
@@ -61,26 +63,35 @@ export function FeatureCases({ runId, userId }: { runId: string; userId: string 
   if (query.isPending) return <LoadingPanel label="Loading feature cases" />;
   if (query.isError) return <ErrorPanel message={query.error.message} />;
   const { cases, coverage, evaluation_pending: pending, available } = query.data;
-  return <section aria-label="Feature case coverage">
+  const selected = cases.find((item) => item.case_id === selectedCaseId) ?? cases[0];
+  return <section id={id} aria-label="Feature case coverage">
     <h2>Feature cases</h2>
     <p>Coverage applies to the planned feature. Inferred expectations do not establish a product defect.</p>
     <AuthenticatedCoverage runId={runId} userId={userId} />
     {!available ? <p>The feature plan has not been saved yet.</p> : null}
     {pending ? <p>Evaluation is pending. Completed verdicts appear after evidence verification.</p> : null}
     {coverage ? <p>{coverage.planned} planned · {coverage.passed} passed · {coverage.failed_assertions} failed assertions · {coverage.blocked} blocked · {coverage.inconclusive} inconclusive · {coverage.not_run} not run</p> : null}
-    {cases.map((item) => <article className="panel" key={item.case_id}>
-      <h3>{item.title}</h3><p>{pending ? "Awaiting evidence evaluation" : item.verdict.replaceAll("_", " ")} · {item.kind.replaceAll("_", " ")}</p>
-      {pending && item.recorded_verdict ? <p>Recorded result awaiting verification: {item.recorded_verdict.replaceAll("_", " ")}. This is not a confirmed defect yet.</p> : null}
-      {item.verdict === "not_satisfied" ? <p>Next: open the supporting step and compare the screenshot with the expected value.</p> : null}
-      {item.reason ? <p>{item.reason.replaceAll("_", " ")}</p> : null}
-      {item.journey_id ? <Link to={`/runs/${runId}/journeys/${item.journey_id}`}>Open recorded steps</Link> : null}
-      {item.assertions.map((assertion) => <details key={assertion.assertion_id}>
-        <summary>{assertion.assertion_id.replaceAll("_", " ")} · {assertion.status.replaceAll("_", " ")}</summary>
-        <p>Expected: {String(assertion.expected_value)}<br />Observed: {assertion.observed_value === null ? "Unavailable" : String(assertion.observed_value)}</p>
-        <p>Source: {assertion.origin.replaceAll("_", " ")} · Step {assertion.step_id}</p>
-        {item.journey_id ? <Link to={`/runs/${runId}/journeys/${item.journey_id}?step=${assertion.step_id}`}>Open supporting step</Link> : null}
-        {assertion.artifact_ids.map((artifactId) => <ArtifactEvidence key={artifactId} runId={runId} artifactId={artifactId} />)}
-      </details>)}
-    </article>)}
+    {cases.length ? <div className="feature-case-workbench">
+      <ul className="feature-case-list" aria-label="Feature cases">
+        {cases.map((item) => <li key={item.case_id}><button type="button" className="feature-case-choice" aria-pressed={(selected?.case_id ?? "") === item.case_id} onClick={() => setSelectedCaseId(item.case_id)}>
+          <strong>{item.title}</strong><span>{pending ? "Awaiting evaluation" : item.verdict.replaceAll("_", " ")}</span><span className="muted">{item.kind.replaceAll("_", " ")}</span>
+          <span className="muted">Assertions: {item.assertions.length} · Sources: {[...new Set(item.assertions.map((assertion) => assertion.origin.replaceAll("_", " ")))].join(", ") || "not recorded"}</span>
+        </button></li>)}
+      </ul>
+      {selected ? <article className="panel feature-case-detail" aria-live="polite">
+      <p className="section-label">{selected.kind.replaceAll("_", " ")} · {pending ? "Evaluation pending" : selected.verdict.replaceAll("_", " ")}</p>
+      <h3>{selected.title}</h3>
+      {pending && selected.recorded_verdict ? <p>Recorded result awaiting verification: {selected.recorded_verdict.replaceAll("_", " ")}. This is not a confirmed defect yet.</p> : null}
+      {selected.verdict === "not_satisfied" ? <p>Next: open the supporting step and compare the screenshot with the expected value.</p> : null}
+      {selected.reason ? <p>{selected.reason.replaceAll("_", " ")}</p> : null}
+      {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}`}>Open recorded steps</Link> : null}
+      {selected.assertions.map((assertion) => <section className="feature-assertion" key={assertion.assertion_id}>
+        <h4>{assertion.assertion_id.replaceAll("_", " ")} · {assertion.status.replaceAll("_", " ")}</h4>
+        <dl><div><dt>Expected</dt><dd>{String(assertion.expected_value)}</dd></div><div><dt>Observed</dt><dd>{assertion.observed_value === null ? "Unavailable" : String(assertion.observed_value)}</dd></div><div><dt>Source</dt><dd>{assertion.origin.replaceAll("_", " ")}</dd></div><div><dt>Supporting step</dt><dd>{assertion.step_id}</dd></div></dl>
+        {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}?step=${assertion.step_id}`}>Open supporting step</Link> : null}
+        <div className="feature-assertion-evidence">{assertion.artifact_ids.map((artifactId) => <ArtifactEvidence key={artifactId} runId={runId} artifactId={artifactId} />)}</div>
+      </section>)}
+      </article> : null}
+    </div> : null}
   </section>;
 }

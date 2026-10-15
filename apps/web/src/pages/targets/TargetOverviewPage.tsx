@@ -6,6 +6,7 @@ import { ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, TargetAuthorization, api } from "../../lib/api";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
+import { isAuthorizationActive } from "../../lib/targetAuthorization";
 import { useAsync } from "../../lib/useAsync";
 import { AppShellContext } from "../../layouts/AppShell";
 
@@ -32,10 +33,8 @@ export function TargetOverviewPage() {
     return <ErrorPanel message={authorizationState.error} />;
   const target = targetState.data;
   const authorization = authorizationState.data;
-  const expired = Boolean(
-    authorization?.expires_at && Date.parse(authorization.expires_at) <= Date.now(),
-  );
-  const authorized = authorization?.status === "authorized" && !expired;
+  const authorized = isAuthorizationActive(authorization);
+  const expired = authorization?.status === "authorized" && !authorized;
   const canWrite =
     canWriteWorkspace(workspace.role) && target.status === "active";
   return (

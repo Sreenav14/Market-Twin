@@ -5,74 +5,111 @@ import { Link, useOutletContext } from "react-router-dom";
 
 import { RunContext } from "../../layouts/RunLayout";
 import { api, type HumanLeaseGrant } from "../../lib/api";
+import { canAuthorizeTarget } from "../../lib/permissions";
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
 
 export function HumanActionPage() {
-  const { run } = useOutletContext<RunContext>();
+  const { run, user, workspace } = useOutletContext<RunContext>();
+  const canManageHumanActions = canAuthorizeTarget(workspace.role);
   const actions = useQuery({
-    queryKey: ["human-actions", run.id],
+    queryKey: ["human-actions", user.id, workspace.id, run.id],
     queryFn: ({ signal }) => api.listHumanActions(run.id, signal),
-    refetchInterval: 2500,
+    enabled: canManageHumanActions,
+    refetchInterval: canManageHumanActions ? 2500 : false,
   });
   const queryClient = useQueryClient();
   const [activeLease, setActiveLease] = useState<HumanLeaseGrant | null>(null);
+  const activeLeaseRef = useRef<HumanLeaseGrant | null>(null);
+  const mountedRef = useRef(true);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const [decisionMessage, setDecisionMessage] = useState<string | null>(null);
   const releasingRef = useRef(false);
   const claim = useMutation({
-    mutationFn: (requestId: string) => api.claimHumanAction(requestId),
-    onSuccess: (lease, requestId) => {
-      releasingRef.current = false;
+    mutationFn: async (requestId: string) => {
+      const lease = await api.claimHumanAction(requestId);
+      if (!mountedRef.current) return;
+      activeLeaseRef.current = lease;
       setActiveLease(lease);
       setActiveRequestId(requestId);
-      queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] });
+    },
+    onSuccess: (_result, requestId) => {
+      releasingRef.current = false;
+      queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
     },
   });
   const renew = useMutation({
-    mutationFn: ({ requestId, lease }: { requestId: string; lease: HumanLeaseGrant }) =>
-      api.renewHumanAction(requestId, lease),
+    mutationFn: (requestId: string) => {
+      const lease = activeLeaseRef.current;
+      if (!lease) throw new Error("The local browser lease is no longer available.");
+      return api.renewHumanAction(requestId, lease);
+    },
     onSuccess: ({ expires_at }) => {
-      setActiveLease((lease) => lease ? { ...lease, expires_at } : lease);
+      const lease = activeLeaseRef.current;
+      if (lease) {
+        const renewed = { ...lease, expires_at };
+        activeLeaseRef.current = renewed;
+        setActiveLease(renewed);
+      }
     },
     onError: () => {
       if (releasingRef.current) return;
       setActiveLease(null);
       setActiveRequestId(null);
-      queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] });
+      activeLeaseRef.current = null;
+      queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
     },
   });
   const release = useMutation({
     onMutate: () => { releasingRef.current = true; },
-    mutationFn: ({ requestId, lease }: { requestId: string; lease: HumanLeaseGrant }) =>
-      api.releaseHumanAction(requestId, lease),
+    mutationFn: (requestId: string) => {
+      const lease = activeLeaseRef.current;
+      if (!lease) throw new Error("The local browser lease is no longer available.");
+      return api.releaseHumanAction(requestId, lease);
+    },
     onSuccess: () => {
       releasingRef.current = false;
+      activeLeaseRef.current = null;
       setActiveLease(null);
       setActiveRequestId(null);
-      queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] });
+      queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
     },
   });
   const cancel = useMutation({
     mutationFn: (requestId: string) => api.cancelHumanAction(requestId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] }),
   });
   const approvals = useQuery({
-    queryKey: ["action-approvals", run.id],
+    queryKey: ["action-approvals", user.id, workspace.id, run.id],
     queryFn: ({ signal }) => api.listActionApprovals(run.id, signal),
-    refetchInterval: 2500,
+    enabled: canManageHumanActions,
+    refetchInterval: canManageHumanActions ? 2500 : false,
   });
   const decision = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
       api.decideActionApproval(id, approved),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["action-approvals", run.id] }),
+    onSuccess: (_result, variables) => {
+      setDecisionMessage(variables.approved ? "Approval recorded. The worker will validate and consume the one-time receipt." : "Approval rejected. The protected action remains blocked.");
+      return queryClient.invalidateQueries({ queryKey: ["action-approvals", user.id, workspace.id, run.id] });
+    },
   });
-  const pending = actions.data?.filter((item) => item.status === "pending") ?? [];
-  const leased = actions.data?.filter((item) => item.status === "leased") ?? [];
+  const pending = actions.data?.filter((item) => item.status === "pending" && item.id !== activeRequestId) ?? [];
+  const leased = actions.data?.filter((item) => item.status === "leased" && item.id !== activeRequestId) ?? [];
   const finished = actions.data?.filter((item) => ["completed", "cancelled", "expired"].includes(item.status)) ?? [];
+  const pendingApprovals = approvals.data?.filter((item) => item.status === "pending") ?? [];
+  const approvedActions = approvals.data?.filter((item) => item.status === "approved") ?? [];
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      activeLeaseRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeLease || !activeRequestId || release.isPending || release.isError) return;
     const timer = window.setInterval(() => {
-      renew.mutate({ requestId: activeRequestId, lease: activeLease });
+      renew.mutate(activeRequestId);
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [activeLease, activeRequestId, release.isPending, release.isError]);
@@ -80,8 +117,12 @@ export function HumanActionPage() {
   return (
     <section className="results-boundary" aria-labelledby="human-action-heading">
       <p className="section-label">Human assistance</p>
-      <h1 id="human-action-heading">Continue in the test browser</h1>
+      <h2 id="human-action-heading">Continue in the test browser</h2>
       <p>MarketTwin pauses the agent while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>
+      {!canManageHumanActions ? <p className="human-action-denied" role="status">Human browser control and action approvals require an owner or administrator role. {run.status === "awaiting_human" ? "This test is paused until an authorized operator acts." : "Ask an authorized operator to review protected requests."}</p> : null}
+      {canManageHumanActions ? <>
+      <h2>Login and protected interaction</h2>
+      <section className="human-action-group human-auth-group" aria-label="Login and protected interaction requests">
 
       {actions.isPending ? <p role="status">Checking for a human action request…</p> : null}
       {actions.isError ? <p role="alert">Human action status is unavailable. Retry this page in a moment.</p> : null}
@@ -122,14 +163,16 @@ export function HumanActionPage() {
               <HumanBrowserViewer url={activeLease.viewer_url} ticket={activeLease.viewer_ticket}
                 onReconnect={async () => {
                   const grant = await api.reconnectHumanAction(activeRequestId, activeLease);
-                  setActiveLease((lease) => lease ? { ...lease, expires_at: grant.expires_at } : lease);
+                  const renewed = { ...activeLease, expires_at: grant.expires_at, viewer_url: grant.viewer_url, viewer_ticket: grant.viewer_ticket };
+                  activeLeaseRef.current = renewed;
+                  setActiveLease(renewed);
                   return grant;
                 }} />
             ) : (
               <p role="alert">The browser owner did not provide a secure viewer. Control remains unavailable.</p>
             )}
-            <button className="primary-button" type="button" disabled={release.isPending} onClick={() => release.mutate({ requestId: activeRequestId, lease: activeLease })}>
-              Release control for verification
+            <button className="primary-button" type="button" disabled={release.isPending} onClick={() => release.mutate(activeRequestId)}>
+              {release.isError ? "Retry release for verification" : "Release control for verification"}
             </button>
           </div>
         </article>
@@ -157,11 +200,15 @@ export function HumanActionPage() {
         </article>
       ))}
 
+      </section>
+      <section className="human-action-group human-approval-group" aria-labelledby="approval-decisions-heading">
       <div className="section-heading">
-        <div><p className="section-label">Sensitive actions</p><h2>Approval decisions</h2></div>
+        <div><p className="section-label">Sensitive actions</p><h2 id="approval-decisions-heading">Approval decisions</h2></div>
       </div>
+      <p className="muted">Each decision applies to one recorded action. Approval does not authorize similar actions elsewhere.</p>
+      {decisionMessage ? <p role="status" aria-live="polite">{decisionMessage}</p> : null}
       {approvals.isError ? <p role="alert">Approval requests could not be loaded.</p> : null}
-      {approvals.data?.filter((item) => item.status === "pending").map((item) => (
+      {pendingApprovals.map((item) => (
         <article className="study-summary" key={item.id}>
           <ShieldCheck aria-hidden="true" />
           <div>
@@ -175,8 +222,17 @@ export function HumanActionPage() {
           </div>
         </article>
       ))}
+      {approvedActions.map((item) => <article className="study-summary approval-granted" key={item.id}>
+        <ShieldCheck aria-hidden="true" />
+        <div><h3>Approval granted · dispatch status pending</h3><p>{item.action_summary}</p>
+          <p>Environment: {item.environment}. This one-time authorization does not mean the action was dispatched or completed. The worker must revalidate and consume its receipt.</p>
+          {item.journey_id && item.step_id ? <Link to={`/runs/${run.id}/journeys/${item.journey_id}?step=${item.step_id}`}>Review the recorded step</Link> : null}
+        </div>
+      </article>)}
       {approvals.data?.length === 0 ? <p className="muted">No sensitive action is awaiting approval.</p> : null}
       {decision.isError ? <p role="alert">That approval is no longer available; refresh the page.</p> : null}
+      </section>
+      </> : null}
 
       <p className="muted">Passwords, one-time codes, browser frames, and page contents must only be sent through the protected browser viewer. Never paste them into MarketTwin notes or chat.</p>
     </section>

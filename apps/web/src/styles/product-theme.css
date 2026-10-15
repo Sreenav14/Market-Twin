@@ -1,13 +1,13 @@
 /* Carry the public product's visual language through existing workspace controls. */
-.enterprise-shell .page-header h1 { font-weight: 580; font-size: clamp(28px, 3vw, 40px); line-height: 1.12; letter-spacing: -.045em; }
-.enterprise-shell .page-header { padding-bottom: 30px; }
-.enterprise-shell .eyebrow, .enterprise-shell .section-label, .signin-kicker { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
-.enterprise-shell .panel, .enterprise-shell .study-composer, .enterprise-shell .study-summary { border-radius: 10px; box-shadow: var(--shadow); }
+.enterprise-shell .page-header h1 { font-weight: 580; font-size: clamp(26px, 2.5vw, 32px); line-height: 1.25; letter-spacing: -.03em; }
+.enterprise-shell .page-header { padding-bottom: 0; }
+.enterprise-shell .eyebrow, .enterprise-shell .section-label, .signin-kicker { font-family: "Instrument Sans Variable", sans-serif; font-size: 13px; letter-spacing: 0; text-transform: none; }
+.enterprise-shell .panel, .enterprise-shell .study-composer { border-radius: 10px; box-shadow: var(--shadow); }
 .enterprise-shell .topbar { background: var(--page); }
 .enterprise-shell .sidebar { background: var(--page); }
 .enterprise-shell .nav-link.active { background: var(--surface-muted); box-shadow: inset 3px 0 var(--primary); }
 .enterprise-shell .sidebar-brand .brand-mark { color: var(--text); }
-.enterprise-shell .page-container { padding-top: 38px; }
+.enterprise-shell .page-container { padding-top: 32px; }
 .enterprise-shell .primary-button, .signin-form button[type="submit"] { min-height: 46px; border-radius: 7px; }
 .enterprise-shell .header-actions .delete-trigger { min-height: 46px; }
 .enterprise-shell .section-heading h2 { font-weight: 600; letter-spacing: -.03em; }
@@ -20,7 +20,7 @@
 .signin-description { font-size: 17px; }
 .signin-access-footer a { color: var(--primary); text-underline-offset: 4px; }
 .signin-step-icon { background: var(--surface); border-radius: 7px; }
-@media (max-width: 760px) { .enterprise-shell .page-container { padding-top: 26px; }.enterprise-shell .page-header { padding-bottom: 22px; }.signin-story { border-right: 0; border-bottom: 1px solid var(--border); } }
+@media (max-width: 760px) { .enterprise-shell .page-container { padding-top: 26px; }.enterprise-shell .page-header { padding-bottom: 0; }.signin-story { border-right: 0; border-bottom: 1px solid var(--border); } }
 .agent-tree { border-left: 2px solid var(--border); padding-left: 24px; }
 .agent-tree li { padding: 8px 0; overflow-wrap: anywhere; }
 .agent-project-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }

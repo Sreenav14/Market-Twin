@@ -1,3 +1,91 @@
+## End-to-end integration checkpoint (2026-10-15, final)
+
+Requested synthetic local integration is verified; existing UI and user changes
+are preserved and uncommitted. Five surgical fixes: missing-run Kafka delivery
+acknowledgement; successful claim viewer_available contract; active-lease-only
+assistance listing (reclaimed historical leases no longer duplicate rows);
+privacy-safe browser close during cancellation; expired vs cancelled abandonment.
+No authorization, exclusivity, generation or credential protections were relaxed.
+
+Full protected React/API/PG/outbox/Kafka/execution/evaluation/report/React PASS:
+run 98009f92-ee63-4a20-bcc7-b2580c155159,
+report 9f4fcf74-5f4c-4cb3-9b1e-2d2069dd24ac completed and rendered.
+One same-context login/MFA, disconnect/reconnect/Release, seven later fresh-case
+snapshot installations and role reverifications. Eight cases: four completed
+(recorded satisfied), four intentionally policy_blocked (recorded unverified).
+React approved valid only: one completed receipt and exactly one registration;
+four React rejections had no receipts; all five duplicate decisions HTTP409.
+Results HTTP409 explicitly evaluation-pending ->200 after report persisted.
+Report no overflow at1440/768/390, axe0. Safe metadata:
+.local/ui-integration-result-f99b0ece11294e5ea9ba9c1d8657f646.json.
+
+Independent live auth boundary additionally passed pending Cancel, successful
+MFA then disconnected Release without reconnect, natural request expiry, real
+lease expiry/stale input denial/reaper/fresh claim. No credential-phase captures.
+Public complete pipeline passed earlier (see docs/ui/VERIFICATION.md for IDs).
+An earlier evaluator stall reached observability init; explicit-off retry passed;
+no precise evaluator/observability code defect established. Local telemetry-off
+instructions documented; no error-suppression fallback was added.
+
+Final focused backend85passed (4 existing ADK warnings,109.31s); real PostgreSQL
+repository/approval/lease-list regression1passed35.39s; final API contracts11pass;
+focused pending/ready/permission desktop/mobile UI+axe8pass. Frontend typecheck/
+build passed; strict changed-source Pyright0; scoped Ruff passed excluding E501
+and an existing ASYNC110 polling-test finding; diff whitespace check passed.
+Counts overlap. Historical full mocked UI107pass/7skip remains below.
+
+No source migration/new service. Existing application DB unchanged at
+d7f3c2a9b108; manual startup needs upgrade to f82e4160cb9d. Disposable DBs and
+exact UUID-owned local services/MinIO/artifacts cleaned. Shared Kafka offsets,
+topics and unrelated messages unchanged; earliest private groups drained stale
+missing-run deliveries safely. Ordinary worker must share API/outbox canonicalDB.
+A human wait still occupies the single execution consumer; lost browser fails
+closed, no distributed recovery. No push/deploy/spend/real-account use.
+All specialist implementation/review work finished. No new redesign or rewrite.
+
+Remaining: authorized production proxy/SSO/CAPTCHA, live process interruption,
+full integrated canary sweep, manual assistive-tech/cross-browser and H12 release
+certification. Hosted production remains NO-GO. Exact evidence, changed files,
+startup commands and manual flow: docs/ui/VERIFICATION.md, docs/hitl/README.md.
+Historical checkpoints below retain prior outcomes and are superseded where
+explicitly updated by this final checkpoint (including Aiven probe disclosure).
+
+## UI redesign checkpoint (2026-10-15)
+
+Primary specification: root MARKETTWIN_UI_REDESIGN_RESEARCH_CODEX_MASTER_SPEC_2026-10-15.md.
+Baseline: feat/batch-1-aws-observability, HEAD 339a4b3; only the supplied spec was
+initially untracked. Existing HITL implementation and all user work are preserved.
+Four agents implemented/reviewed exclusive shared-shell, page, run/HITL and test
+scopes. Quiet Precision light UI, existing fonts, accessible responsive drawer,
+action-required navigation, three-zone creation, case/finding inspectors, bounded
+evidence, role-safe HITL and local-only lease secrets are implemented. Actual
+rendered desktop/tablet/mobile review found and corrected contrast, focus, viewer
+width, case-list height and content-hierarchy issues. Dark mode is deferred.
+
+Final unified frontend Playwright: 107 passed, 7 intentional skips, 0 failed /114
+(two workers). Unit suite: 42 passed; affected case tests rechecked after final
+visual changes. Typecheck/build passed; JS 584.33 kB, CSS 89.67 kB. Local synthetic
+backend browser/auth/approval suite: 47 passed; disposable PG lifecycle/migrations:
+2 passed. Real UI/API/disposable-PG login/session, app/loopback-target creation,
+authorization, draft and logout smoke passed. Additional shell reflow/axe checks
+at 1280x800 and 1024x768 passed. API-mocked UI tests are not full-stack proof.
+
+The application's DB remains d7f3c2a9b108, not upgraded; source head is f82e4160cb9d.
+A cached local Kafka was started. Final isolated synthetic run
+fcf0f1b1-6fdd-4124-8122-1ca628ea50aa consumed/committed its request and
+reached completed. Its immediate results request returned non-2xx without a
+retained status; evaluator/report readiness remains unverified. An earlier
+nonisolated attempt timed out queued, with later ValueError in request
+acceptance; old commands for deleted disposable DBs are plausible, not proven.
+Default Kafka state was not reset; retained test commands can interfere with
+ordinary manual startup. UUID test-group offsets were isolated. Temporary DBs,
+owned workers and browser artifacts were removed. Full protected browser
+login/MFA and release/reconnect end-to-end, manual assistive-tech review, field
+performance and H12 release certification remain unverified. See docs/ui/VERIFICATION.md
+for scope, exact changed files, safe screenshots, commands and the disclosed Aiven
+health-probe incident. Subsequent test runners pin loopback Kafka and clear SASL.
+No external application test, provider/model call, deployment, purchase or push.
+
 # Current MarketTwin checkpoint
 
 ## Latest HITL integration correction (2026-10-14)

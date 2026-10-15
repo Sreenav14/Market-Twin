@@ -412,3 +412,26 @@ async def test_sensitive_sinks_and_cleanup_paths(
             if path.suffix == ".zip":
                 with zipfile.ZipFile(path) as trace:
                     assert all(canary.encode() not in trace.read(n) for n in trace.namelist())
+
+
+async def test_close_after_pending_handoff_revoke_skips_browser_logs(
+    scoped_fixture: tuple[str, int], tmp_path: Path,
+) -> None:
+    url, port = scoped_fixture
+    async with BrowserController(artifact_root=tmp_path / "pending-revoke") as controller:
+        handle = await controller.create_session(
+            execution_id=uuid4(), journey_id=uuid4(), network_policy="local_development",
+            allowed_origins=(AllowedOrigin("http", "127.0.0.1", port),),
+            authenticated_session=True,
+        )
+        await controller.navigate(session_id=handle.session_id, url=url)
+        session = cast(Any, controller)._get_session(session_id=handle.session_id)
+        # A cancellation/revoke before viewer attach fences agent writes while
+        # the context remains capture-enabled; shutdown must still be safe.
+        session.control_mode = "verifying"
+
+        artifacts = await controller.close_session(session_id=handle.session_id)
+
+        assert artifacts.console_log_path is None
+        assert artifacts.page_log_path is None
+        assert artifacts.network_log_path is None

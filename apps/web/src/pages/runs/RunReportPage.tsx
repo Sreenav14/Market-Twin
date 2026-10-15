@@ -19,6 +19,7 @@ export function RunReportPage() {
   const { run, results, user } = useOutletContext<RunContext>();
   const data = results.status === "ready" ? results.data : null;
   const metrics = data ? reportMetrics(data) : null;
+  const featureRun = data?.report.payload.mode === "deep_feature_v1" || run.configuration_snapshot.execution_mode === "deep_feature_v1";
   return (
     <ResultsBoundary>
       {data && metrics ? (
@@ -26,7 +27,7 @@ export function RunReportPage() {
           <nav className="report-toc" aria-label="Report contents">
             <span className="section-label">In this report</span>
             <a href="#report-summary">Executive summary</a>
-            <a href="#report-outcomes">Journey outcomes</a>
+            {featureRun ? <a href="#report-feature-cases">Feature cases</a> : <a href="#report-outcomes">Journey outcomes</a>}
             <a href="#report-assessment">Overall assessment</a>
             <a href="#report-findings">Findings</a>
             <a href="#report-scope">Scope & provenance</a>
@@ -56,16 +57,18 @@ export function RunReportPage() {
               </p>
             </section>
             <RunAssessmentView assessment={data.report.payload.assessment} runId={run.id} />
-            {data.report.payload.mode === "deep_feature_v1" ? <FeatureCases runId={run.id} userId={user.id} /> : null}
+            {featureRun ? <FeatureCases id="report-feature-cases" runId={run.id} userId={user.id} /> : null}
             <section id="report-outcomes">
-              <h3>Journey outcomes</h3>
+              <h3>{featureRun ? "Recorded feature outcomes" : "Journey outcomes"}</h3>
               <p>
-                {metrics.journeyTotal === null
+                {featureRun
+                  ? "Feature case records and their evaluation status are shown above. Execution completion and evaluated outcomes are separate."
+                  : metrics.journeyTotal === null
                   ? "The total number of evaluated journeys was not included."
                   : `${metrics.journeyTotal} journeys were included in this evaluation.`}{" "}
-                Execution completion and product outcomes are separate measures.
+                {!featureRun ? "Execution completion and product outcomes are separate measures." : null}
               </p>
-              {metrics.outcomes.length > 0 ? (
+              {!featureRun && metrics.outcomes.length > 0 ? (
                 <dl className="outcome-list">
                   {metrics.outcomes.map(([outcome, count]) => (
                     <div key={outcome}>
@@ -78,9 +81,9 @@ export function RunReportPage() {
                     </div>
                   ))}
                 </dl>
-              ) : (
+              ) : !featureRun ? (
                 <p className="muted">Outcome counts are not available.</p>
-              )}
+              ) : null}
             </section>
             <section id="report-findings">
               <h3>Findings</h3>

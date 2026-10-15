@@ -47,6 +47,7 @@ h4 {
   color: var(--text);
   font-weight: 650;
   text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 h2 {
   font-size: 21px;
@@ -75,7 +76,7 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 3px solid var(--primary);
+  outline: 3px solid var(--mt-focus);
   outline-offset: 3px;
 }
 main:focus {
@@ -441,4 +442,12 @@ h3[id] {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Reflow applies to content, never by clipping the document. */
+.page-action, .header-actions, .content-shell { min-width: 0; }
+.page-action, .header-actions { flex-wrap: wrap; }
+pre { max-width: 100%; overflow: auto; }
+@media (pointer: coarse) {
+  .icon-button, .compact, .tab-link { min-height: 44px; min-width: 44px; }
 }

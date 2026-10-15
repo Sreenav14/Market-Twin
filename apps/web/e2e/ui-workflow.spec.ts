@@ -225,13 +225,14 @@ test("repeated persona claims stay under Needs Verification and out of confirmed
   await page.goto(`/runs/${runId}/findings`);
   await expect(page.getByText("1 confirmed · 3 total records")).toBeVisible();
   const unverified = page.getByRole("region", { name: "Needs Verification" });
-  await expect(unverified.getByRole("heading", { name: observations[0].title })).toBeVisible();
-  await expect(unverified.getByRole("heading", { name: observations[1].title })).toBeVisible();
-  await expect(unverified.getByRole("heading", { name: observations[2].title })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Confirmed issues" }).getByRole("heading", { name: observations[2].title })).toBeVisible();
+  await expect(unverified.getByRole("button", { name: new RegExp(observations[0].title) })).toBeVisible();
+  await expect(unverified.getByRole("button", { name: new RegExp(observations[1].title) })).toBeVisible();
+  await expect(unverified.getByRole("button", { name: new RegExp(observations[2].title) })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Confirmed issues" }).getByRole("button", { name: new RegExp(observations[2].title) })).toBeVisible();
   await checkLayoutAndAccessibility(page);
   await page.screenshot({ path: `../../artifacts/v1/needs-verification-${testInfo.project.name}.png`, fullPage: true });
-  await unverified.getByRole("heading", { name: observations[1].title }).click();
+  await unverified.getByRole("button", { name: new RegExp(observations[1].title) }).click();
+  await page.getByRole("link", { name: "Open finding details" }).click();
   await expect(page.getByText(/No evidence references were attached/)).toBeVisible();
   await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report" }).click();
   await expect(page.getByText("1 confirmed issues. Severity totals below include confirmed issues only.")).toBeVisible();
@@ -258,18 +259,18 @@ test("completed test: triage, detail and report", async ({
     .click();
   await page.getByLabel("Severity", { exact: true }).selectOption("high");
   await expect(page).toHaveURL(/severity=high/);
+  const selectedFinding = page.getByRole("button", { name: new RegExp(finding.title) });
+  await expect(selectedFinding).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: finding.title }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "A console error was recorded" }),
+    page.getByRole("button", { name: /A console error was recorded/ }),
   ).toHaveCount(0);
   await checkLayoutAndAccessibility(page);
   await page.screenshot({
     path: testInfo.outputPath("findings.png"),
     fullPage: true,
   });
-  await page.getByRole("heading", { name: finding.title }).click();
+  await selectedFinding.click();
+  await page.getByRole("link", { name: "Open finding details" }).click();
   await expect(
     page.getByRole("heading", { name: "Recommendation", exact: true }),
   ).toBeVisible();
@@ -299,6 +300,30 @@ test("409 is an evaluation waiting state", async ({ page }) => {
     page.getByRole("heading", { name: "Preparing evaluation" }),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("pending evaluation automatically displays the persisted report when ready", async ({ page }) => {
+  test.setTimeout(60_000);
+  await mockApi(page);
+  let ready = false;
+  let requests = 0;
+  await page.route(`**/api/v1/test-runs/${runId}/results`, (route) => {
+    requests += 1;
+    return route.fulfill({
+      status: ready ? 200 : 409,
+      json: ready ? results : {
+        detail: "Test run execution completed, but evaluation results are not available yet.",
+      },
+    });
+  });
+  await page.goto(`/runs/${runId}/report`);
+  await expect(page.getByRole("heading", { name: "Preparing evaluation" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  ready = true;
+  await expect(page.getByRole("heading", { name: "What this test found" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(results.report.executive_summary, { exact: true })).toBeVisible();
+  expect(requests).toBeGreaterThan(1);
+  await checkLayoutAndAccessibility(page);
 });
 
 test("forbidden results show a recoverable error", async ({ page }) => {

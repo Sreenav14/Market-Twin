@@ -1,12 +1,12 @@
 # MarketTwin HITL: implementation, operations and testing guide
 
-Updated: 2026-10-14. This is the single current HITL documentation entry point.
+Updated: 2026-10-15. This is the single current HITL documentation entry point.
 It consolidates the implementation handoff, phase evidence, transport review,
 baseline reconciliation, finish checklist and original master implementation plan.
 
 **Release status: local pilot code implemented; hosted production NO-GO.**
-Focused checks passed. Comprehensive end-to-end and release verification remain
-unexecuted. Implementation status must not be read as acceptance certification.
+Focused checks and the complete synthetic local HITL-to-report pipeline passed.
+Comprehensive adversarial, external-identity and release verification remain open. Implementation status must not be read as acceptance certification.
 
 ## Contents
 
@@ -62,6 +62,26 @@ H00-H12 acceptance/release verification is a separate, incomplete status.
 
 ## Essential checks
 
+### Current complete local integration (2026-10-15)
+
+The real protected React/API/PostgreSQL/outbox/Kafka/execution/evaluation/report
+pipeline passed, including login/MFA, fresh-ticket reconnect/Release, scoped
+cross-case auth reuse, React approval/rejection, single actual target effect and
+persisted report rendering. Results returned expected evaluation-pending409 then
+200. Separate live boundary checks passed disconnected Release without reconnect,
+cancellation, request expiry and lease expiry/reclaim with stale-input rejection.
+Final focused backend85passed; real PG lifecycle/approval/reclaimed-lease test1
+passed; final API contract11passed; pending/ready desktop/mobile UI8passed;
+typecheck/build and scoped checks passed. Counts overlap.
+
+Integration fixes cover stale deleted-run Kafka deliveries, successful claim
+viewer availability, one current lease per listed request, privacy-safe close
+and truthful expiry. No migration or new infrastructure was added. Exact run and
+report IDs, test scope, files, limitations and startup instructions are in
+[UI integration verification](../ui/VERIFICATION.md#end-to-end-integration-correction-2026-10-15).
+The earlier correction and historical appendices below are retained as evidence.
+
+
 ### Integration correction against 0682c375
 
 The focused correction fixes the disconnect/Release generation race. Closing a
@@ -101,8 +121,9 @@ Checks executed for this correction (overlapping suites; do not sum totals):
 - Strict Pyright: **0 errors** in affected backend production paths. Scoped Ruff
   passed with the existing E501 baseline excluded. `git diff --check` passed.
 
-No migration or infrastructure service was added. Full UI/Kafka/evaluation/report
-E2E and H12 release verification remain unexecuted.
+No migration or infrastructure service was added by that earlier correction.
+Full synthetic UI/Kafka/evaluation/report integration subsequently passed above;
+H12 release verification remains unexecuted.
 
 ### Exact files changed in this correction
 
@@ -230,6 +251,15 @@ Lease operations bind lease ID, secret lease token and generation to the current
 authorized user/request. A release or Done interaction is never authentication
 proof by itself. Worker verification must still pass the frozen policy.
 
+The redesigned run navigation exposes Human Assistance and Evidence directly.
+Owner/admin operators can claim and decide; other workspace roles see an explicit
+operator-required message. In the live viewer, Tab/Shift+Tab navigate the tested
+page; **Shift+Escape** returns focus to MarketTwin's keyboard-exit control, then
+Tab can reach Release. Leaving keyboard control or closing the viewer does not
+Release the lease. Lease grants remain local to the owning page and are excluded
+from React Query mutation data/variables. UI redesign evidence and remaining
+integrated checks are recorded in [UI verification](../ui/VERIFICATION.md).
+
 ## Database and migrations
 
 | Durable record | Contents and purpose |
@@ -271,9 +301,16 @@ still needed for generated planning and evaluation.
 2. For the default frontend use MARKETTWIN_HITL_VIEWER_ORIGINS=http://localhost:5173,
    MARKETTWIN_HITL_VIEWER_URL=ws://localhost:5173/api/v1/hitl-viewer and
    VITE_HITL_VIEWER_PROXY_TARGET=http://127.0.0.1:8020. Origins and ports must match.
-3. Set OUTBOX_RELAY_ENABLED=true for queued local execution. Keep observability
-   content capture disabled. Hosted use needs a reviewed HTTPS/WSS reverse proxy.
-4. From the repository root, after local services are available:
+3. Use local-only Kafka settings for fixture/manual tests: KAFKA_BOOTSTRAP_SERVERS=localhost:9092,
+   KAFKA_SECURITY_PROTOCOL=PLAINTEXT, and no cloud SASL credentials. Verify the
+   effective broker host/protocol before starting API or workers; do not inherit
+   a cloud broker from an existing .env. Keep that file private and merge settings
+   deliberately rather than replacing it.
+4. Set OUTBOX_RELAY_ENABLED=true for queued local execution. For isolated local
+   verification set MARKETTWIN_OBSERVABILITY_ENABLED=false and
+   MARKETTWIN_OBSERVABILITY_CAPTURE_CONTENT=false; configure telemetry separately
+   before enabling it. Hosted use needs a reviewed HTTPS/WSS reverse proxy.
+5. From the repository root, after local services are available:
 
 ```powershell
 # Start existing local infrastructure only when needed.
@@ -301,6 +338,12 @@ cancellation or failure; later runs can remain queued. The API and viewer listen
 can still respond. An event-driven worker regression confirms this behavior.
 Extra execution consumers are not a supported workaround: multi-worker live
 browser ownership/recovery is not implemented.
+
+Retained commands referencing a genuinely missing run are now acknowledged
+individually without browser execution; database lookup failures still retry.
+No offset reset or topic deletion is needed for these stale disposable commands.
+The normal execution group must use the same canonical database as the API and
+outbox. Never start that group against a disposable or unrelated empty database.
 
 ## Declared effect example
 
@@ -357,8 +400,10 @@ safe. Review the target and use dedicated test data with a reset contract.
 
 ## Known limits and verification still required
 
-- Comprehensive UI -> API -> Kafka -> worker -> viewer -> resume -> evaluator/report E2E and H12
-  hostile-path/release verification remain for the user. HOSTED PRODUCTION NO-GO.
+- Complete synthetic local UI -> API -> Kafka -> worker -> viewer -> resume ->
+  evaluator/report passed. H12 hostile-path/release certification, production
+  proxy/identity testing and the remaining live trials in UI verification are
+  still required. HOSTED PRODUCTION NO-GO.
 - Single execution worker; pending human assistance occupies its execution consumer
   and queues later runs. Human waits are bounded. A lost live browser fails
   closed rather than restoring passkeys or replaying actions. No horizontal-worker

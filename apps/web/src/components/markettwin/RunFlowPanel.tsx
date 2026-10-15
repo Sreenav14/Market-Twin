@@ -22,7 +22,7 @@ function FlowStep({ node, connected }: { node: RunFlow["nodes"][number]; connect
 export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
   runId: string; userId: string; runStatus: TestRunStatus; reportReady: boolean;
 }) {
-  const [expanded, setExpanded] = useState(() => window.matchMedia("(min-width: 1100px)").matches);
+  const [expanded, setExpanded] = useState(false);
   const [journeysExpanded, setJourneysExpanded] = useState(false);
   const flow = useQuery({
     queryKey: ["run-flow", userId, runId, runStatus, reportReady],
@@ -34,9 +34,9 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
   const isFeaturePlan = flow.data?.nodes.some((node) => node.kind === "meta" && node.label === "Feature plan") ?? false;
 
   return (
-    <aside className="run-flow" aria-label="Agent flow">
+    <aside className="run-flow" aria-label={isFeaturePlan ? "Feature execution" : "Agent flow"}>
       <details open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-        <summary><span>Agent flow</span>{flow.data ? <span className="run-flow-count">{journeyCount} {journeyCount === 1 ? "journey" : "journeys"}</span> : null}</summary>
+        <summary><span>{isFeaturePlan ? "Feature execution" : "Agent flow"}</span>{flow.data ? <span className="run-flow-count">{journeyCount} {isFeaturePlan ? "cases" : journeyCount === 1 ? "journey" : "journeys"}</span> : null}</summary>
         <div className="run-flow-body">
           {flow.isPending ? <p className="muted" role="status">Loading agent flow…</p> : flow.isError ? (
             <div><p className="error-text" role="alert">Could not load agent flow: {flow.error.message}</p><button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button></div>

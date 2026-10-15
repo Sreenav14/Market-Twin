@@ -31,6 +31,7 @@ export function OverviewPage() {
     );
   const { applications, runs } = state.data;
   const completed = runs.filter((run) => run.status === "completed");
+  const awaitingHuman = runs.filter((run) => run.status === "awaiting_human");
   const active = runs.filter((run) =>
     ["planning", "queued", "running"].includes(run.status),
   );
@@ -38,9 +39,9 @@ export function OverviewPage() {
     <>
       <PageHeader
         title="Workspace overview"
-        description="Recent tests and applications in your workspace."
+        description="Test activity and applications in your workspace."
         action={
-          canWrite ? (
+          canWrite && applications.length > 0 ? (
             <Link
               className="primary-button"
               to={
@@ -57,16 +58,6 @@ export function OverviewPage() {
           ) : undefined
         }
       />
-      <section className="workspace-process" aria-labelledby="test-process-heading">
-        <div className="section-heading"><h2 id="test-process-heading">How a test runs</h2><Link className="text-link" to="/runs">View tests</Link></div>
-        <ol className="workspace-process-list">
-          <li><span aria-hidden="true">1</span><div><h3>Plan</h3><p>Create personas and missions for your testing goal.</p></div></li>
-          <li><span aria-hidden="true">2</span><div><h3>Execute</h3><p>Agents carry out the planned journeys in your application.</p></div></li>
-          <li><span aria-hidden="true">3</span><div><h3>Supervisor collection</h3><p>Collect agent outputs, journey records, and evidence.</p></div></li>
-          <li><span aria-hidden="true">4</span><div><h3>Evaluate</h3><p>Review findings and the report after execution finishes.</p></div></li>
-        </ol>
-        <p className="workspace-process-note">Creating a test saves a draft. Start it to run the agents. Journey results and evaluation are separate views inside each test.</p>
-      </section>
       {state.isError ? (
         <p className="inline-note" role="alert">
           Could not refresh tests. Showing the last loaded data.{" "}
@@ -89,6 +80,23 @@ export function OverviewPage() {
         />
       ) : (
         <>
+          {awaitingHuman.length > 0 ? (
+            <section className="mt-overview-attention" aria-labelledby="awaiting-human-heading">
+              <div className="section-heading">
+                <h2 id="awaiting-human-heading">Awaiting your attention</h2>
+                <span>{awaitingHuman.length} {awaitingHuman.length === 1 ? "test" : "tests"}</span>
+              </div>
+              <div className="mt-attention-row-list">
+                {awaitingHuman.map((run) => (
+                  <Link className="mt-attention-row" to={`/runs/${run.id}/human-action`} key={run.id}>
+                    <span><strong>{testTitle(run)}</strong><small>{textValue(run.target_snapshot.name, "Target")}</small></span>
+                    <span>Continue test</span>
+                    <ArrowUpRight size={18} aria-hidden="true" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <dl className="workspace-metrics">
             <div>
               <dt>Applications</dt>
@@ -188,6 +196,11 @@ export function OverviewPage() {
         <div><h2>Knowledge for tests <span className="muted">Optional</span></h2><p className="muted">Ingest a source, review and approve its knowledge, then attach it to an application before selecting it for a test.</p></div>
         <div className="inline-actions"><Link className="text-link" to="/ingestion">Ingest knowledge</Link><Link className="text-link" to="/knowledge/review">Review knowledge</Link></div>
       </section>
+      <details className="mt-progressive-help">
+        <summary>How tests work</summary>
+        <p>Planning creates simulated perspectives and missions. Execution records browser journeys; deterministic feature cases may also run alongside persona journeys. Evaluation follows execution and reviews saved reports and evidence.</p>
+        <p>Creating a test saves a draft. Select Start when you are ready. Journey results, feature cases, and evaluation are separate views.</p>
+      </details>
     </>
   );
 }

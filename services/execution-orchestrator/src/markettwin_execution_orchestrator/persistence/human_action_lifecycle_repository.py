@@ -185,7 +185,11 @@ class HumanActionLifecycleRepository:
             return
         request, browser = row
         if request.status in {"pending", "leased"}:
-            request.status = "cancelled"
+            request.status = (
+                "expired"
+                if request.expires_at is not None and request.expires_at <= datetime.now(UTC)
+                else "cancelled"
+            )
             browser.control_generation += 1
             browser.control_mode = "none"
             leases = await self._session.scalars(

@@ -10,6 +10,7 @@ import {
 } from "../../components/ui/StateViews";
 import { ApiError, TargetAuthorization, api } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
+import { isAuthorizationActive } from "../../lib/targetAuthorization";
 import { useAsync } from "../../lib/useAsync";
 import { AppShellContext } from "../../layouts/AppShell";
 
@@ -43,7 +44,8 @@ export function TargetAuthorizationPage() {
 
   const target = targetState.data;
   const authorization = authorizationState.data;
-  const active = authorization?.status === "authorized";
+  const active = isAuthorizationActive(authorization);
+  const expired = authorization?.status === "authorized" && !active;
   const mayAuthorize =
     canAuthorizeTarget(workspace.role) && target.status === "active";
 
@@ -104,12 +106,14 @@ export function TargetAuthorizationPage() {
             <div>
               <p className="eyebrow">Current state</p>
               <h2>
-                {active ? "Authorized for testing" : "Authorization required"}
+                {active ? "Authorized for testing" : expired ? "Authorization expired" : "Authorization required"}
               </h2>
               <p>
                 {active
                   ? "MarketTwin may create tests against this target while authorization remains active."
-                  : "An owner or admin must explicitly confirm permission before MarketTwin can create a Test Run."}
+                  : expired
+                    ? "This authorization has expired. An owner or admin must confirm permission again before MarketTwin can create a test."
+                    : "An owner or admin must explicitly confirm permission before MarketTwin can create a test."}
               </p>
             </div>
           </div>

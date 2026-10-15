@@ -1319,7 +1319,7 @@ class BrowserController:
                         network_log_path,
                     ) = (
                         await write_event_logs(session)
-                        if session.capture_enabled
+                        if session.capture_enabled and session.control_mode == "agent"
                         else (None, None, None)
                     )
 

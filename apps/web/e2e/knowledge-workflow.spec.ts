@@ -67,7 +67,15 @@ test("ingest, review, and select approved knowledge before test creation", async
   }
   await page.goto("/ingestion");
   await expect(page.getByRole("heading", { name: "Ingestion", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Knowledge", exact: true })).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    const drawer = page.getByRole("dialog", { name: "Workspace navigation" });
+    await expect(drawer.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Knowledge", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+  } else {
+    await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Knowledge", exact: true })).toBeVisible();
+  }
   await expect(page.getByRole("navigation", { name: "Workspace navigation", includeHidden: true }).getByRole("link", { name: "Ingestion", exact: true, includeHidden: true })).toHaveCount(1);
   await inspect("ingestion");
   await page.getByLabel("Source file", { exact: true }).setInputFiles({ name: "requirements.txt", mimeType: "text/plain", buffer: Buffer.from("Account creation requires an email address.") });
