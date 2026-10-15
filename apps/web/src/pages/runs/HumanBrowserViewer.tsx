@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 interface HumanBrowserViewerProps {
   url: string;
   ticket: string;
+  onReconnect?: () => Promise<{ viewer_url: string; viewer_ticket: string }>;
 }
 
 const permittedKeys = new Set([
@@ -11,34 +12,55 @@ const permittedKeys = new Set([
 ]);
 
 /** Volatile, ticket-authenticated view of the worker-owned browser. */
-export function HumanBrowserViewer({ url, ticket }: HumanBrowserViewerProps) {
+export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const sequenceRef = useRef(0);
+  const attemptedRef = useRef(false);
+  const connectingRef = useRef(false);
+  const mountedRef = useRef(true);
   const [status, setStatus] = useState("Connecting to the protected browser…");
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       const socket = socketRef.current;
       socketRef.current = null;
       socket?.close(1000, "operator left viewer");
     };
   }, []);
 
-  const connect = () => {
-    if (socketRef.current) return;
-    const socket = new WebSocket(url);
+  const connect = async () => {
+    if (socketRef.current || connectingRef.current) return;
+    connectingRef.current = true;
+    let grant = { viewer_url: url, viewer_ticket: ticket };
+    try {
+      if (attemptedRef.current) {
+        if (!onReconnect) throw new Error("A fresh viewer ticket is required.");
+        grant = await onReconnect();
+      }
+    } catch {
+      connectingRef.current = false;
+      setStatus("Reconnect unavailable. The lease may have expired; check the request status.");
+      return;
+    }
+    if (!mountedRef.current) return;
+    attemptedRef.current = true;
+    sequenceRef.current = 0;
+    const socket = new WebSocket(grant.viewer_url);
     socket.binaryType = "blob";
     socketRef.current = socket;
     socket.onopen = () => {
-      socket.send(JSON.stringify({ ticket }));
+      connectingRef.current = false;
+      socket.send(JSON.stringify({ ticket: grant.viewer_ticket }));
       setStatus("Connected. Browser frames and input are not saved.");
     };
     socket.onmessage = (event: MessageEvent<Blob | string>) => {
       if (typeof event.data === "string") return;
       void createImageBitmap(event.data).then((image) => {
         const canvas = canvasRef.current;
-        if (canvas) {
+        if (canvas && socketRef.current === socket) {
           canvas.width = image.width;
           canvas.height = image.height;
           canvas.getContext("2d")?.drawImage(image, 0, 0);
@@ -47,7 +69,14 @@ export function HumanBrowserViewer({ url, ticket }: HumanBrowserViewerProps) {
       });
     };
     socket.onerror = () => setStatus("The protected browser connection failed.");
-    socket.onclose = () => setStatus("Browser control ended.");
+    socket.onclose = () => {
+      if (socketRef.current !== socket) return;
+      socketRef.current = null;
+      connectingRef.current = false;
+      const canvas = canvasRef.current;
+      canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      setStatus("Viewer disconnected. Reconnect while the lease is active, or release control.");
+    };
     setStatus("Connecting to the protected browser…");
   };
 
@@ -66,7 +95,7 @@ export function HumanBrowserViewer({ url, ticket }: HumanBrowserViewerProps) {
   return (
     <div className="human-browser-viewer">
       <p role="status">{status}</p>
-      {!socketRef.current ? <button type="button" className="secondary-button" onClick={connect}>Connect to protected browser</button> : null}
+      {!socketRef.current ? <button type="button" className="secondary-button" onClick={() => void connect()}>{attemptedRef.current ? "Reconnect to protected browser" : "Connect to protected browser"}</button> : null}
       <canvas
         ref={canvasRef}
         aria-label="Live protected browser"

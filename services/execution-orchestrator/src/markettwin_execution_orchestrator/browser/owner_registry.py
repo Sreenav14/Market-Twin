@@ -53,13 +53,18 @@ class BrowserOwnerRegistry:
             raise ViewerRejectedError("Browser authority is unavailable.")
         return entry[2]
 
-    async def begin_human_control(self, handle: BrowserSessionHandle) -> None:
+    async def begin_human_control(
+        self, handle: BrowserSessionHandle, *, generation: int,
+    ) -> None:
         entry = self._sessions[handle.session_id]
         self._owner(handle)
-        await entry[1].ensure_human_control(handle=handle)
+        await entry[1].ensure_human_control(handle=handle, generation=generation)
 
     async def attach(self, lease: OwnerLease) -> None:
         await self._owner(lease.handle).attach(lease)
+
+    async def detach(self, lease: OwnerLease) -> None:
+        await self._owner(lease.handle).detach(lease)
 
     async def renew(self, lease: OwnerLease) -> None:
         await self._owner(lease.handle).renew(lease)

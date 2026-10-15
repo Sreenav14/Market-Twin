@@ -1,10 +1,15 @@
 """Authenticated human-control request and lease endpoints."""
 
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from markettwin_database.models.execution import (
     ActionApprovalRequest,
     AgentExecution,
@@ -40,7 +45,25 @@ from markettwin_control_api.persistence.repositories.action_approval_repository 
 )
 from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient, ViewerGrant
 
-router = APIRouter(tags=["Human Control"])
+
+class HumanActionRoute(APIRoute):
+    """Validation must not reflect lease tokens or malformed secret input."""
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+
+        async def safe_handler(request: Request) -> Response:
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                return JSONResponse(
+                    status_code=422, content={"detail": "Invalid human action request."},
+                )
+
+        return safe_handler
+
+
+router = APIRouter(tags=["Human Control"], route_class=HumanActionRoute)
 
 
 class ClaimRequest(BaseModel):
@@ -77,6 +100,12 @@ class ClaimResponse(BaseModel):
     lease_id: UUID
     lease_token: str = Field(repr=False)
     generation: int
+    expires_at: datetime
+    viewer_url: str
+    viewer_ticket: str = Field(repr=False)
+
+
+class ReconnectResponse(BaseModel):
     expires_at: datetime
     viewer_url: str
     viewer_ticket: str = Field(repr=False)
@@ -366,6 +395,42 @@ async def renew_human_action(
         raise _error(exc) from exc
 
 
+@router.post("/api/v1/human-actions/{request_id}/viewer")
+async def reconnect_human_action(
+    request_id: UUID, payload: LeaseRequest, request: Request,
+) -> ReconnectResponse:
+    """Issue a fresh one-use ticket for the same still-authorized control lease."""
+    _csrf(request)
+    actor_id = await get_authenticated_user_id(request=request)
+    database = get_database_runtime(request)
+    try:
+        async with database.session_factory() as session:
+            async with session.begin():
+                expires_at = await HumanActionRepository(session).renew(
+                    lease_id=payload.lease_id, actor_id=actor_id,
+                    lease_token=payload.lease_token, generation=payload.generation,
+                    expected_request_id=request_id,
+                )
+        row = await _get_lease_envelope(
+            request=request, request_id=request_id, lease_id=payload.lease_id, actor_id=actor_id,
+        )
+        viewer = await _worker_client().issue_viewer_grant(
+            actor_id=actor_id, request_id=request_id,
+            browser_session_id=UUID(str(row["browser_session_id"])),
+            execution_id=UUID(str(row["execution_id"])), journey_id=UUID(str(row["journey_id"])),
+            lease_id=payload.lease_id, lease_token=payload.lease_token,
+            generation=payload.generation, expires_at=expires_at.isoformat(),
+        )
+        return ReconnectResponse(
+            expires_at=expires_at, viewer_ticket=viewer.ticket,
+            viewer_url=_validate_viewer_url(viewer),
+        )
+    except (HumanActionNotAuthorizedError, HumanActionConflictError, HumanActionExpiredError) as exc:
+        raise _error(exc) from exc
+    except RuntimeError as exc:
+        raise HTTPException(503, "The supervised browser owner is unavailable.") from exc
+
+
 @router.post("/api/v1/human-actions/{request_id}/cancel")
 async def cancel_human_action(request_id: UUID, request: Request) -> dict[str, str]:
     _csrf(request)
@@ -424,14 +489,13 @@ async def release_human_action(
                 path="/internal/hitl/leases/revoke",
                 payload={
                     "lease_id": str(payload.lease_id),
+                    "request_id": str(request_id),
                     "browser_session_id": lease_row["browser_session_id"],
                     "generation": generation,
                 },
             )
-        except HTTPException:
-            pass
-        except RuntimeError:
-            pass
+        except (HTTPException, RuntimeError) as exc:
+            raise HTTPException(503, "Release delivery failed; retry release.") from exc
         return {"generation": generation}
     except (
         HumanActionNotAuthorizedError,

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from markettwin_control_api.api import human_actions
 from markettwin_control_api.config import Settings
 from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient
@@ -99,3 +99,15 @@ def test_viewer_url_must_be_same_origin_and_query_free(monkeypatch: pytest.Monke
             human_actions._validate_viewer_url(  # pyright: ignore[reportPrivateUsage]
                 grant(invalid)
             )
+
+
+async def test_invalid_lease_request_never_reflects_secret_input() -> None:
+    app = FastAPI()
+    app.include_router(human_actions.router)
+    canary = "CANARY_TOKEN"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api") as client:
+        response = await client.post(f"/api/v1/human-actions/{uuid4()}/viewer", json={
+            "lease_id": str(uuid4()), "lease_token": canary, "generation": 1,
+        })
+    assert response.status_code == 422
+    assert canary not in response.text

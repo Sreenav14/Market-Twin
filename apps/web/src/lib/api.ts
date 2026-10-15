@@ -457,6 +457,11 @@ export const api = {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
       body: JSON.stringify({ lease_id: lease.lease_id, lease_token: lease.lease_token, generation: lease.generation }),
     }),
+  reconnectHumanAction: (requestId: string, lease: HumanLeaseGrant) =>
+    request<{ expires_at: string; viewer_url: string; viewer_ticket: string }>(`/api/v1/human-actions/${requestId}/viewer`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ lease_id: lease.lease_id, lease_token: lease.lease_token, generation: lease.generation }),
+    }),
   cancelHumanAction: (requestId: string) =>
     request<{ id: string; status: string }>(`/api/v1/human-actions/${requestId}/cancel`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },

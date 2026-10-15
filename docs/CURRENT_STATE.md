@@ -1,5 +1,19 @@
 # Current MarketTwin checkpoint
 
+## Latest HITL integration correction (2026-10-14)
+
+Review of commit 0682c375 fixed viewer disconnect/Release generation ordering,
+durable revoke redelivery, fresh-ticket reconnect and invalid lease-token
+reflection. Database authority and strict generation fencing remain intact.
+Focused regressions passed, including real local PostgreSQL, signed API/worker
+traffic, Playwright authentication/resume and a disposable full migration
+roundtrip. Frontend typecheck/build, strict backend typing and scoped lint passed.
+Application DB untouched. Pending human assistance occupies the single execution
+consumer and queues later runs; no infrastructure redesign was introduced.
+See [the HITL guide](hitl/README.md#essential-checks) for exact check results,
+startup/manual-test instructions and remaining comprehensive E2E/H12 verification.
+No external applications, real credentials, paid calls, push or deployment.
+
 ## Current HITL documentation
 
 All current HITL details and preserved original requirements are consolidated in

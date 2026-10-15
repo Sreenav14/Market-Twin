@@ -100,7 +100,6 @@ class HITLWorkerService:
         self._viewer_url = viewer_url
         self._registry = registry
         self._used_nonces: dict[str, float] = {}
-        self._requests_by_lease: dict[UUID, UUID] = {}
         self._resume_events: dict[UUID, asyncio.Event] = {}
         self._server: Any = None
         self._server_task: asyncio.Task[None] | None = None
@@ -185,13 +184,12 @@ class HITLWorkerService:
                     envelope.lease_token.get_secret_value(),
                 ):
                     raise ViewerRejectedError("Lease is unavailable.")
-                await self._registry.begin_human_control(lease.handle)
+                await self._registry.begin_human_control(lease.handle, generation=lease.generation)
                 if not await self._authority.activate_human(lease):
                     raise ViewerRejectedError("Lease is unavailable.")
                 ticket = await self._gateway.issue_ticket(lease.actor_id, lease)
                 if lease.request_id is None:
                     raise ViewerRejectedError("Lease is unavailable.")
-                self._requests_by_lease[lease.lease_id] = lease.request_id
             except Exception:
                 raise HTTPException(status_code=409, detail="Browser handoff unavailable") from None
             return {"ticket": ticket, "viewer_url": self._viewer_url}
@@ -215,33 +213,18 @@ class HITLWorkerService:
             envelope = await parse_signed(request, RevokeEnvelope)
             assert isinstance(envelope, RevokeEnvelope)
             try:
-                if envelope.lease_id is not None:
-                    if envelope.browser_session_id is None:
-                        raise ViewerRejectedError("Lease is unavailable.")
-                    await self._gateway.revoke_lease(
-                        envelope.lease_id,
-                        envelope.generation,
-                        envelope.browser_session_id,
-                    )
-                    request_id = self._requests_by_lease.pop(envelope.lease_id, None)
-                    if request_id is not None:
-                        self._resume_events.setdefault(request_id, asyncio.Event()).set()
-                elif envelope.request_id is not None:
-                    await self._gateway.revoke_request(
-                        envelope.request_id,
-                        envelope.generation,
-                    )
-                    self._requests_by_lease = {
-                        lease_id: request_id
-                        for lease_id, request_id in self._requests_by_lease.items()
-                        if request_id != envelope.request_id
-                    }
-                    self._resume_events.setdefault(
-                        envelope.request_id,
-                        asyncio.Event(),
-                    ).set()
-                else:
+                durable = await self._authority.revoked_handle(
+                    generation=envelope.generation, request_id=envelope.request_id,
+                    lease_id=envelope.lease_id, session_id=envelope.browser_session_id,
+                )
+                if durable is None:
                     raise ViewerRejectedError("Lease is unavailable.")
+                handle, request_id, completed = durable
+                if completed:
+                    return {"revoked": True}
+                await self._registry.revoke(handle, envelope.generation)
+                await self._gateway.revoke_request(request_id, envelope.generation)
+                self._resume_events.setdefault(request_id, asyncio.Event()).set()
             except Exception:
                 raise HTTPException(status_code=409, detail="Browser handoff unavailable") from None
             return {"revoked": True}

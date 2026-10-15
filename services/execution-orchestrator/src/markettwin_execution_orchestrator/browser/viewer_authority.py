@@ -22,6 +22,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
 from markettwin_execution_orchestrator.browser.owner import OwnerLease
 from markettwin_execution_orchestrator.browser.owner_registry import BrowserOwnerRegistry
 
@@ -60,6 +61,51 @@ class DatabaseViewerAuthority:
             )
             actor_id = result.scalar_one_or_none()
             return UUID(str(actor_id)) if actor_id is not None else None
+
+    async def revoked_handle(
+        self, *, generation: int, request_id: UUID | None,
+        lease_id: UUID | None, session_id: UUID | None,
+    ) -> tuple[BrowserSessionHandle, UUID, bool] | None:
+        """Only a committed database transition may fence the live owner or wake it."""
+        statement = (
+            select(BrowserSession.id, BrowserSession.execution_id,
+                   AgentExecution.journey_id, HumanActionRequest.id,
+                   BrowserSession.control_mode, HumanActionRequest.status)
+            .join(HumanActionRequest, HumanActionRequest.browser_session_id == BrowserSession.id)
+            .join(AgentExecution, AgentExecution.id == HumanActionRequest.execution_id)
+            .where(
+                BrowserSession.control_generation == generation,
+                BrowserSession.execution_id == HumanActionRequest.execution_id,
+                BrowserSession.control_mode.in_(("verifying", "none", "agent", "human_pending")),
+            )
+        )
+        if lease_id is not None:
+            if session_id is None:
+                return None
+            statement = statement.join(
+                HumanControlLease, HumanControlLease.request_id == HumanActionRequest.id,
+            ).where(
+                HumanControlLease.id == lease_id,
+                HumanControlLease.browser_session_id == session_id,
+                BrowserSession.id == session_id,
+                HumanControlLease.released_at.is_not(None),
+                HumanControlLease.generation < generation,
+            )
+        elif request_id is None:
+            return None
+        if request_id is not None:
+            statement = statement.where(HumanActionRequest.id == request_id)
+        async with self._session_factory() as session:
+            row = (await session.execute(statement)).one_or_none()
+        if row is None:
+            return None
+        browser_id, execution_id, journey_id, durable_request_id, mode, status = row
+        try:
+            return self._registry.handle(
+                session_id=browser_id, execution_id=execution_id, journey_id=journey_id,
+            ), durable_request_id, mode == "agent" and status == "completed"
+        except Exception:
+            return None
 
     async def permitted(self, actor_id: UUID, lease: OwnerLease) -> bool:
         now = datetime.now(UTC)

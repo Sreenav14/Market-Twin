@@ -331,6 +331,7 @@ class HumanActionRepository:
             actor_id=actor_id,
             lease_token=lease_token,
             generation=generation,
+            allow_released=True,
         )
         if expected_request_id is not None:
             request_id = await self._session.scalar(
@@ -339,6 +340,12 @@ class HumanActionRepository:
             if request_id != expected_request_id:
                 raise HumanActionNotAuthorizedError("The human control lease is unavailable.")
         if browser.control_mode != "human":
+            if lease.released_at is not None and browser.control_mode == "verifying":
+                request = await self._session.get(HumanActionRequest, lease.request_id)
+                if (request is not None and request.status == "leased"
+                        and request.expires_at is not None
+                        and request.expires_at > datetime.now(UTC)):
+                    return browser.control_generation
             raise HumanActionConflictError("The browser is not in human control.")
         lease.released_at = datetime.now(UTC)
         browser.control_generation += 1
@@ -381,6 +388,7 @@ class HumanActionRepository:
         actor_id: UUID,
         lease_token: str,
         generation: int,
+        allow_released: bool = False,
     ) -> tuple[HumanControlLease, BrowserSession]:
         await self._authorize_lease(lease_id=lease_id, actor_id=actor_id)
         result = await self._session.execute(
@@ -389,7 +397,7 @@ class HumanActionRepository:
             .where(
                 HumanControlLease.id == lease_id,
                 HumanControlLease.user_id == actor_id,
-                HumanControlLease.released_at.is_(None),
+                (HumanControlLease.released_at.is_(None)) | allow_released,
             )
             .with_for_update(of=(HumanControlLease, BrowserSession))
         )
@@ -398,11 +406,18 @@ class HumanActionRepository:
             raise HumanActionNotAuthorizedError("The human control lease is unavailable.")
         lease, browser = row
         token_hash = hashlib.sha256(lease_token.encode("utf-8")).hexdigest()
+        release_retry = (
+            allow_released and lease.released_at is not None
+            and browser.control_mode == "verifying"
+            and browser.control_generation == generation + 1
+        )
         if (
             not secrets.compare_digest(lease.lease_token_hash, token_hash)
             or lease.generation != generation
-            or browser.control_generation != generation
-            or lease.expires_at <= datetime.now(UTC)
+            or (lease.released_at is not None and not release_retry)
+            or (not release_retry and (
+                browser.control_generation != generation or lease.expires_at <= datetime.now(UTC)
+            ))
         ):
             raise HumanActionNotAuthorizedError("The human control lease is unavailable.")
         return lease, browser

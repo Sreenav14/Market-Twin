@@ -48,6 +48,7 @@ class OwnerLease:
 @dataclass(slots=True)
 class _ViewerConnection:
     lease: OwnerLease
+    connected: bool = True
     sequence: int = 0
     input_window: datetime = field(default_factory=lambda: datetime.now(UTC))
     input_count: int = 0
@@ -55,6 +56,7 @@ class _ViewerConnection:
 
 class BrowserOwner(Protocol):
     async def attach(self, lease: OwnerLease) -> None: ...
+    async def detach(self, lease: OwnerLease) -> None: ...
     async def renew(self, lease: OwnerLease) -> None: ...
     async def input(self, lease: OwnerLease, event: ViewerInput) -> None: ...
     async def frame(self, lease: OwnerLease) -> bytes: ...
@@ -79,11 +81,12 @@ class ControllerBrowserOwner:
             journey_id=handle.journey_id,
         )
 
-    def _require(self, lease: OwnerLease) -> JourneyBrowserSession:
+    def _require(self, lease: OwnerLease, *, connected: bool = True) -> JourneyBrowserSession:
         session = self._session(lease.handle)
         connection = self._connections.get(lease.handle.session_id)
         if (
             connection is None or connection.lease != lease
+            or (connected and not connection.connected)
             or lease.expires_at <= datetime.now(UTC)
             or session.control_generation != lease.generation
             or session.control_mode != "human" or session.state != "open"
@@ -100,15 +103,32 @@ class ControllerBrowserOwner:
     async def attach(self, lease: OwnerLease) -> None:
         session = self._session(lease.handle)
         async with session.lock:
+            previous = self._connections.get(lease.handle.session_id)
+            reconnect = (
+                previous is not None and previous.lease == lease and not previous.connected
+                and lease.generation == session.control_generation
+            )
             if (
                 lease.expires_at <= datetime.now(UTC)
-                or lease.generation <= session.control_generation
+                or (lease.generation <= session.control_generation and not reconnect)
                 or session.control_mode != "human" or session.capture_enabled
-                or session.tracing_active or lease.handle.session_id in self._connections
+                or session.tracing_active
             ):
                 raise ViewerRejectedError("Viewer authority is unavailable.")
             session.control_generation = lease.generation
-            self._connections[lease.handle.session_id] = _ViewerConnection(lease)
+            if reconnect and previous is not None:
+                previous.connected = True
+                previous.sequence = 0
+            else:
+                self._connections[lease.handle.session_id] = _ViewerConnection(lease)
+
+    async def detach(self, lease: OwnerLease) -> None:
+        """End transport input without inventing a durable control generation."""
+        session = self._session(lease.handle)
+        async with session.lock:
+            connection = self._connections.get(lease.handle.session_id)
+            if connection is not None and connection.lease.lease_id == lease.lease_id:
+                connection.connected = False
 
     async def input(self, lease: OwnerLease, event: ViewerInput) -> None:
         session = self._session(lease.handle)
@@ -151,7 +171,6 @@ class ControllerBrowserOwner:
             except Exception:
                 # Playwright exceptions can include entered text/URLs. Fence
                 # uncertain input and expose only this safe error.
-                session.control_generation += 1
                 session.control_mode = "none"
                 self._connections.pop(lease.handle.session_id, None)
                 raise ViewerRejectedError("Viewer input could not be confirmed.") from None
@@ -163,11 +182,11 @@ class ControllerBrowserOwner:
             if connection is None:
                 raise ViewerRejectedError("Viewer authority is unavailable.")
             previous = connection.lease
-            self._require(previous)
+            self._require(previous, connected=False)
             if (
                 lease.handle != previous.handle or lease.actor_id != previous.actor_id
                 or lease.lease_id != previous.lease_id or lease.generation != previous.generation
-                or lease.expires_at <= previous.expires_at
+                or lease.expires_at < previous.expires_at
             ):
                 raise ViewerRejectedError("Viewer renewal was rejected.")
             connection.lease = lease
@@ -195,7 +214,11 @@ class ControllerBrowserOwner:
 
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None:
         session = self._session(handle)
-        if generation <= session.control_generation:
+        if generation < session.control_generation or (
+            generation == session.control_generation and (
+                session.control_mode != "verifying" or handle.session_id in self._connections
+            )
+        ):
             raise BrowserSessionStateError("A newer control generation is required.")
         # Fence queued input synchronously before waiting for an in-flight event.
         session.control_generation = generation

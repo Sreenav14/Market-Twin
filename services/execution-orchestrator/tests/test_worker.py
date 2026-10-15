@@ -23,6 +23,36 @@ class SessionContext:
         pass
 
 
+async def test_human_wait_occupies_the_single_execution_consumer(monkeypatch) -> None:
+    waiting, resume = asyncio.Event(), asyncio.Event()
+    consumer = SimpleNamespace(
+        start=AsyncMock(), receive=AsyncMock(side_effect=["run", asyncio.CancelledError()]),
+        commit=AsyncMock(), stop=AsyncMock(),
+    )
+
+    async def process(*_args: object) -> None:
+        waiting.set()
+        await resume.wait()
+
+    monkeypatch.setattr(worker, "process_command", process)
+    task = asyncio.create_task(worker.run_worker(
+        cast(KafkaConsumer, consumer), cast(async_sessionmaker[AsyncSession], object()),
+    ))
+    try:
+        await asyncio.wait_for(waiting.wait(), timeout=1)
+        assert consumer.receive.await_count == 1
+        consumer.commit.assert_not_awaited()
+        resume.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        consumer.commit.assert_awaited_once()
+    finally:
+        if not task.done():
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+
 @pytest.mark.asyncio
 async def test_worker_reconnects_and_handles_multiple_commands(
     monkeypatch: pytest.MonkeyPatch,

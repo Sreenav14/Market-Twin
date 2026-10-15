@@ -56,6 +56,7 @@ class RecordingOwner:
     def __init__(self) -> None:
         self.inputs = 0
         self.revoked = 0
+        self.detached = 0
 
     async def attach(self, lease: OwnerLease) -> None:
         pass
@@ -71,6 +72,9 @@ class RecordingOwner:
 
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None:
         self.revoked += 1
+
+    async def detach(self, lease: OwnerLease) -> None:
+        self.detached += 1
 
 
 @pytest.fixture
@@ -218,7 +222,8 @@ async def test_live_session_and_target_revocation_stops_input(
             while True:
                 await asyncio.wait_for(websocket.recv(), 3)
     assert owner.inputs == 1
-    assert owner.revoked == 1
+    assert owner.detached == 1
+    assert owner.revoked == 0
     # Used ticket is gone and cannot create another connection.
     authority.session_active = True
     authority.target_active = True
@@ -253,6 +258,30 @@ async def test_live_lease_expiry_closes_socket_without_input(
             while True:
                 await asyncio.wait_for(websocket.recv(), 2)
     assert owner.inputs == 0
+    assert owner.detached == 1
+    assert owner.revoked == 0
+
+
+async def test_disconnect_retains_durable_lease_for_release_and_fresh_ticket(
+    gateway_server,
+) -> None:
+    url, tls, gateway, _, owner, lease = gateway_server
+    ticket = await gateway.issue_ticket(lease.actor_id, lease)
+    async with connect(
+        url, ssl=tls, origin="https://fixture.invalid",
+        additional_headers={"Cookie": "markettwin_session=synthetic-session"},
+    ) as websocket:
+        await websocket.send(json.dumps({"ticket": ticket}))
+        assert await websocket.recv() == b"synthetic-frame"
+    async with asyncio.timeout(2):
+        while lease.handle.session_id in gateway._connected:
+            await asyncio.sleep(0.01)
+    assert owner.detached == 1
+    assert owner.revoked == 0
+    assert gateway._leases[lease.lease_id] == lease
+    fresh_ticket = await gateway.issue_ticket(lease.actor_id, lease)
+    assert fresh_ticket != ticket
+    await gateway.revoke_lease(lease.lease_id, lease.generation + 1, lease.handle.session_id)
     assert owner.revoked == 1
 
 
@@ -302,18 +331,14 @@ async def test_tls_gateway_operates_the_original_browser_context(
             session = cast(Any, controller)._get_session(session_id=handle.session_id)
             context = session.context
             lease = replace(original, handle=handle)
-            revoked = asyncio.Event()
-            original_revoke = ControllerBrowserOwner.revoke
+            detached = asyncio.Event()
+            original_detach = ControllerBrowserOwner.detach
 
-            async def signal_revoke(
-                owner: ControllerBrowserOwner,
-                browser_handle: BrowserSessionHandle,
-                generation: int,
-            ) -> None:
-                await original_revoke(owner, browser_handle, generation)
-                revoked.set()
+            async def signal_detach(owner: ControllerBrowserOwner, lease: OwnerLease) -> None:
+                await original_detach(owner, lease)
+                detached.set()
 
-            monkeypatch.setattr(ControllerBrowserOwner, "revoke", signal_revoke)
+            monkeypatch.setattr(ControllerBrowserOwner, "detach", signal_detach)
             gateway._owner = ControllerBrowserOwner(controller)  # pyright: ignore[reportPrivateUsage]
             await controller.begin_human_control(session_id=handle.session_id)
             token = await gateway.issue_ticket(lease.actor_id, lease)
@@ -362,8 +387,12 @@ async def test_tls_gateway_operates_the_original_browser_context(
                 ).to_be_visible()
                 assert session.context is context
                 assert session.session_id == handle.session_id
-            await asyncio.wait_for(revoked.wait(), timeout=2)
+            await asyncio.wait_for(detached.wait(), timeout=2)
+            assert session.control_generation == lease.generation
+            assert session.control_mode == "human"
+            await gateway.revoke_lease(lease.lease_id, lease.generation + 1, handle.session_id)
             assert session.control_mode == "verifying"
+            assert session.control_generation == lease.generation + 1
             assert not session.capture_enabled
             assert not session.tracing_active
     finally:

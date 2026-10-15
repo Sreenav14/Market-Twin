@@ -1150,7 +1150,9 @@ class BrowserController:
         async with session.lock:
             await begin_human_control(session)
 
-    async def ensure_human_control(self, *, handle: BrowserSessionHandle) -> None:
+    async def ensure_human_control(
+        self, *, handle: BrowserSessionHandle, generation: int | None = None,
+    ) -> None:
         """Fence capture before a worker attaches the human viewer."""
 
         session = self._get_session(
@@ -1162,6 +1164,11 @@ class BrowserController:
             if session.state != "open":
                 raise BrowserSessionStateError("Browser session is unavailable.")
             if session.control_mode == "human":
+                return
+            if (generation is not None and generation > session.control_generation
+                    and session.control_mode in {"none", "verifying"}
+                    and not session.capture_enabled and not session.tracing_active):
+                session.control_mode = "human"
                 return
             await begin_human_control(session)
 

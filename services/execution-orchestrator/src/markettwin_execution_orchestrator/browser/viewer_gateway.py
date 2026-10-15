@@ -56,6 +56,7 @@ class ViewerGateway:
         self._local_ws = allow_local_ws
         self._tickets: dict[str, _Ticket] = {}
         self._connected: set[UUID] = set()
+        self._attached: set[UUID] = set()
         self._leases: dict[UUID, OwnerLease] = {}
         self.router = APIRouter()
         self.router.add_api_websocket_route("/api/v1/hitl-viewer", self.connect)
@@ -80,6 +81,8 @@ class ViewerGateway:
             if value.lease.lease_id != lease.lease_id
         }
         token = secrets.token_urlsafe(32)
+        if lease.lease_id in self._leases:
+            await self.renew(actor_id, lease)
         self._tickets[hashlib.sha256(token.encode()).hexdigest()] = _Ticket(
             lease,
             min(now + timedelta(seconds=30), lease.expires_at),
@@ -99,10 +102,13 @@ class ViewerGateway:
         if (
             previous is None
             or actor_id != lease.actor_id
+            or previous.handle != lease.handle or previous.actor_id != lease.actor_id
+            or previous.generation != lease.generation or previous.request_id != lease.request_id
+            or lease.expires_at < previous.expires_at
             or not await self._authority.permitted(actor_id, lease)
         ):
             raise ViewerRejectedError("Viewer authority is unavailable.")
-        if lease.handle.session_id in self._connected:
+        if lease.lease_id in self._attached:
             await self._owner.renew(lease)
         self._leases[lease.lease_id] = lease
 
@@ -122,13 +128,20 @@ class ViewerGateway:
         if lease is not None and session_id is not None and lease.handle.session_id != session_id:
             raise ViewerRejectedError("Viewer authority is unavailable.")
         if lease is not None:
-            self._leases.pop(lease_id, None)
+            if generation <= lease.generation:
+                raise ViewerRejectedError("A newer control generation is required.")
             await self._owner.revoke(lease.handle, generation)
+            self._leases.pop(lease_id, None)
+            self._attached.discard(lease_id)
+            self._tickets = {
+                key: ticket for key, ticket in self._tickets.items()
+                if ticket.lease.lease_id != lease_id
+            }
 
     async def revoke_request(self, request_id: UUID, generation: int) -> None:
         for lease_id, lease in tuple(self._leases.items()):
             if lease.request_id == request_id:
-                await self.revoke_lease(lease_id, max(generation, lease.generation + 1))
+                await self.revoke_lease(lease_id, generation)
 
     async def connect(self, websocket: WebSocket) -> None:
         loopback = websocket.client is not None and websocket.client.host in {"127.0.0.1", "::1"}
@@ -177,7 +190,7 @@ class ViewerGateway:
             registered = True
             await self._owner.attach(lease)
             attached = True
-            self._leases[lease.lease_id] = lease
+            self._attached.add(lease.lease_id)
 
             async def send_frames() -> None:
                 while True:
@@ -214,10 +227,9 @@ class ViewerGateway:
                 pass
         finally:
             if lease is not None and registered:
-                self._leases.pop(lease.lease_id, None)
-                self._connected.discard(lease.handle.session_id)
                 if attached:
                     try:
-                        await self._owner.revoke(lease.handle, lease.generation + 1)
+                        await self._owner.detach(lease)
                     except Exception:
                         pass
+                self._connected.discard(lease.handle.session_id)

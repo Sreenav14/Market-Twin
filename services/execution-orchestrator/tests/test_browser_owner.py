@@ -19,7 +19,10 @@ from uuid import uuid4
 
 import pytest
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
-from markettwin_execution_orchestrator.browser.errors import HumanControlActiveError
+from markettwin_execution_orchestrator.browser.errors import (
+    BrowserSessionStateError,
+    HumanControlActiveError,
+)
 from markettwin_execution_orchestrator.browser.owner import (
     ControllerBrowserOwner,
     OwnerLease,
@@ -242,3 +245,39 @@ async def test_popup_remains_in_owned_context_and_expired_input_is_rejected(
         with pytest.raises(ViewerRejectedError):
             await owner.frame(lease)
         await owner.revoke(handle, 2)
+
+
+async def test_transport_reconnect_preserves_generation_and_strict_revoke_validation(
+    fixture_origin: tuple[str, int], tmp_path: Path,
+) -> None:
+    origin, port = fixture_origin
+    async with BrowserController(artifact_root=tmp_path) as controller:
+        handle = await controller.create_session(
+            execution_id=uuid4(), journey_id=uuid4(), network_policy="local_development",
+            allowed_origins=(AllowedOrigin("http", "127.0.0.1", port),),
+        )
+        await controller.navigate(session_id=handle.session_id, url=origin + "/index.html")
+        await controller.begin_human_control(session_id=handle.session_id)
+        owner = ControllerBrowserOwner(controller)
+        lease = OwnerLease(handle, uuid4(), uuid4(), 1, datetime.now(UTC) + timedelta(seconds=30))
+        await owner.attach(lease)
+        await owner.detach(lease)
+        live = controller._get_session(session_id=handle.session_id)
+        assert live.control_generation == 1 and live.control_mode == "human"
+        with pytest.raises(ViewerRejectedError):
+            await owner.input(lease, ViewerInput(sequence=1, event="key", key="Tab"))
+        with pytest.raises(ViewerRejectedError):
+            await owner.attach(replace(lease, actor_id=uuid4()))
+        with pytest.raises(ViewerRejectedError):
+            await owner.attach(replace(lease, expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+        await owner.attach(lease)
+        with pytest.raises(ViewerRejectedError):
+            await owner.attach(lease)
+        with pytest.raises(BrowserSessionStateError):
+            await owner.revoke(handle, 1)
+        await owner.revoke(handle, 2)
+        await owner.revoke(handle, 2)  # exact duplicate of an already applied revoke
+        with pytest.raises(BrowserSessionStateError):
+            await owner.revoke(handle, 1)
+        assert live.control_mode == "verifying" and live.control_generation == 2
+        assert not live.capture_enabled and not live.tracing_active

@@ -30,12 +30,18 @@ class MockWebSocket {
     this.readyState = MockWebSocket.OPEN;
     this.onopen?.(new Event("open"));
   }
+
+  disconnect() {
+    this.close();
+    this.onclose?.(new Event("close") as CloseEvent);
+  }
 }
 
 describe("HumanBrowserViewer", () => {
   afterEach(() => {
     MockWebSocket.instances = [];
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("uses the one-time ticket only in the first protected websocket message", async () => {
@@ -54,5 +60,27 @@ describe("HumanBrowserViewer", () => {
     fireEvent.change(input, { target: { value: "synthetic-password" } });
     expect(socket.sent[1]).toBe(JSON.stringify({ sequence: 1, event: "text", text: "synthetic-password" }));
     expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("requests a fresh ticket after disconnect and resets input sequence", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    const reconnect = vi.fn().mockResolvedValue({
+      viewer_url: "wss://local.test/api/v1/hitl-viewer", viewer_ticket: "fresh-ticket",
+    });
+    render(<HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="first-ticket" onReconnect={reconnect} />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
+    const first = MockWebSocket.instances[0];
+    act(() => first.open());
+    fireEvent.change(screen.getByLabelText("Type into the protected browser"), { target: { value: "synthetic" } });
+    act(() => first.disconnect());
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Reconnect to protected browser" })));
+    expect(reconnect).toHaveBeenCalledOnce();
+    const second = MockWebSocket.instances[1];
+    act(() => second.open());
+    expect(second.sent).toEqual([JSON.stringify({ ticket: "fresh-ticket" })]);
+    fireEvent.change(screen.getByLabelText("Type into the protected browser"), { target: { value: "more-synthetic" } });
+    expect(JSON.parse(second.sent[1]).sequence).toBe(1);
+    expect(second.sent.join("")).not.toContain("first-ticket");
   });
 });

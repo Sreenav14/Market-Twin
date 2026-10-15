@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Clock3, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useOutletContext } from "react-router-dom";
@@ -17,9 +17,11 @@ export function HumanActionPage() {
   const queryClient = useQueryClient();
   const [activeLease, setActiveLease] = useState<HumanLeaseGrant | null>(null);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const releasingRef = useRef(false);
   const claim = useMutation({
     mutationFn: (requestId: string) => api.claimHumanAction(requestId),
     onSuccess: (lease, requestId) => {
+      releasingRef.current = false;
       setActiveLease(lease);
       setActiveRequestId(requestId);
       queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] });
@@ -32,15 +34,18 @@ export function HumanActionPage() {
       setActiveLease((lease) => lease ? { ...lease, expires_at } : lease);
     },
     onError: () => {
+      if (releasingRef.current) return;
       setActiveLease(null);
       setActiveRequestId(null);
       queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] });
     },
   });
   const release = useMutation({
+    onMutate: () => { releasingRef.current = true; },
     mutationFn: ({ requestId, lease }: { requestId: string; lease: HumanLeaseGrant }) =>
       api.releaseHumanAction(requestId, lease),
     onSuccess: () => {
+      releasingRef.current = false;
       setActiveLease(null);
       setActiveRequestId(null);
       queryClient.invalidateQueries({ queryKey: ["human-actions", run.id] });
@@ -65,12 +70,12 @@ export function HumanActionPage() {
   const finished = actions.data?.filter((item) => ["completed", "cancelled", "expired"].includes(item.status)) ?? [];
 
   useEffect(() => {
-    if (!activeLease || !activeRequestId) return;
+    if (!activeLease || !activeRequestId || release.isPending || release.isError) return;
     const timer = window.setInterval(() => {
       renew.mutate({ requestId: activeRequestId, lease: activeLease });
     }, 10_000);
     return () => window.clearInterval(timer);
-  }, [activeLease, activeRequestId]);
+  }, [activeLease, activeRequestId, release.isPending, release.isError]);
 
   return (
     <section className="results-boundary" aria-labelledby="human-action-heading">
@@ -114,7 +119,12 @@ export function HumanActionPage() {
             <p>Complete the requested authentication in the protected browser, then release control for verification.</p>
             <p className="muted">Lease expires {new Date(activeLease.expires_at).toLocaleTimeString()}.</p>
             {activeLease.viewer_available && activeLease.viewer_url && activeLease.viewer_ticket ? (
-              <HumanBrowserViewer url={activeLease.viewer_url} ticket={activeLease.viewer_ticket} />
+              <HumanBrowserViewer url={activeLease.viewer_url} ticket={activeLease.viewer_ticket}
+                onReconnect={async () => {
+                  const grant = await api.reconnectHumanAction(activeRequestId, activeLease);
+                  setActiveLease((lease) => lease ? { ...lease, expires_at: grant.expires_at } : lease);
+                  return grant;
+                }} />
             ) : (
               <p role="alert">The browser owner did not provide a secure viewer. Control remains unavailable.</p>
             )}
@@ -124,7 +134,7 @@ export function HumanActionPage() {
           </div>
         </article>
       ) : null}
-      {release.isError ? <p role="alert">Browser control could not be released. It will expire automatically.</p> : null}
+      {release.isError ? <p role="alert">Release delivery failed. Retry Release to notify the worker. Agent control remains blocked until the handoff is verified.</p> : null}
 
       {leased.map((action) => (
         <article className="study-summary" key={action.id}>

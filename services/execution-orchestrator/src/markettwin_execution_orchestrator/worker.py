@@ -138,7 +138,13 @@ async def run_worker(
     retry_delay_seconds: float = 5.0,
     hitl_service: HITLWorkerService | None = None,
 ) -> None:
-    """Retry transport failures; commit only after a run reaches a terminal state."""
+    """Retry transport failures; commit only after a run reaches a terminal state.
+
+    Human waits remain inside process_command: this single consumer cannot receive
+    another run until the current run resumes or terminates. The viewer listener
+    remains responsive on the same event loop. Do not add parallel consumers as a
+    workaround without execution-owner leases and coordinated recovery.
+    """
     try:
         if hitl_service is not None:
             await hitl_service.start(

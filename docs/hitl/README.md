@@ -62,6 +62,75 @@ H00-H12 acceptance/release verification is a separate, incomplete status.
 
 ## Essential checks
 
+### Integration correction against 0682c375
+
+The focused correction fixes the disconnect/Release generation race. Closing a
+viewer detaches transport while retaining the durable lease, human ownership and
+current generation. Only an authorized database transition advances the fence.
+Release validates the committed database generation, revokes live control and
+signals the waiting worker even without a WebSocket. Authentication verification
+still runs before agent control resumes. Exact duplicate notifications are
+idempotent; stale, uncommitted and differently bound generations fail closed.
+Late duplicates after completed verification do not revoke the resumed agent.
+
+Reconnect obtains a fresh one-use ticket through authenticated POST
+`/api/v1/human-actions/{request_id}/viewer` for the same unexpired actor, token,
+request and generation. Transport sequences reset without changing the lease.
+Expiry denies reconnect and Release; the existing reaper/reclaim path grants a
+new generation. Release delivery failures return HTTP 503; an exact authorized
+retry redelivers the committed revoke without advancing the fence twice. The UI
+retains retry controls even if an in-flight heartbeat fails. HITL validation
+errors omit raw invalid input, including submitted lease tokens.
+
+Checks executed for this correction (overlapping suites; do not sum totals):
+
+- Owner/viewer/workflow/lifecycle/worker/privacy focused suite: **35 passed**.
+- Final worker, disconnect and strict owner-generation checks: **9 passed**.
+- Local PostgreSQL/API-to-signed-worker/Playwright integration: **1 passed**,
+  covering disconnected Release, active-viewer Release, fresh-ticket reconnect,
+  expired lease/reclaim, delivery retry, duplicates and verified authentication/
+  resume. Application-user authentication is stubbed with a synthetic actor;
+  database authorization and the signed bridge are real.
+- Disposable PostgreSQL migration test: **1 passed**. Actual full-chain upgrade,
+  Alembic metadata check, final-migration downgrade/reupgrade and second check
+  passed. Final combined database invocation: **2 passed**. Disposable test DB
+  and schemas were removed; the application database was not migrated.
+- API bridge/reaper and token-reflection canary checks: **8 passed**.
+- Viewer UI reconnect tests: **2 passed**. Final frontend typecheck/build passed.
+  Existing bundle-size warning remains.
+- Strict Pyright: **0 errors** in affected backend production paths. Scoped Ruff
+  passed with the existing E501 baseline excluded. `git diff --check` passed.
+
+No migration or infrastructure service was added. Full UI/Kafka/evaluation/report
+E2E and H12 release verification remain unexecuted.
+
+### Exact files changed in this correction
+
+- `apps/web/src/lib/api.ts`
+- `apps/web/src/pages/runs/HumanActionPage.tsx`
+- `apps/web/src/pages/runs/HumanBrowserViewer.test.tsx`
+- `apps/web/src/pages/runs/HumanBrowserViewer.tsx`
+- `docs/CURRENT_STATE.md`
+- `docs/SESSION_HANDOFF.md`
+- `docs/hitl/README.md`
+- `services/control-api/src/markettwin_control_api/api/human_actions.py`
+- `services/control-api/src/markettwin_control_api/persistence/repositories/human_action_repository.py`
+- `services/control-api/tests/test_hitl_migrations.py`
+- `services/control-api/tests/test_hitl_worker_client.py`
+- `services/control-api/tests/test_human_action_repository.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/browser/controller.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/browser/owner.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/browser/owner_registry.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/browser/owner_service.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/browser/viewer_authority.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/browser/viewer_gateway.py`
+- `services/execution-orchestrator/src/markettwin_execution_orchestrator/worker.py`
+- `services/execution-orchestrator/tests/test_browser_owner.py`
+- `services/execution-orchestrator/tests/test_viewer_gateway.py`
+- `services/execution-orchestrator/tests/test_worker.py`
+
+Earlier implementation evidence follows:
+
 Focused workflow/API: 85 passed; browser/security: 45 passed; final rule/API/summary: 27 passed (overlap); PostgreSQL: 1 passed; fixture: 3 passed. Typing/build and offline migration rendering passed. The phase-status and verification sections below contain the consolidated evidence. No comprehensive
 pipeline run, external app testing, benchmark, paid model call, push or deployment
 was performed. Migrations were rendered offline; the application's existing DB
@@ -149,6 +218,7 @@ These are application routes, not instructions to bypass authentication.
 | GET | /api/v1/test-runs/{run_id}/human-actions | List authorized run handoffs and states |
 | POST | /api/v1/human-actions/{request_id}/claim | Claim exclusive browser control |
 | POST | /api/v1/human-actions/{request_id}/renew | Renew the current authorized lease |
+| POST | /api/v1/human-actions/{request_id}/viewer | Obtain a fresh reconnect ticket for the authorized lease |
 | POST | /api/v1/human-actions/{request_id}/release | Revoke human input and request verification/resume |
 | POST | /api/v1/human-actions/{request_id}/cancel | Cancel a handoff |
 | GET | /api/v1/test-runs/{run_id}/action-approvals | List pending/approved exact-action requests and review links |
@@ -181,7 +251,7 @@ New HITL migration sequence:
 5. f82e4160cb9d: general run approval authority, awaiting_human status, cancellation,
    browser/session generation binding and approval-linked suspensions.
 
-The final Alembic head is f82e4160cb9d. Offline SQL rendering passed. The existing
+The final Alembic head is f82e4160cb9d. Offline SQL rendering and disposable PostgreSQL upgrade/check/downgrade/reupgrade checks passed. The existing
 application DB was not upgraded by the coding session. Apply the migration before
 running the new API/worker code; use normal backup/change procedures for any DB
 whose contents you need to preserve. Disposable PostgreSQL test schemas were used
@@ -210,6 +280,7 @@ still needed for generated planning and evaluation.
 docker compose --env-file .env -f infra/compose/docker-compose.yml up -d postgres kafka minio
 # Apply the additive chain through f82e4160cb9d.
 uv run --no-sync --env-file .env alembic -c database/alembic.ini upgrade head
+uv run --no-sync --env-file .env alembic -c database/alembic.ini current
 # Separate terminals:
 uv run --no-sync --env-file .env uvicorn markettwin_control_api.main:app --host 127.0.0.1 --port 8000
 uv run --no-sync --env-file .env python -m markettwin_execution_orchestrator.worker
@@ -220,7 +291,16 @@ npm --workspace @markettwin/web run dev
 ```
 
 Use your configured API port if it differs from 8000. Vite reads CONTROL_API_PORT.
-Do not run two execution consumers; this pilot uses one active worker.
+For these commands set CONTROL_API_PORT=8000 and WEB_ORIGIN=http://localhost:5173
+in the existing local configuration. Do not run two execution consumers.
+
+**Kafka scheduling limitation:** `run_worker` awaits the current `process_command`
+before committing and receiving the next execution command. Pending human
+assistance occupies the single execution consumer until resume, timeout,
+cancellation or failure; later runs can remain queued. The API and viewer listener
+can still respond. An event-driven worker regression confirms this behavior.
+Extra execution consumers are not a supported workaround: multi-worker live
+browser ownership/recovery is not implemented.
 
 ## Declared effect example
 
@@ -250,6 +330,13 @@ safe. Review the target and use dedicated test data with a reset contract.
 4. Release control on the dashboard. Verify that the role check completes, human
    input stops, and protected discovery/case execution continues. A wrong account,
    unfinished challenge, or Cancel must leave the case blocked, never passed.
+   Repeat Release in separate runs with the viewer still connected and after a
+   brief network disconnect. Disconnect alone must not resume the agent. For a
+   valid lease use Reconnect, check input, then Release; the original ticket is
+   consumed and cannot reconnect. If Release reports delivery failure, restore
+   worker connectivity and retry Release using the retained lease. For expiry,
+   stop heartbeats, wait for expiry/reaping, then claim anew; stale controls must
+   fail. Keep this test separate from the normal Release run.
 5. Run several independent read-only protected cases. Check fresh contexts, correct
    role verification, authentication reuse counts and no repeated login when state
    transfers. Expire/logout to verify fresh-HITL fallback. Browser restart must
@@ -272,7 +359,8 @@ safe. Review the target and use dedicated test data with a reset contract.
 
 - Comprehensive UI -> API -> Kafka -> worker -> viewer -> resume -> evaluator/report E2E and H12
   hostile-path/release verification remain for the user. HOSTED PRODUCTION NO-GO.
-- Single execution worker; human waits are bounded. A lost live browser fails
+- Single execution worker; pending human assistance occupies its execution consumer
+  and queues later runs. Human waits are bounded. A lost live browser fails
   closed rather than restoring passkeys or replaying actions. No horizontal-worker
   recovery or unrestricted parallel execution is claimed.
 - In-memory auth state does not survive worker restart. Cookie/storage transfer
@@ -331,7 +419,9 @@ No reviewer bypass, tree reset/cleanup, credential import, paid call, push or de
 | --- | --- |
 | Run stays queued | Confirm Kafka health, enabled outbox relay and the single execution consumer. Broker connectivity alone does not prove worker availability |
 | Awaiting human but no viewer | Check matching API/worker internal secrets, worker listener, exact frontend Origin, viewer URL and Vite WebSocket proxy |
-| Viewer connection rejected | Check ticket/lease expiry, actor, generation and Origin. Obtain a new authorized claim; do not reuse stale tickets |
+| Viewer disconnected | Use Reconnect while the lease is valid; it obtains a fresh ticket. Expiry requires reaping and a new claim. Disconnect does not release control |
+| Viewer connection rejected | Check ticket/lease expiry, actor, generation and Origin; do not reuse consumed tickets |
+| Release reports delivery failure | Restore worker connectivity and retry Release with the retained lease; exact retry redelivers the committed fence |
 | Release does not resume | Confirm the expected application origin, unique visible marker and correct identity/role; finish any visible challenge and release on a reviewed safe page |
 | SSO request blocked | Authorize the exact local IdP origin on the target and declare it authentication-only; do not broaden general agent authority |
 | Sensitive action blocked | Check explicit run opt-in, nonproduction target, exact role/name/scope rule and reset confirmation. Empty rules intentionally authorize no effect |
