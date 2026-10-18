@@ -1,0 +1,95 @@
+/* Evidence Ledger pilot: scoped report styles; existing workspace design remains unchanged. */
+.report-layout.evidence-ledger{--lp:#f5f4ed;--ls:#fffefa;--li:#1b302e;--lm:#586965;--lr:#d4dad1;--la:#156b55;display:grid;grid-template-columns:minmax(135px,170px) minmax(0,1fr);gap:clamp(16px,2.6vw,32px);align-items:start}
+.evidence-ledger .ledger-toc{display:grid;gap:12px;position:sticky;top:28px;padding-top:14px}
+.evidence-ledger .ledger-toc .section-label{font:11px "IBM Plex Mono",monospace;color:var(--text-3)}
+.evidence-ledger .ledger-toc a{font-size:12px;color:var(--text-2);text-decoration:none}
+.evidence-ledger .ledger-toc a:hover{color:var(--primary);text-decoration:underline}
+.evidence-ledger .ledger-paper{width:100%;max-width:1150px;min-width:0;background:var(--lp);color:var(--li);border:1px solid var(--lr);border-radius:5px;padding:clamp(22px,3vw,46px)}
+.evidence-ledger .ledger-paper h2,.evidence-ledger .ledger-paper h3,.evidence-ledger .ledger-paper h4,.evidence-ledger .ledger-paper strong{color:var(--li)}
+.evidence-ledger .ledger-paper p{color:var(--lm);font-size:14px;line-height:1.65;overflow-wrap:anywhere}
+.evidence-ledger .ledger-paper a{color:var(--la)}
+.evidence-ledger .ledger-paper .status-badge{border-radius:3px;font-size:10px;font-weight:700}
+.evidence-ledger .ledger-paper .status-success{color:#13523e;background:#e5f1e8;border-color:#b7d8c3}
+.evidence-ledger .ledger-paper .status-info{color:#245a75;background:#e8f0f4;border-color:#bacbd7}
+.evidence-ledger .ledger-paper .status-warning{color:#824820;background:#f7edd9;border-color:#dbc59d}
+.evidence-ledger .ledger-paper .status-danger{color:#8a3436;background:#f8e8e5;border-color:#e6b8b4}
+.evidence-ledger .ledger-paper .status-neutral{color:#41554e;background:#e8eae3;border-color:#c9d0c7}
+.evidence-ledger .ledger-topline{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.evidence-ledger .ledger-eyebrow,.evidence-ledger .ledger-kicker,.evidence-ledger .ledger-metrics dt,.evidence-ledger .ledger-identifiers dt{font:11px/1.5 "IBM Plex Mono",monospace;letter-spacing:.035em}
+.evidence-ledger .ledger-eyebrow{color:var(--lm);display:inline-flex;align-items:center;gap:8px}
+.evidence-ledger .ledger-health{border:1px solid var(--lr);background:var(--ls);border-radius:3px;padding:6px 10px;font-size:11px;display:inline-flex;align-items:center;gap:8px}
+.evidence-ledger .ledger-health:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--la)}
+.evidence-ledger .ledger-health-limited:before{background:#a25c30}
+.evidence-ledger .ledger-hero{border:0;padding:0 0 35px;margin:0}
+.evidence-ledger .ledger-hero h2{font-size:clamp(34px,3.8vw,56px);font-weight:610;letter-spacing:-.055em;line-height:1.07;max-width:720px;margin:23px 0 19px}
+.evidence-ledger .ledger-hero h2 em{font-family:Georgia,serif;font-weight:400;letter-spacing:-.045em}
+.evidence-ledger .ledger-paper .ledger-lead{color:var(--li);font-size:clamp(17px,1.7vw,21px);line-height:1.45;margin:0 0 8px;max-width:740px}
+.evidence-ledger .ledger-paper .ledger-support{font-size:13px;margin:0;max-width:740px}
+.evidence-ledger .ledger-actions{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin-top:22px}
+.evidence-ledger .ledger-actions a{font-size:12px;font-weight:650;display:inline-flex;align-items:center;gap:6px}
+.evidence-ledger .ledger-actions time{font:11px "IBM Plex Mono",monospace;color:var(--lm);margin-left:auto}
+.evidence-ledger .ledger-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-block:1px solid var(--lr);margin:0}
+.evidence-ledger .ledger-metrics>div{min-width:0;padding:22px 16px 22px 0}
+.evidence-ledger .ledger-metrics>div+div{border-left:1px solid var(--lr);padding-left:16px}
+.evidence-ledger .ledger-metrics dt{color:var(--lm);text-transform:uppercase}
+.evidence-ledger .ledger-metrics dd{margin:8px 0 2px;font:620 35px/1.15 "Instrument Sans Variable",sans-serif;letter-spacing:-.055em;overflow-wrap:anywhere}
+.evidence-ledger .ledger-metrics dd span{font-size:16px;font-weight:400;letter-spacing:normal;color:var(--lm)}
+.evidence-ledger .ledger-metrics small{display:block;color:var(--lm);font-size:12px}
+.evidence-ledger .ledger-columns{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(220px,.8fr);gap:clamp(20px,3.6vw,56px);padding:32px 0 0;align-items:start}
+.evidence-ledger .ledger-main{min-width:0}
+.evidence-ledger .ledger-section{margin:0 0 38px;scroll-margin-top:80px}
+.evidence-ledger .ledger-section+.ledger-section{padding-top:27px;border-top:1px solid var(--lr)}
+.evidence-ledger .ledger-kicker{color:var(--la);text-transform:uppercase}
+.evidence-ledger .ledger-paper .ledger-section h3{margin:8px 0 14px;font-size:27px;line-height:1.18;letter-spacing:-.04em}
+.evidence-ledger .ledger-paper .ledger-section>p{font-size:13px;margin:0 0 16px}
+.evidence-ledger .ledger-empty{border-top:1px solid var(--lr);padding:20px 0 0}
+.evidence-ledger .ledger-empty>strong{display:block;font-size:15px}
+.evidence-ledger .ledger-empty p{margin:7px 0 0}
+.evidence-ledger .ledger-findings{list-style:none;margin:12px 0 0;padding:0}
+.evidence-ledger .ledger-finding{border-top:1px solid var(--lr);padding:19px 0;min-width:0;overflow-wrap:anywhere}
+.evidence-ledger .ledger-finding-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--lm)}
+.evidence-ledger .ledger-finding h4{font-size:16px;line-height:1.35;letter-spacing:-.02em;margin:9px 0}
+.evidence-ledger .ledger-finding h4 a{color:var(--li);text-decoration:none}
+.evidence-ledger .ledger-finding h4 a:hover{text-decoration:underline}
+.evidence-ledger .ledger-finding h4 svg{display:inline;vertical-align:middle}
+.evidence-ledger .ledger-finding p{margin:8px 0;white-space:pre-line}
+.evidence-ledger .ledger-paper .ledger-next{font-size:12px}
+.evidence-ledger .ledger-evidence-link{display:inline-block;font-size:12px;font-weight:650;text-decoration:underline;text-underline-offset:3px;padding-top:6px}
+.evidence-ledger .ledger-severity{display:flex;flex-wrap:wrap;gap:12px;font-size:12px}
+.evidence-ledger .ledger-severity span{display:inline-flex;align-items:center;gap:5px}
+.evidence-ledger .ledger-aside{position:sticky;top:25px;background:var(--ls);padding:23px;border:1px solid var(--lr)}
+.evidence-ledger .ledger-aside h3{font-size:19px;letter-spacing:-.035em;margin:10px 0 7px}
+.evidence-ledger .ledger-aside h4{font-size:14px;margin:22px 0 9px;padding-top:20px;border-top:1px solid var(--lr)}
+.evidence-ledger .ledger-aside p{font-size:12px;margin:7px 0 14px}
+.evidence-ledger .ledger-paper .ledger-rate{display:block;font-size:32px;letter-spacing:-.05em;margin:15px 0 7px;font-weight:630}
+.evidence-ledger .ledger-progress{height:8px;background:#cdd4c9;overflow:hidden;border-radius:2px}
+.evidence-ledger .ledger-progress span{display:block;height:100%;background:var(--la)}
+.evidence-ledger .ledger-paper .ledger-fineprint{font-size:11px;margin-top:6px}
+.evidence-ledger .ledger-aside>a{font-size:12px;display:inline-flex;align-items:center;gap:4px;font-weight:650}
+.evidence-ledger .ledger-cluster{border-top:1px solid var(--lr)}
+.evidence-ledger .ledger-cluster:last-of-type{border-bottom:1px solid var(--lr)}
+.evidence-ledger .ledger-cluster summary{cursor:pointer;display:flex;align-items:center;gap:12px;padding:17px 0;list-style:none;font-size:13px;font-weight:650}
+.evidence-ledger .ledger-cluster summary::-webkit-details-marker{display:none}
+.evidence-ledger .ledger-cluster summary:after{content:"+";margin-left:5px;color:var(--la);font-size:17px}
+.evidence-ledger .ledger-cluster[open] summary:after{content:"−"}
+.evidence-ledger .ledger-cluster summary small{margin-left:auto;color:var(--lm);font-size:11px;white-space:nowrap}
+.evidence-ledger .ledger-cluster ul{padding:0 0 16px 20px;margin:0}
+.evidence-ledger .ledger-cluster li{font-size:12px;overflow-wrap:anywhere;margin-bottom:12px}
+.evidence-ledger .ledger-cluster li p{white-space:pre-line;margin:6px 0}
+.evidence-ledger .ledger-paper>.ledger-lower{padding-top:25px;border-top:1px solid var(--lr);margin-top:32px;scroll-margin-top:85px}
+.evidence-ledger .ledger-lower h3{font-size:24px;letter-spacing:-.035em;margin:8px 0 11px}
+.evidence-ledger .ledger-outcomes{margin:15px 0;max-width:600px}
+.evidence-ledger .ledger-outcomes>div{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid var(--lr);padding:11px 0}
+.evidence-ledger .ledger-outcomes dt{color:var(--lm);text-transform:capitalize}
+.evidence-ledger .ledger-outcomes dd{margin:0;font:600 19px "IBM Plex Mono",monospace}
+.evidence-ledger .ledger-paper>.ledger-original{border-block:1px solid var(--lr);margin:30px 0;padding:14px 0}
+.evidence-ledger .ledger-original summary{cursor:pointer;font-size:13px;font-weight:620}
+.evidence-ledger .ledger-original p{white-space:pre-wrap}
+.evidence-ledger .ledger-identifiers{display:flex;flex-wrap:wrap;gap:25px;margin-top:16px}
+.evidence-ledger .ledger-identifiers dt{color:var(--lm)}
+.evidence-ledger .ledger-identifiers dd{font:11px "IBM Plex Mono",monospace;overflow-wrap:anywhere;margin:5px 0 0}
+.evidence-ledger .ledger-assessment #report-assessment{margin:0}
+.evidence-ledger .ledger-assessment .run-record{background:var(--ls);border:1px solid var(--lr)}
+@media(max-width:1300px){.report-layout.evidence-ledger{grid-template-columns:1fr}.evidence-ledger .ledger-toc{position:static;display:flex;flex-wrap:wrap;gap:11px 20px;padding:0}.evidence-ledger .ledger-toc .section-label{width:100%;margin:0}.evidence-ledger .ledger-paper{max-width:none}}
+@media(max-width:760px){.evidence-ledger .ledger-paper{padding:20px}.evidence-ledger .ledger-hero h2{font-size:36px}.evidence-ledger .ledger-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.evidence-ledger .ledger-metrics>div{padding:15px 10px 15px 0}.evidence-ledger .ledger-metrics>div+div{padding-left:10px}.evidence-ledger .ledger-metrics>div:last-child{grid-column:1/-1;border-top:1px solid var(--lr);border-left:0;padding-left:0}.evidence-ledger .ledger-columns{grid-template-columns:1fr;gap:10px}.evidence-ledger .ledger-aside{position:static}.evidence-ledger .ledger-actions time{margin-left:0}.evidence-ledger .ledger-identifiers{display:block}.evidence-ledger .ledger-identifiers>div+div{margin-top:15px}}
+@media(prefers-reduced-motion:reduce){.evidence-ledger *, .evidence-ledger *::before, .evidence-ledger *::after{animation:none!important;transition:none!important}}

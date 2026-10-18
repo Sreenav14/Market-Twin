@@ -107,7 +107,6 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
       </aside>
       <div className="live-browser-column">
         <div className="section-heading"><h3>{live ? "Actual test browser" : "Recorded journey"}</h3><span>{run.status === "awaiting_human" ? <a className="text-link" href="#human-action-heading">Human assistance required — Assist</a> : live ? chosenBrowser?.viewer_state === "available" ? "Read only" : "Protected / unavailable" : "Historical evidence"}</span></div>
-        <p className="muted">Recorded session in next version.</p>
         {permitted && live ? <section className="live-pause-controls" aria-label="Execution pause">
           <button type="button" className="secondary-button" disabled={!browser || browser.control_state !== "agent" || Boolean(pendingPause) || requestPause.isPending || metadata.isError} onClick={() => requestPause.mutate()}>Request pause</button>
           {pause?.status === "paused" && linked?.status === "pending" && browser?.control_state === "human_pending" ? <button type="button" className="primary-button" disabled={resumePause.isPending} onClick={() => resumePause.mutate()}>Resume agent</button> : null}
