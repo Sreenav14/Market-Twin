@@ -30,6 +30,9 @@ class FakeController:
 
     def require_agent_control(self, handle: BrowserSessionHandle) -> None:
         pass
+
+    async def cooperative_checkpoint(self, handle: BrowserSessionHandle) -> None:
+        pass
         
     async def _call(self, name: str, /, **kwargs: object) -> BrowserActionResult:
         self.calls.append((name, kwargs))

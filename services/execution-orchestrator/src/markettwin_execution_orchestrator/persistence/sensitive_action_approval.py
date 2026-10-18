@@ -9,7 +9,7 @@ from typing import cast
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
-from markettwin_database.models.core import Workspace, WorkspaceMember
+from markettwin_database.models.core import User, Workspace, WorkspaceMember
 from markettwin_database.models.execution import (
     ActionApprovalReceipt,
     ActionApprovalRequest,
@@ -306,6 +306,7 @@ class SensitiveActionApproval:
             .join(TestRun, TestRun.id == ActionApprovalRequest.test_run_id)
             .join(Workspace, Workspace.id == TestRun.workspace_id)
             .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+            .join(User, User.id == ActionApprovalRequest.decision_by_user_id)
             .join(BrowserSession, BrowserSession.id == ActionApprovalRequest.browser_session_id)
             .join(ApplicationTarget, ApplicationTarget.id == TestRun.target_id)
             .join(TargetAuthorization, TargetAuthorization.target_id == ApplicationTarget.id)
@@ -324,6 +325,8 @@ class SensitiveActionApproval:
                 BrowserSession.control_mode == "agent",
                 ActionApprovalRequest.decision_by_user_id == WorkspaceMember.user_id,
                 WorkspaceMember.role.in_(("owner", "admin")),
+                User.status == "active",
+                User.deleted_at.is_(None),
                 Workspace.status == "active",
                 Workspace.deleted_at.is_(None),
                 ApplicationTarget.status == "active",

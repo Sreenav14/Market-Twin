@@ -1,6 +1,30 @@
 # UI redesign verification
 
-Updated: 2026-10-17
+Updated: 2026-10-18
+
+## Live execution and cooperative pause — 2026-10-18
+
+Current detailed plan, exact fixes, commands, evidence, manual guide and limitations:
+[Live execution audit checkpoint](../LIVE_EXECUTION_AUDIT_CHECKPOINT.md).
+
+- Real protected Feature Cases pipeline passed: read-only JPEG before takeover,
+  login/MFA, reconnect/Release, isolated session reuse, one consumed approval,
+  three rejected actions, duplicate decisions409, persisted report/UI results200.
+- Final real persona matrix passed good3passed, seeded-bug3failed, Skip1untested+
+  2passed, including manual Pause202→workerACK→plainResume and optional takeover.
+  Evidence `.local/ui-integration-result-584578024f4342fcb30f9045d581405b.json`.
+- Full frontend87passed; evaluation/knowledge/shared189passed8skipped. Real migrated
+  database/Chromium combined6passed plus final11-scenario worker pause regression.
+  Focused production Ruff/Pyright pass; baseline whole-repo debt remains.
+- Actual updated live/paused views at1440/768/390 reviewed independently. No
+  critical visual issue, document overflow or axe violation in those scans.
+- Canonical stale API404 and missing migration were confirmed. User approved local
+  additive migration and API/execution-worker restarts; metadata route now mounted,
+  private bridge rejects unsigned requests and worker is connected. No canonical
+  target run was initiated as part of the restart.
+- Session recording is deferred, labeled "Recorded session in next version."
+  These synthetic scripted-model results do not establish autonomous AI quality,
+  universal authentication support or production privacy/release readiness.
 
 ## MT-000050 Sup_14: live UI and HITL investigation — 2026-10-17
 

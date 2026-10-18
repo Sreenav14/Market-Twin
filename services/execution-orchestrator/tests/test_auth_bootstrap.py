@@ -39,7 +39,9 @@ async def test_discovery_requires_verification_and_cleans_up(monkeypatch, verifi
         return SimpleNamespace(observation=SimpleNamespace(to_dict=lambda: {"title": "Protected feature"}))
 
     controller.get_state = AsyncMock(side_effect=observe)
-    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                              scalar=AsyncMock(return_value=None), execute=AsyncMock(),
+                              flush=AsyncMock())
     request = SimpleNamespace(run_id=uuid4(), runtime_human_assistance=False,
                                allowed_origins=(), network_policy="local_development",
                                start_url="http://127.0.0.1", auth_mode="required", auth_verification=AuthVerificationPolicy(
@@ -100,7 +102,9 @@ async def test_public_runtime_discovery_never_requests_unconditional_human_help(
     )
     result = await auth_bootstrap.authenticated_discovery(
         request=request, controller=controller,
-        session=SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock()), auth_scope=None,
+        session=SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                                scalar=AsyncMock(return_value=None), execute=AsyncMock(),
+                                flush=AsyncMock()), auth_scope=None,
     )
     assert result == {"title": "Public page"}
     runtime_help.assert_not_awaited()

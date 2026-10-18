@@ -255,6 +255,10 @@ class HITLWorkerService:
                 ):
                     raise ViewerRejectedError("Observation is unavailable.")
                 image = await self._registry.observe(handle, generation=envelope.generation)
+                if not await self._authority.observer_permitted(
+                    envelope.actor_id, handle, envelope.generation,
+                ):
+                    raise ViewerRejectedError("Observation is unavailable.")
             except Exception:
                 raise HTTPException(
                     status_code=409, detail="Browser observation unavailable.",

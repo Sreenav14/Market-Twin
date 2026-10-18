@@ -1,0 +1,44 @@
+.live-execution { min-width: 0; }
+.live-execution-heading { display: flex; justify-content: space-between; gap: 24px; padding: 8px 0 12px; }
+.live-execution-heading > div { min-width: 0; }
+.live-execution-heading h2 { margin: 6px 0; font-size: 24px; }
+.live-execution-heading p { color: var(--text-2); overflow-wrap: anywhere; margin: 6px 0; }
+.live-workbench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 310px); gap: 24px; align-items: start; }
+.live-workbench > * { min-width: 0; }
+.live-work-selector { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(180px, 320px) minmax(0, 1fr); column-gap: 24px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.live-work-choice { display: grid; gap: 6px; align-content: start; }
+.live-work-selector select { width: 100%; }
+.live-selected-work p { margin: 2px 0 8px; }
+.live-selected-work details { font-size: 14px; color: var(--text-2); }
+.live-browser-surface { border: 1px solid var(--border); border-radius: var(--mt-radius-sm); overflow: hidden; background: var(--surface); }
+.live-browser-surface img { display: block; width: 100%; height: auto; }
+.live-browser-empty { min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; color: var(--text-2); background: var(--surface-muted); }
+.live-browser-empty p { max-width: 52ch; }
+.live-browser-caption { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 12px 16px; font-size: 14px; border-top: 1px solid var(--border); }
+.live-browser-caption p { margin: 0; }
+.live-browser-caption time { color: var(--text-2); }
+.live-browser-column > details { margin-top: 12px; }
+.live-pause-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.live-pause-controls p { margin: 0; color: var(--text-2); font-size: 14px; flex: 1 1 240px; }
+.live-browser-column .study-summary { grid-template-columns: auto minmax(0, 1fr); }
+.live-browser-column .study-summary > .button-row { grid-column: 2; }
+.live-browser-column .human-browser-viewer canvas { width: 100%; }
+.live-activity { border-left: 1px solid var(--border); padding-left: 20px; }
+.live-activity h3 { margin: 0 0 12px; }
+.live-activity select { width: 100%; margin-bottom: 12px; }
+.live-activity-list { list-style: none; margin: 0 0 16px; padding: 0; max-height: 560px; overflow-y: auto; }
+.live-activity-list li + li { border-top: 1px solid var(--border); }
+.live-activity-list button { display: grid; gap: 5px; width: 100%; padding: 12px 8px; text-align: left; border: 0; background: transparent; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
+.live-activity-list button:hover, .live-activity-list button[aria-pressed="true"] { background: var(--surface-hover); }
+.live-activity-list time, .live-activity-list span { color: var(--text-2); font-size: 14px; }
+.live-step-inspector { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px; }
+.live-step-inspector p { font-size: 14px; }
+.tester-journeys { display: grid; gap: 0; margin-bottom: 24px; }
+.tester-journey { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(160px, 1fr) auto; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+.tester-journey h3, .tester-journey p { margin: 0 0 8px; }
+.tester-journey p { color: var(--text-2); }
+.tester-journey .button-row { align-content: start; }
+.tester-advanced > summary { padding: 16px 0; cursor: pointer; font-weight: 600; }
+@media (min-width: 1500px) { .live-workbench { grid-template-columns: 220px minmax(0, 1fr) 300px; } .live-work-selector { grid-column: auto; display: block; padding: 0 16px 0 0; border: 0; } .live-work-selector > * { margin: 0 0 16px !important; } }
+@media (max-width: 1050px) { .live-workbench { grid-template-columns: 1fr; } .live-activity { border: 0; border-top: 1px solid var(--border); padding: 20px 0 0; } .live-activity-list { max-height: 360px; } }
+@media (max-width: 640px) { .live-execution-heading, .live-work-selector { display: block; } .live-work-selector > * { margin-bottom: 12px; } .live-browser-empty { min-height: 200px; padding: 16px; } .tester-journey { grid-template-columns: 1fr; } .live-browser-column .study-summary { display: block; } }

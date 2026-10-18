@@ -4,6 +4,20 @@ import { api } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("fetches exact-generation frames with cookies and no-store outside the JSON client", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(new Blob(["jpeg"]), { status: 200, headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store" } }));
+  vi.stubGlobal("fetch", fetchMock);
+  const signal = new AbortController().signal;
+  const blob = await api.getLiveBrowserFrame("run", { browser_session_id: "browser", generation: 3 } as Parameters<typeof api.getLiveBrowserFrame>[1], signal);
+  expect(blob).toBeInstanceOf(Blob);
+  expect(fetchMock).toHaveBeenCalledWith("/api/v1/test-runs/run/live-browser/frame?browser_session_id=browser&generation=3", { credentials: "include", cache: "no-store", signal });
+});
+
+it.each(["application/json", "text/html"])("rejects a non-JPEG %s frame", async (contentType) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not a frame", { status: 200, headers: { "Content-Type": contentType } })));
+  await expect(api.getLiveBrowserFrame("run", { browser_session_id: "browser", generation: 1 } as Parameters<typeof api.getLiveBrowserFrame>[1], new AbortController().signal)).rejects.toThrow("invalid frame");
+});
+
 it("sends workspace ingestion as browser-encoded multipart data", async () => {
   const fetchMock = vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ source: { name: "source.txt" } }), { status: 200 }),

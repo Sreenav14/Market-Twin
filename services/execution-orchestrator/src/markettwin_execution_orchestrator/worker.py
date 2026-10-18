@@ -13,6 +13,7 @@ from markettwin_database.models.execution import (
     ActionApprovalRequest,
     AgentExecution,
     BrowserSession,
+    ExecutionPauseRequest,
     ExecutionSuspension,
     HumanActionRequest,
     HumanControlLease,
@@ -85,6 +86,10 @@ async def abandon_run_handoffs(session: AsyncSession, *, test_run_id: UUID) -> N
         ExecutionSuspension.test_run_id == test_run_id,
         ExecutionSuspension.status.in_(("waiting", "ready")),
     ).values(status="abandoned"))
+    await session.execute(update(ExecutionPauseRequest).where(
+        ExecutionPauseRequest.test_run_id == test_run_id,
+        ExecutionPauseRequest.status.in_(("requested", "paused", "resume_requested")),
+    ).values(status="unavailable", completed_at=datetime.now(UTC)))
     await session.execute(update(BrowserSession).where(
         BrowserSession.execution_id.in_(executions),
         BrowserSession.state == "open",
@@ -152,7 +157,7 @@ async def process_command(
             }:
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
             if run is not None:
-                payload = failure_event_payload(error)
+                payload: dict[str, object] = {**failure_event_payload(error)}
                 await RunEventRepository(session).create(
                     test_run_id=run.id, event_type="run.failed",
                     payload=payload,
@@ -160,7 +165,7 @@ async def process_command(
                 )
                 await session.commit()
             else:
-                payload = failure_event_payload(error)
+                payload = {**failure_event_payload(error)}
             logger.error(
                 "Execution failed for TestRun %s (%s) at %s: %s",
                 accepted.test_run_id,

@@ -421,6 +421,10 @@ def _safe_action_summary(step: ExecutionStep) -> str:
     }.get(step.action_type, "Perform a recorded browser action.")
 
 
+# Shared fixed projection for both historical steps and live activity.
+safe_action_summary = _safe_action_summary
+
+
 def _safe_observation_summary(step: ExecutionStep) -> str | None:
     """Expose structured context, never raw exception text or page content."""
     if step.status == "policy_blocked":

@@ -48,6 +48,11 @@ def test_startup_instruments_once(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_actual_builder_call_emits_success_or_failure_span(
     monkeypatch: pytest.MonkeyPatch, capture_content: bool, fails: bool,
 ) -> None:
+    # Instrumentors are process-wide singletons. Other service suites may have
+    # installed one; this test needs its own provider and privacy configuration.
+    instrumentor = LiteLLMInstrumentor()
+    if instrumentor.is_instrumented_by_opentelemetry:
+        instrumentor.uninstrument()
     payload: dict[str, object] = {"application_knowledge": [], "artifacts": [], "skills": []}
     response = ModelResponse(
         model="test-model", choices=[{
@@ -64,7 +69,6 @@ async def test_actual_builder_call_emits_success_or_failure_span(
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    instrumentor = LiteLLMInstrumentor()
     instrumentor.instrument(tracer_provider=provider, config=TraceConfig(
         hide_inputs=not capture_content, hide_outputs=not capture_content,
         hide_input_messages=not capture_content, hide_output_messages=not capture_content,

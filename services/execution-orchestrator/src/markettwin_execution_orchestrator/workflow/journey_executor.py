@@ -252,6 +252,29 @@ async def execute_persona_journey(
 
             browser_controller.bind_authentication_handler(handle, request_runtime_help)
 
+        from markettwin_execution_orchestrator.workflow.cooperative_pause import (
+            cooperative_pause_checkpoint,
+        )
+
+        async def request_cooperative_pause() -> None:
+            if persona_timer is None:
+                await cooperative_pause_checkpoint(
+                    request=request, controller=browser_controller, handle=browser_session,
+                    session=session, policy=request.auth_verification,
+                )
+            else:
+                from markettwin_execution_orchestrator.workflow.case_execution import (
+                    pause_case_deadline,
+                )
+                async with pause_case_deadline(persona_timer, allowance_seconds=300):
+                    await cooperative_pause_checkpoint(
+                        request=request, controller=browser_controller, handle=browser_session,
+                        session=session, policy=request.auth_verification,
+                    )
+
+        browser_controller.bind_cooperative_pause_handler(
+            browser_session, request_cooperative_pause,
+        )
         artifact_storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
 
         step_recorder = ExecutionStepRecorder(
@@ -366,6 +389,7 @@ async def execute_persona_journey(
                     session_id=session_id,
                     new_message=message,
                 ):
+                    await browser_controller.cooperative_checkpoint(browser_session)
                     if (
                         event.is_final_response()
                         and event.author == runtime.agent.name
@@ -479,6 +503,10 @@ async def execute_persona_journey(
 
                 else:
                     if browser_session_persisted:
+                        from markettwin_execution_orchestrator.workflow.cooperative_pause import (
+                            finalize_browser_pauses,
+                        )
+                        await finalize_browser_pauses(session, browser_session)
                         await execution_repository.mark_browser_session_closed(
                             browser_session_id=browser_session.session_id,
                         )

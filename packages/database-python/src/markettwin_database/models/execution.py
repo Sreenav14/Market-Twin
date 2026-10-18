@@ -514,6 +514,59 @@ class RunEvent(Base):
     )
 
 
+class ExecutionPauseRequest(Base):
+    """Durable operator intent; only the worker acknowledges a safe pause."""
+
+    __tablename__ = "pause_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('requested', 'paused', 'resume_requested', 'resumed', 'skipped', "
+            "'cancelled', 'expired', 'unavailable')", name="ck_pause_requests_status_allowed",
+        ),
+        CheckConstraint("generation >= 0", name="ck_pause_requests_generation_nonnegative"),
+        ForeignKeyConstraint(
+            ["execution_id", "browser_session_id"],
+            ["execution.browser_sessions.execution_id", "execution.browser_sessions.id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "uq_active_pause_per_browser", "browser_session_id", unique=True,
+            postgresql_where=text("status IN ('requested', 'paused', 'resume_requested')"),
+        ),
+        {"schema": "execution"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    test_run_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+    )
+    journey_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("testing.persona_journeys.id", ondelete="CASCADE"),
+    )
+    execution_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    browser_session_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("core.users.id", ondelete="RESTRICT"),
+    )
+    resume_requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("core.users.id", ondelete="RESTRICT"),
+    )
+    generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    human_request_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("execution.human_action_requests.id", ondelete="SET NULL"),
+    )
+    last_durable_step_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("execution.execution_steps.id", ondelete="SET NULL"),
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="requested")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class HumanActionRequest(Base):
     __tablename__ = "human_action_requests"
     __table_args__ = (

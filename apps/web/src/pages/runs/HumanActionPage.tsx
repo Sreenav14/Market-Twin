@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Clock3, ShieldCheck, UserRound } from "lucide-react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useLocation, useOutletContext } from "react-router-dom";
 
-import { RunContext } from "../../layouts/RunLayout";
-import { api, type HumanAction, type HumanLeaseGrant } from "../../lib/api";
+import type { RunContext } from "../../layouts/RunLayout";
+import { api, type HumanAction, type HumanLeaseGrant, type LiveExecution } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
 import { terminalTestStatuses } from "../../lib/results";
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
@@ -16,10 +17,52 @@ function RequestContext({ action, runId }: { action: HumanAction; runId: string 
   </div>;
 }
 
+const HumanAssistanceContainer = createContext<HTMLDivElement | null>(null);
+type ActiveControl = { requestId: string; done: () => void } | null;
+
+/** One lease/viewer owner persists across run routes; the portal target never changes. */
+export function HumanAssistanceHost({ context, children }: { context: RunContext; children: ReactNode }) {
+  const [container] = useState(() => document.createElement("div"));
+  const [control, setControl] = useState<ActiveControl>(null);
+  const fallback = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const inline = location.pathname.endsWith("/activity");
+  const showing = inline || location.pathname.endsWith("/human-action");
+  useLayoutEffect(() => {
+    if (!showing && !container.parentElement) fallback.current?.append(container);
+  }, [showing, container]);
+  return <HumanAssistanceContainer.Provider value={container}>
+    {control && !showing ? <section className="run-action-required" role="status">
+      <div><h2>You still control the test browser</h2><p>The agent is paused. Return to the browser or finish the handoff.</p></div>
+      <Link className="secondary-button" to={`/runs/${context.run.id}/activity`}>Return to browser control</Link>
+      <button type="button" className="primary-button" onClick={control.done}>Done—resume agent</button>
+    </section> : null}
+    {children}
+    <div ref={fallback} hidden={showing || !control} className="human-assistance-fallback" />
+    {createPortal(<HumanActionPanel context={context} inline={inline} onControlChange={setControl} />, container)}
+  </HumanAssistanceContainer.Provider>;
+}
+
 export function HumanActionPage() {
-  const { run, user, workspace } = useOutletContext<RunContext>();
+  const container = useContext(HumanAssistanceContainer);
+  const slot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!container || !slot.current) return;
+    slot.current.append(container);
+    return () => { container.remove(); };
+  }, [container]);
+  return container ? <div ref={slot} className="human-assistance-slot" /> : <HumanActionPanel />;
+}
+
+function HumanActionPanel({ context, inline = false, onControlChange }: {
+  context?: RunContext; inline?: boolean; onControlChange?: (control: ActiveControl) => void;
+}) {
+  const inherited = useOutletContext<RunContext>();
+  const { run, user, workspace } = context ?? inherited;
   const canManageHumanActions = canAuthorizeTarget(workspace.role);
   const ended = terminalTestStatuses.has(run.status);
+  const authorityRef = useRef(false);
+  authorityRef.current = canManageHumanActions && !ended;
   const actions = useQuery({
     queryKey: ["human-actions", user.id, workspace.id, run.id],
     queryFn: ({ signal }) => api.listHumanActions(run.id, signal),
@@ -27,6 +70,11 @@ export function HumanActionPage() {
     refetchInterval: canManageHumanActions ? 2500 : false,
   });
   const queryClient = useQueryClient();
+  const pauseStatus = useSyncExternalStore(
+    (notify) => queryClient.getQueryCache().subscribe(notify),
+    () => queryClient.getQueryData<LiveExecution>(["live-execution", user.id, workspace.id, workspace.role, run.id])?.pause?.status ?? "",
+  );
+  const resumePending = ["resume_requested", "verifying"].includes(pauseStatus);
   const [activeLease, setActiveLease] = useState<HumanLeaseGrant | null>(null);
   const activeLeaseRef = useRef<HumanLeaseGrant | null>(null);
   const mountedRef = useRef(true);
@@ -36,7 +84,7 @@ export function HumanActionPage() {
   const claim = useMutation({
     mutationFn: async (requestId: string) => {
       const lease = await api.claimHumanAction(requestId);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !authorityRef.current) return;
       activeLeaseRef.current = lease;
       setActiveLease(lease);
       setActiveRequestId(requestId);
@@ -136,6 +184,22 @@ export function HumanActionPage() {
     return () => window.clearInterval(timer);
   }, [activeLease, activeRequestId, release.isPending, release.isError, skip.isPending]);
 
+  useEffect(() => {
+    if (!canManageHumanActions || ended) {
+      activeLeaseRef.current = null;
+      setActiveLease(null);
+      setActiveRequestId(null);
+    }
+  }, [canManageHumanActions, ended]);
+
+  useEffect(() => {
+    onControlChange?.(activeLease && activeRequestId && canManageHumanActions && !ended
+      ? { requestId: activeRequestId, done: () => release.mutate(activeRequestId) } : null);
+  }, [activeLease?.lease_id, activeRequestId, canManageHumanActions, ended, onControlChange]);
+
+  if (inline && !activeLease && !pending.length && !leased.length && !pendingApprovals.length
+      && !actions.isError && !approvals.isError && run.status !== "awaiting_human") return null;
+
   return (
     <section className="results-boundary" aria-labelledby="human-action-heading">
       <p className="section-label">Human assistance</p>
@@ -169,7 +233,7 @@ export function HumanActionPage() {
             <p className="muted">Request expires {action.expires_at ? new Date(action.expires_at).toLocaleString() : "when the run ends"}.</p>
           </div>
           <div className="button-row">
-            <button className="secondary-button" type="button" disabled={claim.isPending || skip.isPending || Boolean(activeLease) || Boolean(action.browser_state && action.browser_state !== "open")} onClick={() => claim.mutate(action.id)}>
+            <button className="secondary-button" type="button" disabled={claim.isPending || skip.isPending || Boolean(activeLease) || resumePending || Boolean(action.browser_state && action.browser_state !== "open")} onClick={() => claim.mutate(action.id)}>
               <ShieldCheck size={16} aria-hidden="true" /> Take browser control
             </button>
             <button className="secondary-button" type="button" disabled={skip.isPending || claim.isPending || release.isPending} onClick={() => skip.mutate(action.id)}>Skip this case/journey</button>
@@ -265,7 +329,7 @@ export function HumanActionPage() {
       </section>
       </> : null}
 
-      <p className="muted">Passwords, one-time codes, browser frames, and page contents must only be sent through the protected browser viewer. Never paste them into MarketTwin notes or chat.</p>
+      <p className="muted">Enter login details only in the protected browser, using a dedicated test account. MarketTwin forwards your input to the browser; the agent is paused. Credential entry is not intentionally retained, and scoped session state may be held temporarily for this test. Never paste credentials into notes or chat.</p>
     </section>
   );
 }

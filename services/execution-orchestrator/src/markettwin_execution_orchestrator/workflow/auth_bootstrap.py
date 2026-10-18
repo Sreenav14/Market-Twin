@@ -87,6 +87,17 @@ async def authenticated_discovery(
                 runtime_target_id=UUID(str(request.target_snapshot["target_id"]))
                     if request.runtime_human_assistance else None,
             )
+        from markettwin_execution_orchestrator.workflow.cooperative_pause import (
+            cooperative_pause_checkpoint,
+        )
+
+        async def request_pause() -> None:
+            await cooperative_pause_checkpoint(
+                request=journey_request, controller=controller, handle=handle,
+                session=session, policy=request.auth_verification,
+            )
+
+        controller.bind_cooperative_pause_handler(handle, request_pause)
         async def request_login() -> None:
             if request.auth_verification is None:
                 await request_runtime_assistance(
@@ -113,6 +124,10 @@ async def authenticated_discovery(
     finally:
         await session.rollback()
         await controller.close_session(session_id=handle.session_id)
+        from markettwin_execution_orchestrator.workflow.cooperative_pause import (
+            finalize_browser_pauses,
+        )
+        await finalize_browser_pauses(session, handle)
         await executions.mark_browser_session_closed(browser_session_id=handle.session_id)
         await executions.finish_agent_execution(
             execution_id=execution_id,

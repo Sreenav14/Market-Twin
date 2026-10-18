@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from markettwin_database.models.execution import (
     AgentExecution,
     BrowserSession,
+    ExecutionPauseRequest,
     ExecutionSuspension,
     HumanActionRequest,
     HumanControlLease,
@@ -198,7 +199,10 @@ class HumanActionRepository:
             .limit(1)
             .with_for_update(of=(HumanActionRequest, BrowserSession, TargetAuthorization))
         )
-        result = await self._session.execute(statement)
+        # Serialize browser transitions before locking their request, matching
+        # cooperative Resume and worker acknowledgment lock order.
+        await self._session.execute(statement.with_for_update(of=BrowserSession))
+        result = await self._session.execute(statement.execution_options(populate_existing=True))
         return result.tuples().one_or_none()
 
     async def claim(
@@ -214,6 +218,12 @@ class HumanActionRepository:
         if row is None:
             raise HumanActionNotAuthorizedError("Human control is not authorized for this request.")
         request, browser = row
+        resuming = await self._session.scalar(select(ExecutionPauseRequest.id).where(
+            ExecutionPauseRequest.human_request_id == request.id,
+            ExecutionPauseRequest.status == "resume_requested",
+        ))
+        if resuming is not None:
+            raise HumanActionConflictError("The worker is already resuming this browser.")
         now = datetime.now(UTC)
         if request.expires_at is None or request.expires_at <= now:
             raise HumanActionExpiredError("The human action request has expired.")

@@ -108,6 +108,11 @@ export function AgentPromptsPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const run = useQuery({ queryKey: ["run", user.id, runId], queryFn: ({ signal }) => api.getRun(runId!, signal), enabled: Boolean(runId) });
+  const journeys = useQuery({
+    queryKey: ["agent-journeys", user.id, workspace.id, runId],
+    queryFn: ({ signal }) => api.getRunJourneys(runId!, signal), enabled: Boolean(runId),
+    refetchInterval: run.data && ["planning", "running", "awaiting_human"].includes(run.data.status) ? 3000 : false,
+  });
   const state = useQuery({
     queryKey: ["agent-prompts", user.id, runId],
     queryFn: ({ signal }) => agentPrompts.list(runId!, signal),
@@ -137,8 +142,21 @@ export function AgentPromptsPage() {
   }
   return (
     <>
-      <PageHeader title="Test agent flow" description="Meta plans the test. Journey subagents run sequentially, then the collector hands results to evaluation and reporting. Select a recorded agent to edit its YAML." />
+      <PageHeader title="Testers, goals and execution" description="See what was attempted and what the recorded evidence supports. Simulated testers are hypothetical perspectives, not human research participants." />
       <Link className="back-link" to="/agents">All projects</Link>
+      <section className="tester-journeys" aria-label="Testers and goals">
+        <h2>{run.data?.configuration_snapshot.execution_mode === "deep_feature_v1" ? "Feature Cases — deterministic execution" : "Simulated testers and journeys"}</h2>
+        {journeys.isPending ? <LoadingPanel label="Loading recorded work" /> : journeys.isError ? <ErrorPanel message={journeys.error.message} /> : !journeys.data.length ? <p>No testing work has been recorded. Start the test to create its plan.</p> : journeys.data.map((journey) => <article className="tester-journey" key={journey.id}>
+          <div><h3>{journey.runtime_name === "browser_discovery_v1" ? "Browser discovery" : run.data?.configuration_snapshot.execution_mode === "deep_feature_v1" ? `Feature case ${journey.ordinal}` : `${journey.persona_name} · simulated tester`}</h3>
+            <strong>{journey.mission_title}</strong><p>{journey.mission_objective}</p>
+            <details><summary>Success criteria and scenario</summary><ul>{journey.success_criteria.map((criterion, index) => <li key={index}>{criterion}</li>)}</ul><p>{journey.persona_perspective}</p></details>
+          </div>
+          <dl className="definition-list"><div><dt>Execution</dt><dd>{journey.execution_status?.replaceAll("_", " ") ?? "Not started"}</dd></div><div><dt>Recorded outcome</dt><dd>{journey.outcome ?? "Not established"}</dd></div><div><dt>Recorded work</dt><dd>{journey.step_count} steps · {journey.artifact_count} artifacts</dd></div></dl>
+          <div className="button-row"><Link className="text-link" to={`/runs/${runId}/activity`}>Watch / assist</Link><Link className="text-link" to={`/runs/${runId}/journeys/${journey.id}`}>Inspect actions and evidence</Link></div>
+        </article>)}
+        <p className="muted">Execution completion and the product outcome are separate. A failed test is not automatically a confirmed website defect. Inspect its criteria and supporting evidence.</p>
+      </section>
+      <details className="tester-advanced"><summary>Advanced agent configuration and recorded diagnostics</summary>
       {state.isPending ? <LoadingPanel label="Loading agent prompts" /> : state.isError ? <ErrorPanel message={state.error.message} action={<Button variant="secondary" onClick={() => void state.refetch()}>Try again</Button>} /> : selected ? (
         <div className="agent-prompts-layout">
           <section className="panel agent-prompt-list" aria-label="Created agents">
@@ -171,6 +189,7 @@ export function AgentPromptsPage() {
           }} />
         </div>
       ) : <EmptyState title="No agents have been created yet" copy="The planner appears when planning starts. Persona agents appear as their journeys start executing." />}
+      </details>
     </>
   );
 }

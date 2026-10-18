@@ -160,7 +160,7 @@ def test_dedup_preserves_distinct_preconditions() -> None:
     "budget,reason",
     [
         (PlanBudget(max_cases=2), "case_budget"),
-        (PlanBudget(max_steps=2), "step_budget"),
+        (PlanBudget(max_steps=3), "step_budget"),
         (PlanBudget(max_total_seconds=30), "time_budget"),
         (PlanBudget(max_model_cost_usd=0.1), "cost_budget"),
     ],
@@ -176,6 +176,50 @@ def test_budget_trims_explicitly(budget: PlanBudget, reason: str) -> None:
     assert plan.cases
     assert plan.skipped
     assert {item.reason for item in plan.skipped} == {reason}
+
+
+@pytest.mark.parametrize("max_steps,selected", [(3, 1), (4, 1), (5, 1), (6, 2)])
+def test_selection_reserves_initial_navigation_for_each_case(max_steps: int, selected: int) -> None:
+    from markettwin_execution_orchestrator.workflow.deep_run import skip_reason
+
+    req = replace(request(), budget=PlanBudget(max_steps=max_steps))
+    first = update(
+        cases(req).cases[0], case_id="case_a",
+        steps=(CaseAction(action="navigate", url=req.scope.starting_url),),
+        expected=(ExpectedAssertion(
+            assertion_id="heading", oracle="visible", expected_value=True,
+            target=SemanticTarget(role="heading", name="Fixture home"),
+        ),),
+    )
+    second = update(first, case_id="case_b", preconditions=("Distinct fixture setup",))
+    candidates = FeatureCaseCandidates(cases=(first, second))
+    original = candidates.model_dump_json()
+    plan = select_feature_cases(request=req, candidates=candidates)
+    assert len(plan.cases) == selected
+    assert len(plan.skipped) == 2 - selected
+    assert all(item.reason == "step_budget" for item in plan.skipped)
+    assert candidates.model_dump_json() == original
+    remaining = max_steps
+    for case in plan.cases:
+        assert skip_reason(remaining_seconds=100, remaining_steps=remaining, case=case) is None
+        remaining -= len(case.steps) + len(case.expected) + 1
+    assert remaining >= 0
+
+
+def test_historical_frozen_plan_step_accounting_remains_compatible() -> None:
+    req = replace(request(), budget=PlanBudget(max_steps=2))
+    case = update(
+        cases(req).cases[0], steps=(CaseAction(action="navigate", url=req.scope.starting_url),),
+        expected=(ExpectedAssertion(
+            assertion_id="heading", oracle="visible", expected_value=True,
+            target=SemanticTarget(role="heading", name="Fixture home"),
+        ),),
+    )
+    historical = DeepFeaturePlan(scope=req.scope, budget=req.budget, cases=(case,))
+    frozen_json = historical.model_dump_json()
+    restored = DeepFeaturePlan.model_validate_json(frozen_json)
+    validate_feature_plan(restored, req)
+    assert restored.model_dump_json() == frozen_json
 
 
 @pytest.mark.parametrize("mutation", ["source", "value", "feature", "data", "action", "origin"])

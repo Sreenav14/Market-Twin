@@ -26,6 +26,7 @@ import { testTitle, testReference, textValue } from "../lib/format";
 import { canDeleteTest, terminalTestStatuses } from "../lib/results";
 import { AppShellContext } from "./AppShell";
 import { RunFlowPanel } from "../components/markettwin/RunFlowPanel";
+import { HumanAssistanceHost } from "../pages/runs/HumanActionPage";
 
 export type ResultsState =
   | { status: "loading" | "waiting"; data: null; error: null }
@@ -62,6 +63,7 @@ export function RunLayout() {
     try {
       await api.startRun(runId);
       await runQuery.refetch();
+      navigate(`/runs/${runId}/activity`);
     } catch (error) {
       setStartError(
         error instanceof Error
@@ -184,26 +186,26 @@ export function RunLayout() {
           {startError}
         </p>
       ) : null}
-      {run.status === "awaiting_human" && !location.pathname.endsWith("/human-action") ? (
+      {run.status === "awaiting_human" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") ? (
         <section className="run-action-required" aria-labelledby="run-action-required-title">
           <div>
             <p className="section-label">Action required</p>
             <h2 id="run-action-required-title">A human action is holding this test</h2>
-            <p>The agent is paused until an authorized operator completes or cancels the request.</p>
+            <p>The agent is paused until an authorized operator completes or skips the affected work.</p>
           </div>
-          <Link className="primary-button" aria-label="Open Human Assistance for this test" to={`/runs/${run.id}/human-action`}>Open Human Assistance</Link>
+          <Link className="primary-button" aria-label="Open Human Assistance for this test" to={`/runs/${run.id}/activity`}>Open Live Execution</Link>
         </section>
       ) : null}
       <div className="run-workspace">
       <div className="run-workspace-content">
       <nav className="tab-strip" aria-label="Test sections">
-        {["overview", "journeys", "findings", "evidence", "report", "human-action"].map((tab) => (
+        {["overview", "activity", "journeys", "findings", "evidence", "report"].map((tab) => (
           <NavLink
             key={tab}
             to={`/runs/${run.id}/${tab}`}
             className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}
           >
-            {tab === "overview" ? "Summary" : tab === "human-action" ? "Human Assistance" : tab[0].toUpperCase() + tab.slice(1)}
+            {tab === "overview" ? "Summary" : tab === "activity" ? "Live Execution" : tab[0].toUpperCase() + tab.slice(1)}
             {tab === "findings" && results.status === "ready" ? (
               <span className="tab-count">{results.data.findings.length}</span>
             ) : null}
@@ -212,19 +214,20 @@ export function RunLayout() {
         <details className="run-more-nav">
           <summary>More</summary>
           <div className="run-more-menu" aria-label="More test sections">
-            {["activity", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
+            {["human-action", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
               <NavLink key={tab} to={`/runs/${run.id}/${tab}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>
-                {tab[0].toUpperCase() + tab.slice(1)}
+                {tab === "human-action" ? "Human Assistance" : tab === "agents" ? "Testers & Agents" : tab[0].toUpperCase() + tab.slice(1)}
               </NavLink>
             ))}
           </div>
         </details>
       </nav>
-      <Outlet
+      <HumanAssistanceHost key={`${appContext.user.id}:${appContext.workspace.id}:${appContext.workspace.role}:${run.id}`}
+        context={{ ...appContext, run, results, refresh }}><Outlet
         context={{ ...appContext, run, results, refresh } satisfies RunContext}
-      />
+      /></HumanAssistanceHost>
       </div>
-      {!location.pathname.endsWith("/human-action") ? <RunFlowPanel runId={run.id} userId={appContext.user.id} runStatus={run.status} reportReady={results.status === "ready"} /> : null}
+      {!location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") ? <RunFlowPanel runId={run.id} userId={appContext.user.id} runStatus={run.status} reportReady={results.status === "ready"} /> : null}
       </div>
     </>
   );

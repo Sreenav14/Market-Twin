@@ -169,6 +169,7 @@ class HumanActionLifecycleRepository:
             .join(BrowserSession, BrowserSession.id == HumanActionRequest.browser_session_id)
             .where(HumanActionRequest.id == request_id)
             .with_for_update(of=(HumanActionRequest, BrowserSession))
+            .execution_options(populate_existing=True)
         )
         row = pair.one_or_none()
         if row is None:
@@ -207,6 +208,7 @@ class HumanActionLifecycleRepository:
             .join(BrowserSession, BrowserSession.id == HumanActionRequest.browser_session_id)
             .where(HumanActionRequest.id == request_id)
             .with_for_update(of=(HumanActionRequest, BrowserSession))
+            .execution_options(populate_existing=True)
         )
         row = pair.one_or_none()
         if row is None:

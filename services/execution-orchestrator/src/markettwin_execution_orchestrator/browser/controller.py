@@ -128,6 +128,8 @@ class BrowserController:
         self._authentication_handlers: dict[UUID, Callable[[], Awaitable[None]]] = {}
         self._authentication_locks: dict[UUID, asyncio.Lock] = {}
         self._pending_authentication: set[UUID] = set()
+        self._cooperative_handlers: dict[UUID, Callable[[], Awaitable[None]]] = {}
+        self._cooperative_locks: dict[UUID, asyncio.Lock] = {}
         self._start_lock = asyncio.Lock()
         self._approval_salt = secrets.token_hex(32)
 
@@ -285,6 +287,35 @@ class BrowserController:
         self._authentication_handlers[handle.session_id] = handler
         self._authentication_locks[handle.session_id] = asyncio.Lock()
 
+    def bind_cooperative_pause_handler(
+        self, handle: BrowserSessionHandle, handler: Callable[[], Awaitable[None]],
+    ) -> None:
+        self._get_session(session_id=handle.session_id, execution_id=handle.execution_id,
+                          journey_id=handle.journey_id)
+        self._cooperative_handlers[handle.session_id] = handler
+        self._cooperative_locks[handle.session_id] = asyncio.Lock()
+
+    async def cooperative_checkpoint(self, handle: BrowserSessionHandle) -> None:
+        handler = self._cooperative_handlers.get(handle.session_id)
+        if handler is not None:
+            async with self._cooperative_locks[handle.session_id]:
+                await handler()
+
+    async def cooperative_pause_ready(self, handle: BrowserSessionHandle) -> bool:
+        """Safe boundary probe; never recursively invokes action/pause handlers."""
+        session = self._get_session(session_id=handle.session_id,
+                                    execution_id=handle.execution_id, journey_id=handle.journey_id)
+        async with session.lock:
+            if session.state != "open" or session.control_mode != "agent":
+                return False
+            try:
+                validate_target_url(
+                    session.page.url, session.allowed_origins, session.network_policy,
+                )
+            except BrowserPolicyError:
+                return False
+            return not await self._has_authentication_challenge(session)
+
     async def has_authentication_challenge(
         self, handle: BrowserSessionHandle, *, include_pending: bool = True,
     ) -> bool:
@@ -414,6 +445,8 @@ class BrowserController:
     async def _agent_control_action(
         self, session: JourneyBrowserSession
     ) -> AsyncGenerator[None, None]:
+        handle = BrowserSessionHandle(session.session_id, session.execution_id, session.journey_id)
+        await self.cooperative_checkpoint(handle)
         await self._authentication_checkpoint(session)
         async with session.lock:
             await self._authentication_checkpoint(session, lock_held=True)
@@ -1541,6 +1574,8 @@ class BrowserController:
                     self._authentication_handlers.pop(session_id, None)
                     self._authentication_locks.pop(session_id, None)
                     self._pending_authentication.discard(session_id)
+                    self._cooperative_handlers.pop(session_id, None)
+                    self._cooperative_locks.pop(session_id, None)
 
         return BrowserSessionArtifacts(
             trace_paths=trace_paths,

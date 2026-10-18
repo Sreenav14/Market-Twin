@@ -12,7 +12,7 @@ export function ProjectAgentBrowser({ workspaceId }: { workspaceId: string }) {
   const runs = useQuery({ queryKey: ["agent-project-runs", projectId], queryFn: () => api.listRuns(projectId), enabled: Boolean(projectId), refetchInterval: 5000 });
   const project = projects.data?.find((item) => item.id === projectId);
   return <>
-    <PageHeader title="Agent settings" description="Choose a project, then a test to inspect its agent flow and saved settings." />
+    <PageHeader title="Testers & Agents" description="Choose an application and test to inspect its testers, goals, actual actions and evidence. Advanced model and prompt settings remain available within each test." />
     {projects.isPending ? <LoadingPanel label="Loading projects" /> : projects.isError ? <ErrorPanel message={projects.error.message} /> : <div className="agent-project-grid">{projects.data?.map((item) => <button className={`agent-prompt-choice panel${item.id === projectId ? " is-selected" : ""}`} key={item.id} aria-pressed={item.id === projectId} onClick={() => setProjectId(item.id)}><strong>{item.name}</strong><span>View test agent flows</span></button>)}</div>}
     {project ? <section className="panel"><h2>{project.name} · Tests</h2>
       {runs.isPending ? <LoadingPanel label="Loading tests" /> : runs.isError ? <ErrorPanel message={runs.error.message} /> : runs.data?.length ? <div className="study-table">{runs.data.map((run) => <Link className="study-row" key={run.id} to={`/runs/${run.id}/agents`}><span className="study-row-copy"><strong>{testTitle(run)}</strong><span>Open ordered agent flow</span></span><span>{run.status}</span></Link>)}</div> : <EmptyState title="No tests in this project" copy="Create and start a test to record its agents." />}

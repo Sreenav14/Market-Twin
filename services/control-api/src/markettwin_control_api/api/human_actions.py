@@ -14,6 +14,7 @@ from markettwin_database.models.execution import (
     ActionApprovalRequest,
     AgentExecution,
     BrowserSession,
+    ExecutionPauseRequest,
     HumanActionRequest,
     HumanControlLease,
 )
@@ -281,6 +282,12 @@ async def list_human_actions(test_run_id: UUID, request: Request) -> list[HumanA
                 .limit(50)
                 )
             ).all()
+            manual_requests: set[UUID | None] = set((await session.scalars(select(
+                ExecutionPauseRequest.human_request_id,
+            ).where(
+                ExecutionPauseRequest.test_run_id == test_run_id,
+                ExecutionPauseRequest.human_request_id.in_(tuple(row[0].id for row in rows)),
+            ))).all()) if rows else set()
             return [
                 HumanActionResponse(
                     id=req.id,
@@ -303,6 +310,10 @@ async def list_human_actions(test_run_id: UUID, request: Request) -> list[HumanA
                     requested_by_step_id=req.requested_by_step_id,
                     browser_state=browser.state,
                     instructions=(
+                        "Execution paused at a safe boundary. Resume without taking control, "
+                        "or take control of this browser within approved origins and choose "
+                        "Done when finished. You can also skip this case/journey."
+                        if req.id in manual_requests else
                         "Prepare the current page so the original planned control is available. "
                         "Choose Done when ready to continue, or skip this case/journey. "
                         "Stay within the run's approved origins."

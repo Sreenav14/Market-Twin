@@ -7,6 +7,7 @@ import { EmptyState } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { findingClassification, isConfirmedFinding, severityOrder, sortFindings } from "../../lib/results";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
 
 export function RunFindingsPage() {
   const { run, results } = useOutletContext<RunContext>();
@@ -17,6 +18,7 @@ export function RunFindingsPage() {
   const category = params.get("category") || "all";
   const sort = params.get("sort") || "severity";
   const findings = results.status === "ready" ? results.data.findings : [];
+  const emptySummary = results.status === "ready" ? emptyFindingsSummary(results.data) : null;
   const selectedId = params.get("selected") || "";
   const categories = [
     ...new Set(findings.map((finding) => finding.category)),
@@ -134,11 +136,11 @@ export function RunFindingsPage() {
                 <div className="findings-workbench">
                 <div className="findings-groups">
                 {([
-                  ["Confirmed issues", "Visually verified issue"],
+                  ["Confirmed issues", "confirmed"],
                   ["Needs Verification", "Needs Verification"],
                   ["Test execution issues", "Test execution issue"],
                 ] as const).map(([heading, classification]) => {
-                  const items = filtered.filter((finding) => findingClassification(finding) === classification);
+                  const items = filtered.filter((finding) => classification === "confirmed" ? isConfirmedFinding(finding) : findingClassification(finding) === classification);
                   return items.length ? (
                     <section key={heading} aria-label={heading}>
                       <h3>{heading}</h3>
@@ -182,10 +184,10 @@ export function RunFindingsPage() {
             )}
           </>
         ) : (
-          <EmptyState
-            title="No findings in this evaluation"
-            copy="This test did not produce findings from the available evaluation checks. Review the report to understand its scope and outcomes."
-          />
+          emptySummary ? <>
+            <EmptyState title={emptySummary.title} copy={emptySummary.copy} action={<Link className="secondary-button" to={`/runs/${run.id}/report${emptySummary.featureCases ? "#report-feature-cases" : ""}`}>{emptySummary.featureCases ? "Review case outcomes and assertions" : "Review evaluation report"}</Link>} />
+            {emptySummary.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
+          </> : null
         )}
       </section>
     </ResultsBoundary>

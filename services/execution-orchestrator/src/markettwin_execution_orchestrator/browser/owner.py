@@ -25,6 +25,8 @@ class ViewerRejectedError(RuntimeError):
 # so an operator's entry is never exposed through the observation path.
 OBSERVABLE_CONTROL_MODES = frozenset({"agent", "human_pending"})
 OBSERVATION_LOCK_SECONDS = 2.0
+OBSERVATION_OPERATION_SECONDS = 2.0
+OBSERVATION_CLEANUP_SECONDS = 0.25
 OBSERVATION_MAX_BYTES = 2 * 1024 * 1024
 
 
@@ -237,18 +239,18 @@ class ControllerBrowserOwner:
         """Read-only JPEG for an agent or pending browser. Never changes control state.
 
         Does not create a lease, alter generation, enable input, or toggle capture flags.
-        Waiting for the session lock is bounded so viewing cannot stall a browser action.
+        Lock wait and capture share one bounded budget. Cleanup cannot retain the lock.
         """
         session = self._session(handle)
+        channel = None
+        acquired = False
         try:
-            async with asyncio.timeout(OBSERVATION_LOCK_SECONDS):
-                await session.lock.acquire()
-        except TimeoutError:
-            raise ViewerRejectedError("Browser observation is unavailable.") from None
-        try:
-            self._observable(session, generation)
-            channel = await session.context.new_cdp_session(session.page)
-            try:
+            async with asyncio.timeout(OBSERVATION_OPERATION_SECONDS):
+                async with asyncio.timeout(OBSERVATION_LOCK_SECONDS):
+                    await session.lock.acquire()
+                acquired = True
+                self._observable(session, generation)
+                channel = await session.context.new_cdp_session(session.page)
                 send = cast(
                     Callable[[str, dict[str, object]], Awaitable[dict[str, object]]],
                     channel.send,  # pyright: ignore[reportUnknownMemberType]
@@ -257,19 +259,25 @@ class ControllerBrowserOwner:
                     "format": "jpeg", "quality": 65, "captureBeyondViewport": False,
                 })
                 data = base64.b64decode(cast(str, result["data"]), validate=True)
-            finally:
-                await channel.detach()
-            # Revalidate after capture so a frame from a transition is never returned.
-            self._observable(session, generation)
-            if len(data) > OBSERVATION_MAX_BYTES:
-                raise ViewerRejectedError("Browser observation is unavailable.")
-            return data
+                # Revalidate after capture; transition frames must never be returned.
+                self._observable(session, generation)
+                if len(data) > OBSERVATION_MAX_BYTES:
+                    raise ViewerRejectedError("Browser observation is unavailable.")
+                return data
         except ViewerRejectedError:
             raise
         except Exception:
             raise ViewerRejectedError("Browser observation is unavailable.") from None
         finally:
-            session.lock.release()
+            if acquired:
+                session.lock.release()
+            if channel is not None:
+                try:
+                    async with asyncio.timeout(OBSERVATION_CLEANUP_SECONDS):
+                        await channel.detach()
+                except Exception:
+                    # Cleanup failure cannot expose page data or hold agent control.
+                    pass
 
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None:
         session = self._session(handle)

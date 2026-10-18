@@ -6,6 +6,7 @@ import { FindingListItem } from "../../components/markettwin/FindingListItem";
 import { CopyButton } from "../../components/markettwin/CopyButton";
 import { reportMetrics, sortFindings, findingClassification, isConfirmedFinding } from "../../lib/results";
 import { textValue, testBrief } from "../../lib/format";
+import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
 
 export function RunOverviewPage() {
   const { run, results } = useOutletContext<RunContext>();
@@ -30,8 +31,10 @@ export function RunOverviewPage() {
     "policy_blocked",
   ].includes(run.status);
   const metrics = ready ? reportMetrics(results.data) : null;
+  const emptySummary = ready && results.data.findings.length === 0 ? emptyFindingsSummary(results.data) : null;
   return (
     <>
+      {!["draft", "failed", "cancelled"].includes(run.status) ? <section className="run-action-required"><div><h2>{pausedForHuman ? "Human assistance required" : run.status === "completed" ? "Review recorded execution" : "Watch this test execute"}</h2><p>{pausedForHuman ? "Open the requesting journey and protected browser. The agent waits while you assist." : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}</p></div><Link className="primary-button" to={`/runs/${run.id}/activity`}>Open Live Execution</Link></section> : null}
       {pausedForHuman ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
       <ol className="lifecycle-rail" aria-label="Test lifecycle">
         {stages.map((label, index) => (
@@ -77,11 +80,11 @@ export function RunOverviewPage() {
                 <p className="section-label">The test at a glance</p>
                 <h2>
                   {results.data.findings.length === 0
-                    ? "No findings in this evaluation"
+                    ? emptySummary?.title
                     : `${results.data.findings.length} ${results.data.findings.length === 1 ? "finding" : "findings"} to review`}
                 </h2>
                 <p>
-                  {results.data.report.executive_summary ||
+                  {emptySummary?.copy || results.data.report.executive_summary ||
                     "Open the findings to inspect the evaluation and its supporting references."}
                 </p>
                 <Link
@@ -110,6 +113,7 @@ export function RunOverviewPage() {
                 </div>
               </dl>
             </div>
+            {emptySummary?.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
             <div className="outcome-counts" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : outcome.replaceAll("_", " ")}: {count}</span>)}</div>
             {results.data.findings.length > 0 ? (
               <section className="section-block">

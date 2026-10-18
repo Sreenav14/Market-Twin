@@ -198,6 +198,8 @@ class DatabaseViewerAuthority:
                     BrowserSession.control_generation == generation,
                     BrowserSession.control_mode.in_(("agent", "human_pending")),
                     BrowserSession.state == "open",
+                    TestRun.status.in_(("planning", "running", "awaiting_human")),
+                    AgentExecution.status == "running",
                     WorkspaceMember.role.in_(("owner", "admin")),
                     Workspace.status == "active",
                     Workspace.deleted_at.is_(None),

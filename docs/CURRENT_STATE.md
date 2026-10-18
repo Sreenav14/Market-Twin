@@ -1,4 +1,18 @@
-## Current instruction: implementation paused; detailed live execution plan (2026-10-17)
+## Active: audited live execution implementation (2026-10-18)
+
+User resumed implementation under the complete repository audit/live execution
+master specification dated 2026-10-18 and explicitly requested parallel agents.
+Current baseline is commit `38431448`; initial Git status contained only the
+untracked user specification. Preserve that document and all existing source.
+
+Current plan, ownership, findings and checks:
+[Live execution audit checkpoint](LIVE_EXECUTION_AUDIT_CHECKPOINT.md).
+Four slots are active: root audit/integration, worker security, Control API/read
+model, and frontend. Worker observation is already committed; public API and live
+UI are being added. Historical statements below saying observation is absent or
+coding remains paused are superseded by this checkpoint. No full acceptance yet.
+
+## Historical instruction: implementation paused; detailed live execution plan (2026-10-17)
 
 User stopped coding and requested a detailed what/where/why document. Working plan:
 [Live execution implementation plan](hitl/LIVE_EXECUTION_IMPLEMENTATION_PLAN.md).

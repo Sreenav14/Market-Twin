@@ -275,7 +275,7 @@ def select_feature_cases(
         elif len(selected) >= request.budget.max_cases:
             reason = "case_budget"
         elif (
-            sum(len(item.steps) + len(item.expected) for item in (*selected, case))
+            sum(len(item.steps) + len(item.expected) + 1 for item in (*selected, case))
             > request.budget.max_steps
         ):
             reason = "step_budget"

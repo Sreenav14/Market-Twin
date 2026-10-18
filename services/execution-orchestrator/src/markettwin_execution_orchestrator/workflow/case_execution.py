@@ -560,6 +560,7 @@ async def execute_test_case(
         approved_operation: Callable[[int], Awaitable[BrowserActionResult]] | None = None,
     ) -> None:
         assert recorder is not None and handle is not None
+        await browser_controller.cooperative_checkpoint(handle)
         reserve_step()
         step_id = await recorder.start_step(
             action_type=action_type,
@@ -653,6 +654,18 @@ async def execute_test_case(
             )
             await session.commit()
             persisted_browser = True
+            from markettwin_execution_orchestrator.workflow.cooperative_pause import (
+                cooperative_pause_checkpoint,
+            )
+
+            async def request_cooperative_pause() -> None:
+                async with pause_case_deadline(case_timeout, allowance_seconds=300):
+                    await cooperative_pause_checkpoint(
+                        request=request, controller=browser_controller, handle=handle,
+                        session=session, policy=auth_verification,
+                    )
+
+            browser_controller.bind_cooperative_pause_handler(handle, request_cooperative_pause)
             stage = "storage_setup"
             storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
             recorder = ExecutionStepRecorder(session, request.execution_id, storage)
@@ -825,6 +838,7 @@ async def execute_test_case(
                     approved_operation=execute_case_action,
                 )
             for expected in case.expected:
+                await browser_controller.cooperative_checkpoint(handle)
                 stage = "assertions"
                 reserve_step()
                 step_id = await recorder.start_step(
@@ -934,6 +948,11 @@ async def execute_test_case(
             try:
                 async with asyncio.timeout(10):
                     artifacts = await browser_controller.close_session(session_id=handle.session_id)
+                    if persisted_browser:
+                        from markettwin_execution_orchestrator.workflow.cooperative_pause import (
+                            finalize_browser_pauses,
+                        )
+                        await finalize_browser_pauses(session, handle)
                     if storage is not None:
                         await SessionArtifactRecorder(
                             session, request.execution_id, storage

@@ -45,6 +45,7 @@ def create_browser_tools(
         click_preflight: Callable[[], Awaitable[SensitiveActionIntent | None]] | None = None,
     ) -> dict[str, object]:
         async with action_lock:
+            await controller.cooperative_checkpoint(handle)
             return await execute_recorded_action(
                 action_type=action_type,
                 action_summary=action_summary,

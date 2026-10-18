@@ -67,6 +67,53 @@ export interface HumanLeaseGrant {
   viewer_ticket?: string;
 }
 
+export interface LiveBrowser {
+  browser_session_id: string;
+  execution_id: string;
+  journey_id: string;
+  generation: number;
+  control_state: string;
+  viewer_state: "available" | "suppressed";
+  journey_title: string;
+  requesting_agent: string;
+}
+
+export interface RunActivityItem {
+  id: string;
+  run_id: string;
+  journey_id: string | null;
+  execution_id: string | null;
+  step_id: number | null;
+  source: "browser_agent" | "deterministic_case" | "planner" | "human_assistance" | "approval" | "evaluation" | "report" | "system";
+  kind: string;
+  status: string;
+  occurred_at: string;
+  title: string;
+}
+
+export interface LiveExecution {
+  run_id: string;
+  run_status: TestRunStatus;
+  server_observed_at: string;
+  browser: LiveBrowser | null;
+  activity: { items: RunActivityItem[]; next_cursor: string | null };
+  pause?: ExecutionPause | null;
+}
+
+export interface ExecutionPause {
+  id: string;
+  status: string;
+  execution_id: string;
+  journey_id: string;
+  browser_session_id: string;
+  generation: number;
+  human_request_id: string | null;
+  created_at: string;
+  expires_at: string;
+  acknowledged_at: string | null;
+  completed_at: string | null;
+}
+
 export interface ActionApproval {
   step_id?: number;
   journey_id?: string;
@@ -330,6 +377,33 @@ async function readResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 export const api = {
+  requestExecutionPause: (runId: string, browser: LiveBrowser) =>
+    request<ExecutionPause>(`/api/v1/test-runs/${runId}/live-browser/pause`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ browser_session_id: browser.browser_session_id, generation: browser.generation }),
+    }),
+  resumeExecutionPause: (runId: string, pauseId: string) =>
+    request<ExecutionPause>(`/api/v1/test-runs/${runId}/live-browser/pause/${pauseId}/resume`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+    }),
+  getLiveExecution: (runId: string, cursor?: string, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ limit: "50" });
+    if (cursor) query.set("cursor", cursor);
+    return request<LiveExecution>(`/api/v1/test-runs/${runId}/live-browser?${query}`, { signal, cache: "no-store" });
+  },
+  getLiveBrowserFrame: async (runId: string, browser: LiveBrowser, signal: AbortSignal): Promise<Blob> => {
+    const query = new URLSearchParams({ browser_session_id: browser.browser_session_id, generation: String(browser.generation) });
+    const response = await fetch(`/api/v1/test-runs/${runId}/live-browser/frame?${query}`, {
+      credentials: "include", cache: "no-store", signal,
+    });
+    if (!response.ok) throw new ApiError("The selected live browser is unavailable.", response.status);
+    if (response.headers.get("content-type")?.split(";")[0].trim() !== "image/jpeg") {
+      throw new ApiError("The live browser returned an invalid frame.", 502);
+    }
+    const frame = await response.blob();
+    if (!frame.size || frame.size > 2 * 1024 * 1024) throw new ApiError("The live browser frame exceeded its limits.", 502);
+    return frame;
+  },
   ingestKnowledgeLink: (workspaceId: string, url: string, name: string, roles: string[]) =>
     request<IngestionEntry>(`/api/v1/workspaces/${workspaceId}/ingestion/link`, {
       method: "POST", body: JSON.stringify({ url, name, roles }),
