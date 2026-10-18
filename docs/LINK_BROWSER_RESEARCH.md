@@ -30,7 +30,7 @@ The current implementation uses the already-installed Playwright1.61 Chromium:
 - Saves a source-attributed text bundle through the existing draft ingestion pipeline.
 - Reports inaccessible pages, remaining discovered pages and inspection limitations.
 
-Limits:30 pages, approximately120 seconds,300 discovered URLs,180 requests,
+Limits:100 pages, 20 minutes, 1000 discovered URLs, 1000 subresource requests,
 2MB per response and40MB total responses. No claim of exhaustive site coverage.
 Public pages only: no credentials, form submissions, account mutations, downloads,
 media or image analysis. Pages requiring unsupported access/requests may be incomplete.

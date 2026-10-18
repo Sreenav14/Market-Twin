@@ -3,6 +3,40 @@
 Primary specification: `MARKETTWIN_COMPLETE_REPOSITORY_AUDIT_AND_LIVE_EXECUTION_MASTER_SPEC_2026-10-18.md`.
 Baseline: `38431448ded7357c6d7b6010baa0d4c4ad773146`, 2026-10-18.
 
+## Spec reconciliation at HEAD b189d96 (2026-10-18, current)
+
+Start state: working tree clean. The earlier work in this checkpoint is committed
+in `b189d96`, which contains the master spec file. `38431448` is an ancestor.
+
+Gap check against the master spec (source-verified this pass):
+- L1 observation/public API, L2 Live Execution workbench, L3 single assistance
+  owner and L5 cooperative pause are present in source at HEAD.
+- L4 Agents is already tester-first on the run page, with YAML/advanced settings
+  collapsed.
+- Perspectives and Missions were still `FutureStagePage` placeholders with copy
+  that promised generation. Replaced this pass with views of the run's saved
+  journeys (`lib/testerWork.ts`, `RunPerspectivesPage.tsx`, `RunMissionsPage.tsx`).
+  Discovery records and Feature Cases are excluded. Empty and error states are explicit.
+
+Checks run this pass:
+- `npm --workspace @markettwin/web run typecheck`: passed.
+- Web Vitest, full suite (`--pool=threads --maxWorkers=1`): 25 files, 102 tests passed.
+- `npm --workspace @markettwin/web run build`: passed (existing chunk-size warning).
+- Control API `test_live_browser.py`, `test_execution_pause.py`,
+  `test_human_action_response.py`: 33 passed.
+- Worker `test_live_browser_observation.py`: 5 passed. This shell's
+  `PLAYWRIGHT_BROWSERS_PATH` pointed at an empty sandbox cache; the run used the
+  installed Chromium in `%LOCALAPPDATA%\ms-playwright`. No code changed for this.
+
+Not done and still open:
+- L4a LangSmith trace verification. It needs the operator-confirmed project and
+  explicit authorization for a real trace. Not attempted.
+- Spec section 19 full tracked-file ledger (about 673 files). Not started; this
+  pass does not certify every line.
+- Manual Edge, keyboard and screen-reader review of the workbench.
+- Spec 4.6 run-overview "current action / next action" panel was not reviewed or changed.
+- Changes are uncommitted; no commit or push was made.
+
 ## Plan and ownership
 
 1. **Audit current source before changes.** Inventory paths and hashes; review

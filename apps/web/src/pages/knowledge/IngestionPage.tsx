@@ -72,7 +72,7 @@ export function IngestionPage() {
           {sourceType === "link" ? <>
             <label className="field-label" htmlFor="source-url">Public source link</label>
             <input id="source-url" type="url" className="text-input" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/docs" maxLength={2048} required disabled={busy} aria-describedby="link-help" />
-            <p className="form-help" id="link-help">MarketTwin opens the site in a browser, follows connected pages, and expands menus, tabs and readable sections. It inspects up to 30 public pages within two minutes, saves source URLs and coverage limits, then proposes knowledge and skills for your review. Login, form submissions and private pages require a separate approved source.</p>
+            <p className="form-help" id="link-help">MarketTwin opens the site in a browser, follows connected pages, and expands menus, tabs and readable sections. Research continues until 100 public pages or 20 minutes, then saves source URLs and coverage limits and proposes knowledge and skills for your review. Login, form submissions and private pages require a separate approved source.</p>
           </> : <>
           <label className="field-label" htmlFor="source-file">Source file</label>
           <input id="source-file" type="file" disabled={busy} required onChange={(event) => {
@@ -92,7 +92,7 @@ export function IngestionPage() {
           </select>
           <p className="form-help">This helps MarketTwin understand how to use the source. You’ll confirm it during review.</p>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
-          {busy ? <p className="form-note" role="status">{sourceType === "link" ? "Researching linked pages and saving their sources." : "Uploading source."} Knowledge and skill generation will continue in the background.</p> : null}
+          {busy ? <p className="form-note" role="status">{sourceType === "link" ? "Researching linked pages and saving their sources. This can take up to 20 minutes." : "Uploading source."} Knowledge and skill generation will continue in the background.</p> : null}
           <div className="form-actions">
             <Button type="submit" disabled={(sourceType === "file" ? !file : !url.trim()) || !name.trim() || !role || busy}>
               {busy ? <><Spinner /> {sourceType === "link" ? "Researching source…" : "Uploading source…"}</> : "Ingest knowledge"}

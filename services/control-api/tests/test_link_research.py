@@ -3,6 +3,7 @@
 import socket
 import time
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi import HTTPException
@@ -45,7 +46,9 @@ def test_research_preserves_sources_and_is_bounded(monkeypatch):
 
     def page(url, _deadline, **_kwargs):
         fetched.append(url)
-        links = "".join(f'<a href="/docs/{i}">Documentation</a>' for i in range(40))
+        links = "".join(
+            f'<a href="/docs/{i}">Documentation</a>' for i in range(research.MAX_PAGES + 10)
+        )
         return (
             url,
             (f"<h1>Product instructions</h1><script>unsafe invisible</script>{links}"
@@ -143,3 +146,38 @@ def test_connected_link_scope_and_spa_routes():
     assert research.same_site_link(origin, "#/guide", origin) == "https://example.com/#/guide"
     assert research.same_site_link(origin, "https://other.example/", origin) is None
     assert research.same_site_link(origin, "/logout", origin) is None
+
+
+def test_asset_budget_never_blocks_later_page_navigation(monkeypatch):
+    # Real pages load many subresources; those must not starve page navigation.
+    scripts = "".join(f'<script src="/asset-{i}.js"></script>' for i in range(100))
+
+    def page(url, _deadline, **_kwargs):
+        if url.endswith(".js"):
+            return url, b"window.loaded = true;", "application/javascript"
+        if url.endswith("/p1") or url.endswith("/p2") or url.endswith("/p3"):
+            return url, f"<h1>Section {url[-2:]}</h1>{scripts}".encode(), "text/html"
+        links = "".join(f'<a href="/p{i}">Section {i}</a>' for i in (1, 2, 3))
+        return url, f"<h1>Home</h1>{links}".encode(), "text/html"
+
+    monkeypatch.setattr(research, "download_page", page)
+    _, content = research.research_link("https://example.com/")
+    assert b"Could not inspect" not in content
+    assert b"SOURCE URL: https://example.com/p3" in content
+
+
+def test_off_origin_assets_do_not_block_page_text(monkeypatch):
+    def page(url, _deadline, **_kwargs):
+        if urlsplit(url).netloc != "example.com":
+            time.sleep(5)
+            return url, b"third-party", "application/javascript"
+        scripts = "".join(f'<script src="https://cdn.example/a{i}.js"></script>' for i in range(20))
+        html = f"<h1>Visible product</h1><p>Open Settings then choose Profile.</p>{scripts}"
+        return url, html.encode(), "text/html"
+
+    monkeypatch.setattr(research, "download_page", page)
+    started = time.monotonic()
+    _, content = research.research_link("https://example.com/")
+    assert time.monotonic() - started < 12
+    assert b"Visible product" in content
+    assert b"Browser rendering did not finish" not in content

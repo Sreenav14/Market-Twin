@@ -1,3 +1,21 @@
+## Latest: spec reconciliation (2026-10-18)
+
+HEAD is `b189d96`; the prior live-execution work and master spec are committed.
+This pass replaced the Perspectives and Missions placeholders with views of the
+run's saved journeys (uncommitted). Typecheck, 102 web unit tests, build, and
+the Control API and worker live-browser/pause tests pass. Remaining: LangSmith
+trace verification (needs operator project and authorization), the full
+per-file audit ledger, manual accessibility review, and the 4.6 next-action
+panel. Details: `docs/LIVE_EXECUTION_AUDIT_CHECKPOINT.md`, top section.
+
+## Link ingestion research fix (2026-10-18)
+
+Fixed the shared subresource/navigation budget in `knowledge/link_research.py`
+that silently stopped page inspection after about six to nine pages. Focused
+link suite: 15 passed; Ruff and the new regression test cover this. The knowledge
+worker on port 8010 was not running, so the complete ingest-to-review path
+remains unverified. Details: `docs/SESSION_HANDOFF.md`.
+
 ## Active: audited live execution implementation (2026-10-18)
 
 User resumed implementation under the complete repository audit/live execution

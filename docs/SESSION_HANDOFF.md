@@ -1,5 +1,33 @@
 # Active handoff: incremental live execution implementation (2026-10-18)
 
+Knowledge link research fix (2026-10-18): link research shared one 180-request
+budget between page navigations and subresources. Pages after the budget was spent
+were silently recorded as "Could not inspect" (react.dev: 6 pages; docs.python.org:
+9 pages). Budgets now gate subresources only (1000 requests); navigation stays
+bounded by 30 pages, 2 MB per response and the 120 s deadline. Regression test
+`test_asset_budget_never_blocks_later_page_navigation` added; 15 link tests pass.
+Not verified: the full ingest flow with a running knowledge worker on port 8010,
+which was not listening during this session.
+
+Klaviyo link follow-up: `https://www.klaviyo.com/` downloaded, then browser
+research returned 422 "No readable public pages" after about 40 seconds.
+Third-party scripts were downloaded inside the page-load handler and the
+navigation timed out. Off-origin subresources are now aborted, and saved HTML
+text is kept when rendering does not finish. A direct research of that URL then
+inspected 4 pages in 121 seconds. The running Control API must be restarted
+before the UI uses this change. The form stays on "Researching source…" until that request returns.
+Research limits are now 100 pages or 20 minutes, with the dev proxy and
+knowledge-preview timeout extended to match. Restart the Control API and Vite
+before the next link submission.
+
+Latest pass (HEAD `b189d96`): reconciled the master spec against source. Replaced
+the Perspectives/Missions placeholders with saved-journey views (uncommitted,
+see `apps/web/src/lib/testerWork.ts`). Open items are listed at the top of
+`docs/LIVE_EXECUTION_AUDIT_CHECKPOINT.md`: LangSmith trace verification (needs
+operator project and authorization), the full per-file audit, manual
+accessibility review, and the 4.6 next-action panel. Do not commit or push
+without authorization.
+
 User resumed coding with the complete repository audit/live execution master spec
 and requested maximum useful agent parallelism. See
 `docs/LIVE_EXECUTION_AUDIT_CHECKPOINT.md` for the current sequential plan and

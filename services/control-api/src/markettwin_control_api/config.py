@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     outbox_relay_enabled: bool = False
     knowledge_worker_url: str = "http://127.0.0.1:8010"
     knowledge_model_timeout_seconds: float = Field(default=180, gt=0)
-    knowledge_preview_timeout_seconds: float = Field(default=240, gt=0)
+    knowledge_preview_timeout_seconds: float = Field(default=1800, gt=0)
     knowledge_preview_max_bytes: int = Field(default=52428800, gt=0)
     kafka_bootstrap_servers: str = "localhost:9092"
     
