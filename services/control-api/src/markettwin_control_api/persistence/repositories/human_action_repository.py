@@ -52,6 +52,7 @@ class HumanActionRecord:
     request_type: str
     status: str
     expires_at: datetime | None
+    terminal_generation: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ def _request_record(request: HumanActionRequest) -> HumanActionRecord:
         request_type=request.request_type,
         status=request.status,
         expires_at=request.expires_at,
+        terminal_generation=request.terminal_generation,
     )
 
 
@@ -563,13 +565,30 @@ class HumanActionRepository:
         return len(requests) + len(expired_lease_requests)
 
     async def cancel(self, *, request_id: UUID, actor_id: UUID) -> HumanActionRecord:
+        return await self._stop_request(
+            request_id=request_id, actor_id=actor_id, terminal_status="cancelled",
+        )
+
+    async def skip(self, *, request_id: UUID, actor_id: UUID) -> HumanActionRecord:
+        """Abandon only the waiting work item, fencing live human control once."""
+        return await self._stop_request(
+            request_id=request_id, actor_id=actor_id, terminal_status="skipped",
+        )
+
+    async def _stop_request(
+        self, *, request_id: UUID, actor_id: UUID, terminal_status: str,
+    ) -> HumanActionRecord:
         row = await self._lock_operator_request(request_id=request_id, actor_id=actor_id)
         if row is None:
             raise HumanActionNotAuthorizedError("Human control is not authorized for this request.")
         request, browser = row
+        if request.status == "skipped" and terminal_status == "skipped":
+            return _request_record(request)
         if request.status not in {"pending", "leased"}:
             raise HumanActionConflictError("The human action request is no longer active.")
         now = datetime.now(UTC)
+        if terminal_status == "skipped" and request.expires_at and request.expires_at <= now:
+            raise HumanActionExpiredError("The human action request has expired.")
         lease_result = await self._session.execute(
             select(HumanControlLease).where(
                 HumanControlLease.request_id == request.id,
@@ -580,7 +599,8 @@ class HumanActionRepository:
             lease.released_at = now
         browser.control_generation += 1
         browser.control_mode = "none"
-        request.status = "cancelled"
+        request.status = terminal_status
+        request.terminal_generation = browser.control_generation
         await self._abandon_suspension(request.id)
         await self._session.flush()
         return _request_record(request)

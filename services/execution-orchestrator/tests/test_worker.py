@@ -142,6 +142,40 @@ async def test_terminal_duplicate_is_not_executed(monkeypatch: pytest.MonkeyPatc
     execute.assert_not_awaited()
 
 
+async def test_completed_run_logging_does_not_read_expired_orm_identity(monkeypatch) -> None:
+    run_id = uuid4()
+
+    class ExpiringRun:
+        expired = False
+
+        @property
+        def id(self):
+            assert not self.expired, "A handoff rollback expired this ORM identity."
+            return run_id
+
+    run = ExpiringRun()
+    session = SimpleNamespace(get=AsyncMock(return_value=run), rollback=AsyncMock())
+    envelope = SimpleNamespace(payload={"test_run_id": str(run_id)})
+    monkeypatch.setattr(EventEnvelope, "from_json", Mock(return_value=envelope))
+    monkeypatch.setattr(
+        worker, "accept_run_requested", AsyncMock(return_value=SimpleNamespace(test_run_id=run_id)),
+    )
+    monkeypatch.setattr(worker, "build_run_request", Mock(return_value=object()))
+    note = Mock()
+    monkeypatch.setattr(worker, "record_temp_note", note)
+
+    async def execute(*args, **kwargs):
+        run.expired = True
+
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    await worker.process_command(
+        KafkaMessage("commands", 0, 1, None, b"{}"),
+        cast(async_sessionmaker[AsyncSession], lambda: SessionContext(session)),
+    )
+    session.rollback.assert_not_awaited()
+    note.assert_called_with(stage="completed", detail=f"Completed TestRun {run_id}")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("duplicate", [False, True])
 async def test_failed_or_interrupted_run_is_finalized(
@@ -172,6 +206,8 @@ async def test_failed_or_interrupted_run_is_finalized(
     monkeypatch.setattr(worker, "execute_markettwin_run", execute)
     repository = SimpleNamespace(mark_failed=AsyncMock())
     monkeypatch.setattr(worker, "RunStateRepository", Mock(return_value=repository))
+    event_repository = SimpleNamespace(create=AsyncMock())
+    monkeypatch.setattr(worker, "RunEventRepository", Mock(return_value=event_repository))
     await worker.process_command(
         KafkaMessage("commands", 0, 1, None, b"{}"),
         cast(async_sessionmaker[AsyncSession], factory),
@@ -179,3 +215,90 @@ async def test_failed_or_interrupted_run_is_finalized(
     repository.mark_failed.assert_awaited_once_with(test_run_id=run_id)
     session.commit.assert_awaited_once()
     assert execute.await_count == (0 if duplicate else 1)
+    event = event_repository.create.await_args.kwargs
+    assert event["event_type"] == "run.failed"
+    assert "Model unavailable" not in str(event["payload"])
+    assert event["payload"]["code"] == ("interrupted" if duplicate else "execution_failed")
+
+
+@pytest.mark.asyncio
+async def test_failed_run_logs_and_stores_a_reviewed_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    run_id = uuid4()
+    run = SimpleNamespace(id=run_id, status="planning")
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run), rollback=AsyncMock(), commit=AsyncMock(),
+        execute=AsyncMock(),
+    )
+
+    def factory() -> SessionContext:
+        return SessionContext(session)
+
+    envelope = SimpleNamespace(payload={"test_run_id": str(run_id)})
+    monkeypatch.setattr(EventEnvelope, "from_json", Mock(return_value=envelope))
+    monkeypatch.setattr(
+        worker, "accept_run_requested", AsyncMock(return_value=SimpleNamespace(test_run_id=run_id)),
+    )
+    monkeypatch.setattr(worker, "build_run_request", Mock(return_value=object()))
+    monkeypatch.setattr(
+        worker,
+        "execute_markettwin_run",
+        AsyncMock(side_effect=ValueError("Feature planner returned no schema-valid cases.")),
+    )
+    monkeypatch.setattr(
+        worker, "RunStateRepository", Mock(return_value=SimpleNamespace(mark_failed=AsyncMock())),
+    )
+    event_repository = SimpleNamespace(create=AsyncMock())
+    monkeypatch.setattr(worker, "RunEventRepository", Mock(return_value=event_repository))
+    with caplog.at_level("ERROR", logger="markettwin_execution_orchestrator.worker"):
+        await worker.process_command(
+            KafkaMessage("commands", 0, 1, None, b"{}"),
+            cast(async_sessionmaker[AsyncSession], factory),
+        )
+    payload = event_repository.create.await_args.kwargs["payload"]
+    assert payload["code"] == "invalid_plan"
+    assert payload["reason"] == "Feature planner returned no schema-valid cases."
+    assert "Feature planner returned no schema-valid cases." in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_failed_run_log_omits_unreviewed_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    run_id = uuid4()
+    run = SimpleNamespace(id=run_id, status="planning")
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run), rollback=AsyncMock(), commit=AsyncMock(),
+        execute=AsyncMock(),
+    )
+
+    def factory() -> SessionContext:
+        return SessionContext(session)
+
+    envelope = SimpleNamespace(payload={"test_run_id": str(run_id)})
+    monkeypatch.setattr(EventEnvelope, "from_json", Mock(return_value=envelope))
+    monkeypatch.setattr(
+        worker, "accept_run_requested", AsyncMock(return_value=SimpleNamespace(test_run_id=run_id)),
+    )
+    monkeypatch.setattr(worker, "build_run_request", Mock(return_value=object()))
+    monkeypatch.setattr(
+        worker,
+        "execute_markettwin_run",
+        AsyncMock(side_effect=RuntimeError("SECRET_CANARY provider body")),
+    )
+    monkeypatch.setattr(
+        worker, "RunStateRepository", Mock(return_value=SimpleNamespace(mark_failed=AsyncMock())),
+    )
+    monkeypatch.setattr(
+        worker, "RunEventRepository", Mock(return_value=SimpleNamespace(create=AsyncMock())),
+    )
+    with caplog.at_level("ERROR", logger="markettwin_execution_orchestrator.worker"):
+        await worker.process_command(
+            KafkaMessage("commands", 0, 1, None, b"{}"),
+            cast(async_sessionmaker[AsyncSession], factory),
+        )
+    assert "SECRET_CANARY" not in caplog.text
+    assert "detail omitted" in caplog.text

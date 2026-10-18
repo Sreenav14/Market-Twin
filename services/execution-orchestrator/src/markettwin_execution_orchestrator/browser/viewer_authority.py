@@ -168,6 +168,52 @@ class DatabaseViewerAuthority:
             )
             return (await session.scalar(statement)) is not None
 
+    async def observer_permitted(
+        self, actor_id: UUID, handle: BrowserSessionHandle, generation: int,
+    ) -> bool:
+        """Read-only pixels: exact browser, owner/admin, active target. Grants no input."""
+        now = datetime.now(UTC)
+        async with self._session_factory() as session:
+            statement = (
+                select(BrowserSession.id)
+                .join(AgentExecution, AgentExecution.id == BrowserSession.execution_id)
+                .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
+                .join(TestRun, TestRun.id == PersonaJourney.test_run_id)
+                .join(Workspace, Workspace.id == TestRun.workspace_id)
+                .join(
+                    WorkspaceMember,
+                    (WorkspaceMember.workspace_id == TestRun.workspace_id)
+                    & (WorkspaceMember.user_id == actor_id),
+                )
+                .join(ApplicationTarget, ApplicationTarget.id == TestRun.target_id)
+                .join(
+                    TargetAuthorization,
+                    TargetAuthorization.target_id == ApplicationTarget.id,
+                )
+                .join(User, User.id == actor_id)
+                .where(
+                    BrowserSession.id == handle.session_id,
+                    BrowserSession.execution_id == handle.execution_id,
+                    AgentExecution.journey_id == handle.journey_id,
+                    BrowserSession.control_generation == generation,
+                    BrowserSession.control_mode.in_(("agent", "human_pending")),
+                    BrowserSession.state == "open",
+                    WorkspaceMember.role.in_(("owner", "admin")),
+                    Workspace.status == "active",
+                    Workspace.deleted_at.is_(None),
+                    ApplicationTarget.status == "active",
+                    ApplicationTarget.deleted_at.is_(None),
+                    TargetAuthorization.status == "authorized",
+                    TargetAuthorization.revoked_at.is_(None),
+                    (TargetAuthorization.expires_at.is_(None))
+                    | (TargetAuthorization.expires_at > now),
+                    User.status == "active",
+                    User.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+            return (await session.scalar(statement)) is not None
+
     async def refresh_lease(self, actor_id: UUID, lease_id: UUID) -> OwnerLease | None:
         async with self._session_factory() as session:
             row = await session.execute(

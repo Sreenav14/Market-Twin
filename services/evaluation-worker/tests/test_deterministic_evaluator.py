@@ -171,3 +171,10 @@ def test_validation_downgrade_preserves_repeated_original_claims_as_unverified()
     assert len(findings) == 1
     assert findings[0].severity == "info"
     assert "not a confirmed product defect" in findings[0].summary
+
+
+def test_human_assistance_skipped_never_creates_a_finding() -> None:
+    assert build_deterministic_finding({
+        "journey_key": "buyer__checkout", "status": "skipped", "outcome": None,
+        "summary": "Not tested—human assistance skipped.",
+    }) is None

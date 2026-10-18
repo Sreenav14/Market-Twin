@@ -90,10 +90,16 @@ def build_run_request(
         if raw_auth_policy is not None
         else None
     )
-    if target_snapshot.get("requires_auth") is True and (
-        auth_verification is None or execution_mode != "deep_feature_v1"
+    auth_mode = configuration_snapshot.get("auth_mode", "required")
+    if auth_mode not in {"required", "optional"}:
+        raise ValueError("Unsupported authentication mode.")
+    if (configuration_snapshot.get("runtime_human_assistance") is not True
+            and target_snapshot.get("requires_auth") is True) and (
+        auth_verification is None or auth_mode != "required"
     ):
-        raise ValueError("Authenticated targets require deep execution and identity verification.")
+        raise ValueError("Authenticated targets require mandatory identity verification.")
+    if auth_mode == "optional" and auth_verification is None:
+        raise ValueError("Optional authentication requires an approved identity policy.")
     if auth_verification is not None:
         for origin in (auth_verification.origin, *auth_verification.auth_only_origins):
             parsed_auth_origin = urlsplit(origin)
@@ -139,6 +145,8 @@ def build_run_request(
         feature_budget=cast(dict[str, object] | None, configuration_snapshot.get("feature_budget")),
         feature_plan=cast(dict[str, object] | None, configuration_snapshot.get("feature_plan")),
         auth_verification=auth_verification,
+        auth_mode=cast(Literal["required", "optional"], auth_mode),
+        runtime_human_assistance=configuration_snapshot.get("runtime_human_assistance") is True,
         fixture_truth=fixture_approval_enabled,
         synthetic_fixture_approval_enabled=fixture_approval_enabled,
         human_action_approvals_enabled=bool(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlsplit
@@ -20,6 +22,8 @@ from markettwin_database.models import (
     RunMission,
     RunPersona,
 )
+from markettwin_shared.deep_testing import AssertionResult
+from pydantic import ValidationError
 from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,21 +129,38 @@ class TestRunResultsRepository:
                 select(RunEvent)
                 .where(
                     RunEvent.test_run_id == test_run_id,
-                    RunEvent.event_type == "journey.result",
+                    RunEvent.event_type.in_(("journey.result", "test_case.diagnostic")),
                     RunEvent.execution_id.in_(execution_ids),
                 )
-                .distinct(RunEvent.execution_id)
-                .order_by(RunEvent.execution_id, RunEvent.id.desc())
+                .distinct(RunEvent.execution_id, RunEvent.event_type)
+                .order_by(RunEvent.execution_id, RunEvent.event_type, RunEvent.id.desc())
             )
         ).all()
         results: dict[UUID, dict[str, object]] = {}
+        diagnostics: dict[UUID, dict[str, object]] = {}
         for event in events:
             if event.execution_id is not None:
-                results.setdefault(event.execution_id, event.payload)
+                if event.event_type == "test_case.diagnostic":
+                    reason = event.payload.get("reason_code")
+                    if reason in {
+                        "absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target",
+                        "action_failed",
+                        "human_assistance_unverified",
+                    }:
+                        diagnostics[event.execution_id] = {"reason_code": reason}
+                else:
+                    results.setdefault(event.execution_id, event.payload)
         journeys: list[dict[str, object]] = []
         for journey, persona_name, perspective, mission_title, objective, criteria in rows:
             execution = latest.get(journey.id)
             result = results.get(execution.id) if execution is not None else None
+            policy_diagnostic = (
+                _safe_policy_diagnostic(execution.error_message) if execution is not None else None
+            )
+            if policy_diagnostic is not None:
+                result = {**(result or {}), "diagnostic": policy_diagnostic}
+            if result is not None and execution is not None and execution.id in diagnostics:
+                result = {**result, "diagnostic": diagnostics[execution.id]}
             journeys.append(
                 {
                     "id": journey.id,
@@ -157,10 +178,13 @@ class TestRunResultsRepository:
                     "execution_id": execution.id if execution is not None else None,
                     "attempt_number": execution.attempt_number if execution is not None else None,
                     "execution_status": execution.status if execution is not None else None,
+                    "runtime_name": getattr(execution, "runtime_name", None),
                     "outcome": execution.outcome if execution is not None else None,
                     "started_at": execution.started_at if execution is not None else None,
                     "completed_at": execution.completed_at if execution is not None else None,
-                    "error_message": "Browser stopped. Review its steps and target policy."
+                    "error_message": "Not tested—human assistance skipped."
+                    if execution is not None and execution.status == "skipped"
+                    else "Browser stopped. Review its steps and target policy."
                     if execution is not None and execution.error_message else None,
                     "result": result,
                 }
@@ -362,6 +386,24 @@ class TestRunResultsRepository:
         )
 
 
+def _safe_policy_diagnostic(message: str | None) -> dict[str, str] | None:
+    """Expose only a canonical denied origin from the reviewed policy sentence."""
+    match = re.fullmatch(r'Target origin "([^"\s]{1,300})" is not allowed\.', message or "")
+    if match is None:
+        return None
+    origin = match.group(1)
+    try:
+        parsed = urlsplit(origin)
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path or parsed.query or parsed.fragment):
+            return None
+        _ = parsed.port
+    except ValueError:
+        return None
+    return {"reason_code": "origin_not_authorized", "requested_origin": origin}
+
+
 def _safe_action_summary(step: ExecutionStep) -> str:
     """Keep entered values, locators and arbitrary historical text out of read APIs."""
     if step.action_type == "navigate":
@@ -381,10 +423,22 @@ def _safe_action_summary(step: ExecutionStep) -> str:
 
 def _safe_observation_summary(step: ExecutionStep) -> str | None:
     """Expose structured context, never raw exception text or page content."""
+    if step.status == "policy_blocked":
+        policy = _safe_policy_diagnostic(step.observation_summary)
+        if policy is not None:
+            return json.dumps(policy)
     if step.status != "completed":
         return "Action did not complete. Review its status and available evidence."
     if not step.observation_summary:
         return None
+    if step.action_type == "assertion":
+        try:
+            assertion = AssertionResult.model_validate_json(step.observation_summary)
+            if assertion.execution_id != step.execution_id or assertion.step_id != step.id:
+                return "Assertion evidence ownership could not be verified."
+            return json.dumps(assertion.model_dump(mode="json"))
+        except ValidationError:
+            return "A valid structured assertion result was not recorded."
     fields = {
         key: value for part in step.observation_summary.split(";")
         for key, _, value in [part.partition("=")]

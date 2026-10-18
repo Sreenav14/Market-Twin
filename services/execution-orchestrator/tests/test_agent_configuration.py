@@ -1,11 +1,15 @@
 """Configuration must change the real tree while retaining controlled tools."""
 
 import json
+from typing import cast
 
 import pytest
 from google.adk.agents import LlmAgent, SequentialAgent
-from markettwin_shared.agent_configuration import default_configuration, validate_configuration
 from markettwin_execution_orchestrator.agents import configuration
+from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
+from markettwin_execution_orchestrator.browser.controller import BrowserController
+from markettwin_execution_orchestrator.browser.tools import create_browser_tools
+from markettwin_shared.agent_configuration import default_configuration, validate_configuration
 
 
 @pytest.mark.parametrize(
@@ -32,6 +36,28 @@ def test_planning_agent_cannot_gain_browser_access():
         validate_configuration(
             default_configuration("Agent_1", ("browser_click",)), browser_allowed=False
         )
+
+
+def test_default_persona_configuration_accepts_actual_controlled_browser_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def local_model(**kwargs: object) -> str:
+        return "openai/example"
+
+    monkeypatch.setattr(configuration, "create_model", local_model)
+    # Construct the production tools without opening a browser or invoking them.
+    tools = create_browser_tools(
+        controller=cast(BrowserController, object()),
+        handle=cast(BrowserSessionHandle, object()),
+    )
+    primary = LlmAgent(name="original", model="openai/example", tools=list(tools))
+
+    root, tree, _ = configuration.configure_agent(
+        primary, None, name="Agent_1", max_tokens=2048, browser_allowed=True
+    )
+
+    assert root is primary
+    assert tree["tools"] == [tool.__name__ for tool in tools]
 
 
 @pytest.mark.parametrize("name", ["Agent_1", "Agent_1_reporter"])

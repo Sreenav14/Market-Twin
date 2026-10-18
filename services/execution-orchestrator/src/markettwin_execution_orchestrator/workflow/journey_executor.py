@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, replace
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID, uuid4
 
 from google.adk.runners import InMemoryRunner
 from google.genai import types
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.observability import (
     use_observability_correlation,
 )
@@ -34,9 +35,14 @@ from markettwin_execution_orchestrator.browser import (
     AllowedOrigin,
     BrowserController,
 )
+from markettwin_execution_orchestrator.browser.auth_session_broker import (
+    AuthSessionReuseRejected,
+    AuthSessionScope,
+)
 from markettwin_execution_orchestrator.browser.contracts import NetworkPolicy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserPolicyError,
+    HumanAssistanceSkipped,
 )
 from markettwin_execution_orchestrator.browser.mcp_tools import connect_controlled_browser_tools
 from markettwin_execution_orchestrator.persistence import (
@@ -71,6 +77,11 @@ class PersonaJourneyExecutionRequest:
     start_url: str
     allowed_origins: tuple[AllowedOrigin, ...]
 
+    auth_verification: AuthVerificationPolicy | None = None
+    auth_session_scope: AuthSessionScope | None = None
+    auth_mode: Literal["required", "optional"] = "required"
+    runtime_human_assistance: bool = False
+    runtime_target_id: UUID | None = None
     network_policy: NetworkPolicy = "public_only"
     max_duration_seconds: int = 180
     prompt_override: dict[str, str] | None = None
@@ -138,13 +149,35 @@ async def execute_persona_journey(
     runner: InMemoryRunner | None = None
     artifact_storage: S3ArtifactStorage | None = None
     mcp_resources = AsyncExitStack()
+    persona_timer: asyncio.Timeout | None = None
 
     try:
+        auth_snapshot = None
+        if request.auth_session_scope is not None:
+            try:
+                auth_snapshot = browser_controller.take_auth_session_snapshot(
+                    scope=request.auth_session_scope, case_id=request.journey.journey_key,
+                )
+            except AuthSessionReuseRejected:
+                pass
+        elif request.runtime_human_assistance and request.runtime_target_id is not None:
+            try:
+                auth_snapshot = browser_controller.take_human_session_snapshot(
+                    run_id=request.test_run_id, target_id=request.runtime_target_id,
+                    case_id=request.journey.journey_key,
+                )
+            except AuthSessionReuseRejected:
+                pass
         browser_session = await browser_controller.create_session(
             execution_id=request.execution_id,
             journey_id=request.journey_id,
             allowed_origins=request.allowed_origins,
             network_policy=request.network_policy,
+            auth_snapshot=auth_snapshot,
+            auth_only_origins=(request.auth_verification.auth_only_origins
+                               if request.auth_verification else ()),
+            authenticated_session=(request.auth_verification is not None
+                                   or request.runtime_human_assistance),
         )
 
         await execution_repository.create_browser_session(
@@ -155,6 +188,69 @@ async def execute_persona_journey(
         await session.commit()
 
         browser_session_persisted = True
+        if request.auth_verification is not None:
+            from markettwin_execution_orchestrator.workflow.case_execution import (
+                MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                pause_case_deadline,
+                verify_or_request_login,
+            )
+            policy, auth_scope, handle = (
+                request.auth_verification, request.auth_session_scope, browser_session,
+            )
+            if auth_scope is None:
+                raise BrowserPolicyError("The approved authentication scope is unavailable.")
+
+            async def verify_login() -> None:
+                await verify_or_request_login(
+                    request=request, controller=browser_controller, handle=handle,
+                    policy=policy, auth_scope=auth_scope, session=session,
+                    max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                )
+
+            async def request_login() -> None:
+                if persona_timer is None:
+                    await verify_login()
+                else:
+                    async with pause_case_deadline(
+                        persona_timer, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                    ):
+                        await verify_login()
+
+            browser_controller.bind_authentication_handler(handle, request_login)
+            # Navigate once before the persona starts. Human login is a bounded
+            # prerequisite outside the agent's model execution deadline.
+            await browser_controller.navigate(session_id=handle.session_id, url=request.start_url)
+            if request.auth_mode == "required" or auth_snapshot is not None:
+                verified = await browser_controller.verify_authenticated_role(
+                    handle=handle, policy=policy,
+                )
+                if verified is None:
+                    browser_controller.revoke_auth_session_snapshot(scope=auth_scope)
+                await request_login()
+        elif request.runtime_human_assistance:
+            from markettwin_execution_orchestrator.workflow.case_execution import (
+                MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                pause_case_deadline,
+                request_runtime_assistance,
+            )
+            handle = browser_session
+
+            async def request_runtime_help() -> None:
+                if persona_timer is None:
+                    await request_runtime_assistance(
+                        request=request, controller=browser_controller, handle=handle,
+                        session=session,
+                    )
+                else:
+                    async with pause_case_deadline(
+                        persona_timer, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                    ):
+                        await request_runtime_assistance(
+                            request=request, controller=browser_controller, handle=handle,
+                            session=session,
+                        )
+
+            browser_controller.bind_authentication_handler(handle, request_runtime_help)
 
         artifact_storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
 
@@ -264,7 +360,7 @@ async def execute_persona_journey(
         ):
             async with asyncio.timeout(
                 request.max_duration_seconds
-            ):
+            ) as persona_timer:
                 async for event in runner.run_async(
                     user_id=user_id,
                     session_id=session_id,
@@ -317,6 +413,11 @@ async def execute_persona_journey(
         await session.rollback()
         raise
 
+    except HumanAssistanceSkipped:
+        return PersonaJourneyResult(
+            journey=request.journey, status=JourneyExecutionStatus.SKIPPED,
+            summary="Not tested—human assistance skipped.",
+        )
     except BrowserPolicyError as exc:
         return PersonaJourneyResult(
             journey=request.journey,

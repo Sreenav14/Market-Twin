@@ -58,7 +58,7 @@ def summarize_authenticated_coverage(
             "role": role,
             "planned": len(planned_ids),
             "authenticated": len(ids),
-            "executed": len(completed),
+            "executed": sum(item.execution_status != "skipped" for item in completed),
             "passed": sum(item.verdict == "satisfied" for item in completed),
             "failed_assertions": sum(
                 assertion.status == "not_satisfied"
@@ -66,10 +66,12 @@ def summarize_authenticated_coverage(
             ),
             "blocked": sum(item.execution_status == "policy_blocked" for item in completed),
             "inconclusive": sum(
-                item.verdict == "unverified" and item.execution_status != "policy_blocked"
+                item.verdict == "unverified"
+                and item.execution_status not in {"policy_blocked", "skipped"}
                 for item in completed
             ),
-            "not_run": len(planned_ids - set(results)),
+            "not_run": len(planned_ids - set(results))
+                + sum(item.execution_status == "skipped" for item in completed),
         })
     return {
         "schema_version": 1,
@@ -82,7 +84,8 @@ def summarize_authenticated_coverage(
             "unknown_requirements": len(plan.scope.unknown_requirements),
             "roles_verified": sorted(roles),
             "asserted_cases": sum(bool(item.assertion_results) for item in results.values()),
-            "not_explored": len(plan.skipped) + len(planned_ids - set(results)),
+            "not_explored": len(plan.skipped) + len(planned_ids - set(results))
+                + sum(item.execution_status == "skipped" for item in results.values()),
         }] if plan else [],
         "role_coverage": matrix,
         "reused_auth_cases": len(reused),

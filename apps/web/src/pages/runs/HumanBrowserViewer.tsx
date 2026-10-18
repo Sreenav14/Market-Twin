@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 interface HumanBrowserViewerProps {
   url: string;
   ticket: string;
+  autoConnect?: boolean;
   onReconnect?: () => Promise<{ viewer_url: string; viewer_ticket: string }>;
 }
 
@@ -12,7 +13,7 @@ const permittedKeys = new Set([
 ]);
 
 /** Volatile, ticket-authenticated view of the worker-owned browser. */
-export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserViewerProps) {
+export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = false }: HumanBrowserViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const leaveControlRef = useRef<HTMLButtonElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +22,8 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
   const attemptedRef = useRef(false);
   const connectingRef = useRef(false);
   const mountedRef = useRef(true);
+  const readyRef = useRef(false);
+  const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState("Viewer not connected. Connect to begin browser control.");
 
   useEffect(() => {
@@ -29,6 +32,9 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
       mountedRef.current = false;
       const socket = socketRef.current;
       socketRef.current = null;
+      connectingRef.current = false;
+      readyRef.current = false;
+      if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
       socket?.close(1000, "operator left viewer");
     };
   }, []);
@@ -50,41 +56,69 @@ export function HumanBrowserViewer({ url, ticket, onReconnect }: HumanBrowserVie
     if (!mountedRef.current) return;
     attemptedRef.current = true;
     sequenceRef.current = 0;
+    readyRef.current = false;
     const socket = new WebSocket(grant.viewer_url);
     socket.binaryType = "blob";
     socketRef.current = socket;
+    let failure: string | null = null;
+    const fail = (message: string) => {
+      if (socketRef.current !== socket) return;
+      failure = message;
+      readyRef.current = false;
+      if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
+      setStatus(message);
+      socket.close(1000, "viewer unavailable");
+    };
+    readyTimerRef.current = setTimeout(() => {
+      fail("No live browser frame arrived. Reconnect, or choose Skip if assistance is unavailable.");
+    }, 15_000);
     socket.onopen = () => {
-      connectingRef.current = false;
       socket.send(JSON.stringify({ ticket: grant.viewer_ticket }));
-      setStatus("Connected. Browser frames and input are not saved.");
+      setStatus("Authenticating viewer; waiting for the first live browser frame…");
     };
     socket.onmessage = (event: MessageEvent<Blob | string>) => {
       if (typeof event.data === "string") return;
       void createImageBitmap(event.data).then((image) => {
         const canvas = canvasRef.current;
-        if (canvas && socketRef.current === socket) {
+        if (canvas && socketRef.current === socket && !failure) {
           canvas.width = image.width;
           canvas.height = image.height;
-          canvas.getContext("2d")?.drawImage(image, 0, 0);
+          const context = canvas.getContext("2d");
+          if (!context) {
+            image.close();
+            fail("The live browser frame could not be displayed. Reconnect to try again.");
+            return;
+          }
+          context.drawImage(image, 0, 0);
+          readyRef.current = true;
+          connectingRef.current = false;
+          if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
+          setStatus("Connected. Browser frames and input are not saved.");
         }
         image.close();
-      });
+      }).catch(() => fail("The live browser frame could not be displayed. Reconnect to try again."));
     };
-    socket.onerror = () => setStatus("The protected browser connection failed.");
+    socket.onerror = () => fail("The protected browser connection failed. Reconnect to try again.");
     socket.onclose = () => {
       if (socketRef.current !== socket) return;
       socketRef.current = null;
       connectingRef.current = false;
+      readyRef.current = false;
+      if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
       const canvas = canvasRef.current;
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
-      setStatus("Viewer disconnected. Reconnect while the lease is active, or release control.");
+      setStatus(failure ?? "Viewer disconnected. Reconnect while the lease is active, or release control.");
     };
     setStatus("Connecting to the protected browser…");
   };
 
+  useEffect(() => {
+    if (autoConnect) void connect();
+  }, [autoConnect]);
+
   const send = (payload: Record<string, unknown>) => {
     const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
+    if (readyRef.current && socket?.readyState === WebSocket.OPEN) {
       sequenceRef.current += 1;
       socket.send(JSON.stringify({ sequence: sequenceRef.current, ...payload }));
     }

@@ -23,8 +23,11 @@ from markettwin_shared.auth_verification import AuthVerificationPolicy
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("recovery,verified", [(False, True), (True, True), (True, False)])
 async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
     monkeypatch: pytest.MonkeyPatch,
+    recovery: bool,
+    verified: bool,
 ) -> None:
     request_id = uuid4()
     suspension_id = uuid4()
@@ -96,7 +99,12 @@ async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
         ),
     )
 
-    await case_execution.verify_or_request_login(  # pyright: ignore[reportPrivateUsage]
+    verifier = AsyncMock(return_value=verified)
+    options: dict[str, Any] = (
+        {"assistance_reason": "absent_scope", "continuation_verifier": verifier,
+         "planned_step_index": 2} if recovery else {}
+    )
+    handoff = case_execution.verify_or_request_login(
         request=request,
         controller=controller,
         handle=handle,
@@ -104,7 +112,19 @@ async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
         auth_scope=auth_scope,
         session=db_session,
         max_wait_seconds=30,
+        **options,
     )
+    if not verified:
+        with pytest.raises(case_execution.AuthenticationVerificationBlocked):
+            await handoff
+        lifecycle.finish_verification.assert_awaited_once_with(
+            request_id=request_id, expected_generation=3, verified=False,
+        )
+        lifecycle.abandon.assert_awaited_once_with(request_id=request_id)
+        suspension.claim_ready.assert_not_awaited()
+        controller.capture_verified_auth_session.assert_not_awaited()
+        return
+    await handoff
 
     lifecycle.create_login_request.assert_awaited_once()
     suspension.create_waiting.assert_awaited_once()
@@ -113,17 +133,22 @@ async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
     wait_kwargs = wait.await_args.kwargs
     assert wait_kwargs["request_id"] == request_id
     assert 0 < wait_kwargs["timeout_seconds"] <= 30
-    controller.verify_authenticated_role.assert_has_awaits(
+    if recovery:
+        verifier.assert_awaited_once()
+        controller.verify_authenticated_role.assert_not_awaited()
+        controller.capture_verified_auth_session.assert_not_awaited()
+        assert suspension.create_waiting.await_args.kwargs["phase"] == "case_action"
+        assert suspension.create_waiting.await_args.kwargs["planned_step_index"] == 2
+    else:
+        controller.verify_authenticated_role.assert_has_awaits(
         [
             call(handle=handle, policy=policy),
             call(handle=handle, policy=policy),
         ]
-    )
-    controller.capture_verified_auth_session.assert_awaited_once_with(
-        handle=handle,
-        policy=policy,
-        scope=auth_scope,
-    )
+        )
+        controller.capture_verified_auth_session.assert_awaited_once_with(
+            handle=handle, policy=policy, scope=auth_scope,
+        )
     lifecycle.finish_verification.assert_awaited_once_with(
         request_id=request_id,
         expected_generation=3,
@@ -144,7 +169,7 @@ async def test_human_wait_is_excluded_from_case_action_deadline() -> None:
     started = time.monotonic()
     with pytest.raises(TimeoutError):
         async with asyncio.timeout(0.04) as case_timeout:
-            async with case_execution._pause_case_deadline(  # pyright: ignore[reportPrivateUsage]
+            async with case_execution.pause_case_deadline(
                 case_timeout,
                 allowance_seconds=0.2,
             ):

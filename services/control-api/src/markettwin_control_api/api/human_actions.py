@@ -17,6 +17,7 @@ from markettwin_database.models.execution import (
     HumanActionRequest,
     HumanControlLease,
 )
+from markettwin_database.models.testing import RunMission, RunPersona
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -82,6 +83,12 @@ class HumanActionResponse(BaseModel):
     execution_id: UUID
     browser_session_id: UUID
     request_type: str
+    journey_id: UUID | None = None
+    journey_title: str | None = None
+    requesting_agent: str | None = None
+    requested_by_step_id: int | None = None
+    browser_state: str | None = None
+    instructions: str = "Complete the requested protected interaction, then Release."
     status: str
     created_at: datetime
     expires_at: datetime | None
@@ -233,12 +240,18 @@ async def list_human_actions(test_run_id: UUID, request: Request) -> list[HumanA
             now = datetime.now(UTC)
             rows = (
                 await session.execute(
-                    select(HumanActionRequest, BrowserSession, HumanControlLease)
+                    select(
+                        HumanActionRequest, BrowserSession, HumanControlLease,
+                        PersonaJourney.id, RunMission.title, AgentExecution.runtime_name,
+                        RunPersona.name,
+                    )
                     .join(
                         BrowserSession, BrowserSession.id == HumanActionRequest.browser_session_id
                     )
                     .join(AgentExecution, AgentExecution.id == HumanActionRequest.execution_id)
                     .join(PersonaJourney, PersonaJourney.id == AgentExecution.journey_id)
+                    .join(RunMission, RunMission.id == PersonaJourney.mission_id)
+                    .join(RunPersona, RunPersona.id == PersonaJourney.persona_id)
                     .join(TestRun, TestRun.id == PersonaJourney.test_run_id)
                     .join(Workspace, Workspace.id == TestRun.workspace_id)
                     .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
@@ -275,6 +288,29 @@ async def list_human_actions(test_run_id: UUID, request: Request) -> list[HumanA
                     execution_id=req.execution_id,
                     browser_session_id=req.browser_session_id,
                     request_type=req.request_type,
+                    journey_id=journey_id,
+                    journey_title=(
+                        "Observe approved starting page"
+                        if runtime_name == "browser_discovery_v1" else mission_title
+                    ),
+                    requesting_agent=(
+                        "Browser discovery" if runtime_name == "browser_discovery_v1"
+                        else "Identity verification" if runtime_name == "human_auth_bootstrap_v1"
+                        else "Deterministic browser executor"
+                        if runtime_name == "deterministic_case_steps_v1"
+                        else f"Persona agent: {persona_name}"
+                    ),
+                    requested_by_step_id=req.requested_by_step_id,
+                    browser_state=browser.state,
+                    instructions=(
+                        "Prepare the current page so the original planned control is available. "
+                        "Choose Done when ready to continue, or skip this case/journey. "
+                        "Stay within the run's approved origins."
+                        if req.request_type == "other" else
+                        "Complete the requested login or authentication challenge in the "
+                        "protected browser, then choose Done to resume safely. "
+                        "Skip this case/journey if you do not want to continue."
+                    ),
                     status=req.status,
                     created_at=req.created_at,
                     expires_at=req.expires_at,
@@ -284,7 +320,9 @@ async def list_human_actions(test_run_id: UUID, request: Request) -> list[HumanA
                     if lease and lease.released_at is None
                     else None,
                 )
-                for req, browser, lease in rows
+                for (
+                    req, browser, lease, journey_id, mission_title, runtime_name, persona_name
+                ) in rows
             ]
 
 
@@ -428,7 +466,9 @@ async def reconnect_human_action(
             expires_at=expires_at, viewer_ticket=viewer.ticket,
             viewer_url=_validate_viewer_url(viewer),
         )
-    except (HumanActionNotAuthorizedError, HumanActionConflictError, HumanActionExpiredError) as exc:
+    except (
+        HumanActionNotAuthorizedError, HumanActionConflictError, HumanActionExpiredError,
+    ) as exc:
         raise _error(exc) from exc
     except RuntimeError as exc:
         raise HTTPException(503, "The supervised browser owner is unavailable.") from exc
@@ -461,6 +501,36 @@ async def cancel_human_action(request_id: UUID, request: Request) -> dict[str, s
         HumanActionNotAuthorizedError,
         HumanActionConflictError,
         HumanActionExpiredError,
+    ) as exc:
+        raise _error(exc) from exc
+
+
+@router.post("/api/v1/human-actions/{request_id}/skip")
+async def skip_human_action(request_id: UUID, request: Request) -> dict[str, str]:
+    """Skip the waiting work item without cancelling the enclosing test run."""
+    _csrf(request)
+    actor_id = await get_authenticated_user_id(request=request)
+    database = get_database_runtime(request)
+    try:
+        async with database.session_factory() as session:
+            async with session.begin():
+                record = await HumanActionRepository(session).skip(
+                    request_id=request_id, actor_id=actor_id,
+                )
+        generation = record.terminal_generation
+        if generation is None:
+            raise HTTPException(409, "The skipped browser generation is unavailable.")
+        try:
+            await _worker_client().notify(
+                path="/internal/hitl/leases/revoke",
+                payload={"request_id": str(request_id), "generation": generation},
+            )
+        except (HTTPException, RuntimeError):
+            # Durable terminal state is observed by the worker's existing poll loop.
+            pass
+        return {"id": str(record.request_id), "status": record.status}
+    except (
+        HumanActionNotAuthorizedError, HumanActionConflictError, HumanActionExpiredError,
     ) as exc:
         raise _error(exc) from exc
 

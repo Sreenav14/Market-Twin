@@ -75,6 +75,9 @@ class BrowserOwnerRegistry:
     async def frame(self, lease: OwnerLease) -> bytes:
         return await self._owner(lease.handle).frame(lease)
 
+    async def observe(self, handle: BrowserSessionHandle, *, generation: int) -> bytes:
+        return await self._owner(handle).observe(handle, generation=generation)
+
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None:
         await self._owner(handle).revoke(handle, generation)
 

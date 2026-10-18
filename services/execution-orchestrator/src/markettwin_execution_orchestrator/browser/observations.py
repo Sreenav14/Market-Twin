@@ -1,7 +1,10 @@
 """Compact, model-safe browser observations."""
 
+import asyncio
+import json
+import re
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from playwright.async_api import Locator
@@ -63,6 +66,49 @@ class RawVisibleElement(TypedDict):
     enabled: bool
     level: int | None
     bounding_box: RawElementBox
+    link_index: NotRequired[int | None]
+
+
+async def _ground_link_names(
+    session: JourneyBrowserSession, elements: list[RawVisibleElement],
+) -> tuple[list[RawVisibleElement], bool]:
+    """Use Playwright's exact accessible names, not an innerText approximation.
+
+    CSS generated content can contribute to a link's accessible name; aria-hidden
+    children cannot. Read only each already-visible link, discard the raw snapshot
+    (which can include its URL), and never inspect the protected page as a whole.
+    """
+    links = session.page.locator('a[href], [role="link"]')
+    grounded: list[RawVisibleElement] = []
+    omitted = False
+    deadline = asyncio.get_running_loop().time() + 2
+    for element in elements:
+        index = element.get("link_index")
+        if element["role"] != "link" or index is None:
+            grounded.append(element)
+            continue
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            omitted = True
+            continue
+        try:
+            async with asyncio.timeout(remaining):
+                snapshot = await links.nth(index).aria_snapshot(
+                    timeout=min(session.timeout_ms, 500),
+                )
+            first_line = snapshot.splitlines()[0] if snapshot else ""
+            # Playwright quotes an accessible name as a JSON string inside its
+            # YAML role key. The key itself can be single-quoted by the renderer.
+            match = re.match(r"""^- (?:')?link ("(?:[^"\\]|\\.)*")""", first_line)
+            name = json.loads(match.group(1)) if match else None
+        except Exception:
+            # Missing/stale/unreadable nodes must not become invented locators.
+            name = None
+        if not isinstance(name, str) or not name or len(name) > MAX_VISIBLE_ELEMENT_NAME_CHARS:
+            omitted = True
+            continue
+        grounded.append({**element, "name": name})
+    return grounded, omitted
 
 
 class ViewportMetrics(TypedDict):
@@ -144,6 +190,7 @@ async def build_observation(
                     "img[alt]",
                     "summary",
                 ].join(",");
+                const links = Array.from(document.querySelectorAll('a[href], [role="link"]'));
 
                 function clean(value) {{
                     return (value || "")
@@ -323,6 +370,8 @@ async def build_observation(
                         return {{
                             role: semanticRole(element),
                             name: accessibleName(element),
+                            link_index: semanticRole(element) === "link"
+                                ? links.indexOf(element) : null,
                             tag,
                             enabled,
                             level: headingLevel,
@@ -346,6 +395,10 @@ async def build_observation(
             """
         ),
     )
+
+    more_available = more_available or len(raw_visible_elements) > MAX_VISIBLE_ELEMENTS
+    raw_visible_elements, omitted_links = await _ground_link_names(session, raw_visible_elements)
+    more_available = more_available or omitted_links
 
     viewport_metrics = cast(ViewportMetrics, raw_viewport_metrics)
 

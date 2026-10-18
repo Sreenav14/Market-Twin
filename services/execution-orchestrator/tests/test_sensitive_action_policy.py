@@ -49,3 +49,57 @@ def test_user_declared_rule_is_exact_and_requires_reset_confirmation() -> None:
             "category": "save", "name": "Save", "resource_reference": "fixture-row-v1",
             "test_data_reset_confirmed": False,
         })
+
+
+@pytest.mark.parametrize("name,path", [
+    ("View payment documentation", "/docs/payments"),
+    ("Invite API reference", "/reference/invitations"),
+    ("Buyer's guide", "/guides/options"),
+])
+def test_real_authorized_documentation_links_are_read_only(name: str, path: str) -> None:
+    assert classify_click_action(
+        role="link", name=name, label=None, text=None,
+        navigation_url="https://example.test" + path,
+        navigation_origin_authorized=True, element_tag="a",
+    ) is None
+
+
+@pytest.mark.parametrize("metadata", [
+    {},
+    {"navigation_origin_authorized": False, "element_tag": "a"},
+    {"navigation_origin_authorized": True, "element_tag": "button"},
+    {"navigation_origin_authorized": True, "element_tag": "a", "has_form": True},
+])
+def test_documentation_words_alone_do_not_bypass_restricted_action(metadata) -> None:
+    with pytest.raises(BrowserActionBlockedError):
+        classify_click_action(
+            role="link", name="View payment documentation", label=None, text=None,
+            navigation_url="https://example.test/docs/payments", **metadata,
+        )
+
+
+@pytest.mark.parametrize("url", [
+    "javascript:deleteAccount()", "https://example.test/delete",
+    "https://example.test/docs/../delete", "https://example.test/docs/%2e%2e/delete",
+    "https://example.test/docs/delete", "https://example.test/docs/payments?action=pay",
+    "https://user:secret@example.test/docs/payments",
+])
+def test_action_destinations_remain_denied_even_with_documentation_label(url: str) -> None:
+    with pytest.raises(BrowserActionBlockedError):
+        classify_click_action(
+            role="link", name="Payment documentation", label=None, text=None,
+            navigation_url=url, navigation_origin_authorized=True, element_tag="a",
+        )
+
+
+def test_filter_reset_is_reviewable_not_automatically_executed() -> None:
+    intent = classify_click_action(
+        role="button", name="Remove filters", label=None, text=None,
+        element_tag="button", has_form=False, state_digest="current-filter-state",
+    )
+    assert intent is not None and intent.category == "update"
+    with pytest.raises(BrowserActionBlockedError):
+        classify_click_action(
+            role="button", name="Remove account", label=None, text=None,
+            element_tag="button", has_form=False,
+        )

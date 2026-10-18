@@ -93,6 +93,12 @@ class ApplicationTarget(Base):
         ForeignKey("testing.applications.id", ondelete="CASCADE"),
         nullable=False,
     )
+    scope_parent_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.application_targets.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     environment: Mapped[str] = mapped_column(String(64), nullable=False)
     base_url: Mapped[str] = mapped_column(Text, nullable=False)

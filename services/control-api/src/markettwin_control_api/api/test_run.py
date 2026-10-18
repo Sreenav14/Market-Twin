@@ -20,6 +20,7 @@ from pydantic import (
     BaseModel,
     Field,
     field_validator,
+    model_validator,
 )
 
 from markettwin_control_api.api.auth import (
@@ -60,11 +61,21 @@ class CreateTestRunRequest(BaseModel):
     execution_mode: Literal["legacy_persona", "deep_feature_v1"] = "legacy_persona"
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
     auth_verification: AuthVerificationPolicy | None = None
+    auth_mode: Literal["required", "optional"] | None = None
+    runtime_human_assistance: bool = True
     synthetic_fixture_approval: bool = False
     human_action_approvals: bool = False
     sensitive_action_rules: list[SensitiveActionRule] = Field(
         default_factory=list[SensitiveActionRule], max_length=16,
     )
+
+    @model_validator(mode="after")
+    def authentication_mode_requires_policy(self) -> "CreateTestRunRequest":
+        if self.auth_mode is not None and self.auth_verification is None:
+            raise ValueError(
+                "Authentication mode requires an approved identity verification policy."
+            )
+        return self
 
     @field_validator("name")
     @classmethod
@@ -272,7 +283,10 @@ async def create_test_run(
                 target
             )
 
-            if target.requires_auth and payload.auth_verification is None:
+            if (
+                target.requires_auth and payload.auth_verification is None
+                and not payload.runtime_human_assistance
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
@@ -281,18 +295,10 @@ async def create_test_run(
                 )
 
             if payload.auth_verification is not None:
-                if payload.execution_mode != "deep_feature_v1":
+                if target.requires_auth and payload.auth_mode == "optional":
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=(
-                            "Authenticated verification currently requires "
-                            "deep_feature_v1 execution."
-                        ),
-                    )
-                if not target.requires_auth:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Authentication verification requires an authenticated target.",
+                        detail="Protected targets require authentication before execution.",
                     )
                 if not all(_auth_origin_is_allowed(origin, target) for origin in (
                     payload.auth_verification.origin, *payload.auth_verification.auth_only_origins,
@@ -333,6 +339,7 @@ async def create_test_run(
                 )
 
             configuration_snapshot: dict[str, object] = {
+                "runtime_human_assistance": payload.runtime_human_assistance,
                 "study_brief": payload.study_brief,
                 "testing_depth": payload.testing_depth,
                 "authorization_id_at_creation": str(
@@ -344,6 +351,7 @@ async def create_test_run(
             if payload.execution_mode == "deep_feature_v1":
                 configuration_snapshot["execution_mode"] = payload.execution_mode
             if payload.auth_verification is not None:
+                configuration_snapshot["auth_mode"] = payload.auth_mode or "required"
                 configuration_snapshot["auth_verification"] = payload.auth_verification.model_dump(
                     mode="json"
                 )

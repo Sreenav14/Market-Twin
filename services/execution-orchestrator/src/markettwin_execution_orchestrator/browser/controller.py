@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import secrets
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -29,7 +30,10 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from markettwin_execution_orchestrator.agents.schemas.test_case import ExpectedAssertion
+from markettwin_execution_orchestrator.agents.schemas.test_case import (
+    ExpectedAssertion,
+    SemanticTarget,
+)
 from markettwin_execution_orchestrator.browser.action_policy import (
     ensure_low_risk_click_target,
     ensure_non_sensitive_fill,
@@ -47,6 +51,7 @@ from markettwin_execution_orchestrator.browser.auth_session_broker import (
     AuthSessionBroker,
     AuthSessionScope,
     AuthSessionSnapshot,
+    HumanSessionScope,
 )
 from markettwin_execution_orchestrator.browser.auth_verifier import (
     VerifiedPrincipal,
@@ -120,6 +125,9 @@ class BrowserController:
         self._playwright: Playwright | None = None
         self._sessions: dict[UUID, JourneyBrowserSession] = {}
         self._auth_session_broker = AuthSessionBroker()
+        self._authentication_handlers: dict[UUID, Callable[[], Awaitable[None]]] = {}
+        self._authentication_locks: dict[UUID, asyncio.Lock] = {}
+        self._pending_authentication: set[UUID] = set()
         self._start_lock = asyncio.Lock()
         self._approval_salt = secrets.token_hex(32)
 
@@ -268,6 +276,117 @@ class BrowserController:
             raise BrowserSessionOwnershipError("Browser session does not belong to this Journey.")
         return session
 
+    def bind_authentication_handler(
+        self, handle: BrowserSessionHandle, handler: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Bind a frozen identity verifier to this owned session only."""
+        self._get_session(session_id=handle.session_id, execution_id=handle.execution_id,
+                          journey_id=handle.journey_id)
+        self._authentication_handlers[handle.session_id] = handler
+        self._authentication_locks[handle.session_id] = asyncio.Lock()
+
+    async def has_authentication_challenge(
+        self, handle: BrowserSessionHandle, *, include_pending: bool = True,
+    ) -> bool:
+        """Read challenge presence only; never inspect credentials or assume identity."""
+        session = self._get_session(session_id=handle.session_id,
+                                    execution_id=handle.execution_id,
+                                    journey_id=handle.journey_id)
+        return await self._has_authentication_challenge(session, include_pending=include_pending)
+
+    async def _has_authentication_challenge(
+        self, session: JourneyBrowserSession, *, include_pending: bool = True,
+    ) -> bool:
+        if ((include_pending and session.session_id in self._pending_authentication)
+                or session.is_auth_only_url(session.page.url)):
+            return True
+        if await session.page.locator(
+            'input[type="password"]:visible, input[autocomplete="one-time-code"]:visible, '
+            'input[autocomplete="username"]:visible, '
+            'input[name*="otp" i]:visible, input[name*="captcha" i]:visible, '
+            'iframe[title*="captcha" i]:visible, [data-captcha]:visible'
+        ).count():
+            return True
+        # Email-only login and SSO chooser screens need an actual auth form;
+        # ordinary navigation links and newsletter fields are not challenges.
+        if await session.page.locator("form:visible").filter(
+            has=session.page.locator('input[type="email"]:visible, input[name="username"]:visible'),
+        ).filter(has=session.page.get_by_role(
+            "button", name=re.compile(r"^(sign\s*in|log\s*in|continue(?: with .+)?)$", re.I),
+        )).count():
+            return True
+        return bool(await session.page.get_by_role(
+            "heading", name=re.compile(
+                r"^(sign\s*in|log\s*in|login|authorize .+|permissions requested)$", re.I,
+            ),
+        ).count() and await session.page.get_by_role(
+            "button", name=re.compile(
+                r"^(continue with .+|sign\s*in.*|log\s*in.*|allow|authorize)$", re.I,
+            ),
+        ).count())
+
+    async def human_continuation_ready(self, handle: BrowserSessionHandle) -> bool:
+        """Validate safe continuation, without claiming an authenticated identity."""
+        session = self._get_session(session_id=handle.session_id,
+                                    execution_id=handle.execution_id, journey_id=handle.journey_id)
+        validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+        return (session.state == "open" and session.control_mode == "verifying"
+                and not await self._has_authentication_challenge(session, include_pending=False))
+
+    def take_human_session_snapshot(
+        self, *, run_id: UUID, target_id: UUID, case_id: str,
+    ) -> AuthSessionSnapshot:
+        return self._auth_session_broker.take_human_session(
+            run_id=run_id, target_id=target_id, case_id=case_id,
+        )
+
+    def revoke_human_session_snapshots(self, *, run_id: UUID, target_id: UUID) -> None:
+        self._auth_session_broker.revoke_human_sessions(run_id=run_id, target_id=target_id)
+
+    async def capture_human_session(
+        self, handle: BrowserSessionHandle, *, run_id: UUID, target_id: UUID,
+    ) -> bool:
+        """Capture only after released control and safe continuation, never a role claim."""
+        session = self._get_session(session_id=handle.session_id,
+                                    execution_id=handle.execution_id, journey_id=handle.journey_id)
+        async with session.lock:
+            if not await self.human_continuation_ready(handle):
+                return False
+            origin = validate_target_url(
+                session.page.url, session.allowed_origins, session.network_policy,
+            ).origin
+            await self._auth_session_broker.capture_human_session(
+                scope=HumanSessionScope(run_id=run_id, target_id=target_id, origin=origin),
+                context=cast(Any, session.context), page=session.page,
+            )
+            return True
+
+    async def _authentication_checkpoint(
+        self, session: JourneyBrowserSession, *, lock_held: bool = False, force: bool = False,
+    ) -> None:
+        handler = self._authentication_handlers.get(session.session_id)
+        if handler is None or session.control_mode != "agent":
+            return
+        if not force and not await self._has_authentication_challenge(session):
+            return
+        # Publish the challenge before dropping the browser lock. Concurrent
+        # tools must join this handoff rather than dispatch on the old page.
+        self._pending_authentication.add(session.session_id)
+        # The owner service and verifier take the browser lock themselves. No
+        # action is dispatched while waiting; after a dispatched navigation/click
+        # we continue from the resulting page and never replay that action.
+        if lock_held:
+            session.lock.release()
+        try:
+            async with self._authentication_locks[session.session_id]:
+                if await self._has_authentication_challenge(session):
+                    await handler()
+                    self._pending_authentication.discard(session.session_id)
+        finally:
+            if lock_held:
+                await session.lock.acquire()
+        self._ensure_agent_control(session)
+
     @staticmethod
     def _ensure_agent_control(session: JourneyBrowserSession) -> None:
         if session.control_mode != "agent":
@@ -295,7 +414,9 @@ class BrowserController:
     async def _agent_control_action(
         self, session: JourneyBrowserSession
     ) -> AsyncGenerator[None, None]:
+        await self._authentication_checkpoint(session)
         async with session.lock:
+            await self._authentication_checkpoint(session, lock_held=True)
             self._ensure_agent_control(session)
             yield
 
@@ -306,6 +427,9 @@ class BrowserController:
     ) -> None:
         try:
             if session.control_mode != "human" and session.is_auth_only_url(route.request.url):
+                if (route.request.is_navigation_request()
+                        and route.request.frame.parent_frame is None):
+                    self._pending_authentication.add(session.session_id)
                 raise BrowserActionBlockedError("Authentication-only request blocked.")
             validated = validate_target_url(
                 route.request.url,
@@ -593,6 +717,17 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
+        if session.is_auth_only_url(url):
+            handler = self._authentication_handlers.get(session.session_id)
+            if handler is None:
+                raise BrowserActionError(
+                    "Authentication-only origins require human control."
+                )
+            validate_target_url(url, session.allowed_origins, session.network_policy)
+            async with session.lock:
+                await self._authentication_checkpoint(session, lock_held=True, force=True)
+            return await self.get_state(session_id=session_id, execution_id=execution_id,
+                                        journey_id=journey_id)
         async with self._agent_control_action(session):
             validated = validate_target_url(
                 url,
@@ -618,8 +753,12 @@ class BrowserController:
             except Exception as exc:
                 if isinstance(exc, BrowserPolicyError):
                     raise
-                raise BrowserNavigationError(f'Navigation to "{validated.origin}" failed.') from exc
+                if session.session_id not in self._pending_authentication:
+                    raise BrowserNavigationError(
+                        f'Navigation to "{validated.origin}" failed.'
+                    ) from exc
 
+            await self._authentication_checkpoint(session, lock_held=True)
             screenshot = await capture_screenshot(session, label="navigate")
             return BrowserActionResult(
                 action="navigate",
@@ -654,13 +793,13 @@ class BrowserController:
             await require_unique(locator)
             return await self._click_intent(
                 locator, role=role, name=name, label=label, text=text,
-                scope_role=scope_role, scope_name=scope_name,
+                scope_role=scope_role, scope_name=scope_name, session=session,
             )
 
     async def _click_intent(
         self, locator: Locator, *, role: str | None, name: str | None,
         label: str | None, text: str | None, scope_role: ScopeRole | None,
-        scope_name: str | None,
+        scope_name: str | None, session: JourneyBrowserSession,
     ) -> SensitiveActionIntent | None:
         # Hash page/form state inside the browser. Raw field values never cross
         # Playwright's protocol or enter traces, approval rows, logs or prompts.
@@ -682,17 +821,28 @@ class BrowserController:
                 const digest = await crypto.subtle.digest('SHA-256',
                     new TextEncoder().encode(payload));
                 return {sensitive, description: description.slice(0, 500),
-                    type: form ? element.type : null,
+                    type: form ? element.type : null, tag: element.tagName.toLowerCase(),
+                    href: element.tagName === "A" ? element.href : null, hasForm: !!form,
                     digest: Array.from(new Uint8Array(digest))
                         .map(value => value.toString(16).padStart(2, '0')).join('')};
             }""",
             self._approval_salt,
         )
+        navigation_url = state.get("href")
+        navigation_authorized = False
+        if isinstance(navigation_url, str):
+            try:
+                validate_target_url(navigation_url, session.allowed_origins, session.network_policy)
+                navigation_authorized = True
+            except BrowserPolicyError:
+                pass
         intent = classify_click_action(
             role=role, name=name, label=label, text=text,
             element_type=state.get("type"),
             observed_description=state.get("description"),
             state_digest=state.get("digest"),
+            navigation_url=navigation_url, navigation_origin_authorized=navigation_authorized,
+            element_tag=state.get("tag"), has_form=bool(state.get("hasForm")),
         )
         if intent is not None:
             if state.get("sensitive"):
@@ -756,7 +906,7 @@ class BrowserController:
             await require_unique(locator)
             intent = await self._click_intent(
                 locator, role=role, name=name, label=label, text=text,
-                scope_role=scope_role, scope_name=scope_name,
+                scope_role=scope_role, scope_name=scope_name, session=session,
             )
             if (intent is None and approval_fingerprint is not None) or (
                 intent is not None
@@ -780,7 +930,14 @@ class BrowserController:
                             session.allowed_origins,
                             session.network_policy,
                         )
-                await locator.click(timeout=session.timeout_ms)
+                if href and session.is_auth_only_url(urljoin(session.page.url, href)):
+                    if session.session_id not in self._authentication_handlers:
+                        raise BrowserActionBlockedError(
+                            "Authentication-only origins require human control."
+                        )
+                    await self._authentication_checkpoint(session, lock_held=True, force=True)
+                else:
+                    await locator.click(timeout=session.timeout_ms)
             except BrowserPolicyError:
                 raise
             except PlaywrightTimeoutError as exc:
@@ -788,6 +945,7 @@ class BrowserController:
             except Exception as exc:
                 raise BrowserActionError("Click could not be completed.") from exc
 
+            await self._authentication_checkpoint(session, lock_held=True)
             screenshot = await capture_screenshot(session, label="click")
             return BrowserActionResult(
                 action="click",
@@ -1195,6 +1353,42 @@ class BrowserController:
                 safe_to_capture=safe_to_capture,
             )
 
+    async def verify_recovery_target(
+        self, *, handle: BrowserSessionHandle, target: SemanticTarget,
+    ) -> bool:
+        """Read only: verify the frozen target after Release without capturing secrets."""
+        session = self._get_session(
+            session_id=handle.session_id, execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+        )
+        async with session.lock:
+            if session.state != "open" or session.control_mode != "verifying":
+                return False
+            try:
+                validate_target_url(
+                    session.page.url, session.allowed_origins, session.network_policy,
+                )
+                # A generic recovery never substitutes for approved identity verification.
+                challenges = session.page.locator(
+                    'input[type="password"]:visible, '
+                    'input[autocomplete="one-time-code"]:visible, '
+                    'input[name*="otp" i]:visible, input[name*="captcha" i]:visible, '
+                    'iframe[title*="captcha" i]:visible, [data-captcha]:visible'
+                )
+                if await challenges.count():
+                    return False
+                root = await scoped_root(
+                    session.page, scope_role=target.scope_role, scope_name=target.scope_name,
+                )
+                locator = semantic_locator(
+                    root, role=target.role, name=target.name,
+                    label=target.label, text=target.text,
+                )
+                await require_unique(locator)
+                return await locator.is_visible() and await locator.is_enabled()
+            except Exception:
+                return False
+
     async def verify_authenticated_role(
         self,
         *,
@@ -1344,6 +1538,9 @@ class BrowserController:
                 finally:
                     await session.browser.close()
                     self._sessions.pop(session_id, None)
+                    self._authentication_handlers.pop(session_id, None)
+                    self._authentication_locks.pop(session_id, None)
+                    self._pending_authentication.discard(session_id)
 
         return BrowserSessionArtifacts(
             trace_paths=trace_paths,

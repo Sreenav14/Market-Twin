@@ -141,6 +141,15 @@ export function TargetAuthorizationPage() {
               ) : null}
             </div>
           ) : null}
+          <div className="audit-box">
+            <h3>Exact execution scope under review</h3>
+            <ul>{target.allowed_origins.map((origin) => <li key={`${origin.scheme}:${origin.hostname}:${origin.port}`}>
+              <code>{origin.scheme}://{origin.hostname.includes(":") ? `[${origin.hostname}]` : origin.hostname}{origin.port ? `:${origin.port}` : ""}</code>
+              {origin.include_subdomains ? " (includes subdomains)" : " (exact origin)"}
+            </li>)}</ul>
+            <p>Approval applies to this target only. Existing runs keep their frozen scope.</p>
+            {authorization?.status === "pending" ? <p>Requested reason: {authorization.authorization_basis}</p> : null}
+          </div>
           {!active && mayAuthorize ? (
             <form className="form-grid authorization-form" onSubmit={authorize}>
               <label className="field-label" htmlFor="basis">
@@ -167,8 +176,8 @@ export function TargetAuthorizationPage() {
                   onChange={(event) => setConfirmed(event.target.checked)}
                 />
                 <span>
-                  I confirm that I own this target or have permission to test
-                  it.
+                  I confirm that I own or have permission to test every origin
+                  listed in this execution scope.
                 </span>
               </label>
               {error ? (

@@ -1,3 +1,560 @@
+## Current instruction: implementation paused; detailed live execution plan (2026-10-17)
+
+User stopped coding and requested a detailed what/where/why document. Working plan:
+[Live execution implementation plan](hitl/LIVE_EXECUTION_IMPLEMENTATION_PLAN.md).
+It contains the audited interfaces, completed corrections, missing observation
+capability, proposed read-only frame/activity contracts, exact file map, security
+requirements, phases L0–L7, acceptance matrix and operational limits.
+
+Before the stop, MT50 presentation/readiness/native-link-name corrections were
+implemented and focused checks passed. Fresh isolated persona run `a548d974`
+verified automatic viewer connection, real synthetic login/MFA, Done, isolated
+reuse and rendered report (3 passed). Feature Cases run `28e0d372` also completed
+its handoff/run/report. Details and artifact IDs are in the plan. The canonical
+MT50 Human Assistance terminal message was visibly corrected in Edge.
+
+Continuous agent observation is still MISSING: Activity is a placeholder; the
+current viewer requires an active human-control lease. Coding agents confirmed
+no new observation files or partial implementation were created before interruption.
+No more feature coding/tests/restarts are authorized by the current instruction.
+All owned integration processes finished cleanup. Existing configured services
+were not restarted; external Kafka credential use remains unapproved. Preserve
+the entire dirty tree. The latest turn changes documentation only.
+
+## Historical MT-000050 investigation before corrections (2026-10-17)
+
+User requested research before further fixes after Sup_14 appeared to request HITL
+without an interactive browser. Actual Edge at localhost5173 and local DB agree:
+MT50 `65d770e5-ae0e-4283-b516-5caa046726f8` completed, ZERO human requests/leases.
+Ordinary runtime discovery unconditionally creates a misleading human-authentication
+bootstrap record. Flow counts it as a third case, shows Journey10000 and orders it
+after execution. Human Assistance incorrectly says Waiting for the test on this
+completed/no-request run. Both real cases only navigate public /product; no login
+was reached. Saved screenshot shows Docs/Console links even though exact-name
+visibility assertions fail; accessible-name mismatch is plausible, not proven.
+
+No feature code changed during this research. Full details and ordered surgical
+corrections: latest MT50 section in docs/ui/VERIFICATION.md. Viewer is existing
+same-context volatile JPEG/input transport during a human lease, not an always-on
+execution monitor.20 backend tests and10 UI tests pass; default Vitest fork startup
+timed out, supported serial thread retry passed. Local services ports5173/8000/8020
+respond. Fresh canonical visible handoff still needs verification after UI fixes.
+No external replay/provider calls/real credentials/permission expansion performed.
+
+## Previous checkpoint: runtime-only HITL implemented and locally verified (2026-10-17)
+
+Ordinary New Test no longer asks for login/HITL identity setup. Newly frozen runs
+enable runtime assistance: execute first, pause only on an observed challenge,
+control the same live context within approved origins, then Done or Skip this
+case/journey. Unknown identity stays unknown; permissions and frozen expectations
+are unchanged. Anonymous session reuse is bounded to run/target/origin in memory.
+Skip is durable, releases/fences control, records not tested and continues
+independent work. Raw traces are disabled before unexpected authentication.
+
+Actual local React/API/PostgreSQL/outbox/Kafka/Chromium/evaluation/report checks:
+Feature Cases login/MFA/reconnect/resume/reuse passed; Feature Cases Skip produced
+2 passed/3 blocked/1 human-skipped/2 budget-skipped and no invented findings.
+Persona good and seeded-bad produced 3 passed and 3 failed respectively. Final
+persona Skip run `ec311b6b-cfc2-4b3c-bd7d-41f98f876758` completed with one skipped,
+two passed and a rendered persisted report. Scripted ADK drivers prove integration,
+not live-model quality. Exact artifacts/commands/limits: `docs/ui/VERIFICATION.md`.
+
+Found and fixed a real Skip finalization bug: rollback plus synchronized bulk
+update left the cached TestRun expired; mark_completed raised MissingGreenlet.
+The lifecycle repository now explicitly refreshes; worker completion logs use the
+immutable accepted run ID. Actual PostgreSQL regression fails on the old method
+and passes on the fix. Latest focused Python batches:52 +24 passed; focused
+production Ruff/Pyright pass; frontend22 tests, typecheck/build pass.
+
+Migration `6b0e2ac784d1` was tested on fresh disposable databases and applied to
+the canonical loopback DB after confirming zero active runs; current reports head.
+API/execution/evaluation and frontend still need restart. Do not run duplicate
+workers/reset shared offsets. Full-project
+Pyright is NOT clean (1209 errors across existing source/tests); focused checks
+are the passing gate. External SSO/CAPTCHA/provider behavior and comprehensive
+manual security/release verification remain open. No external target, provider
+call, deployment, push or real test-account credential was used.
+
+## MT-000048/49 corrections implemented and locally verified (2026-10-17)
+
+Scope: surgical corrections, preserving all existing uncommitted work. Details,
+commands, evidence and limits: `docs/ui/VERIFICATION.md`, latest section.
+
+Follow-up browser review:18 rendered Chromium samples (6 states ×3 widths) passed
+axe/overflow checks. Fixed New Test selector-label ordering and auth checkbox-caption
+alignment; DOM geometry regression, TypeScript/build and complete good/optional-bad
+persona UI-to-report rerun passed. Artifact `ui-integration-result-5e9f8ec536144816a9f980f0375ff87a.json`
+under `.local/`; see verification doc for screenshot paths and provider-free limits.
+
+- Explicit exact-origin scope revisions create a NEW pending target. Separate
+  owner/admin authorization is required. Old targets and frozen runs stay unchanged.
+  Additive migration `31d4ef097a2b` passed on disposable PostgreSQL and was applied
+  to the canonical local database; no external origin permissions were changed.
+- Persona and Feature Cases share configured required/optional authentication
+  escalation, verified identity and run/target/identity-bound in-memory reuse.
+  Independent review found a forced-handoff concurrency gap; publishing the pending
+  challenge before releasing the browser lock and rechecking after acquisition
+  closes it. Real Chromium concurrency regression passes without bypassing leases.
+- Assertions use unique semantic targets/rendered normalized text; explicit
+  `url_path_v1` compares origin/path in memory and persists only the frozen matching
+  route or a fixed mismatch marker. Unsupported reads remain unverified. Frozen
+  expectations/provenance are not rewritten. Documentation navigation classification
+  requires actual DOM link metadata and a frozen authorized destination.
+- Actual disposable React/API/PostgreSQL/outbox/Kafka/execution/HITL/evaluation/report:
+  deep good run `d660c216` passed (3 satisfied/3 rejected-blocked/2 budget-skipped);
+  deep seeded-bad `9dedb52d` passed (1 satisfied/2 failed/3 blocked/2 skipped,
+  2 persisted findings). Persona required-good `255b2793`: 3 passed; optional-bad
+  `e946d1ed`: 3 failed with real browser evidence. One verified login per persona run
+  reused across its three isolated contexts. Reports rendered for all four runs.
+- No provider/model calls or external application replays. Persona model is a
+  scripted local ADK integration driver, not AI quality evidence. Existing canonical
+  service processes were NOT restarted: restart API/execution/evaluation before
+  manual use of new code. Canonical cloud Kafka connectivity is not certified here.
+
+## MT-000048/49 policy and HITL investigation (2026-10-17, preceding evidence)
+
+Detailed findings/research: docs/hitl/README.md, Latest investigation section.
+MT48 legacypersona: 6journeys, 4blocked/1passed/1inconclusive. All four blocked
+steps explicitly deny https://console.supermemory.ai; frozen scope permits only
+https://supermemory.ai with subdomainsfalse. Both48/49 publictargets, noauthpolicy,
+approvalsf disabled, nohandoffrequests. Legacytools persist/rethrow policyerrors;
+no authentication handoff bridge. A viewer working locally is not universal HITL.
+MT49 deepfeature: 0policyblocks, 2passed/2unverified/1unsatisfied. Overview locator
+matches heading+navlink; mobile visible heading falsely absent because BR joins
+DOM text forgets.The vs expected forgets. The. Saved screenshot/ARIA/trace reviewed;
+offlineChromium reproduced text0/heading1 and overviewtext2/heading1. AgentURLquery
+privacy yields unverified; fetch200+separate503 do not establish causality.
+
+Found ordinary target create/UI supports only baseorigin, no additional-origin
+management route; SSO field requires preauthorizedorigins. Research proposes exact
+scope review separate from login, explicit authcapabilities/optional-auth, shared
+persona handoff, better semantic selectors and a versioned safe publicroute oracle.
+Keyword policy probes also deny benign payment-docs/invite-reference/removefilters;
+not observed cause of MT48. No permission/data/application-code changes, modelcalls
+or external replay. Documentation only; source+DB evidence independently reviewed.
+
+## Final local HITL/readiness correction (2026-10-16 23:20 local)
+
+See latest correction section in [product audit](PRODUCT_AUDIT_2026-10-16.md).
+Run 485b5eae case agent_format_navigation failed `absent_scope`: missing region
+Page format before link Agent. Target was public with no auth verification policy.
+Also found all HITL env settings absent. Appended only missing loopback configuration
+and generated matching internal key; no existing .env values replaced or printed.
+Canonical API/execution restarted. API session 69780/PID49064; execution session
+49864/PID16500. Viewer listens 127.0.0.1:8020; API/Kafka health200, unsignedlease401.
+No active runs; don't start duplicate workers. Migration head f82e4160cb9d.
+
+Implemented one bounded assistance attempt per case for missing/ambiguous semantic
+controls during click preflight, with exact target/identity verification after
+Release and policy recheck before the first dispatch. Generic assistance never
+creates auth reuse state. Journey UI/API now expose typed assertions and safe
+failure reasons; generic recovery is not labelled authenticated. Source Pyright
+passed; Ruff passed with existing E501 baseline excluded; frontend build/typecheck
+passed. Final HITL/API tests59+isolated PostgreSQL1 passed; real Chromium recovery4;
+frontend6. Direct integrated generic recovery and existing login/cancel/expiry passed.
+Full protected synthetic persisted pipeline passed again: artifact
+`.local/ui-integration-result-456f1f5453c44a7e936ce3ce12853e18.json`, run64f8f663,
+3passed/3blocked/2skipped, results409->200, report rendered, axe0, overflow0 at
+1440/768/390. Disposable cleanup passed, shared Kafka offsets untouched. No model
+calls or external target tests. Intermittent cloud Kafka SSL errors recovered;
+post-fix model quality and arbitrary complexity escalation remain unverified/limited.
+
+## Stale execution worker replaced (2026-10-16 22:40 local)
+
+MT-000046 (`4a0b618c-9788-4ac6-8646-5d51a91d53ba`) inspected read-only:
+failed 22:33:43 local, no started_at, plan, journeys or runtime snapshots; only
+execution_failed/ValueError. Exact rejected output remains unavailable.
+Confirmed no queued/running/awaiting-human runs, then stopped only verified stale
+worker PID 36268. Started current code with the existing uv/.env command; fresh
+process chain 28384/16604/15324 started 22:40:35. Kafka group generation 655 joined
+and worker reported connected/waiting at 22:40:46. Startup and connection records
+are present in `.local/temp-execution.log`. Intermittent broker SSL error occurred
+during startup but connection recovered. Do not start another duplicate worker.
+
+Verification: worker/planner tests 48 passed; logger regression 1 passed after
+supported escalation resolved Windows pytest temp-directory permission failures.
+No model calls, external target tests, failed-run replay, offset resets or DB writes
+were performed. Source fixes are now loaded, but actual Feature Cases acceptance
+after restart is not verified. Worker tool session: 28136. Keep it running for the
+user's next authorized run; inspect safe persisted reason before changing policy.
+
+## Temporary execution failure log (2026-10-16)
+
+The Activity page is still a placeholder, and the execution worker only wrote
+to the terminal that started it. The process serving Sup_10 started before the
+reviewed-reason logging existed, so a failed run left no file. The worker now
+appends start, completion, omitted-case, and failure records to
+`.local/temp-execution.log`, flushed immediately. The failure record includes
+the exception class, redacted message, and file/line stack. Credential-shaped
+text is replaced. Restart the existing execution worker before the next run;
+this does not rewrite MT-000045.
+
+## Product audit checkpoint — 2026-10-16
+
+Sup_10 investigation (MT-000045, `da2c121b-21ec-4710-8fdf-59322142dd0c`):
+read-only local DB confirms failed, started_at null, zero journeys/runtime snapshots,
+only generic execution_failed/ValueError event. Current execution process chain
+11848/18568/36268 started 2026-10-15 18:27:06 local, before worker diagnostics
+(20:52:21) and latest planner correction (22:50:48). Restart required; no process
+was killed/restarted during investigation. Scope has one requirement, zero approved
+oracles, four safe inputs, high depth. Model invoked after Kafka connection errors;
+exact post-invocation ValueError remains unrecoverable from persisted data. No new
+provider call, external browsing, or application code change during investigation.
+
+Latest evidence and verdict: [Product audit](PRODUCT_AUDIT_2026-10-16.md).
+Actual protected React/API/PostgreSQL/outbox/Kafka/execution/evaluation/report E2E
+passed with three passed, three blocked and two budget-skipped cases. Separate
+HITL integration passed disconnect/reconnect, Release without reconnect, verified
+resume, auth reuse, cancellation, request expiry and lease expiry/reclaim.
+Latest protected artifact: `.local/ui-integration-result-2f92558f57a449c5aced8f57e4931359.json`.
+
+Bounded live planning comparison completed exactly twelve calls: two accepted plans,
+two weak navigation checks, no evidenced seeded defects. No further provider calls
+authorized under that allowance. Corrected default persona tool registry and
+planner prompt/provider schema. Combined configuration/API/planner/evaluator tests:
+90 passed, five dependency deprecation warnings. URL redaction false-pass correction:
+12 assertion tests passed, Ruff/Pyright passed. Query/hash URL oracles now remain
+unverified to preserve secrets. Post-fix live provider quality remains untested.
+
+Canonical worker must restart to load source/.env changes. Historical run
+`ac7fc095-a35e-4073-8d08-f539fc6422a5` saved no exact ValueError reason; approved
+LangSmith trace detail inspection failed to load. Do not invent its root cause.
+Verdict REFOCUS: structured caller-approved oracles and domain-safe inputs are
+missing from ordinary Feature Cases knowledge selection. Preserve provenance;
+do not solve this by allowing model-approved truth. No migration, push or deploy.
+
+## Synthetic Feature Cases E2E passed after evaluator correction (2026-10-16)
+
+Strengthened `.local/ui_local_integration.py --execute-fixture` and ran the actual
+React -> Control API -> disposable PostgreSQL/outbox -> loopback Kafka -> execution
+worker/Playwright -> evaluation worker -> report/results API -> React pipeline.
+The first lifecycle-only smoke passed but did not inspect case verdicts. Adding
+that assertion exposed `valid` as unverified: the executor recorded the planned
+`registration_submit` action identity while the evaluator expected generic `click`.
+The evaluator now checks `action_id or action` from the frozen case, keeping exact
+ownership, order, observation, and artifact validation. Three regressions prove the
+exact identity passes and generic/mismatched identities fail. Evaluator tests: 12
+passed; production evaluator Ruff/Pyright pass. Optional journey typing and the
+internally constructed assertion-list type were made explicit for strict Pyright.
+
+Harness fixes: assert evaluated case verdicts and artifact-backed assertions;
+exercise Low/High/Medium selection and verify submitted Medium; check actual
+six-case execution cap and two budget skips; count only the case-list buttons
+(evidence controls caused one intermediate harness false failure); require approved
+receipt counts to match decisions and rejected runs to have zero receipts;
+propagate evidence-capture/check failures after cleanup; reject no-worker mode
+immediately instead of waiting for a run that cannot execute.
+
+Final passing evidence:
+`.local/ui-integration-result-2d41da33ee0b4c91899a18ce6911ed14.json`.
+Approved run `cc1874cb-6d01-4a49-bdfa-9372637daaf3`: 6 executed/6 passed,
+0 failed assertions/blocked/inconclusive, 2 case-budget skips; five approvals
+consumed with five completed receipts. Rejected run
+`57f31eab-142b-407e-ad31-11d9d67a0b27`: 4 blocked/2 passed/2 skipped,
+four rejections and zero receipts. All duplicate decisions returned HTTP 409.
+Before evaluation results returned the expected HTTP 409; after evaluation both
+returned HTTP 200. React rendered the report and eight case rows. Owned database,
+MinIO container, subprocesses, and browser artifacts were cleaned up. Shared Kafka
+consumer offsets and unrelated resources were preserved.
+
+Frontend build now PASSES with local child-process permission (584.52 kB JS,
+89.96 kB CSS; existing chunk-size warning). The four focused FeatureCases Vitest
+tests pass with `--pool=threads --maxWorkers=1`; the default forks worker timed out.
+Previous sandbox EPERM/native-module build blockers are superseded by this result.
+Planner/worker/shared/API suite: 68 passed; the five real ADK boundary scenarios
+were also rerun after the final test edit and passed. These do not prove live LLM
+planning: the E2E uses the explicit fixture plan and no paid provider; protected
+viewer/MFA scenarios were not rerun in this quick smoke. Historical `c6cb14af`
+root cause remains unknown. Restart the user's execution/evaluation workers and
+Control API to load changes before a new live run; canonical services were not
+restarted and failed historical rows were not rewritten.
+
+## ADK response boundary verified and reasoning extraction fixed (2026-10-16)
+
+Checked the installed ADK source and exercised the actual `Runner` through
+`generate_feature_plan`, retaining the production agent factory and output schema.
+Only model responses and database I/O were substituted. With no `output_key` or
+tools configured, this ADK flow does not Pydantic-validate the final response
+before our parser: a mixed valid/malformed response reaches the parser and saves
+seven valid cases; all malformed cases fail closed with a reviewed field reason.
+The proposed output-schema bypass defect was not reproduced in this configuration.
+
+The same tests reproduced a different defect: final response extraction included
+ADK `thought=True` parts, so reasoning text preceding valid JSON caused a JSON
+decode failure. Extraction now consumes only final answer text. Thought-only or
+empty responses report the reviewed missing-candidates reason; malformed JSON
+reports a new fixed, allowlisted invalid-JSON reason without keeping response text.
+This newly reproduced defect does not establish the historical `c6cb14af` cause.
+
+Verification: 68 focused tests passed across feature planning (including five real
+Runner boundary scenarios), worker failure recording, shared safe diagnostics,
+and the feature API. Four existing ADK deprecation warnings. Ruff passes for the
+planner and its tests; shared diagnostics has three pre-existing E501 lines and
+passes with that baseline excluded. Focused Pyright passes. No paid model call,
+external browser run, service restart, or historical database rewrite was made.
+Live provider planning/execution and prior frontend environment blockers remain
+unverified; restart the execution worker and Control API before the next new run.
+
+## Failure reasons are now logged and stored (2026-10-16)
+
+Run failures previously persisted only an exception class and a fixed category
+message, so a `ValueError` during case validation could not be distinguished
+from any other pre-plan failure. The worker log now records the exception
+class, the raising file and line, and a reviewed reason. The same reviewed
+reason is stored on `run.failed` and appended to the Feature Cases failure
+text. Provider bodies, secrets, and raw validation input stay omitted.
+Individual generated cases that fail schema or safety checks are logged with
+the case index or id and the reviewed rule, including when other cases are
+kept. A restarted execution worker and control API are required before the next
+run. Focused tests: 63 passed. The previous run
+`c6cb14af-80a0-4578-8cdd-69244a3474a7` was not rewritten.
+
+## Feature Cases depth selector fix (2026-10-15)
+
+The New Test page had the depth selector disabled in Feature Cases mode, leaving
+the default Medium value visible and preventing user selection. The control is
+now enabled in both modes. Feature Cases maps Low/Medium/High to maximum case
+budgets of 3/6/8; explicit `feature_budget.max_cases` values remain authoritative.
+Verification: `test_testing_depth.py` passed (9 tests); web TypeScript typecheck
+passed. Web build and Vitest could not start because Vite's config loader failed
+with Windows `spawn EPERM` and Tailwind Oxide's native module emitted invalid
+UTF-8. Full build/test verification remains blocked by the local Node process
+environment, not by an assertion failure.
+
+## Latest Feature Cases failure after planner response (2026-10-16)
+
+Read-only local PostgreSQL inspection found run
+`c6cb14af-80a0-4578-8cdd-69244a3474a7` failed with `ValueError` and the generic
+safe category `execution_failed`. It has no persisted `test_plan.created` event,
+journeys, or executions, so the failure occurred before browser case execution
+and before the plan transaction committed. The allowlisted diagnostic deliberately
+does not retain the exception detail; therefore the precise raising line cannot
+be proven from this run. The worker received a final model-planner response per
+user observation, but that response was not persisted and was not replayed.
+
+Updated candidate selection to reject a policy-invalid generated case while
+retaining unrelated candidates that pass all caller-owned authorization and
+safety checks. Rejected cases add a generic coverage gap. Duplicate IDs still
+fail, unsafe candidates are never executed, and a plan with no safe candidates
+still fails closed. Regression coverage checks both mixed valid/unsafe and all-
+unsafe candidate sets. Combined focused backend suite: 42 passed; Ruff passed;
+focused Pyright reported 0 errors. The web typecheck passed; Vite build and
+Vitest remain blocked on local `spawn EPERM`/Tailwind native-module loading.
+The worker must restart before the fix is loaded. A new run is needed to verify
+planner response acceptance and browser execution against the user's target.
+
+## Feature Cases planner correction (2026-10-15)
+
+User requested testing and fixing the Feature Cases failure. One bounded
+provider-backed reproduction used the saved public Supermemory page observation
+and frozen Sup_2 scope (test 33), with one model call, retries disabled, no
+browser, no external site access and persistence stubbed. The LLM returned a
+candidate response, but Pydantic rejected `cases[1].expected[0].target` with a
+custom semantic-target validation error; its expectation list then fell below
+the minimum. This isolates the observed failure to malformed structured planner
+output, after successful provider authentication. A separate synthetic `example.test`
+planner call produced two valid cases; no browser or database writes occurred.
+
+Changed the Feature Cases planner instruction to state the selector and oracle
+target rules explicitly. Added candidate-level schema parsing: malformed cases
+are omitted, a fixed coverage-gap note is added, and the existing strict scope,
+action and plan validators still govern every retained case. Planning still fails
+closed when no schema-valid case remains. This preserves useful valid cases when
+one generated item violates the Pydantic model without relaxing execution safety.
+
+After the prompt wording update, a saved-evidence planner invocation reached the
+configured provider but returned HTTP 500 before a response. It happened before
+the candidate-level parser fix, so provider-backed acceptance of that fix remains
+unverified. The focused regression models the observed invalid
+semantic target and verifies valid cases survive while all-invalid output fails.
+`test_feature_case_planner.py`: 31 passed (5 warnings, including existing ADK
+deprecations and a pytest-cache permission warning). Ruff passed and focused
+Pyright reported 0 errors. No external target was opened and no DB was changed.
+Restart the execution worker to load the code, then submit a new Feature Cases
+run; the previous failed run is unchanged. The original run ID was not present
+in the local database used for read-only inspection. Kafka heartbeat expiration
+and the subsequent offset commit failure were separate transport events.
+
+## Replacement LLM key verified (2026-10-15)
+
+User requested one new check after replacing the key. Actual scripts/check_llm.py
+run in fresh uv --env-file.env process SUCCEEDED: configured openai/gpt-6-luna,
+received_texttrue, reply_is_oktrue, finish_reasonstop. One fixed short prompt,
+256completion-token cap,no retries,no key output,no production target access.
+This proves current key/model completion works; full feature planning/execution
+was not rerun. Restart existing execution/evaluation workers to load the new key
+before starting a new feature run. Earlier401 evidence is historical, superseded
+for the current key by this successful completion; failed runs remain unchanged.
+
+## Reusable one-call LLM diagnostic (2026-10-15)
+
+User asked to write small code and call the LLM after key change. Added
+scripts/check_llm.py: same configured model/key precedence, fixed ReplyOK prompt,
+256completion-token cap,0retries, bounded timeout, no content telemetry or secret
+output. Actual one generation request from uv --env-file.env FAILED HTTP401,
+AuthenticationError for openai/gpt-6-luna. No output was generated; no production
+site was browsed. Earlier metadata probe in interrupted tool never launched due
+automatic approval-review timeout; did not issue a second network request.
+Do not infer key validity or feature-plan success. User must correct configured
+MODEL_API_KEY privately. Reusecommand: uv run --no-sync --env-file.env python
+scripts/check_llm.py. Do not repeatedly rerun paid requests without authorization.
+
+## Fresh model API connection test: invalid_api_key (2026-10-15)
+
+User requested API connection test. One authenticated model-metadata GET for
+gpt-6-luna via fresh uv --env-file.env process and selected MODEL_API_KEY returned
+HTTP401 AuthenticationError, providercode invalid_api_key/typeinvalid_request_error.
+No generation request, token output, model planning, production browser or retry.
+Key value never printed. This confirms provider rejection in a fresh process,
+so restarting alone will not resolve the currently configured invalid key.
+User must privately correct MODEL_API_KEY for the configured provider/endpoint.
+Model availability and completion remain unverified because authentication failed.
+
+## MT-000035 Sup_4: stale worker configuration (2026-10-15)
+
+Readonly DB:0310df66-c044-43f7-81f1-bbc5d385db44/test35 Sup_4 failed22:41:25UTC,
+started_atNULL,no case executions or run.failed event. Active local execution
+worker chain uv41688/python28904/python9544 started16:58:01local. Root.env
+updated17:39:57; worker diagnostic source updated17:23:18. The running process
+predates both key update and failure-reporting patch; root.env edits cannot
+replace its inherited process environment or imported code. No provider call was
+made to test the replacement key; its validity is still unknown. Newly launched
+read-only config probe selects MODEL_API_KEY matching root.env; no key printed.
+User must Ctrl+C/restart the existing execution worker (not launch a second one),
+with localhost9092/PLAINTEXT overrides, to load updated MODEL_API_KEY and safe
+failure reporting. Restart API for new diagnostics endpoint response as well.
+No processes stopped, no queued run executed, no production navigation, no DB
+mutation, and no additional paid call occurred in this investigation.
+
+## Authorized feature-planner reproduction: HTTP401 (2026-10-15)
+
+User explicitly approved one model-backed reproduction using saved page evidence.
+Ran actual ADK feature planner with frozen Sup_2 scope/budget and saved public
+ARIA observation (reconstructed ancillary page metadata, not a byte-identical
+original tool response). No browser was started; production target not contacted;
+DB read-only; runtime/plan persistence replaced with in-memory validation sinks.
+Retries disabled and one model-call limit,100s outer bound; telemetry disabled.
+
+Reproduction FAILED with LiteLLM AuthenticationError, providerHTTP401 for configured
+openai/gpt-6-luna. Safe evidence .local/feature-planner-reproduction.json retains
+only exception class/status and stack locations, no key/prompt/provider body.
+Effective credential is MODEL_API_KEY, present and matching root.env;
+OPENAI_API_KEY absent. No key value printed, replaced, or tested again.
+This proves current planner authentication failure; original33/34 exceptions
+were not saved so historical identity of cause remains an inference. No plan
+was generated and no target defect established. Model availability/output/case
+execution remain unverified until provider authentication succeeds.
+
+Genuine blocker: user must configure a valid authorized model-provider key
+privately in MODEL_API_KEY (never send it in chat) and restart execution worker
+(and evaluation worker if sharing config). Keep API/worker loopback Kafka
+settings aligned. Use a new run; previous failed runs were not rewritten.
+Do not make another paid/provider call under the single-reproduction approval.
+Earlier diagnostic correction tests24backend/4UI/typecheck/build remain passing;
+no new application code change was needed for this credential rejection.
+
+## Feature planning failure reporting correction (2026-10-15)
+
+Sup_3/MT-000034 (78537702-b077-406d-8645-eea72f668402) also failed before
+persisting any journey or event. User has no worker logs. Underlying historical
+planner exception is not recoverable from these DB rows. Initial Sup_2 discovery
+artifact records targetHTTP200. Deterministic case execution still needs model-
+generated planning for nonfixture runs; earlier local fixture passes did not
+exercise provider-generated candidate output.
+
+Implemented only the proven diagnostic defect: worker now commits safe run.failed
+category plus exception class after rollback and on interrupted delivery. Raw
+exception messages/provider responses/validation inputs are never persisted.
+Shared reviewed messages classify common model authentication/permission/model-
+not-found/rate/connection/request, validation, timeout, browser and interruption
+failures. API returns only allowlisted diagnostic text. FeatureCases displays a
+terminal planning error instead of waiting forever for an unsaved plan and stops
+polling that failed result. Historical failures truthfully say error not retained.
+No migration or failed-run rewrite. API and execution worker need restart to load
+new code. Real readonly case_view checks for33/34 returned the expected safe
+historical fallback. No production rerun or provider/model call performed.
+
+Checks: focused worker/API/shared24passed (4existing ADK warnings); frontend
+FeatureCases4passed; TypeScript/build passed (584.48kBJS/89.96kBCSS); scoped
+Pyright0, Ruff passed ignoring baselineE501. Final worker/shared14passed after
+adding durable exception type (overlaps24). Underlying real planner functionality
+is NOT declared fixed. Captured reproduction needs user approval if it invokes
+the configured paid model; no real credential/provider use authorized here.
+
+## MT-000033 Sup_2 investigation (2026-10-15)
+
+User reports Feature plan failed /0cases /Collector notstarted. Read-only local
+DB: run7b5afaef-af69-473f-8581-84ce25564bda, deep_feature_v1, created22:11:20UTC,
+failed22:11:53UTC, started_atNULL,0journeys/agentexecutions/runevents/runtime
+snapshots. Frozen scope exists; offline build_run_request/scope/budget validation
+passed. No predefined featureplan/auth prerequisite/fixture effects configured.
+A contemporaneous local discovery trace under artifacts/runs/87a39343-fece-4e56-
+90b5-d67fba730add records supermemory.ai/product documentHTTP200 and navigation
+screenshot at17:11:34local; no trace Playwright call errors. This supports initial
+navigation succeeded before planning/persistence failed, not a failed case/product
+assertion. The worker rolls back planner snapshots and logs only exception type;
+no exact historical planner exception was persisted. Current.env model resolves
+openai/gpt-6-luna; no provider request/credential check was made and that model's
+availability or exact running-worker configuration is not established.
+Asked user for worker failure line for this UUID. Root cause remains unconfirmed
+pending that log (provider/auth/rate/structured output validation cannot be
+inferred from zero cases alone). No production rerun, external browse, model
+call, database mutation or feature source change performed during investigation.
+Synthetic fixture passes do not establish real model-generated feature planning.
+
+## Dark theme implemented (2026-10-15)
+
+User requested dark mode after the redesign. Default theme now uses dark
+charcoal canvas/surfaces, mint primary/focus colors, readable neutral text and
+dark semantic status backgrounds. Public pages now use shared semantic tokens
+instead of hardcoded light surfaces, including demo, skip link and logo/button
+foregrounds. Existing fonts/layout/behavior retained. Source changes are only
+apps/web/src/styles/tokens.css and apps/web/src/styles/public.css.
+Production build passed (JS584.33kB, CSS89.96kB; existing bundle-size advisory).
+Fresh anonymous browser renders reviewed: home1440px, login1440px and390px;
+actual computed color-scheme dark. Eight palette text/background ratios ranged
+5.25:1-16.14:1 (status pairs7.59:1 or greater). Screenshots under ignored
+.local/dark-mode contain anonymous pages only. No test suite rerun or real login.
+Authenticated report/viewer/portal screenshots and full dark accessibility
+acceptance remain unverified. Prior statements that dark mode was deferred are
+historical and superseded by this requested implementation.
+
+## Duplicate Vite listener resolved (2026-10-15)
+
+After correcting CONTROL_API_PORT, login still failed because two MarketTwin
+Vite processes bound5173: stale PID21796 on127.0.0.1 and newer PID57404 on0.0.0.0.
+The specific loopback listener intercepted requests, returning502. Verified the
+stale PID's listener, node executable and repository Vite script immediately
+before stopping only PID21796. API56592 and newer Vite remained running.
+Afterwards both localhost:5173 and127.0.0.1:5173 proxied GET /api/v1/me ->401 and
+empty-body POST /api/v1/auth/local/login ->422 from Uvicorn, matching directAPI.
+No real account login attempted; user should refresh and retry their approved
+identity. No auth bypass, database mutation, or credential use was needed.
+
+## Local login proxy correction (2026-10-15)
+
+Reproduced login-service unavailable as Vite GET /api/v1/me HTTP502 on both
+localhost and127.0.0.1:5173. Direct API8000 /health returned200 and /api/v1/me401
+(expected unauthenticated); API8001 had no listener. Root.env CONTROL_API_PORT
+was8001, while user started Uvicorn8000. Changed only that exact nonsecret setting
+to8000, preserving every other .env byte. Restart Vite to load the corrected
+proxy; no auth/account changes, credentials, or session creation were needed.
+Post-restart login success remains for the user to verify; no real login attempted.
+
+## Local Kafka startup diagnosis (2026-10-15)
+
+API /health returned200/statusok; / and /json/version are undefined routes,
+so their404 responses do not indicate failed startup. Effective root.env selects
+a non-loopback Kafka broker with SASL_SSL; local Docker Kafka is healthy and
+read-only localhost:9092 metadata inspection succeeded (advertised localhost9092,
+node1). This explains why local startup still attempts remote broker connections;
+the precise remote timeout/network cause was not investigated or contacted.
+No environment file or running process was changed. For local manual testing set
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092 and KAFKA_SECURITY_PROTOCOL=PLAINTEXT in
+each API/execution-worker shell before the existing uv --env-file command, then
+restart those processes. Saved cloud credentials remain private and unchanged.
+No messages were produced/consumed and no offsets changed by this diagnostic.
+
 ## End-to-end integration checkpoint (2026-10-15, final)
 
 Requested synthetic local integration is verified; existing UI and user changes

@@ -33,10 +33,19 @@ class MultiPersonaExecutionResult(BaseModel):
 
 
     @property
+    def skipped_count(self) -> int:
+        """Journeys explicitly not tested after a human assistance skip."""
+
+        return sum(
+            journey.status == JourneyExecutionStatus.SKIPPED
+            for journey in self.journeys
+        )
+
+    @property
     def failed_count(self) -> int:
         """Number of Journeys that did not complete normally."""
 
-        return len(self.journeys) - self.completed_count
+        return len(self.journeys) - self.completed_count - self.skipped_count
 
     
     

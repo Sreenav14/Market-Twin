@@ -2,6 +2,7 @@
 
 import json
 from collections import Counter
+from typing import cast
 from uuid import UUID
 
 from markettwin_database.models import (
@@ -35,7 +36,7 @@ def valid_case_evidence(
         return False
     if len(result.action_step_ids) != len(case.steps) + 1:
         return False
-    expected_actions = ("navigate", *(action.action for action in case.steps))
+    expected_actions = ("navigate", *(action.action_id or action.action for action in case.steps))
     for step_id, action in zip(result.action_step_ids, expected_actions, strict=True):
         step = steps.get(step_id)
         if (
@@ -223,6 +224,7 @@ async def evaluate_deep_run(
             execution = executions.get(result.execution_id)
             owned = (
                 event.execution_id == result.execution_id
+                and event.journey_id is not None
                 and event.journey_id in journeys
                 and execution is not None
                 and execution.journey_id == event.journey_id
@@ -230,6 +232,10 @@ async def evaluate_deep_run(
             )
             valid = bool(owned and valid_case_evidence(case, result, steps, artifacts))
             verdict = result.verdict if valid else "unverified"
+            if owned and result.execution_status == "skipped":
+                verdict = "not_run"
+                entry["reason"] = "human_assistance_skipped"
+                counts["human_assistance_skipped"] += 1
             if owned and result.execution_status == "policy_blocked":
                 verdict = "blocked"
             entry.update(
@@ -306,17 +312,20 @@ async def evaluate_deep_run(
         )
     coverage = {
         "planned": len(entries),
-        "executed": sum(entry.get("execution_id") is not None for entry in entries),
+        "executed": sum(
+            entry.get("execution_id") is not None and entry.get("execution_status") != "skipped"
+            for entry in entries
+        ),
         "passed": counts["satisfied"],
         "failed_assertions": sum(
             assertion.get("status") == "not_satisfied"
             for entry in entries
-            for assertion in entry.get("assertions", [])
-            if isinstance(assertion, dict)
+            for assertion in cast(list[dict[str, object]], entry.get("assertions", []))
         ),
         "blocked": counts["blocked"],
         "inconclusive": counts["unverified"],
         "not_run": counts["not_run"],
+        "human_assistance_skipped": counts["human_assistance_skipped"],
         "verified_findings": len(finding_ids),
     }
     summary = (

@@ -79,6 +79,8 @@ class MarketTwinRunRequest:
     feature_plan: dict[str, object] | None = None
     fixture_truth: bool = False
     auth_verification: AuthVerificationPolicy | None = None
+    auth_mode: Literal["required", "optional"] = "required"
+    runtime_human_assistance: bool = False
     synthetic_fixture_approval_enabled: bool = False
     human_action_approvals_enabled: bool = False
     created_by_user_id: UUID | None = None
@@ -185,6 +187,7 @@ async def execute_markettwin_run(
                 return await execute_one_planned_journey(
                     request=MultiPersonaExecutionRequest(
                         run_id=request.run_id,
+                        runtime_human_assistance=request.runtime_human_assistance,
                         plan=prepared.plan,
                         journey_ids_by_key=prepared.journey_ids_by_key,
                         persona_ids_by_key=prepared.persona_ids_by_key,
@@ -194,6 +197,9 @@ async def execute_markettwin_run(
                         network_policy=request.network_policy,
                         max_duration_seconds_per_journey=(request.max_duration_seconds_per_journey),
                         agent_prompt_overrides=request.agent_prompt_overrides,
+                        auth_verification=request.auth_verification,
+                        auth_mode=request.auth_mode,
+                        target_id=request.target_snapshot.get("target_id"),
                     ),
                     journey=journey,
                     browser_controller=browser_controller,

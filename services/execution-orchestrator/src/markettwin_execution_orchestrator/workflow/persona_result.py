@@ -23,6 +23,7 @@ class JourneyExecutionStatus(StrEnum):
     TIMED_OUT = "timed_out"
     CANCELLED = "cancelled"
     POLICY_BLOCKED = "policy_blocked"
+    SKIPPED = "skipped"
 
 
 class JourneyOutcome(StrEnum):

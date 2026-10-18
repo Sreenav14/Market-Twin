@@ -54,13 +54,6 @@ export function NewRunPage() {
   const [humanActionApprovals, setHumanActionApprovals] = useState(false);
   const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
   const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
-  const [authVerificationEnabled, setAuthVerificationEnabled] = useState(false);
-  const [authOrigin, setAuthOrigin] = useState("");
-  const [authOnlyOrigins, setAuthOnlyOrigins] = useState("");
-  const [authMarkerSelector, setAuthMarkerSelector] = useState("");
-  const [authExpectedMarker, setAuthExpectedMarker] = useState("");
-  const [authRole, setAuthRole] = useState("");
-  const [authAccountReference, setAuthAccountReference] = useState("");
   const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,17 +120,6 @@ export function NewRunPage() {
       setHumanActionApprovals(false);
     }
   }, [approvalsEligible, executionMode]);
-  useEffect(() => {
-    if (target?.requires_auth) {
-      setAuthVerificationEnabled(true);
-      setExecutionMode("deep_feature_v1");
-      try {
-        setAuthOrigin(new URL(target.base_url).origin);
-      } catch {
-        setAuthOrigin("");
-      }
-    }
-  }, [target?.id]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;
@@ -152,16 +134,6 @@ export function NewRunPage() {
     setBusy(true);
     setError(null);
     try {
-      const authVerification = authVerificationEnabled
-        ? {
-            origin: authOrigin.trim(),
-            auth_only_origins: authOnlyOrigins.split(",").map((origin) => origin.trim()).filter(Boolean),
-            marker_selector: authMarkerSelector.trim(),
-            expected_marker: authExpectedMarker,
-            role: authRole.trim(),
-            account_reference: authAccountReference.trim(),
-          }
-        : undefined;
       const run = await api.createRun(
         applicationId,
         target.id,
@@ -170,10 +142,12 @@ export function NewRunPage() {
         testingDepth,
         name,
         executionMode,
-        authVerification,
+        undefined,
         humanActionApprovals && approvalsEligible && executionMode === "deep_feature_v1",
         syntheticFixtureApproval && fixtureApprovalEligible && executionMode === "deep_feature_v1",
         humanActionApprovals ? JSON.parse(sensitiveActionRules) as unknown[] : [],
+        undefined,
+        true,
       );
       setBrief("");
       navigate(`/runs/${run.id}/overview`);
@@ -366,19 +340,19 @@ export function NewRunPage() {
           <section className="run-create-zone" aria-labelledby="how-to-execute-heading">
             <h2 id="how-to-execute-heading">How to execute</h2>
           <div className="composer-knowledge form-grid">
-            <label htmlFor="testing-depth">Testing depth</label>
             <label htmlFor="execution-mode">Testing mode</label>
             <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
               <option value="legacy_persona">Persona journeys</option>
               <option value="deep_feature_v1">Feature cases — experimental</option>
             </select>
             {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unverified.</p> : null}
-            <select id="testing-depth" value={testingDepth} disabled={busy || executionMode === "deep_feature_v1"} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
+            <label htmlFor="testing-depth">Testing depth</label>
+            <select id="testing-depth" value={testingDepth} disabled={busy} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
               <option value="low">Low — focused coverage</option>
               <option value="medium">Medium — balanced coverage</option>
               <option value="high">High — broader coverage</option>
             </select>
-            <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? "Feature cases use a separate bounded budget of up to eight cases." : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
+            <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? <>Feature cases run up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} cases. Broader coverage takes longer.</> : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
           </div>
           <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
             <h2 id="test-knowledge-heading">Knowledge for this test <span className="muted">Optional</span></h2>
@@ -400,33 +374,7 @@ export function NewRunPage() {
           <section className="run-create-zone" aria-labelledby="run-security-heading">
             <h2 id="run-security-heading">Security and authorization</h2>
           <p className="form-help">Only controls permitted by the selected target and test mode are available here. Credentials never belong in the test brief or policy fields.</p>
-          {target?.requires_auth ? (
-            <section className="composer-knowledge form-grid" aria-labelledby="auth-verification-heading">
-              <h2 id="auth-verification-heading">Authentication assistance</h2>
-              <label className="knowledge-choice">
-                <input type="checkbox" checked={authVerificationEnabled} disabled={busy || Boolean(target?.requires_auth)} onChange={(event) => setAuthVerificationEnabled(event.target.checked)} />
-                <span>Allow a human to complete authentication, then verify this test identity before testing</span>
-              </label>
-              {authVerificationEnabled ? (
-                <>
-                  <p className="form-help">Provide an exact, read-only marker from the authenticated page. Never enter a password, token, cookie, one-time code, or other credential here.</p>
-                  <label htmlFor="auth-origin">Authorized authentication origin</label>
-                  <input className="text-input" id="auth-origin" type="url" value={authOrigin} onChange={(event) => setAuthOrigin(event.target.value)} disabled={busy} required />
-                  <label htmlFor="auth-only-origins">SSO origins for human authentication only (optional, comma separated)</label>
-                  <input className="text-input" id="auth-only-origins" value={authOnlyOrigins} onChange={(event) => setAuthOnlyOrigins(event.target.value)} disabled={busy} placeholder="https://idp.example.test" />
-                  <p className="form-help">Each exact origin must already be authorized on the target. Agents cannot inspect or interact with these origins.</p>
-                  <label htmlFor="auth-marker-selector">Unique visible marker selector</label>
-                  <input className="text-input" id="auth-marker-selector" value={authMarkerSelector} onChange={(event) => setAuthMarkerSelector(event.target.value)} disabled={busy} placeholder="[data-authenticated-role]" required maxLength={200} />
-                  <label htmlFor="auth-expected-marker">Exact marker text</label>
-                  <input className="text-input" id="auth-expected-marker" value={authExpectedMarker} onChange={(event) => setAuthExpectedMarker(event.target.value)} disabled={busy} placeholder="user" required maxLength={200} />
-                  <label htmlFor="auth-role">Expected role identifier</label>
-                  <input className="text-input" id="auth-role" value={authRole} onChange={(event) => setAuthRole(event.target.value)} disabled={busy} placeholder="user" required maxLength={64} />
-                  <label htmlFor="auth-account-reference">Nonsecret test account reference</label>
-                  <input className="text-input" id="auth-account-reference" value={authAccountReference} onChange={(event) => setAuthAccountReference(event.target.value)} disabled={busy} placeholder="synthetic-user-01" required maxLength={128} />
-                </>
-              ) : null}
-            </section>
-          ) : null}
+          <p className="form-help">Agents start without login setup. If a login or protected interaction blocks execution, the agent pauses and asks for help. You can take control within approved origins or skip that case or journey.</p>
           {approvalsEligible && executionMode === "deep_feature_v1" ? (
             <section className="composer-knowledge" aria-labelledby="action-approval-heading">
               <h2 id="action-approval-heading">Sensitive action approval</h2>

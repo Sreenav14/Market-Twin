@@ -12,6 +12,7 @@ from markettwin_control_api.persistence.repositories.test_run_results_repository
 from markettwin_control_api.persistence.repositories.test_run_results_repository import (
     _safe_action_summary,
     _safe_observation_summary,
+    _safe_policy_diagnostic,
 )
 
 
@@ -140,3 +141,70 @@ def test_safe_summaries_exclude_filled_values_exception_text_and_url_secrets():
     assert "https://example.test" in summary
     assert "console errors: 1" in summary
     assert "secret" not in summary and "private-user" not in summary
+
+
+def test_structured_assertions_are_readable_only_for_the_owned_step():
+    import json
+
+    from markettwin_shared.deep_testing import AssertionResult
+
+    execution_id = uuid4()
+    assertion = AssertionResult(
+        case_id="navigation", assertion_id="title", oracle="title",
+        expected_value="Guide", observed_value="Guide", status="satisfied",
+        execution_id=execution_id, step_id=12, artifact_ids=(uuid4(),),
+        origin="inferred", elapsed_ms=1,
+    )
+    step = SimpleNamespace(
+        id=12, execution_id=execution_id, action_type="assertion", status="completed",
+        observation_summary=assertion.model_dump_json(),
+    )
+    summary = json.loads(_safe_observation_summary(step))
+    assert summary["expected_value"] == "Guide"
+    assert summary["observed_value"] == "Guide"
+    step.execution_id = uuid4()
+    assert "Guide" not in _safe_observation_summary(step)
+    step.observation_summary = '{"input": "unreviewed-secret"}'
+    assert "unreviewed-secret" not in _safe_observation_summary(step)
+
+
+def test_denied_origin_is_structured_without_exposing_raw_errors_or_url_credentials():
+    expected = {
+        "reason_code": "origin_not_authorized",
+        "requested_origin": "https://console.example.test",
+    }
+    assert _safe_policy_diagnostic(
+        'Target origin "https://console.example.test" is not allowed.'
+    ) == expected
+    for value in (
+        'Target origin "https://user:secret@example.test" is not allowed.',
+        'Target origin "https://example.test?token=secret" is not allowed.',
+        'Target origin "https://example.test/private" is not allowed.',
+        'Unexpected error secret',
+    ):
+        assert _safe_policy_diagnostic(value) is None
+
+
+async def test_skipped_journey_message_does_not_claim_browser_or_policy_failure():
+    from unittest.mock import AsyncMock
+
+    journey_id, execution_id = uuid4(), uuid4()
+    execution = SimpleNamespace(
+        id=execution_id, journey_id=journey_id, attempt_number=1, status="skipped", outcome=None,
+        started_at=None, completed_at=None, error_message="secret raw exception",
+    )
+    session = SimpleNamespace(
+        execute=AsyncMock(side_effect=[
+            SimpleNamespace(all=lambda: [(
+                SimpleNamespace(id=journey_id, ordinal=1), "Persona", "Perspective", "Mission",
+                "Objective", ["Criterion"],
+            )]), SimpleNamespace(all=lambda: []), SimpleNamespace(all=lambda: []),
+        ]),
+        scalars=AsyncMock(side_effect=[
+            SimpleNamespace(all=lambda: [execution]), SimpleNamespace(all=lambda: []),
+        ]),
+    )
+    rows = await Repository(session).list_journeys(test_run_id=uuid4())
+    assert rows[0]["error_message"] == "Not tested\u2014human assistance skipped."
+    assert rows[0]["outcome"] is None
+    assert "secret" not in str(rows)

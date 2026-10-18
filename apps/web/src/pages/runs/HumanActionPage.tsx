@@ -4,13 +4,22 @@ import { AlertTriangle, Clock3, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useOutletContext } from "react-router-dom";
 
 import { RunContext } from "../../layouts/RunLayout";
-import { api, type HumanLeaseGrant } from "../../lib/api";
+import { api, type HumanAction, type HumanLeaseGrant } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
+import { terminalTestStatuses } from "../../lib/results";
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
+
+function RequestContext({ action, runId }: { action: HumanAction; runId: string }) {
+  return <div className="muted">
+    <p>Requesting executor: {action.requesting_agent ?? "Browser executor"} · {action.journey_title ?? `Execution ${action.execution_id.slice(0, 8)}`}</p>
+    {action.journey_id ? <Link className="text-link" to={`/runs/${runId}/journeys/${action.journey_id}${action.requested_by_step_id ? `?step=${action.requested_by_step_id}` : ""}`}>Inspect the paused journey{action.requested_by_step_id ? ` at step ${action.requested_by_step_id}` : ""}</Link> : null}
+  </div>;
+}
 
 export function HumanActionPage() {
   const { run, user, workspace } = useOutletContext<RunContext>();
   const canManageHumanActions = canAuthorizeTarget(workspace.role);
+  const ended = terminalTestStatuses.has(run.status);
   const actions = useQuery({
     queryKey: ["human-actions", user.id, workspace.id, run.id],
     queryFn: ({ signal }) => api.listHumanActions(run.id, signal),
@@ -74,9 +83,21 @@ export function HumanActionPage() {
       queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
     },
   });
-  const cancel = useMutation({
-    mutationFn: (requestId: string) => api.cancelHumanAction(requestId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] }),
+  const skip = useMutation({
+    onMutate: () => { releasingRef.current = true; },
+    mutationFn: async (requestId: string) => {
+      await api.skipHumanAction(requestId);
+    },
+    onSuccess: (_result, requestId) => {
+      releasingRef.current = false;
+      if (activeRequestId === requestId) {
+        activeLeaseRef.current = null;
+        setActiveLease(null);
+        setActiveRequestId(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
+    },
+    onError: () => { releasingRef.current = false; },
   });
   const approvals = useQuery({
     queryKey: ["action-approvals", user.id, workspace.id, run.id],
@@ -94,7 +115,8 @@ export function HumanActionPage() {
   });
   const pending = actions.data?.filter((item) => item.status === "pending" && item.id !== activeRequestId) ?? [];
   const leased = actions.data?.filter((item) => item.status === "leased" && item.id !== activeRequestId) ?? [];
-  const finished = actions.data?.filter((item) => ["completed", "cancelled", "expired"].includes(item.status)) ?? [];
+  const finished = actions.data?.filter((item) => ["completed", "cancelled", "expired", "skipped"].includes(item.status)) ?? [];
+  const activeAction = actions.data?.find((item) => item.id === activeRequestId);
   const pendingApprovals = approvals.data?.filter((item) => item.status === "pending") ?? [];
   const approvedActions = approvals.data?.filter((item) => item.status === "approved") ?? [];
 
@@ -107,12 +129,12 @@ export function HumanActionPage() {
   }, []);
 
   useEffect(() => {
-    if (!activeLease || !activeRequestId || release.isPending || release.isError) return;
+    if (!activeLease || !activeRequestId || release.isPending || release.isError || skip.isPending) return;
     const timer = window.setInterval(() => {
       renew.mutate(activeRequestId);
     }, 10_000);
     return () => window.clearInterval(timer);
-  }, [activeLease, activeRequestId, release.isPending, release.isError]);
+  }, [activeLease, activeRequestId, release.isPending, release.isError, skip.isPending]);
 
   return (
     <section className="results-boundary" aria-labelledby="human-action-heading">
@@ -129,8 +151,9 @@ export function HumanActionPage() {
       {actions.isSuccess && actions.data.length === 0 ? (
         <div className="empty-state">
           <Clock3 aria-hidden="true" />
-          <h2>Waiting for the test</h2>
-          <p>No human action is currently required. This page updates as the run progresses.</p>
+          <h2>{ended ? "No human assistance was requested" : run.status === "awaiting_human" ? "Waiting for an available assistance request" : "No human assistance is needed right now"}</h2>
+          <p>{ended ? "This test ended without a human handoff. There is no active takeover to connect to; review the recorded steps and evidence." : run.status === "awaiting_human" ? "The test reports a human wait, but no authorized request is available yet. Refresh the test if this state persists." : "Agents continue normally. A request and live browser controls appear here only when execution encounters a protected interaction."}</p>
+          {ended ? <Link className="text-link" to={`/runs/${run.id}/journeys`}>Review execution and recorded evidence</Link> : null}
         </div>
       ) : null}
 
@@ -140,13 +163,16 @@ export function HumanActionPage() {
           <div>
             <h2>Awaiting human: {action.request_type.replaceAll("_", " ")}</h2>
             <p>The agent is paused. Taking control opens the same supervised browser context.</p>
+            <RequestContext action={action} runId={run.id} />
+            {action.instructions ? <p>{action.instructions}</p> : null}
+            {action.browser_state && action.browser_state !== "open" ? <p role="alert">This browser is no longer available for interaction. Review the request status or skip this work.</p> : null}
             <p className="muted">Request expires {action.expires_at ? new Date(action.expires_at).toLocaleString() : "when the run ends"}.</p>
           </div>
           <div className="button-row">
-            <button className="secondary-button" type="button" disabled={claim.isPending || Boolean(activeLease)} onClick={() => claim.mutate(action.id)}>
+            <button className="secondary-button" type="button" disabled={claim.isPending || skip.isPending || Boolean(activeLease) || Boolean(action.browser_state && action.browser_state !== "open")} onClick={() => claim.mutate(action.id)}>
               <ShieldCheck size={16} aria-hidden="true" /> Take browser control
             </button>
-            <button className="secondary-button" type="button" disabled={cancel.isPending} onClick={() => cancel.mutate(action.id)}>Cancel request</button>
+            <button className="secondary-button" type="button" disabled={skip.isPending || claim.isPending || release.isPending} onClick={() => skip.mutate(action.id)}>Skip this case/journey</button>
           </div>
         </article>
       ))}
@@ -157,10 +183,11 @@ export function HumanActionPage() {
           <UserRound aria-hidden="true" />
           <div>
             <h2>Controlling browser</h2>
-            <p>Complete the requested authentication in the protected browser, then release control for verification.</p>
+            {activeAction ? <RequestContext action={activeAction} runId={run.id} /> : null}
+            <p>{activeAction?.instructions ?? "Complete the requested interaction within approved origins, then choose Done to return control to the agent."}</p>
             <p className="muted">Lease expires {new Date(activeLease.expires_at).toLocaleTimeString()}.</p>
             {activeLease.viewer_available && activeLease.viewer_url && activeLease.viewer_ticket ? (
-              <HumanBrowserViewer url={activeLease.viewer_url} ticket={activeLease.viewer_ticket}
+              <HumanBrowserViewer autoConnect url={activeLease.viewer_url} ticket={activeLease.viewer_ticket}
                 onReconnect={async () => {
                   const grant = await api.reconnectHumanAction(activeRequestId, activeLease);
                   const renewed = { ...activeLease, expires_at: grant.expires_at, viewer_url: grant.viewer_url, viewer_ticket: grant.viewer_ticket };
@@ -171,13 +198,16 @@ export function HumanActionPage() {
             ) : (
               <p role="alert">The browser owner did not provide a secure viewer. Control remains unavailable.</p>
             )}
-            <button className="primary-button" type="button" disabled={release.isPending} onClick={() => release.mutate(activeRequestId)}>
-              {release.isError ? "Retry release for verification" : "Release control for verification"}
+            <button className="primary-button" type="button" disabled={release.isPending || skip.isPending} onClick={() => release.mutate(activeRequestId)}>
+              {release.isError ? "Retry Done—resume agent" : "Done—resume agent"}
             </button>
+            <button className="secondary-button" type="button" disabled={skip.isPending || release.isPending} onClick={() => skip.mutate(activeRequestId)}>Skip this case/journey</button>
           </div>
         </article>
       ) : null}
-      {release.isError ? <p role="alert">Release delivery failed. Retry Release to notify the worker. Agent control remains blocked until the handoff is verified.</p> : null}
+      {release.isError ? <p role="alert">Resume delivery failed. Retry Done to notify the worker. Agent control remains blocked until the handoff is verified.</p> : null}
+
+      {skip.isError ? <p role="alert">Skip could not be confirmed. Retry Skip; the agent remains paused until browser control is safely revoked.</p> : null}
 
       {leased.map((action) => (
         <article className="study-summary" key={action.id}>
@@ -194,7 +224,8 @@ export function HumanActionPage() {
         <article className="study-summary" key={action.id}>
           <ShieldCheck aria-hidden="true" />
           <div>
-            <h2>{action.status === "completed" ? "Authentication verified; resuming" : `Human action ${action.status}`}</h2>
+            <h2>{action.status === "completed" ? ended ? "Human assistance completed" : "Human assistance completed; resuming" : action.status === "skipped" ? "Not tested—human assistance skipped" : `Human action ${action.status}`}</h2>
+            <RequestContext action={action} runId={run.id} />
             <p>{action.request_type.replaceAll("_", " ")} · Request {action.id.slice(0, 8)}</p>
           </div>
         </article>

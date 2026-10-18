@@ -106,6 +106,9 @@ class RunStateRepository:
         run = await self._session.get(
             TestRun,
             test_run_id,
+            # A human decision may roll back the shared session. Bulk state
+            # updates can leave its cached run partially expired afterwards.
+            populate_existing=True,
         )
         
         if run is None:

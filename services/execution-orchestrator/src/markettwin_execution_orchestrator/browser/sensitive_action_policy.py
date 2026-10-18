@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import unquote, urlsplit
 
 from markettwin_execution_orchestrator.browser.errors import BrowserActionBlockedError
 
@@ -22,6 +23,34 @@ _APPROVAL_TERMS: tuple[tuple[ActionCategory, tuple[str, ...]], ...] = (
     ("update", ("update", "edit", "apply changes")),
     ("publish", ("publish",)),
 )
+
+
+def _documentation_navigation(
+    *, url: str | None, authorized: bool, tag: str | None, has_form: bool,
+    description: str,
+) -> bool:
+    """Recognize a real, scoped documentation link rather than trust locator wording."""
+    if not authorized or (tag or "").lower() != "a" or has_form or not url:
+        return False
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+            or parsed.username or parsed.password or parsed.query):
+        return False
+    segments = unquote(parsed.path).lower().split("/")
+    if any(segment in {".", ".."} for segment in segments):
+        return False
+    parts = [segment for segment in segments if segment]
+    if not parts or parts[0] not in {"docs", "documentation", "reference", "guides", "help"}:
+        return False
+    if any(segment in {
+        "actions", "execute", "delete", "remove", "checkout", "send", "invite",
+        "grant", "revoke", "export", "purchase", "payment",
+    } for segment in parts[1:]):
+        return False
+    return any(term in description for term in ("documentation", "reference", "guide", "docs"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,22 +76,38 @@ def classify_click_action(
     element_type: str | None = None,
     observed_description: str | None = None,
     state_digest: str | None = None,
+    navigation_url: str | None = None,
+    navigation_origin_authorized: bool = False,
+    element_tag: str | None = None,
+    has_form: bool = False,
 ) -> SensitiveActionIntent | None:
     """Classify a semantic click; hard-denied categories never become approvable."""
 
     description = " ".join(
         value.strip().lower() for value in (name, label, text, observed_description) if value
     )
-    if any(term in description for term in _HARD_DENY_TERMS):
+    if _documentation_navigation(
+        url=navigation_url, authorized=navigation_origin_authorized,
+        tag=element_tag, has_form=has_form, description=description,
+    ):
+        return None
+    values = [value.strip().casefold() for value in (name, label, text, observed_description)
+              if value and value.strip()]
+    filter_change = (
+        role == "button" and (element_tag or "").lower() == "button" and not has_form
+        and values and all(value in {"remove filters", "clear filters", "reset filters"}
+                           for value in values)
+    )
+    if not filter_change and any(term in description for term in _HARD_DENY_TERMS):
         raise BrowserActionBlockedError(
             "This action is prohibited by MarketTwin's sensitive-action policy."
         )
     if role not in {"button", "link", "menuitem", None}:
         return None
     normalized_type = (element_type or "").strip().lower()
-    category: ActionCategory | None = None
+    category: ActionCategory | None = "update" if filter_change else None
     for candidate, terms in _APPROVAL_TERMS:
-        if any(term in description for term in terms):
+        if category is None and any(term in description for term in terms):
             category = candidate
             break
     if not category:

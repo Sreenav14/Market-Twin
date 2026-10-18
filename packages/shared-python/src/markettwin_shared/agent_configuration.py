@@ -15,6 +15,11 @@ BROWSER_TOOLS = (
     "browser_wait",
     "browser_capture_element",
     "browser_take_screenshot",
+    "browser_get_form_state",
+    "browser_focus_next",
+    "browser_set_viewport",
+    "browser_check",
+    "browser_uncheck",
 )
 DEFAULT_TEMPERATURE = 0.05
 

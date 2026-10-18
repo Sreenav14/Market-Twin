@@ -24,6 +24,48 @@ class Context:
         return False
 
 
+@pytest.mark.parametrize("code", ["model_not_found", "private-provider-payload"])
+async def test_failed_plan_exposes_only_reviewed_diagnostics(code):
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=SimpleNamespace(status="failed")),
+        scalar=AsyncMock(side_effect=[None, SimpleNamespace(payload={
+            "code": code, "message": "SECRET_CANARY_DO_NOT_EXPOSE",
+        })]),
+    )
+    response = await deep_cases.case_view(session, uuid4())
+    assert response["available"] is False
+    assert response["cases"] == []
+    assert "SECRET_CANARY" not in str(response)
+    assert "private-provider-payload" not in str(response)
+    assert response["failure"]["code"] == (
+        "model_not_found" if code == "model_not_found" else "execution_failed"
+    )
+
+
+async def test_failed_plan_appends_only_a_reviewed_validation_reason():
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=SimpleNamespace(status="failed")),
+        scalar=AsyncMock(side_effect=[None, SimpleNamespace(payload={
+            "code": "invalid_plan",
+            "reason": "Feature planner returned no schema-valid cases. "
+            "(1:expected.0.target:value_error)",
+            "message": "SECRET_CANARY",
+        })]),
+    )
+    response = await deep_cases.case_view(session, uuid4())
+    assert "expected.0.target:value_error" in response["failure"]["message"]
+    assert "SECRET_CANARY" not in str(response)
+
+
+async def test_historical_failed_plan_has_truthful_missing_error_fallback():
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=SimpleNamespace(status="failed")),
+        scalar=AsyncMock(side_effect=[None, None]),
+    )
+    response = await deep_cases.case_view(session, uuid4())
+    assert "original error was not retained" in response["failure"]["message"]
+
+
 @pytest.mark.parametrize("accessible", [False, True])
 async def test_case_reads_authorize_before_reading_events(monkeypatch, accessible):
     run_id, user_id = uuid4(), uuid4()
@@ -128,6 +170,34 @@ async def test_case_steps_reject_invalid_pages(monkeypatch) -> None:
 
 
 async def test_legacy_run_has_explicit_unavailable_cases() -> None:
-    response = await deep_cases.case_view(SimpleNamespace(scalar=AsyncMock(return_value=None)), uuid4())
+    response = await deep_cases.case_view(SimpleNamespace(
+        scalar=AsyncMock(return_value=None), get=AsyncMock(return_value=SimpleNamespace(status="completed")),
+    ), uuid4())
     assert response["available"] is False
     assert response["cases"] == []
+
+
+async def test_skipped_human_assistance_is_not_run_before_evaluation() -> None:
+    scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
+    plan = select_feature_cases(
+        request=DeepFeaturePlanningRequest(
+            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True,
+        ), candidates=fixture_case_candidates(scope),
+    )
+    recorded = CaseExecutionResult(
+        case_id=plan.cases[0].case_id, execution_id=uuid4(), execution_status="skipped",
+        verdict="unverified", blocker="human_assistance_skipped", elapsed_ms=10,
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan.model_dump(mode="json")), None]),
+        execute=AsyncMock(side_effect=[
+            SimpleNamespace(all=lambda: []),
+            SimpleNamespace(all=lambda: [(recorded.model_dump(mode="json"), uuid4())]),
+        ]),
+    )
+    response = await deep_cases.case_view(session, uuid4())
+    shown = response["cases"][0]
+    assert shown["verdict"] == "not_run"
+    assert shown["execution_status"] == "skipped"
+    assert shown["reason"] == "human_assistance_skipped"
+    assert shown["assertions"] == []

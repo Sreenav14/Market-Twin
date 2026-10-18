@@ -52,3 +52,26 @@ async def test_summary_rejects_foreign_run_before_reading_events(monkeypatch) ->
         await hitl_summary.get_hitl_summary(uuid4(), SimpleNamespace())
     assert error.value.status_code == 404
     session.execute.assert_not_awaited()
+
+
+def test_skipped_assistance_counts_as_not_tested_not_inconclusive() -> None:
+    from markettwin_shared.deep_testing import CaseExecutionResult
+
+    scope = fixture_feature_scope("http://127.0.0.1:5191/index.html")
+    plan = select_feature_cases(
+        request=DeepFeaturePlanningRequest(test_run_id=uuid4(), scope=scope, allow_fixture_truth=True),
+        candidates=fixture_case_candidates(scope),
+    )
+    skipped = CaseExecutionResult(
+        case_id=plan.cases[0].case_id, execution_id=uuid4(), execution_status="skipped",
+        verdict="unverified", blocker="human_assistance_skipped", elapsed_ms=10,
+    )
+    response = hitl_summary.summarize_authenticated_coverage([
+        ("test_plan.created", plan.model_dump(mode="json")),
+        ("test_case.authenticated", {"case_id": skipped.case_id, "role": "member"}),
+        ("test_case.completed", skipped.model_dump(mode="json")),
+    ])
+    row = response["role_coverage"][0]
+    assert row["executed"] == row["passed"] == row["inconclusive"] == row["blocked"] == 0
+    assert row["not_run"] == len(plan.cases)
+    assert response["inventory"][0]["not_explored"] == len(plan.cases) + len(plan.skipped)

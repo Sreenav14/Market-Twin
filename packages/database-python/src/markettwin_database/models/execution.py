@@ -31,7 +31,7 @@ class AgentExecution(Base):
         CheckConstraint(
             "status IN "
             "('pending', 'queued', 'running', 'completed', 'failed', "
-            "'timed_out', 'cancelled', 'policy_blocked')",
+            "'timed_out', 'cancelled', 'policy_blocked', 'skipped')",
             name="ck_agent_executions_status_allowed",
         ),
         CheckConstraint(
@@ -522,7 +522,7 @@ class HumanActionRequest(Base):
             name="ck_human_action_requests_type_allowed",
         ),
         CheckConstraint(
-            "status IN ('pending', 'leased', 'completed', 'cancelled', 'expired')",
+            "status IN ('pending', 'leased', 'completed', 'cancelled', 'expired', 'skipped')",
             name="ck_human_action_requests_status_allowed",
         ),
         ForeignKeyConstraint(
@@ -557,6 +557,7 @@ class HumanActionRequest(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     request_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    terminal_generation: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     status: Mapped[str] = mapped_column(
         String(32),

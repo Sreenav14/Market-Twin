@@ -37,8 +37,17 @@ class AuthSessionScope:
 
 
 @dataclass(frozen=True, slots=True)
+class HumanSessionScope:
+    """Operator-established session; identity and role are deliberately unknown."""
+
+    run_id: UUID
+    target_id: UUID
+    origin: str
+
+
+@dataclass(frozen=True, slots=True)
 class AuthSessionSnapshot:
-    scope: AuthSessionScope
+    scope: AuthSessionScope | HumanSessionScope
     browser_storage_state: dict[str, object] = field(repr=False)
     session_storage: dict[str, str] = field(repr=False)
     expires_at: datetime
@@ -61,8 +70,8 @@ class AuthSessionBroker:
             raise ValueError("Authentication reuse bounds are invalid.")
         self._ttl = ttl
         self._max_cases = max_cases
-        self._snapshots: dict[AuthSessionScope, AuthSessionSnapshot] = {}
-        self._used_cases: dict[AuthSessionScope, set[str]] = {}
+        self._snapshots: dict[AuthSessionScope | HumanSessionScope, AuthSessionSnapshot] = {}
+        self._used_cases: dict[AuthSessionScope | HumanSessionScope, set[str]] = {}
 
     async def capture(
         self,
@@ -78,6 +87,17 @@ class AuthSessionBroker:
             or principal.origin != scope.origin
         ):
             raise AuthSessionReuseRejected("Verified identity does not match reuse scope.")
+        await self._capture(scope=scope, context=context, page=page)
+
+    async def capture_human_session(
+        self, *, scope: HumanSessionScope, context: _Context, page: _Page,
+    ) -> None:
+        """Keep separately typed state without inventing a verified principal."""
+        await self._capture(scope=scope, context=context, page=page)
+
+    async def _capture(
+        self, *, scope: AuthSessionScope | HumanSessionScope, context: _Context, page: _Page,
+    ) -> None:
         storage_state = await context.storage_state()
         session_storage = await page.evaluate(
             "() => Object.fromEntries(Array.from({length: sessionStorage.length}, "
@@ -115,7 +135,20 @@ class AuthSessionBroker:
         await self.install_snapshot(snapshot=snapshot, context=context)
         return snapshot
 
-    def take(self, *, scope: AuthSessionScope, case_id: str) -> AuthSessionSnapshot:
+    def take_human_session(
+        self, *, run_id: UUID, target_id: UUID, case_id: str,
+    ) -> AuthSessionSnapshot:
+        scopes = [scope for scope in self._snapshots
+                  if isinstance(scope, HumanSessionScope)
+                  and scope.run_id == run_id and scope.target_id == target_id]
+        if not scopes:
+            raise AuthSessionReuseRejected("No operator-established session is available.")
+        scope = max(scopes, key=lambda item: self._snapshots[item].expires_at)
+        return self.take(scope=scope, case_id=case_id)
+
+    def take(
+        self, *, scope: AuthSessionScope | HumanSessionScope, case_id: str,
+    ) -> AuthSessionSnapshot:
         snapshot = self._snapshots.get(scope)
         used = self._used_cases.get(scope)
         if (
@@ -202,9 +235,15 @@ class AuthSessionBroker:
         )
         await context.add_init_script(script=script)
 
-    def revoke(self, scope: AuthSessionScope) -> None:
+    def revoke(self, scope: AuthSessionScope | HumanSessionScope) -> None:
         self._snapshots.pop(scope, None)
         self._used_cases.pop(scope, None)
+
+    def revoke_human_sessions(self, *, run_id: UUID, target_id: UUID) -> None:
+        for scope in tuple(self._snapshots):
+            if (isinstance(scope, HumanSessionScope) and scope.run_id == run_id
+                    and scope.target_id == target_id):
+                self.revoke(scope)
 
     def clear(self) -> None:
         """Erase every in-memory authenticated snapshot at run teardown."""

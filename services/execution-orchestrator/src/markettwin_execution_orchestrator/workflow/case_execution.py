@@ -12,7 +12,7 @@ import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from markettwin_database.models import ExecutionSuspension
 from markettwin_shared.auth_verification import AuthVerificationPolicy
@@ -36,6 +36,7 @@ from markettwin_execution_orchestrator.agents.schemas.test_case import (
 from markettwin_execution_orchestrator.browser import BrowserController
 from markettwin_execution_orchestrator.browser.assertions import safe_url
 from markettwin_execution_orchestrator.browser.auth_session_broker import (
+    AuthSessionReuseRejected,
     AuthSessionScope,
     AuthSessionSnapshot,
 )
@@ -43,7 +44,11 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserActionResult,
     BrowserSessionHandle,
 )
-from markettwin_execution_orchestrator.browser.errors import BrowserActionError, BrowserPolicyError
+from markettwin_execution_orchestrator.browser.errors import (
+    BrowserActionError,
+    BrowserPolicyError,
+    HumanAssistanceSkipped,
+)
 from markettwin_execution_orchestrator.browser.sensitive_action_policy import (
     SensitiveActionIntent,
 )
@@ -78,7 +83,7 @@ MAX_HUMAN_LOGIN_WAIT_SECONDS = 10 * 60
 
 
 @asynccontextmanager
-async def _pause_case_deadline(
+async def pause_case_deadline(
     case_timer: asyncio.Timeout, *, allowance_seconds: float
 ) -> AsyncGenerator[None, None]:
     """Exclude bounded human wait from the deterministic case action budget."""
@@ -99,13 +104,22 @@ async def verify_or_request_login(
     request: PersonaJourneyExecutionRequest,
     controller: BrowserController,
     handle: BrowserSessionHandle,
-    policy: AuthVerificationPolicy,
-    auth_scope: AuthSessionScope,
+    policy: AuthVerificationPolicy | None,
+    auth_scope: AuthSessionScope | None,
     session: AsyncSession,
     max_wait_seconds: float,
+    assistance_reason: Literal[
+        "absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target"
+    ] | None = None,
+    continuation_verifier: Callable[[], Awaitable[bool]] | None = None,
+    planned_step_index: int = 0,
 ) -> None:
-    principal = await controller.verify_authenticated_role(handle=handle, policy=policy)
+    principal = (
+        await controller.verify_authenticated_role(handle=handle, policy=policy)
+        if assistance_reason is None and policy is not None else None
+    )
     if principal is not None:
+        assert policy is not None and auth_scope is not None
         captured = await controller.capture_verified_auth_session(
             handle=handle, policy=policy, scope=auth_scope,
         )
@@ -118,11 +132,17 @@ async def verify_or_request_login(
     expires_at = datetime.now(UTC) + timedelta(seconds=max_wait_seconds)
     lifecycle = HumanActionLifecycleRepository(session)
     try:
+        handoff_options: dict[str, Any] = {}
+        if assistance_reason is not None:
+            if continuation_verifier is None:
+                raise ValueError("A recovery verifier is required.")
+            handoff_options["assistance_reason"] = assistance_reason
         request_id = await lifecycle.create_login_request(
             test_run_id=request.test_run_id,
             execution_id=request.execution_id,
             browser_session_id=handle.session_id,
             expires_at=expires_at,
+            **handoff_options,
         )
         await session.commit()
     except Exception as error:
@@ -143,6 +163,8 @@ async def verify_or_request_login(
             if remaining <= 0:
                 raise TimeoutError
             state = await lifecycle.state(request_id=request_id)
+            if state is not None and state.request_status == "skipped":
+                raise HumanAssistanceSkipped("Not tested—human assistance skipped.")
             if state is None or state.request_status in {"cancelled", "expired"}:
                 raise AuthenticationVerificationBlocked(
                     "The human login handoff ended before verification."
@@ -158,8 +180,8 @@ async def verify_or_request_login(
                         request_id=request_id,
                         last_durable_step_id=None,
                         owner_generation=state.control_generation,
-                        phase="auth_preflight",
-                        planned_step_index=0,
+                        phase="case_action" if assistance_reason else "auth_preflight",
+                        planned_step_index=planned_step_index,
                         remaining=timedelta(seconds=remaining),
                         human_deadline=expires_at,
                     )
@@ -184,8 +206,8 @@ async def verify_or_request_login(
                         request_id=request_id,
                         last_durable_step_id=None,
                         owner_generation=state.control_generation,
-                        phase="auth_preflight",
-                        planned_step_index=0,
+                        phase="case_action" if assistance_reason else "auth_preflight",
+                        planned_step_index=planned_step_index,
                         remaining=timedelta(seconds=remaining),
                         human_deadline=expires_at,
                     )
@@ -215,12 +237,22 @@ async def verify_or_request_login(
             raise AuthenticationVerificationBlocked(
                 "The human login handoff is no longer active."
             )
-        principal = await controller.verify_authenticated_role(handle=handle, policy=policy)
-        if principal is not None:
+        principal = (
+            await controller.verify_authenticated_role(handle=handle, policy=policy)
+            if assistance_reason is None and policy is not None else None
+        )
+        if principal is not None and assistance_reason is None:
+            assert policy is not None and auth_scope is not None
             principal = await controller.capture_verified_auth_session(
                 handle=handle, policy=policy, scope=auth_scope,
             )
-        if principal is None:
+        continuation_verified = (
+            await continuation_verifier()
+            if (continuation_verifier is not None
+                and (assistance_reason is not None or policy is None))
+            else principal is not None
+        )
+        if not continuation_verified:
             try:
                 await controller.end_human_control(
                     session_id=handle.session_id,
@@ -237,6 +269,8 @@ async def verify_or_request_login(
             )
             await session.commit()
             raise AuthenticationVerificationBlocked(
+                "The original target is still unavailable or unsafe; recovery was not verified."
+                if assistance_reason else
                 "The signed-in identity did not match the approved role."
             )
 
@@ -272,11 +306,16 @@ async def verify_or_request_login(
         await lifecycle.abandon(request_id=request_id)
         await session.commit()
         raise AuthenticationVerificationBlocked(
-            "The approved human login window expired."
+            "The bounded human assistance window expired."
         ) from error
     except asyncio.CancelledError:
         await session.rollback()
         await lifecycle.abandon(request_id=request_id)
+        await session.commit()
+        raise
+    except HumanAssistanceSkipped:
+        await session.rollback()
+        await lifecycle.acknowledge_skipped(request_id=request_id)
         await session.commit()
         raise
     except AuthenticationVerificationBlocked:
@@ -286,11 +325,42 @@ async def verify_or_request_login(
         raise
     except Exception as error:
         await session.rollback()
+        latest = await lifecycle.state(request_id=request_id)
+        if latest is not None and latest.request_status == "skipped":
+            await lifecycle.acknowledge_skipped(request_id=request_id)
+            await session.commit()
+            raise HumanAssistanceSkipped("Not tested—human assistance skipped.") from error
         await lifecycle.abandon(request_id=request_id)
         await session.commit()
         raise AuthenticationVerificationBlocked(
-            "The human login continuation failed closed."
+            "The human continuation failed closed."
         ) from error
+
+
+async def request_runtime_assistance(
+    *, request: PersonaJourneyExecutionRequest, controller: BrowserController,
+    handle: BrowserSessionHandle, session: AsyncSession,
+) -> None:
+    """Encounter-driven assistance, without an upfront identity or role policy."""
+    target_id = request.runtime_target_id
+    if target_id is None:
+        raise AuthenticationVerificationBlocked("The frozen assistance target is unavailable.")
+    controller.revoke_human_session_snapshots(run_id=request.test_run_id, target_id=target_id)
+
+    async def continuation_ready() -> bool:
+        return await controller.capture_human_session(
+            handle, run_id=request.test_run_id, target_id=target_id,
+        )
+
+    try:
+        await verify_or_request_login(
+            request=request, controller=controller, handle=handle, policy=None,
+            auth_scope=None, session=session, max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+            continuation_verifier=continuation_ready,
+        )
+    except BaseException:
+        controller.revoke_human_session_snapshots(run_id=request.test_run_id, target_id=target_id)
+        raise
 
 
 async def perform_case_action(
@@ -367,7 +437,7 @@ async def _approved_case_action(
         journey_id=handle.journey_id,
     )
     try:
-        async with _pause_case_deadline(
+        async with pause_case_deadline(
             case_timeout, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS
         ):
             deadline = case_timeout.when()
@@ -433,6 +503,7 @@ async def execute_test_case(
     controller: BrowserController,
     session: AsyncSession,
     auth_verification: AuthVerificationPolicy | None = None,
+    auth_mode: Literal["required", "optional"] = "required",
     auth_session_scope: AuthSessionScope | None = None,
     reuse_auth_session: bool = False,
 ) -> CaseExecutionResult:
@@ -453,6 +524,7 @@ async def execute_test_case(
     storage: S3ArtifactStorage | None = None
     recorder: ExecutionStepRecorder | None = None
     attempted_steps = 0
+    recovery_attempted = False
     stage = "browser_start"
     case_timer: asyncio.Timeout | None = None
     initial_deadline: float | None = None
@@ -556,6 +628,14 @@ async def execute_test_case(
                     except Exception:
                         # Missing/expired transferable state falls back to secure login.
                         auth_snapshot = None
+            elif request.runtime_human_assistance and request.runtime_target_id is not None:
+                try:
+                    auth_snapshot = browser_controller.take_human_session_snapshot(
+                        run_id=request.test_run_id, target_id=request.runtime_target_id,
+                        case_id=case.case_id,
+                    )
+                except AuthSessionReuseRejected:
+                    pass
             handle = await browser_controller.create_session(
                 execution_id=request.execution_id,
                 journey_id=request.journey_id,
@@ -563,7 +643,8 @@ async def execute_test_case(
                 network_policy=request.network_policy,
                 auth_snapshot=auth_snapshot,
                 auth_only_origins=auth_verification.auth_only_origins if auth_verification else (),
-                authenticated_session=auth_verification is not None,
+                authenticated_session=(auth_verification is not None
+                                       or request.runtime_human_assistance),
             )
             stage = "browser_persistence"
             await repository.create_browser_session(
@@ -575,6 +656,27 @@ async def execute_test_case(
             stage = "storage_setup"
             storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
             recorder = ExecutionStepRecorder(session, request.execution_id, storage)
+            if auth_verification is not None:
+                async def request_login() -> None:
+                    async with pause_case_deadline(
+                        case_timeout, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                    ):
+                        await verify_or_request_login(
+                            request=request, controller=browser_controller, handle=handle,
+                            policy=auth_verification, auth_scope=auth_session_scope,
+                            session=session, max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                        )
+                browser_controller.bind_authentication_handler(handle, request_login)
+            elif request.runtime_human_assistance:
+                async def request_encountered_help() -> None:
+                    async with pause_case_deadline(
+                        case_timeout, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                    ):
+                        await request_runtime_assistance(
+                            request=request, controller=browser_controller, handle=handle,
+                            session=session,
+                        )
+                browser_controller.bind_authentication_handler(handle, request_encountered_help)
             stage = "actions"
             await record_action(
                 "navigate",
@@ -585,7 +687,8 @@ async def execute_test_case(
                     url=request.start_url,
                 ),
             )
-            if auth_verification is not None:
+            if (auth_verification is not None
+                    and (auth_mode == "required" or auth_snapshot is not None)):
                 if auth_session_scope is None:
                     raise AuthenticationVerificationBlocked(
                         "The approved authentication scope is unavailable."
@@ -596,7 +699,7 @@ async def execute_test_case(
                 if auth_snapshot is not None and verified is None:
                     browser_controller.revoke_auth_session_snapshot(scope=auth_session_scope)
                 if verified is None:
-                    async with _pause_case_deadline(
+                    async with pause_case_deadline(
                         case_timeout, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
                     ):
                         await verify_or_request_login(
@@ -616,13 +719,14 @@ async def execute_test_case(
                     "full_application_coverage": False,
                 })
             for action_index, action in enumerate(case.steps):
-                if auth_verification is not None and auth_session_scope is not None:
+                if (auth_mode == "required" and auth_verification is not None
+                        and auth_session_scope is not None):
                     verified = await browser_controller.verify_authenticated_role(
                         handle=handle, policy=auth_verification,
                     )
                     if verified is None:
                         browser_controller.revoke_auth_session_snapshot(scope=auth_session_scope)
-                        async with _pause_case_deadline(
+                        async with pause_case_deadline(
                             case_timeout, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
                         ):
                             await verify_or_request_login(
@@ -635,20 +739,64 @@ async def execute_test_case(
                     action: CaseAction = action,
                     action_index: int = action_index,
                 ) -> BrowserActionResult:
+                    nonlocal recovery_attempted
                     if action.action == "click":
                         assert action.target is not None
                         target = action.target
-                        intent = await browser_controller.inspect_click_approval(
-                            session_id=handle.session_id,
-                            execution_id=request.execution_id,
-                            journey_id=request.journey_id,
-                            role=target.role,
-                            name=target.name,
-                            label=target.label,
-                            text=target.text,
-                            scope_role=target.scope_role,
-                            scope_name=target.scope_name,
-                        )
+                        async def inspect_intent() -> SensitiveActionIntent | None:
+                            return await browser_controller.inspect_click_approval(
+                                session_id=handle.session_id,
+                                execution_id=request.execution_id,
+                                journey_id=request.journey_id,
+                                role=target.role, name=target.name, label=target.label,
+                                text=target.text, scope_role=target.scope_role,
+                                scope_name=target.scope_name,
+                            )
+
+                        try:
+                            intent = await inspect_intent()
+                        except BrowserActionError as error:
+                            reason = error.reason_code
+                            if reason not in {
+                                "absent_scope", "ambiguous_scope",
+                                "absent_target", "ambiguous_target",
+                            } or recovery_attempted:
+                                raise
+                            recovery_attempted = True
+                            await event("test_case.assistance_requested", {
+                                "case_id": case.case_id, "stage": "action_preflight",
+                                "reason_code": reason, "planned_step_index": action_index,
+                            })
+
+                            async def verify_continuation() -> bool:
+                                if not await browser_controller.verify_recovery_target(
+                                    handle=handle, target=target,
+                                ):
+                                    return False
+                                return auth_verification is None or (
+                                    await browser_controller.verify_authenticated_role(
+                                        handle=handle, policy=auth_verification,
+                                    )
+                                ) is not None
+
+                            async with pause_case_deadline(
+                                case_timeout, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                            ):
+                                await verify_or_request_login(
+                                    request=request, controller=browser_controller,
+                                    handle=handle, policy=auth_verification,
+                                    auth_scope=auth_session_scope, session=session,
+                                    max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                                    assistance_reason=reason,  # type: ignore[arg-type]
+                                    continuation_verifier=verify_continuation,
+                                    planned_step_index=action_index,
+                                )
+                            # Only the read-only preflight is retried. No click was
+                            # dispatched before the pause; approval policy runs again.
+                            intent = await inspect_intent()
+                            await event("test_case.assistance_resumed", {
+                                "case_id": case.case_id, "planned_step_index": action_index,
+                            })
                         if intent is not None:
                             return await _approved_case_action(
                                 step_id=step_id,
@@ -733,6 +881,15 @@ async def execute_test_case(
                     raise
                 assertions.append(assertion)
                 await event("test_case.assertion", assertion.model_dump(mode="json"))
+    except HumanAssistanceSkipped:
+        status, blocker = "skipped", "human_assistance_skipped"
+        assertions.clear()
+    except AuthenticationVerificationBlocked:
+        status, blocker = "policy_blocked", "policy_blocked"
+        await event("test_case.diagnostic", {
+            "schema_version": 1, "case_id": case.case_id, "stage": stage,
+            "reason_code": "human_assistance_unverified",
+        })
     except BrowserPolicyError:
         status, blocker = "policy_blocked", "policy_blocked"
     except BrowserActionError as error:

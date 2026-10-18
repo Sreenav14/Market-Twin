@@ -8,6 +8,7 @@ from markettwin_execution_orchestrator.browser.auth_session_broker import (
     AuthSessionBroker,
     AuthSessionReuseRejected,
     AuthSessionScope,
+    HumanSessionScope,
 )
 from markettwin_execution_orchestrator.browser.auth_verifier import VerifiedPrincipal
 
@@ -40,6 +41,29 @@ class InstallContext:
 
     async def add_init_script(self, *, script: str) -> None:
         self.script = script
+
+
+@pytest.mark.asyncio
+async def test_human_session_never_becomes_a_verified_identity_or_crosses_run() -> None:
+    broker = AuthSessionBroker()
+    scope = HumanSessionScope(uuid4(), uuid4(), "http://fixture.test")
+    await broker.capture_human_session(scope=scope, context=SourceContext(), page=Page())
+    grant = broker.take_human_session(run_id=scope.run_id, target_id=scope.target_id, case_id="a")
+    assert isinstance(grant.scope, HumanSessionScope)
+    assert not hasattr(grant.scope, "role")
+    assert "secret-test-token" not in repr(grant)
+    for run_id, target_id in ((uuid4(), scope.target_id), (scope.run_id, uuid4())):
+        with pytest.raises(AuthSessionReuseRejected):
+            broker.take_human_session(run_id=run_id, target_id=target_id, case_id="b")
+    with pytest.raises(AuthSessionReuseRejected):
+        broker.take(scope=AuthSessionScope(scope.run_id, scope.target_id, "admin", "x", scope.origin),
+                    case_id="b")
+    target = InstallContext()
+    await broker.install_snapshot(snapshot=grant, context=target)
+    assert target.cookies and all(cookie["domain"] == "fixture.test" for cookie in target.cookies)
+    broker.revoke_human_sessions(run_id=scope.run_id, target_id=scope.target_id)
+    with pytest.raises(AuthSessionReuseRejected):
+        broker.take_human_session(run_id=scope.run_id, target_id=scope.target_id, case_id="b")
 
 
 @pytest.mark.asyncio

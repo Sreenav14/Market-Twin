@@ -15,6 +15,7 @@ from pydantic import (
     Field,
     field_validator,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_control_api.api.auth import (
@@ -26,6 +27,7 @@ from markettwin_control_api.api.dependencies import (
 from markettwin_control_api.api.permissions import (
     TARGET_AUTHORIZATION_ROLES,
 )
+from markettwin_control_api.persistence.models import ApplicationTarget
 from markettwin_control_api.persistence.repositories import (
     ApplicationRepository,
     TargetAuthorizationRecord,
@@ -60,9 +62,9 @@ class AuthorizeTargetRequest(BaseModel):
 
         cleaned = value.strip()
 
-        if not cleaned:
+        if len(cleaned) < 10:
             raise ValueError(
-                "Authorization basis is required."
+                "Authorization basis requires at least 10 characters."
             )
 
         return cleaned
@@ -214,6 +216,11 @@ async def authorize_target(
                 user_id=user_id,
             )
 
+            await database_session.execute(
+                select(ApplicationTarget.id).where(
+                    ApplicationTarget.id == target_id,
+                ).with_for_update()
+            )
             repository = TargetAuthorizationRepository(
                 database_session
             )
@@ -310,6 +317,11 @@ async def revoke_target_authorization(
                 user_id=user_id,
             )
 
+            await database_session.execute(
+                select(ApplicationTarget.id).where(
+                    ApplicationTarget.id == target_id,
+                ).with_for_update()
+            )
             repository = TargetAuthorizationRepository(
                 database_session
             )

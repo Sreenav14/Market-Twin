@@ -13,6 +13,10 @@ class BrowserActionBlockedError(BrowserPolicyError):
     """Raised when an autonomous action is outside the low-risk policy."""
 
 
+class HumanAssistanceSkipped(BrowserPolicyError):
+    """The operator skipped this execution; no blocked action may be dispatched."""
+
+
 class TargetUrlValidationError(BrowserPolicyError):
     """Raised when a target URL is invalid or outside the allowlist."""
 

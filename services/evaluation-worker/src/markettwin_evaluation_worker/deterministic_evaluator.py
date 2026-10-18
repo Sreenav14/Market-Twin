@@ -190,6 +190,10 @@ def build_deterministic_finding(
         or "unknown_journey"
     )
 
+    # Explicit human skip is not a product or execution-reliability defect.
+    if status == "skipped":
+        return None
+
     # Infrastructure / policy result.
     if status != "completed":
         if status == "policy_blocked":

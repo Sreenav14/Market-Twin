@@ -21,6 +21,16 @@ from markettwin_control_api.persistence.repositories import (
     WorkspaceAccess,
 )
 from markettwin_shared.auth_verification import AuthVerificationPolicy
+from pydantic import ValidationError
+
+
+@pytest.mark.parametrize("mode", ["required", "optional"])
+def test_authentication_mode_requires_explicit_identity_policy(mode: str) -> None:
+    with pytest.raises(ValidationError, match="approved identity verification policy"):
+        test_run_api.CreateTestRunRequest.model_validate({
+            "target_id": str(uuid4()), "study_brief": "Observe synthetic navigation",
+            "auth_mode": mode,
+        })
 
 
 class AsyncContext:
@@ -372,13 +382,18 @@ async def test_create_test_run_rejects_target_without_active_authorization(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("testing_depth", ["low", "medium", "high"])
+@pytest.mark.parametrize("requires_auth", [False, True])
+@pytest.mark.parametrize("mode", ["legacy_persona", "deep_feature_v1"])
 async def test_create_test_run_snapshots_active_authorization(
     monkeypatch: pytest.MonkeyPatch,
     testing_depth: str,
+    requires_auth: bool,
+    mode: Literal["legacy_persona", "deep_feature_v1"],
 ) -> None:
-    """A successful Test Run records the authorization active at creation."""
+    """Both modes start without upfront identity setup, including protected targets."""
 
     user_id, application, workspace, target = make_records()
+    target = replace(target, requires_auth=requires_auth)
     now = datetime.now(UTC)
     authorization_id = uuid4()
     test_run_id = uuid4()
@@ -397,12 +412,15 @@ async def test_create_test_run_snapshots_active_authorization(
     )
 
     expected_configuration: dict[str, object] = {
+        "runtime_human_assistance": True,
         "testing_depth": testing_depth,
         "study_brief": (
             "Evaluate the shopping and checkout experience."
         ),
         "authorization_id_at_creation": str(authorization_id),
     }
+    if mode == "deep_feature_v1":
+        expected_configuration["execution_mode"] = mode
 
     persisted_run = TestRunRecord(
         test_run_id=test_run_id,
@@ -436,6 +454,7 @@ async def test_create_test_run_snapshots_active_authorization(
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
             testing_depth=cast(Literal["low", "medium", "high"], testing_depth),
+            execution_mode=mode,
             study_brief=(
                 "Evaluate the shopping and checkout experience."
             ),
@@ -455,11 +474,17 @@ async def test_create_test_run_snapshots_active_authorization(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "requires_auth", "auth_mode"),
+    [("deep_feature_v1", True, "required"), ("legacy_persona", True, "required"),
+     ("deep_feature_v1", False, "optional"), ("legacy_persona", False, "optional")],
+)
 async def test_create_test_run_freezes_approved_auth_verification_policy(
     monkeypatch: pytest.MonkeyPatch,
+    mode: str, requires_auth: bool, auth_mode: str,
 ) -> None:
     user_id, application, workspace, raw_target = make_records()
-    target = replace(raw_target, requires_auth=True)
+    target = replace(raw_target, requires_auth=requires_auth)
     now = datetime.now(UTC)
     authorization_id = uuid4()
     test_run_id = uuid4()
@@ -483,12 +508,15 @@ async def test_create_test_run_freezes_approved_auth_verification_policy(
         account_reference="fixture-member-1",
     )
     config: dict[str, object] = {
-        "execution_mode": "deep_feature_v1",
+        "runtime_human_assistance": True,
         "testing_depth": "medium",
         "study_brief": "Evaluate the shopping and checkout experience.",
         "authorization_id_at_creation": str(authorization_id),
         "auth_verification": policy.model_dump(mode="json"),
+        "auth_mode": auth_mode,
     }
+    if mode == "deep_feature_v1":
+        config["execution_mode"] = mode
     persisted = TestRunRecord(
         test_run_id=test_run_id,
         workspace_id=application.workspace_id,
@@ -519,8 +547,9 @@ async def test_create_test_run_freezes_approved_auth_verification_policy(
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
             study_brief="Evaluate the shopping and checkout experience.",
-            execution_mode="deep_feature_v1",
+            execution_mode=mode,
             auth_verification=policy,
+            auth_mode=auth_mode,
         ),
         make_request(),
     )
@@ -581,7 +610,7 @@ async def test_create_test_run_rejects_auth_verification_outside_target_allowlis
 
 
 @pytest.mark.asyncio
-async def test_create_test_run_requires_deep_mode_for_auth_verification(
+async def test_protected_target_cannot_downgrade_authentication_to_optional(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user_id, application, workspace, raw_target = make_records()
@@ -613,6 +642,7 @@ async def test_create_test_run_requires_deep_mode_for_auth_verification(
             test_run_api.CreateTestRunRequest(
                 target_id=target.target_id,
                 study_brief="Evaluate the shopping and checkout experience.",
+                auth_mode="optional",
                 auth_verification=AuthVerificationPolicy(
                     origin="http://localhost:3000",
                     marker_selector="[data-testid='signed-in-role']",
@@ -622,6 +652,32 @@ async def test_create_test_run_requires_deep_mode_for_auth_verification(
                 ),
             ),
             make_request(),
+        )
+    assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_legacy_opt_out_still_requires_protected_identity_policy(monkeypatch) -> None:
+    user_id, application, workspace, raw_target = make_records()
+    target = replace(raw_target, requires_auth=True)
+    now = datetime.now(UTC)
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(), target_id=target.target_id,
+        created_by_user_id=user_id, authorized_by_user_id=user_id, status="authorized",
+        authorization_basis="Owned synthetic application.", created_at=now,
+        authorized_at=now, revoked_at=None, expires_at=None,
+    )
+    patch_common_dependencies(
+        monkeypatch, user_id=user_id, application=application, workspace=workspace,
+        target=target, authorization=authorization,
+    )
+    with pytest.raises(HTTPException) as error:
+        await test_run_api.create_test_run(
+            application.application_id,
+            test_run_api.CreateTestRunRequest(
+                target_id=target.target_id, study_brief="Check protected fixture.",
+                runtime_human_assistance=False,
+            ), make_request(),
         )
     assert error.value.status_code == 422
 

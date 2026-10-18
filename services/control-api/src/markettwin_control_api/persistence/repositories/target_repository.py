@@ -37,6 +37,7 @@ class TargetRecord:
     requires_auth: bool
     status: str
     allowed_origins: tuple[AllowedOriginRecord, ...]
+    scope_parent_id: UUID | None = None
 
 
 def _origin_record(
@@ -104,6 +105,7 @@ class TargetRepository:
             base_url=target.base_url,
             requires_auth=target.requires_auth,
             status=target.status,
+            scope_parent_id=target.scope_parent_id,
             allowed_origins=(
                 _origin_record(origin),
             ),
@@ -178,6 +180,7 @@ class TargetRepository:
                 base_url=target.base_url,
                 requires_auth=target.requires_auth,
                 status=target.status,
+                scope_parent_id=target.scope_parent_id,
                 allowed_origins=tuple(
                     origins_by_target[target.id]
                 ),
@@ -255,5 +258,30 @@ class TargetRepository:
             base_url=target.base_url,
             requires_auth=target.requires_auth,
             status=target.status,
+            scope_parent_id=target.scope_parent_id,
             allowed_origins=origins,
+        )
+    async def create_scope_revision(
+        self, *, parent: TargetRecord, name: str,
+        origins: tuple[AllowedOriginRecord, ...],
+    ) -> TargetRecord:
+        """Create an immutable, separately authorized execution scope."""
+        target = ApplicationTarget(
+            application_id=parent.application_id, scope_parent_id=parent.target_id,
+            name=name, environment=parent.environment, base_url=parent.base_url,
+            requires_auth=parent.requires_auth, status="active",
+        )
+        self._session.add(target)
+        await self._session.flush()
+        for origin in origins:
+            self._session.add(TargetAllowedOrigin(
+                target_id=target.id, scheme=origin.scheme, hostname=origin.hostname,
+                port=origin.port, include_subdomains=False,
+            ))
+        await self._session.flush()
+        return TargetRecord(
+            target_id=target.id, application_id=target.application_id, name=target.name,
+            environment=target.environment, base_url=target.base_url,
+            requires_auth=target.requires_auth, status=target.status,
+            allowed_origins=origins, scope_parent_id=parent.target_id,
         )

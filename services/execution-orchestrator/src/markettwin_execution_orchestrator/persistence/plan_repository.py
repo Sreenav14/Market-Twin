@@ -19,7 +19,7 @@ from markettwin_execution_orchestrator.agents.schemas.plan import (
 )
 from markettwin_execution_orchestrator.agents.schemas.test_case import DeepFeaturePlan
 
-# Reserved manual prerequisite record, outside the bounded feature-case ordinals.
+# Reserved discovery record, outside the bounded feature-case ordinals.
 AUTH_BOOTSTRAP_ORDINAL = 10000
 
 
@@ -69,17 +69,32 @@ class PlanRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create_auth_bootstrap(self, *, test_run_id: UUID) -> PersistedJourneyRecord:
-        """Persist manual login ownership before a generated feature plan exists."""
+    async def create_auth_bootstrap(
+        self, *, test_run_id: UUID, requires_identity_verification: bool = True,
+    ) -> PersistedJourneyRecord:
+        """Persist discovery ownership; a configured identity policy is optional."""
         persona_id, mission_id, journey_id = uuid4(), uuid4(), uuid4()
         self._session.add_all([
             RunPersona(id=persona_id, test_run_id=test_run_id, ordinal=AUTH_BOOTSTRAP_ORDINAL,
-                       name="Human authentication prerequisite",
-                       description=("Manual authentication; excluded from feature test coverage."),
-                       attributes={"executor_role": False, "auth_bootstrap": True}),
+                       name=("Human authentication prerequisite"
+                             if requires_identity_verification else "Browser discovery"),
+                       description=(
+                           "Manual authentication; excluded from feature test coverage."
+                           if requires_identity_verification else
+                           "Observe the approved starting page; "
+                           "excluded from feature test coverage."
+                       ),
+                       attributes={"executor_role": False,
+                                   "auth_bootstrap" if requires_identity_verification
+                                   else "browser_discovery": True}),
             RunMission(id=mission_id, test_run_id=test_run_id, ordinal=AUTH_BOOTSTRAP_ORDINAL,
-                       title="Verify identity before protected discovery",
-                       objective="Establish an approved test identity securely.",
+                       title=("Verify identity before protected discovery"
+                              if requires_identity_verification else
+                              "Observe approved starting page"),
+                       objective=("Establish an approved test identity securely."
+                                  if requires_identity_verification else
+                                  "Observe the approved starting page and "
+                                  "request help only if blocked."),
                        success_criteria=[], priority="low"),
         ])
         await self._session.flush()
@@ -88,8 +103,11 @@ class PlanRepository:
             mission_id=mission_id, ordinal=AUTH_BOOTSTRAP_ORDINAL,
         ))
         await self._session.flush()
-        return PersistedJourneyRecord(journey_id, persona_id, mission_id,
-                                      "human_auth__auth_bootstrap", AUTH_BOOTSTRAP_ORDINAL)
+        return PersistedJourneyRecord(
+            journey_id, persona_id, mission_id,
+            "human_auth__auth_bootstrap" if requires_identity_verification
+            else "browser_discovery__observe_starting_page", AUTH_BOOTSTRAP_ORDINAL,
+        )
 
     async def create_from_plan(
         self,

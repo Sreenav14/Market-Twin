@@ -160,7 +160,8 @@ async def test_journey_results_available_before_evaluation_and_scoped(monkeypatc
         assert not called
 
 
-async def test_journey_result_matches_latest_attempt_not_previous_payload():
+@pytest.mark.parametrize("diagnostic_reason", ["absent_scope", "unreviewed-private-value"])
+async def test_journey_result_matches_latest_attempt_not_previous_payload(diagnostic_reason):
     run_id, journey_id, new_execution_id, old_execution_id = (uuid4() for _ in range(4))
     journey = SimpleNamespace(id=journey_id, ordinal=1)
 
@@ -170,6 +171,7 @@ async def test_journey_result_matches_latest_attempt_not_previous_payload():
             journey_id=journey_id,
             attempt_number=attempt,
             status="completed",
+            runtime_name="deterministic_case_steps_v1",
             outcome="passed",
             started_at=None,
             completed_at=None,
@@ -191,16 +193,25 @@ async def test_journey_result_matches_latest_attempt_not_previous_payload():
             queries.append(statement)
             if "run_events" in str(statement):
                 rows = [
-                    SimpleNamespace(execution_id=old_execution_id, payload={"summary": "Old"}),
-                    SimpleNamespace(execution_id=new_execution_id, payload={"summary": "New"}),
+                    SimpleNamespace(execution_id=old_execution_id, event_type="journey.result",
+                                    payload={"summary": "Old"}),
+                    SimpleNamespace(execution_id=new_execution_id, event_type="journey.result",
+                                    payload={"summary": "New"}),
+                    SimpleNamespace(execution_id=new_execution_id,
+                                    event_type="test_case.diagnostic",
+                                    payload={"reason_code": diagnostic_reason, "unsafe": "secret"}),
                 ]
             else:
                 rows = [execution(new_execution_id, 2), execution(old_execution_id, 1)]
             return SimpleNamespace(all=lambda: rows)
 
     result = await ResultsRepository(Session()).list_journeys(test_run_id=run_id)
+    assert result[0]["runtime_name"] == "deterministic_case_steps_v1"
     assert result[0]["execution_id"] == new_execution_id
-    assert result[0]["result"] == {"summary": "New"}
+    expected = {"summary": "New"}
+    if diagnostic_reason == "absent_scope":
+        expected["diagnostic"] = {"reason_code": "absent_scope"}
+    assert result[0]["result"] == expected
     assert result[0]["attempt_number"] == 2
     assert result[0]["step_count"] == 3
     assert result[0]["artifact_count"] == 3
@@ -282,3 +293,33 @@ async def test_flow_collection_evaluation_reads_reject_foreign_runs(monkeypatch,
     with pytest.raises(HTTPException) as error:
         await getattr(test_run_results, name)(uuid4(), SimpleNamespace())
     assert error.value.status_code == 404
+
+
+@pytest.mark.parametrize("runtime_name", ["human_auth_bootstrap_v1", "browser_discovery_v1", None])
+def test_discovery_is_before_plan_and_never_counts_as_a_feature_case(runtime_name):
+    discovery = {
+        "id": uuid4(), "ordinal": 10_000, "runtime_name": runtime_name,
+        "persona_name": "Human authentication", "mission_title": "Verify test identity",
+        "execution_status": "running",
+    }
+    response = test_run_results.build_run_flow(
+        run_status="awaiting_human", journeys=[discovery], collected=False,
+        report_status=None, execution_mode="deep_feature_v1", plan_recorded=False,
+    )
+    assert [node["kind"] for node in response["nodes"]][:2] == ["discovery", "meta"]
+    assert response["nodes"][0]["label"] == "Browser discovery"
+    assert response["nodes"][0]["status"] == "awaiting_human"
+    assert response["nodes"][1]["status"] == "not_started"
+    assert not any(node["kind"] == "journey" for node in response["nodes"])
+    assert "Verify test identity" not in str(response)
+    discovery["execution_status"] = "completed"
+    case = {"id": uuid4(), "ordinal": 1, "runtime_name": "deterministic_case_steps_v1",
+            "persona_name": "Feature tester", "mission_title": "Check form",
+            "execution_status": "running"}
+    planned = test_run_results.build_run_flow(
+        run_status="running", journeys=[case, discovery], collected=False,
+        report_status=None, execution_mode="deep_feature_v1", plan_recorded=True,
+    )
+    assert [node["kind"] for node in planned["nodes"]][:3] == ["discovery", "meta", "journey"]
+    assert planned["nodes"][1]["status"] == "completed"
+    assert sum(node["kind"] == "journey" for node in planned["nodes"]) == 1

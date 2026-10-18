@@ -5,17 +5,26 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
 
+from markettwin_shared.feature_plan import (
+    URL_PATH_MISMATCH,
+    Oracle,
+    normalized_visible_text,
+    require_public_url_path,
+)
+
 AssertionStatus = Literal["satisfied", "not_satisfied", "unverified"]
 AssertionReason = Literal[
     "page_not_loaded", "unsupported_safe_value_read", "ambiguous_target", "page_closed",
     "inspection_failed", "missing_evidence", "evidence_persistence_failed",
+    "unsupported_safe_url_read",
 ]
 CaseExecutionStatus = Literal[
     "completed", "policy_blocked", "failed", "timed_out", "budget_exhausted", "cancelled",
+    "skipped",
 ]
 CaseBlocker = Literal[
     "policy_blocked", "action_failed", "runtime_failed", "time_limit", "action_limit",
-    "evidence_persistence_failed", "cancelled",
+    "evidence_persistence_failed", "cancelled", "human_assistance_skipped",
 ]
 
 
@@ -25,7 +34,7 @@ class AssertionResult(BaseModel):
     schema_version: Literal[1] = 1
     case_id: str = Field(min_length=1, max_length=100)
     assertion_id: str = Field(min_length=1, max_length=100)
-    oracle: Literal["visible_text", "visible", "enabled", "checked", "value", "url", "title", "count"]
+    oracle: Oracle
     expected_value: StrictStr | StrictBool | StrictInt
     observed_value: StrictStr | StrictBool | StrictInt | None
     status: AssertionStatus
@@ -39,6 +48,8 @@ class AssertionResult(BaseModel):
 
     @model_validator(mode="after")
     def require_evidence(self) -> "AssertionResult":
+        if self.reason is not None and self.status != "unverified":
+            raise ValueError("An unsupported or failed inspection cannot establish a verdict.")
         expected_type = (bool if self.oracle in {"visible", "enabled", "checked"}
                          else int if self.oracle == "count" else str)
         if type(self.expected_value) is not expected_type:
@@ -47,12 +58,20 @@ class AssertionResult(BaseModel):
             raise ValueError("Oracle expectation is too long.")
         if isinstance(self.observed_value, str) and len(self.observed_value) > 1000:
             raise ValueError("Oracle observation is too long.")
+        if self.oracle == "url_path_v1":
+            require_public_url_path(str(self.expected_value))
+            if self.observed_value not in {None, self.expected_value, URL_PATH_MISMATCH}:
+                raise ValueError("Path observations may contain only the frozen route or mismatch.")
         if self.status != "unverified" and type(self.observed_value) is not expected_type:
             raise ValueError("A deterministic verdict requires a typed observation.")
         if self.status != "unverified" and not self.artifact_ids:
             raise ValueError("A deterministic verdict requires exact persisted evidence.")
         matches = (type(self.observed_value) is type(self.expected_value)
                    and self.observed_value == self.expected_value)
+        if self.oracle == "visible_text" and isinstance(self.observed_value, str):
+            matches = normalized_visible_text(self.observed_value) == normalized_visible_text(
+                str(self.expected_value)
+            )
         if self.status == "satisfied" and not matches:
             raise ValueError("A satisfied assertion requires matching observations.")
         if self.status == "not_satisfied" and matches:
@@ -78,6 +97,12 @@ class CaseExecutionResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_provenance_and_verdict(self) -> "CaseExecutionResult":
+        if self.execution_status == "skipped":
+            if (self.blocker != "human_assistance_skipped" or self.assertion_results
+                    or self.verdict != "unverified"):
+                raise ValueError("Skipped assistance cannot establish assertions or a verdict.")
+        elif self.blocker == "human_assistance_skipped":
+            raise ValueError("Skipped assistance requires a skipped execution.")
         if any(step <= 0 for step in self.action_step_ids):
             raise ValueError("Action step IDs must be positive.")
         if len(set(self.action_step_ids)) != len(self.action_step_ids):

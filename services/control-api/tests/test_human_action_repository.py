@@ -29,6 +29,7 @@ from markettwin_control_api.persistence.repositories.action_approval_repository 
 )
 from markettwin_control_api.persistence.repositories.human_action_repository import (
     HumanActionConflictError,
+    HumanActionExpiredError,
     HumanActionNotAuthorizedError,
     HumanActionRepository,
     HumanLeaseGrant,
@@ -723,6 +724,11 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
         ]
         assert len(reclaimed_rows) == 1
         assert reclaimed_rows[0].lease_id == reclaimed_grant.lease_id
+        assert reclaimed_rows[0].journey_id is not None
+        assert reclaimed_rows[0].journey_title
+        assert reclaimed_rows[0].requesting_agent
+        assert reclaimed_rows[0].browser_state == "open"
+        assert reclaimed_grant.lease_token not in reclaimed_rows[0].model_dump_json()
         async with factory.begin() as session:
             await HumanActionRepository(session).abort_claim(
                 lease_id=reclaimed_grant.lease_id,
@@ -731,6 +737,77 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
                 generation=reclaimed_grant.generation,
                 expected_request_id=failed_handoff.request_id,
             )
+
+        # Skip is durable and exclusive, fences control once, and is not cancellation.
+        for leased in (False, True):
+            async with factory.begin() as session:
+                repository = HumanActionRepository(session)
+                current_browser = await session.get(BrowserSession, browser_id)
+                assert current_browser is not None
+                # Each independent work item publishes a fresh waiting browser state.
+                current_browser.control_mode = "human_pending"
+                skipped_request = await repository.create_request(
+                    execution_id=execution_id, browser_session_id=browser_id,
+                    request_type="login", idempotency_key=f"skip:{leased}",
+                    expires_at=datetime.now(UTC) + timedelta(minutes=2),
+                )
+                if leased:
+                    skip_grant = await repository.claim(
+                        request_id=skipped_request.request_id, actor_id=user_id,
+                    )
+                initial_generation = current_browser.control_generation
+                suspension_id = uuid4()
+                session.add(ExecutionSuspension(
+                    id=suspension_id, test_run_id=run_id, journey_id=journey_id,
+                    execution_id=execution_id, browser_session_id=browser_id,
+                    pending_request_id=skipped_request.request_id,
+                    checkpoint_version=100 + int(leased),
+                    owner_generation=initial_generation, phase="case_action",
+                    planned_step_index=0, active_deadline_remaining_ms=1000,
+                    suspended_at=datetime.now(UTC),
+                    human_deadline=datetime.now(UTC) + timedelta(minutes=2), status="waiting",
+                ))
+                await session.flush()
+                with pytest.raises(HumanActionNotAuthorizedError):
+                    await repository.skip(
+                        request_id=skipped_request.request_id, actor_id=member_id,
+                    )
+                skipped = await repository.skip(
+                    request_id=skipped_request.request_id, actor_id=user_id,
+                )
+                assert skipped.status == "skipped"
+                assert current_browser.control_mode == "none"
+                assert current_browser.control_generation == initial_generation + 1
+                again = await repository.skip(
+                    request_id=skipped_request.request_id, actor_id=user_id,
+                )
+                assert again.status == "skipped"
+                assert current_browser.control_generation == initial_generation + 1
+                assert again.terminal_generation == initial_generation + 1
+                # A delayed duplicate must retain the old fence, never adopt a later
+                # independent work item's browser generation for its notification.
+                current_browser.control_generation += 3
+                await session.flush()
+                delayed = await repository.skip(
+                    request_id=skipped_request.request_id, actor_id=user_id,
+                )
+                assert delayed.terminal_generation == initial_generation + 1
+                assert current_browser.control_generation == initial_generation + 4
+                with pytest.raises(HumanActionConflictError):
+                    await repository.claim(
+                        request_id=skipped_request.request_id, actor_id=user_id,
+                    )
+                if leased:
+                    old_lease = await session.get(HumanControlLease, skip_grant.lease_id)
+                    assert old_lease is not None and old_lease.released_at is not None
+            async with factory() as session:
+                persisted = await session.get(HumanActionRequest, skipped_request.request_id)
+                assert persisted is not None and persisted.status == "skipped"
+                enclosing_run = await session.get(RunModel, run_id)
+                assert enclosing_run is not None and enclosing_run.status != "cancelled"
+                persisted_suspension = await session.get(ExecutionSuspension, suspension_id)
+                assert persisted_suspension is not None
+                assert persisted_suspension.status == "abandoned"
 
         async with factory.begin() as session:
             repository = HumanActionRepository(session)
@@ -755,6 +832,11 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
             )
 
         await asyncio.sleep(0.25)
+        async with factory.begin() as session:
+            with pytest.raises(HumanActionExpiredError):
+                await HumanActionRepository(session).skip(
+                    request_id=expiring_request.request_id, actor_id=user_id,
+                )
         async with factory.begin() as session:
             assert await HumanActionRepository(session).expire_due() == 1
         async with factory.begin() as session:

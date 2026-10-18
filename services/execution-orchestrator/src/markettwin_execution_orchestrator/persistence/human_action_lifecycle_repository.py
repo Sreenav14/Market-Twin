@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID, uuid4
 
 from markettwin_database.models import (
@@ -42,7 +43,14 @@ class HumanActionLifecycleRepository:
         execution_id: UUID,
         browser_session_id: UUID,
         expires_at: datetime,
+        assistance_reason: Literal[
+            "absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target"
+        ] | None = None,
     ) -> UUID:
+        if assistance_reason is not None and assistance_reason not in {
+            "absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target",
+        }:
+            raise ValueError("Unsupported recovery reason.")
         now = datetime.now(UTC)
         if expires_at <= now or expires_at > now + timedelta(minutes=15):
             raise ValueError("Human handoff expiry must be within 15 minutes.")
@@ -80,6 +88,8 @@ class HumanActionLifecycleRepository:
             "auth-preflight-v1" if browser.control_generation == 0
             else f"auth-preflight-v1:{browser.control_generation}"
         )
+        if assistance_reason is not None:
+            idempotency_key = f"case-recovery-v1:{browser.control_generation}"
         existing = await self._session.scalar(
             select(HumanActionRequest).where(
                 HumanActionRequest.execution_id == execution_id,
@@ -99,10 +109,18 @@ class HumanActionLifecycleRepository:
                 id=request_id,
                 execution_id=execution_id,
                 browser_session_id=browser_session_id,
-                request_type="login",
+                request_type="other" if assistance_reason else "login",
                 idempotency_key=idempotency_key,
                 status="pending",
-                instructions="Sign in to the authorized test account, then release control.",
+                instructions=(
+                    f"The planned control could not be resolved ({assistance_reason}). "
+                    "Prepare the current page so that the planned control is available, "
+                    "then Release. Do not perform the pending action. The worker will "
+                    "verify the original target and recheck policy before continuing. "
+                    "Cancel if the plan describes a control that does not exist."
+                    if assistance_reason else
+                    "Sign in to the authorized test account, then release control."
+                ),
                 expires_at=expires_at,
             )
         )
@@ -128,6 +146,16 @@ class HumanActionLifecycleRepository:
             control_generation=browser.control_generation,
             request_expires_at=request.expires_at,
         )
+
+    async def acknowledge_skipped(self, *, request_id: UUID) -> None:
+        """Let independent work continue after the worker observes durable Skip."""
+        request = await self._session.scalar(
+            select(HumanActionRequest).where(HumanActionRequest.id == request_id).with_for_update()
+        )
+        if request is None or request.status != "skipped":
+            raise HumanHandoffUnavailable("The skipped handoff is unavailable.")
+        await self._resume_run(execution_id=request.execution_id)
+        await self._session.flush()
 
     async def finish_verification(
         self,

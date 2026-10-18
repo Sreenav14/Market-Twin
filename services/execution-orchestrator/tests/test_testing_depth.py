@@ -15,6 +15,10 @@ from markettwin_execution_orchestrator.workflow.planning import (
     build_planning_prompt,
 )
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
+from markettwin_execution_orchestrator.workflow.testing_depth import (
+    TestingDepth,
+    feature_case_limit,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -53,6 +57,11 @@ def test_invalid_persisted_depth_does_not_silently_expand_coverage() -> None:
     )
     with pytest.raises(KeyError):
         build_run_request(run)
+
+
+@pytest.mark.parametrize("depth,limit", [("low", 3), ("medium", 6), ("high", 8)])
+def test_feature_case_coverage_limits_follow_selected_depth(depth: str, limit: int) -> None:
+    assert feature_case_limit(cast(TestingDepth, depth)) == limit
 
 
 async def test_over_budget_plan_cannot_reach_browser_execution(

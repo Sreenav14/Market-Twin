@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
+from markettwin_shared.auth_verification import AuthVerificationPolicy
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.agents.meta_agent_factory import (
@@ -20,6 +22,7 @@ from markettwin_execution_orchestrator.browser import (
     AllowedOrigin,
     BrowserController,
 )
+from markettwin_execution_orchestrator.browser.auth_session_broker import AuthSessionScope
 from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
 )
@@ -62,6 +65,10 @@ class MultiPersonaExecutionRequest:
     start_url: str
     allowed_origins: tuple[AllowedOrigin, ...]
 
+    auth_verification: AuthVerificationPolicy | None = None
+    auth_mode: Literal["required", "optional"] = "required"
+    runtime_human_assistance: bool = False
+    target_id: object = None
     network_policy: NetworkPolicy = "public_only"
     max_duration_seconds_per_journey: int = 180
     agent_prompt_overrides: dict[str, dict[str, str]] = field(
@@ -158,6 +165,17 @@ async def execute_one_planned_journey(
                 start_url=request.start_url,
                 allowed_origins=request.allowed_origins,
                 network_policy=request.network_policy,
+                auth_verification=request.auth_verification,
+                auth_mode=request.auth_mode,
+                runtime_human_assistance=request.runtime_human_assistance,
+                runtime_target_id=UUID(str(request.target_id))
+                    if request.runtime_human_assistance else None,
+                auth_session_scope=(AuthSessionScope(
+                    run_id=request.run_id, target_id=UUID(str(request.target_id)),
+                    role=request.auth_verification.role,
+                    account_reference=request.auth_verification.account_reference,
+                    origin=request.auth_verification.origin,
+                ) if request.auth_verification is not None else None),
                 max_duration_seconds=(request.max_duration_seconds_per_journey),
                 prompt_override=request.agent_prompt_overrides.get(journey.journey_key),
                 agent_number=next(
@@ -252,6 +270,7 @@ async def persist_run_collection(
             "journey_count": len(result.journeys),
             "completed_count": result.completed_count,
             "failed_count": result.failed_count,
+            "skipped_count": result.skipped_count,
             "journey_keys": [item.journey.journey_key for item in result.journeys],
         },
     )

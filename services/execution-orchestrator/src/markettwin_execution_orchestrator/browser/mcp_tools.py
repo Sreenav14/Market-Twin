@@ -12,7 +12,10 @@ from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import create_connected_server_and_client_session
 from sqlalchemy.exc import SQLAlchemyError
 
-from markettwin_execution_orchestrator.browser.errors import BrowserPolicyError
+from markettwin_execution_orchestrator.browser.errors import (
+    BrowserPolicyError,
+    HumanAssistanceSkipped,
+)
 from markettwin_execution_orchestrator.browser.tools import BrowserTool
 
 
@@ -35,6 +38,9 @@ class ControlledBrowserMCPTool(BaseTool):
     async def run_async(self, *, args: dict[str, Any], tool_context: ToolContext) -> object:
         result = await self.client.call_tool(self.name, arguments=args)
         if result.isError:
+            if (result.structuredContent
+                    and result.structuredContent.get("error_kind") == "human_assistance_skipped"):
+                raise HumanAssistanceSkipped("Not tested—human assistance skipped.")
             if (
                 result.structuredContent
                 and result.structuredContent.get("error_kind") == "persistence_failed"
@@ -87,6 +93,7 @@ async def connect_controlled_browser_tools(
             while cause is not None:
                 if isinstance(cause, (BrowserPolicyError, SQLAlchemyError)):
                     error_kind = (
+                        "human_assistance_skipped" if isinstance(cause, HumanAssistanceSkipped) else
                         "policy_blocked"
                         if isinstance(cause, BrowserPolicyError)
                         else "persistence_failed"

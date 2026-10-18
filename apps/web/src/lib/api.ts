@@ -41,7 +41,13 @@ export interface HumanAction {
   execution_id: string;
   browser_session_id: string;
   request_type: string;
-  status: "pending" | "leased" | "completed" | "cancelled" | "expired";
+  journey_id?: string | null;
+  journey_title?: string | null;
+  requesting_agent?: string | null;
+  requested_by_step_id?: number | null;
+  browser_state?: string | null;
+  instructions?: string;
+  status: "pending" | "leased" | "completed" | "cancelled" | "expired" | "skipped";
   created_at: string;
   expires_at: string | null;
   control_generation: number;
@@ -171,6 +177,7 @@ export interface Target {
   requires_auth: boolean;
   status: string;
   allowed_origins: AllowedOrigin[];
+  scope_parent_id?: string | null;
 }
 
 export interface TargetAuthorization {
@@ -268,6 +275,7 @@ export interface JourneyExecution {
   summary: string | null;
   success_criteria: string[];
   execution_id: string | null;
+  runtime_name?: string | null;
   attempt_number: number | null;
   execution_status: string | null;
   outcome: string | null;
@@ -402,6 +410,12 @@ export const api = {
     request<Target[]>(`/api/v1/applications/${applicationId}/targets`),
   getTarget: (targetId: string) =>
     request<Target>(`/api/v1/targets/${targetId}`),
+  listScopeRevisions: (targetId: string) =>
+    request<Target[]>(`/api/v1/targets/${targetId}/scope-revisions`),
+  requestScopeRevision: (targetId: string, payload: { name: string; origins: string[]; request_basis: string }) =>
+    request<Target>(`/api/v1/targets/${targetId}/scope-revisions`, {
+      method: "POST", body: JSON.stringify(payload),
+    }),
   createTarget: (
     applicationId: string,
     payload: {
@@ -466,6 +480,10 @@ export const api = {
     request<{ id: string; status: string }>(`/api/v1/human-actions/${requestId}/cancel`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
     }),
+  skipHumanAction: (requestId: string) =>
+    request<{ id: string; status: "skipped" }>(`/api/v1/human-actions/${requestId}/skip`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+    }),
   releaseHumanAction: (requestId: string, lease: HumanLeaseGrant) =>
     request<{ generation: number }>(`/api/v1/human-actions/${requestId}/release`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
@@ -478,9 +496,9 @@ export const api = {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
       body: JSON.stringify({ approved }),
     }),
-  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "legacy_persona", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = []) =>
+  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "legacy_persona", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = [], authMode?: "required" | "optional", runtimeHumanAssistance = true) =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",
-        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(executionMode === "deep_feature_v1" ? { execution_mode: executionMode } : {}), ...(authVerification ? { auth_verification: authVerification } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
+        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, runtime_human_assistance: runtimeHumanAssistance, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(executionMode === "deep_feature_v1" ? { execution_mode: executionMode } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
     }),
 };

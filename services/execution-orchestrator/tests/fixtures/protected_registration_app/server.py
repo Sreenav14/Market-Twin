@@ -37,7 +37,14 @@ class ProtectedRegistrationHandler(BaseHTTPRequestHandler):
                 count = self.server.effects
             self.respond(200, json.dumps({"registration_submissions": count}), "application/json")
             return
-        if path == "/index.html":
+        if path == "/public.html":
+            variant = "bad" if "variant=bad" in urlsplit(self.path).query.split("&") else "good"
+            html = f'''<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public registration guide</title><main><h1>Registration guide</h1>
+<p>Public fixture documentation. No login is required to read this page.</p>
+<a href="/registration.html?variant={variant}">Open protected registration</a></main></html>'''
+        elif path == "/index.html":
             html = (FIXTURES / "hitl_app/index.html").read_text(encoding="utf-8")
             redirect = 'location.href = "?view=dashboard&variant=" + variant;'
             if html.count(redirect) != 1:
@@ -67,7 +74,8 @@ if (fixtureRole === 'user' || fixtureRole === 'admin') {
   const registration = PAYLOAD;
   document.write(registration);
 } else {
-  location.replace('/index.html?view=login');
+  const variant = new URLSearchParams(location.search).get('variant') === 'bad' ? 'bad' : 'good';
+  location.replace('/index.html?view=login&variant=' + variant);
 }
 </script>""".replace("PAYLOAD", payload)
         else:

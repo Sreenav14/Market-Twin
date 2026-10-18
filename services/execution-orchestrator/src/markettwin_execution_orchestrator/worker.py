@@ -25,6 +25,7 @@ from markettwin_shared.messaging import (
     KafkaMessage,
     load_kafka_consumer_settings,
 )
+from markettwin_shared.run_failure import failure_details, failure_event_payload, failure_site
 from sqlalchemy import select, update
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -32,6 +33,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from markettwin_execution_orchestrator.browser.owner_registry import browser_owner_registry
 from markettwin_execution_orchestrator.browser.owner_service import HITLWorkerService
 from markettwin_execution_orchestrator.persistence import RunStateRepository
+from markettwin_execution_orchestrator.persistence.run_event_repository import RunEventRepository
+from markettwin_execution_orchestrator.temp_failure_log import (
+    bind_temp_run,
+    install_temp_log_handler,
+    record_temp_failure,
+    record_temp_note,
+    reset_temp_run,
+    temp_log_path,
+)
 from markettwin_execution_orchestrator.workflow.run_executor import execute_markettwin_run
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
 from markettwin_execution_orchestrator.workflow.run_request_handler import (
@@ -111,6 +121,10 @@ async def process_command(
             if run is not None and run.status in {"planning", "running", "awaiting_human"}:
                 await abandon_run_handoffs(session, test_run_id=run.id)
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
+                await RunEventRepository(session).create(
+                    test_run_id=run.id, event_type="run.failed",
+                    payload={**failure_details("interrupted")}, journey_id=None, execution_id=None,
+                )
                 await session.commit()
                 logger.warning("Interrupted run %s marked failed", run.id)
             return
@@ -118,12 +132,17 @@ async def process_command(
         run = await session.get(TestRun, accepted.test_run_id)
         if run is None:
             raise RuntimeError("Accepted TestRun disappeared.")
+        run_id = accepted.test_run_id
+        run_token = bind_temp_run(run_id)
         try:
             request = build_run_request(run)
-            logger.info("Executing TestRun %s", run.id)
+            logger.info("Executing TestRun %s", run_id)
+            record_temp_note(stage="start", detail=f"Executing TestRun {run_id}")
             await execute_markettwin_run(request, session=session)
-            logger.info("Completed TestRun %s", run.id)
+            logger.info("Completed TestRun %s", run_id)
+            record_temp_note(stage="completed", detail=f"Completed TestRun {run_id}")
         except (Exception, asyncio.CancelledError) as error:
+            record_temp_failure(stage="run", error=error)
             await session.rollback()
             run = await session.get(TestRun, accepted.test_run_id)
             if run is not None:
@@ -133,12 +152,26 @@ async def process_command(
             }:
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
             if run is not None:
+                payload = failure_event_payload(error)
+                await RunEventRepository(session).create(
+                    test_run_id=run.id, event_type="run.failed",
+                    payload=payload,
+                    journey_id=None, execution_id=None,
+                )
                 await session.commit()
+            else:
+                payload = failure_event_payload(error)
             logger.error(
-                "Execution failed for TestRun %s (%s)", accepted.test_run_id, type(error).__name__,
+                "Execution failed for TestRun %s (%s) at %s: %s",
+                accepted.test_run_id,
+                type(error).__name__,
+                failure_site(error),
+                payload.get("reason", "detail omitted"),
             )
             if isinstance(error, asyncio.CancelledError):
                 raise
+        finally:
+            reset_temp_run(run_token)
 
 
 async def run_worker(
@@ -171,7 +204,8 @@ async def run_worker(
                     message = await consumer.receive()
                     await process_command(message, session_factory)
                     await consumer.commit()
-            except Exception:
+            except Exception as error:
+                record_temp_failure(stage="worker-iteration", error=error)
                 logger.exception("Execution worker iteration failed; reconnecting")
                 await consumer.stop()
                 await asyncio.sleep(retry_delay_seconds)
@@ -222,6 +256,8 @@ def build_hitl_worker_service(
 async def main() -> None:
     """Run the worker until stopped by its process supervisor."""
     logging.basicConfig(level=logging.INFO)
+    install_temp_log_handler()
+    logger.info("Temporary execution log: %s", temp_log_path())
     engine = create_database_engine(
         URL.create(
             "postgresql+asyncpg",

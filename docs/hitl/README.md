@@ -1,12 +1,343 @@
 # MarketTwin HITL: implementation, operations and testing guide
 
-Updated: 2026-10-15. This is the single current HITL documentation entry point.
+Updated: 2026-10-17. This is the single current HITL documentation entry point.
 It consolidates the implementation handoff, phase evidence, transport review,
 baseline reconciliation, finish checklist and original master implementation plan.
+
+**Current work is paused for planning.** The requested continuous live agent
+browser/activity view is not implemented. See the detailed
+[live execution implementation plan](LIVE_EXECUTION_IMPLEMENTATION_PLAN.md) for
+current code status, exact required files, reasons, security, dependencies and
+acceptance tests. Existing human takeover is a separate capability. The plan also
+records the MT50 corrections implemented and tested before the pause.
 
 **Release status: local pilot code implemented; hosted production NO-GO.**
 Focused checks and the complete synthetic local HITL-to-report pipeline passed.
 Comprehensive adversarial, external-identity and release verification remain open. Implementation status must not be read as acceptance certification.
+
+## Runtime-only HITL implementation (2026-10-17)
+
+New tests start without login, identity-marker, role or account-reference fields.
+The API freezes `runtime_human_assistance: true` for these runs. Agents begin
+normal browser execution; an actual detected authentication challenge requests
+assistance. A public page containing a Login link does not itself trigger takeover.
+If the first destination is a login page, assistance may appear after that first
+navigation. Existing runs retain their frozen configuration and explicit identity
+verification policies.
+
+The operator opens **Human assistance**, chooses **Take browser control**, connects
+to the same live browser, and completes login/MFA or other needed interaction within
+approved origins. **Done—resume agent** revokes viewer authority and checks safe
+continuation before browser tools resume. Without an explicit verification policy,
+completion proves neither a particular identity nor a role. A scoped in-memory
+session may be reused in isolated contexts within the same run and target; failed,
+skipped or cancelled handoffs revoke provisional copies. Authenticated state is
+not written as a reusable file. Runtime-enabled contexts disable raw traces before
+an unexpected login is encountered.
+
+**Skip this case/journey** is available before claiming control and while controlling.
+It durably marks the request skipped, fences/releases control, abandons its
+checkpoint, and records **Not tested—human assistance skipped**. It does not pass
+the assertion, produce a product defect, or cancel independent work. Another
+independent journey may request assistance if it encounters its own login blocker.
+Duplicate Skip preserves the original terminal generation and cannot revoke a
+newer session. Stop run remains separate.
+
+Migration `6b0e2ac784d1` adds the skipped state and terminal-generation fence on top
+of `31d4ef097a2b`. It has been exercised on disposable PostgreSQL databases and
+applied to the normal loopback database after verifying zero active runs. Restart
+the API and workers before using the feature. On another checkout, apply the
+migration before restarting. Do not
+start duplicate execution consumers or reset shared offsets. Existing service
+processes do not reload this code automatically.
+
+Local evidence and exact remaining checks are maintained in
+[UI verification](../ui/VERIFICATION.md#runtime-only-hitl--2026-10-17).
+Coverage is synthetic: it does not certify arbitrary external SSO/CAPTCHA widgets,
+all possible login-page layouts, or live-model planning quality. Generic difficulty
+is not automatically treated as proof of authentication or permission to expand
+scope. Out-of-origin navigation still needs a separately approved execution scope.
+
+## Historical runtime-only HITL research (before implementation)
+
+The following records the original gap analysis and proposed acceptance matrix.
+The implementation status above and verification record supersede this historical
+description; unchecked research scenarios remain verification work, not proof of
+universal support.
+
+### Confirmed user experience
+
+Start a test without supplying login credentials, identity markers, role/account
+references or enabling HITL. Agents execute normally. Only an encountered blocker
+creates human assistance. The operator may control the same live browser freely
+within the frozen approved origins. **Skip this case/journey** records **Not tested:
+human assistance skipped** and continues independent work; it never bypasses login
+or marks a skipped test passed. Stop run is a separate action. If the first page
+itself requires login, a request can legitimately appear on first navigation;
+there must be no unconditional pre-execution login request.
+
+Both operator choices were explicitly confirmed in conversation: free takeover
+within approved origins; skip only the blocked case/journey.
+
+### Why the previous behavior differed
+
+- `NewRunPage.tsx` forces verification and required mode for `requires_auth` targets;
+  its form requires identity-marker, role and account-reference fields.
+- Control API `api/test_run.py` rejects protected runs without that policy. Simply
+  changing required to optional still needs an upfront policy.
+- `journey_executor.py` and `case_execution.py` bind the authentication callback
+  only when an `AuthVerificationPolicy` exists. `auth_bootstrap.py` can request
+  authentication before feature discovery. The low-level challenge detector is
+  already runtime-oriented, but no-policy runs do not get the callback.
+- `HumanActionPage.tsx` exposes cancellation, not skip. The database request status
+  constraint has no skipped state; deep-result contracts have no assistance-skipped
+  result. Renaming Cancel would lose the distinct outcome and reporting semantics.
+- `auth_session_broker.py` accepts only a verified principal matched to explicit
+  role/account/origin. It cannot safely treat arbitrary human completion as a
+  verified role. Unconfigured sessions also enable raw Playwright traces; privacy
+  needs to cover unexpected login redirects before any secret entry, not only
+  sessions declared authenticated at creation.
+
+### Recommended implementation using current architecture
+
+1. Make runtime assistance the new-run default, remove required login/HITL fields
+   from the ordinary form, and allow creation without an authentication policy.
+   Target authorization and frozen origins remain mandatory. Preserve old frozen
+   policies and explicit role-verification contracts for existing runs.
+2. Bind a common assistance handler to every persona, discovery and feature-case
+   browser session before first navigation. Combine bounded password/MFA/CAPTCHA
+   detection, evidenced login redirects/auth challenges, and a structured agent
+   request-help tool. A marketing Login link, generic403, wrong assertion or product
+   bug is not by itself proof of an authentication challenge. Bound repeated requests
+   per obstacle so a skipped challenge cannot produce an immediate prompt loop.
+3. Reuse durable requests, suspensions, ownership and exclusive viewer leases.
+   Pause browser tools and the execution budget, persist the exact execution cursor,
+   display the requesting agent/case/step/reason, and offer **Take control**, **Skip
+   this case/journey**, and separate **Stop run**. While controlling, use **Done,
+   resume agent** and retain Skip. Do not record live frames, entered credentials
+   or token-bearing redirects. Reuse existing channels; no new service/framework.
+4. Resume only after viewer authority is revoked and the current generation is
+   reconciled. Reobserve the actual page, require an approved application origin,
+   check that the relevant obstacle/continuation permits progress, and recheck action
+   policy. A human may have navigated or already performed an action: never blindly
+   replay a pending submit/click or alter frozen expectations to fit the new state.
+   Where continuation/effect cannot be established, report human-assisted/unverified
+   or offer Skip rather than inventing success.
+5. Distinguish an operator-established browser session from independently verified
+   identity/role. Ordinary login needs no marker input. It can produce a short-lived,
+   in-memory runtime session grant bound to run/target/exact origin/operator/session
+   epoch for allowed case reuse, with identity/role explicitly unknown. Existing
+   approved role oracles can upgrade verification; role-dependent tests without
+   proof remain unverified/not tested. Such a grant never expands action or origin
+   authorization. Logout, expiry, changed identity or challenge revokes stale copies.
+6. Add explicit skip request/result semantics through migration, API, worker,
+   shared contracts, evaluation and UI. Skip must atomically resolve the request,
+   abandon its suspension, revoke any lease/tickets, close or quarantine that case's
+   context and advance only to independent work. Duplicate Skip/Done must be
+   idempotent; a worker notification failure cannot permit stale viewer input.
+   Preserve distinct cancelled, expired, skipped, failed and assisted outcomes.
+
+### Research basis and acceptance gates
+
+[LangGraph dynamic interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)
+support conditional durable pauses; its side-effect guidance highlights replay
+hazards. These are patterns to apply to existing MarketTwin machinery, not a reason
+to migrate frameworks. [Browser Use custom tools](https://docs.browser-use.com/open-source/customize/tools/basics)
+demonstrate an agent requesting human input during execution; that example alone
+does not supply authenticated viewer ownership or safe browser continuation.
+[Playwright authentication](https://playwright.dev/docs/auth) documents context
+isolation and sensitive authenticated state. [OWASP authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+distinguishes identity from permission; human login cannot grant arbitrary scope.
+
+Original acceptance matrix (see verification record for executed scenarios): no-configuration public run
+never prompts; late login in both modes; first-page login only after navigation;
+same-context takeover/Done; human navigation and completed-side-effect no replay;
+Skip before/during claim with next independent case continuing; duplicate decisions;
+challenge still present;401/403 versus genuine bug distinction; identity-unknown
+reuse versus verified-role isolation; popup/SSO scope enforcement; disconnect/expiry/
+cancellation/worker loss; secrets canary across traces/logs/artifacts; skipped and
+assisted outcomes accurately rendered in the final report. Existing configured-flow
+tests do not establish that this new no-setup flow works.
+
+## Latest corrections: MT-000048 and MT-000049
+
+Implemented and exercised locally on 2026-10-17. Detailed outcomes and executable
+commands are in [UI verification](../ui/VERIFICATION.md#mt-00004849-corrections--2026-10-17).
+
+### Additional destination approval
+
+Open the target's **Network policy / Execution scopes** page. Request a new target
+name, the complete list of exact origins (including the base origin), and a reason.
+This creates a separate **pending** target. An owner/admin then reviews every origin
+on its Authorization page and explicitly authorizes that new scope. Select the new
+target when creating a new run. Existing runs cannot be expanded or retroactively
+resumed into an unapproved origin. Login never grants destination authorization.
+Wildcards, credentials, paths, queries, fragments and automatic subdomain trust are
+rejected. Migration `31d4ef097a2b` links revisions without changing existing scopes.
+
+### Authentication in either execution mode
+
+New Test supports **verified human authentication assistance** for Persona journeys
+and Feature Cases. Protected targets require authentication. A public target may
+explicitly select optional authentication: public browsing continues until a bounded
+visible credential/MFA/CAPTCHA challenge or approved human-only IdP is encountered.
+Configure the approved application origin, unique identity marker selector, exact
+marker text, role identifier and nonsecret account reference. SSO origins must
+already be in the approved execution scope and are human-only.
+
+The worker creates a durable request; the operator claims exclusive browser control,
+connects the live viewer, enters synthetic/test credentials directly in that browser,
+and chooses **Release control for verification**. The worker verifies the exact
+approved identity before resuming the same context. Login alone does not establish
+a role. Reuse is in memory, bound to run/target/origin/account/role, copied into isolated
+contexts, and reverified. A failed identity check blocks resume and revokes reuse.
+Unexpected unknown origins stay blocked. An arbitrary difficult page is not proof
+that authentication is required. Narrow missing/ambiguous-control assistance remains
+bounded and separately verified. Worker loss does not restore a live browser.
+
+### Verification changes and remaining limits
+
+New plans prefer unique semantic controls. Rendered text assertions normalize DOM
+whitespace without editing frozen targets/expectations; genuine duplicates remain
+ambiguous. The explicit `url_path_v1` oracle ignores query/fragment by contract and
+persists no arbitrary mismatched path. Unsupported private full-URL/value reads are
+unverified, not product defects. Benign documentation links need real link metadata,
+no form, a safe documentation path and an already authorized destination; labels
+alone cannot waive restrictions. Filter reset still requires one-time approval.
+
+Real synthetic UI-to-report tests passed in both modes on good/seeded-bad fixtures.
+Required and optional persona authentication, reconnect/Release, approvals/rejection,
+duplicate decisions, expiry and cancellation were exercised. This is local pilot
+evidence, not external IdP/CAPTCHA compatibility, model-quality or release certification.
+The single execution consumer still waits while its run awaits a human; no new
+infrastructure was introduced. Restart old local services before manual testing.
+
+## Investigation evidence preceding these corrections
+
+### Findings from persisted evidence
+
+| Run | Mode | Recorded outcomes | Human requests |
+|---|---|---|---|
+| MT-000048 / `3c1f46d0-1dc2-413d-8f54-0000110bcb8c` | Legacy persona journeys | Six journeys: four policy-blocked, one passed, one inconclusive | None |
+| MT-000049 / `2f9205d2-a5d4-4261-8ce4-0c0ba787bbbf` | Feature Cases | Five cases: two satisfied, two unverified, one not satisfied; **zero policy-blocked** | None |
+
+Both runs froze only `https://supermemory.ai` with `include_subdomains=false`.
+Both targets had `requires_auth=false`, no authentication verification policy,
+and sensitive-action approvals disabled. Completed run status means collection
+finished; it does not mean every journey passed.
+
+MT-000048's four blocked steps all have the exact reason:
+`Target origin "https://console.supermemory.ai" is not allowed.` They occurred in
+journeys 1/2/4/6 at steps 36/6/19/17 respectively: two clicks and two navigations.
+This proves a destination authorization mismatch. It does not prove that a login
+screen was reached: the destination was blocked first. There were no durable
+human requests. Legacy `browser/tools.py` records and rethrows browser policy
+exceptions; `workflow/journey_executor.py` does not bridge these into the modern
+verified authentication handoff. This is a real workflow coverage limitation.
+
+MT-000049's distinct issues:
+
+- Overview heading: text `What a memory is` matches both a Contents link and a
+  heading; the assertion returned `ambiguous_target`. Title assertion passed.
+- Agent-format navigation: expected `/product.md`; the recorded frame remained
+  `/product/` and acquired a query string. The URL verifier returned unverified
+  `inspection_failed` because its privacy contract cannot compare redacted URLs.
+  A recorded `/product.md` fetch returned 200 and a separate request returned 503.
+  These facts do not establish the cause of the final routing behavior; no raw
+  query values were disclosed and no external replay was performed.
+- Contents and Pricing cases passed their recorded assertions.
+- Mobile heading: screenshot and accessibility snapshot show the expected heading.
+  Trace DOM text is `Memory that infers, updates and forgets.The engine, in one page.`
+  because a `<br>` separates the first sentence and a span. The generated plain
+  text locator includes a space after the period and reports absent. This is a
+  reproducible selector/oracle mismatch, not a confirmed mobile product defect.
+  The expectation is inferred and must remain distinct from an approved finding.
+
+Offline Chromium reproduction using synthetic inline HTML confirmed mobile text
+matches 0 versus heading-role matches 1; overview text matches 2 versus heading-role
+matches 1. Pure URL-policy probes confirmed the frozen root-only authorization
+rejects console while an explicitly supplied exact console origin accepts it.
+The latter is a diagnostic probe, **not a change to any actual target authorization**.
+
+### Why login does not automatically open HITL here
+
+Current behavior is configuration-driven, not a universal login detector:
+
+| Configuration or boundary | Current behavior | Required correction |
+|---|---|---|
+| Public target + legacy persona | Agent tools run inside frozen scope; policy exceptions can end a journey | Explicit scope-review outcome and visible executor capability limits |
+| Protected Feature Cases + approved identity policy | Verified bootstrap/login/MFA takeover and controlled resume | Existing supported route; use a protected application target |
+| Public Feature Cases + missing/ambiguous click control | One bounded generic recovery attempt | Existing supported recovery; never count it as verified login |
+| Unexpected login on a public target | No general authentication escalation/identity policy exists | Optional-auth contract, safe challenge detection and approved identity verification |
+| Unapproved console or IdP origin | Network/action remains blocked | Explicit exact-origin authorization before browser access |
+| Legacy persona + authenticated execution | Normal API rejects configured authenticated execution outside Feature Cases | Integrate shared handoff lifecycle or clearly disable this combination |
+
+The viewer's local configuration is now present and API/worker keys match; the
+missing configuration from earlier sessions is not the reason these two runs
+created no requests. A working viewer does not imply all executors trigger it.
+
+There is also an operator setup gap: `CreateTargetRequest` and the normal target
+form create only the base origin. The inspected target routes provide creation
+and reads but no additional-origin management endpoint. The run form accepts SSO
+origins only if already authorized on the target. Therefore multi-origin/SSO setup
+is not a complete ordinary-user workflow, despite backend support and fixture tests.
+
+### Recommended implementation, in order
+
+1. **Explain the block precisely.** Persist typed policy codes and sanitized denied
+   origins; show frozen allowed scope, affected step, and next action. Use separate
+   labels for scope approval needed, login needed, sensitive action approval,
+   locator ambiguity, unsupported verification, and hard denial.
+2. **Complete exact-origin setup/review.** Let an authorized operator explicitly
+   review console and authentication-only IdP origins, with audit/versioning and
+   renewed authorization where scope expands. Keep existing run snapshots immutable;
+   create a new run for an expanded scope until a versioned scope amendment exists.
+   Do not silently add wildcards or infer authorization from a shared parent domain.
+3. **Unify handoff triggers across supported executors.** When a configured identity
+   becomes unavailable or a safe authentication challenge is detected on an already
+   authorized origin, quiesce capture, persist the request/checkpoint, and pause in
+   the same context. Human performs login/MFA, releases, and the worker verifies
+   the approved identity on the approved app origin before resuming. Unknown origins
+   require scope review, not a login bypass. Keep generic recovery and auth reuse
+   separate. Do not invent a role marker from untrusted page text.
+4. **Make authentication modes explicit.** Public-only, authentication-required,
+   and optional-auth need clear capabilities. Until optional-auth/persona wiring is
+   implemented, show that limitation before Start. A separate console target with
+   Feature Cases, `requires_auth=true`, a reviewed identity marker and explicitly
+   authorized IdP origins is the smallest supported protected-testing route.
+5. **Fix generated selectors and safe route assertions.** Prefer observed heading
+   role/name for headings and scoped role/name for links. Do not change a frozen
+   expectation after it fails or fall back to fuzzy matching. Add a versioned,
+   explicit path/public-route oracle for non-secret navigation checks; preserve the
+   full-URL privacy boundary instead of comparing stripped URLs as equal.
+6. **Review intent classification separately.** Pure local probes show
+   `View payment documentation`, `Invite API reference`, and `Remove filters` all
+   hard-block under the current substring classifier. This is evidence of coarse
+   intent classification, **not the cause of MT-000048's four blocks**. Evaluate
+   role, link destination, form submission semantics and exact intended operation
+   before classifying benign reading as a financial/destructive write. Retain hard
+   denial for real prohibited actions and unsafe network destinations.
+
+Research supports retaining explicit scope, secret-safe auth state, and safe resume:
+[OWASP SSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
+recommends allowlist-based validation and preventing redirect bypasses;
+[Playwright authentication](https://playwright.dev/docs/auth) documents isolated
+contexts, conditional state reuse, and the sensitivity of authentication state;
+[LangGraph interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)
+warns that resumed execution can repeat side effects. These principles fit the
+existing MarketTwin architecture and do not require adopting another framework.
+
+Acceptance checks for those changes: no dispatch to unapproved origins; approve
+only exact domains under current authorization; IdP pages remain human-only;
+same-context login/MFA/SSO and verified identity after Release; cancellation/expiry
+cannot resume; duplicate Release cannot duplicate actions; persona/deep modes
+advertise their real capabilities; ambiguous/inferred assertions cannot become
+verified product findings. Test all with local synthetic accounts and origins.
+
+This investigation changed documentation only. It did not alter target permissions,
+weaken policies, rewrite either run, use credentials, call a model, or rerun the
+external application. An independent reviewer agreed with the scope/authentication
+separation and challenged unsupported conclusions about the Agent URL requests.
 
 ## Contents
 
@@ -315,10 +646,13 @@ still needed for generated planning and evaluation.
 ```powershell
 # Start existing local infrastructure only when needed.
 docker compose --env-file .env -f infra/compose/docker-compose.yml up -d postgres kafka minio
-# Apply the additive chain through f82e4160cb9d.
+# Apply the additive chain through 6b0e2ac784d1.
 uv run --no-sync --env-file .env alembic -c database/alembic.ini upgrade head
 uv run --no-sync --env-file .env alembic -c database/alembic.ini current
-# Separate terminals:
+# In EACH API/worker terminal, explicitly override any remote .env broker:
+$env:KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
+$env:KAFKA_SECURITY_PROTOCOL = "PLAINTEXT"
+# Separate terminals (repeat the two overrides above in each):
 uv run --no-sync --env-file .env uvicorn markettwin_control_api.main:app --host 127.0.0.1 --port 8000
 uv run --no-sync --env-file .env python -m markettwin_execution_orchestrator.worker
 uv run --no-sync --env-file .env python -m markettwin_evaluation_worker.worker

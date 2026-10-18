@@ -6,13 +6,15 @@ from pathlib import Path
 from threading import Thread
 from uuid import uuid4
 
+import pytest
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
 from markettwin_execution_orchestrator.browser.auth_session_broker import AuthSessionScope
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from playwright.async_api import async_playwright, expect
 
 
-async def test_protected_registration_requires_mfa_and_counts_effects() -> None:
+@pytest.mark.parametrize("variant", ["good", "bad"])
+async def test_protected_registration_requires_mfa_and_counts_effects(variant: str) -> None:
     path = Path(__file__).parent / "fixtures/protected_registration_app/server.py"
     spec = importlib.util.spec_from_file_location("protected_registration_fixture", path)
     assert spec is not None and spec.loader is not None
@@ -29,7 +31,7 @@ async def test_protected_registration_requires_mfa_and_counts_effects() -> None:
             await context.route("**/*", lambda route: route.continue_()
                                 if route.request.url.startswith(origin + "/") else route.abort())
             page = await context.new_page()
-            await page.goto(origin + "/registration.html?variant=good")
+            await page.goto(origin + "/registration.html?variant=" + variant)
             await expect(page.get_by_role(
                 "heading", name="Sign in to the synthetic app",
             )).to_be_visible()
@@ -43,6 +45,16 @@ async def test_protected_registration_requires_mfa_and_counts_effects() -> None:
             await page.get_by_label("One-time code").fill("246810")
             await page.get_by_role("button", name="Verify").click()
             await expect(page.locator("#identity")).to_have_text("Signed in as user")
+            assert "variant=" + variant in page.url
+            await page.get_by_label("Team", exact=True).select_option("research")
+            await expect(page.get_by_label("Role", exact=True)).to_be_enabled(
+                enabled=variant == "good",
+            )
+            await page.get_by_label("Team", exact=True).select_option("")
+            await page.get_by_role("button", name="Check address").click()
+            await expect(page.locator("#address-status")).to_have_text(
+                "Address unavailable." if variant == "bad" else "Address available.",
+            )
             await page.get_by_label("Display name", exact=True).fill("Visitor")
             await page.get_by_label("Email", exact=True).fill("fixture@example.test")
             async with page.expect_response(origin + "/__fixture_effect") as effect:
@@ -53,7 +65,9 @@ async def test_protected_registration_requires_mfa_and_counts_effects() -> None:
             response = await context.request.get(origin + "/__fixture_effects")
             assert await response.json() == {"registration_submissions": 1}
             await page.get_by_role("link", name="Open registration guide").click()
-            await expect(page.get_by_role("heading", name="Registration guide")).to_be_visible()
+            await expect(page.get_by_role(
+                "heading", name="Account settings" if variant == "bad" else "Registration guide",
+            )).to_be_visible()
             await expect(page.locator("#identity")).to_have_text("Signed in as user")
             await browser.close()
     finally:

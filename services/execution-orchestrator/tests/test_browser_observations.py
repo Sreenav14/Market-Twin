@@ -14,7 +14,7 @@ from markettwin_execution_orchestrator.browser.session import (
 
 
 @pytest.mark.asyncio
-async def test_observation_contains_viewport_metrics() -> None:
+async def test_observation_contains_viewport_metrics(tmp_path) -> None:
     """Persona observations should describe the visible page position."""
 
     body = MagicMock()
@@ -56,7 +56,10 @@ async def test_observation_contains_viewport_metrics() -> None:
         SimpleNamespace(
             page=page,
             timeout_ms=30_000,
-            capture_enabled=False,
+            capture_enabled=True,
+            control_mode="agent",
+            authenticated_session=False,
+            artifact_directory=tmp_path,
             action_number=4,
             context=SimpleNamespace(pages=[page]),
             event_buffer=SimpleNamespace(

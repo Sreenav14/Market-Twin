@@ -42,6 +42,7 @@ from markettwin_execution_orchestrator.workflow.test_case_planner import (
     select_feature_cases,
     validate_feature_plan,
 )
+from markettwin_execution_orchestrator.workflow.testing_depth import feature_case_limit
 
 if TYPE_CHECKING:
     from markettwin_execution_orchestrator.workflow.run_executor import MarketTwinRunRequest
@@ -165,7 +166,7 @@ def coverage_summary(
     return {
         "schema_version": 1,
         "planned": len(plan.cases) + len(plan.skipped),
-        "executed": len(results),
+        "executed": sum(item.execution_status != "skipped" for item in results),
         "covered": sum(bool(item.assertion_results) for item in results),
         "passed": sum(item.verdict == "satisfied" for item in results),
         "failed_assertions": sum(
@@ -175,10 +176,13 @@ def coverage_summary(
         ),
         "blocked": sum(item.execution_status == "policy_blocked" for item in results),
         "inconclusive": sum(
-            item.verdict == "unverified" and item.execution_status != "policy_blocked"
+            item.verdict == "unverified"
+            and item.execution_status not in {"policy_blocked", "skipped"}
             for item in results
         ),
-        "not_run": len(plan.skipped) + len(plan.cases) - len(results),
+        "not_run": len(plan.skipped) + len(plan.cases) - len(results)
+            + sum(item.execution_status == "skipped" for item in results),
+        "human_assistance_skipped": sum(item.execution_status == "skipped" for item in results),
         "missing_case_ids": [case.case_id for case in plan.cases if case.case_id not in ids],
         "unknown_requirements": list(plan.scope.unknown_requirements),
         "coverage_gaps": list(plan.coverage_gaps),
@@ -206,7 +210,9 @@ async def execute_deep_feature_run(
     if request.fixture_truth and request.network_policy != "local_development":
         raise ValueError("Fixture truth requires an explicit local development request.")
     await freeze_authorized_scope(session, request.run_id, scope)
-    budget = PlanBudget.model_validate(request.feature_budget or {})
+    budget_values = dict(request.feature_budget or {})
+    budget_values.setdefault("max_cases", feature_case_limit(request.testing_depth))
+    budget = PlanBudget.model_validate(budget_values)
     planning = DeepFeaturePlanningRequest(
         test_run_id=request.run_id,
         scope=scope,
@@ -262,12 +268,11 @@ async def execute_deep_feature_run(
             validate_feature_plan(plan, planning)
             await persist_test_plan(session=session, request=planning, plan=plan)
         else:
-            if request.auth_verification is not None:
+            if request.auth_verification is not None or request.runtime_human_assistance:
                 from markettwin_execution_orchestrator.workflow.auth_bootstrap import (
                     authenticated_discovery,
                 )
 
-                assert auth_session_scope is not None
                 page_context = await authenticated_discovery(
                     request=request, controller=controller, session=session,
                     auth_scope=auth_session_scope,
@@ -350,6 +355,9 @@ async def execute_deep_feature_run(
                     start_url=scope.starting_url,
                     allowed_origins=request.allowed_origins,
                     network_policy=request.network_policy,
+                    runtime_human_assistance=request.runtime_human_assistance,
+                    runtime_target_id=UUID(str(request.target_snapshot["target_id"]))
+                        if request.runtime_human_assistance else None,
                     max_duration_seconds=max(
                         1, min(int(remaining), request.max_duration_seconds_per_journey)
                     ),
@@ -360,6 +368,7 @@ async def execute_deep_feature_run(
                 controller=controller,
                 session=session,
                 auth_verification=request.auth_verification,
+                auth_mode=request.auth_mode,
                 auth_session_scope=auth_session_scope,
                 reuse_auth_session=bool(results) or (
                     request.auth_verification is not None and request.feature_plan is None
@@ -405,8 +414,13 @@ async def execute_deep_feature_run(
                 execution_id=None,
                 payload=coverage if event_type == "test_run.coverage" else {
                     **coverage, "mode": "deep_feature_v1", "journey_count": len(results),
-                    "completed_count": sum(item.execution_status == "completed" for item in results),
-                    "failed_count": sum(item.execution_status != "completed" for item in results),
+                    "completed_count": sum(
+                        item.execution_status == "completed" for item in results
+                    ),
+                    "failed_count": sum(
+                        item.execution_status not in {"completed", "skipped"} for item in results
+                    ),
+                    "skipped_count": sum(item.execution_status == "skipped" for item in results),
                 },
             )
         await states.mark_completed(test_run_id=request.run_id)

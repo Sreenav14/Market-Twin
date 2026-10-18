@@ -10,9 +10,11 @@ from markettwin_database.models import (
     PersonaJourney,
     Report,
     RunEvent,
+    TestRun,
 )
 from markettwin_shared.deep_testing import CaseExecutionResult
 from markettwin_shared.feature_plan import DeepFeaturePlan
+from markettwin_shared.run_failure import public_failure_details
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +37,18 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
         .limit(1)
     )
     if plan_event is None:
-        return {"schema_version": 1, "available": False, "coverage": None, "cases": []}
+        result: dict[str, object] = {
+            "schema_version": 1, "available": False, "coverage": None, "cases": [],
+        }
+        run = await session.get(TestRun, run_id)
+        if run is not None and run.status == "failed":
+            event = await session.scalar(
+                select(RunEvent).where(
+                    RunEvent.test_run_id == run_id, RunEvent.event_type == "run.failed",
+                ).order_by(RunEvent.id.desc()).limit(1)
+            )
+            result["failure"] = public_failure_details(None if event is None else event.payload)
+        return result
     plan = DeepFeaturePlan.model_validate(plan_event.payload)
     report = await session.scalar(
         select(Report)
@@ -150,8 +163,10 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
                 "kind": case.kind,
                 "verdict": final.get(
                     "verdict",
-                    "awaiting_verification" if active or observed else "not_run",
+                    "not_run" if observed is not None and observed.execution_status == "skipped"
+                    else "awaiting_verification" if active or observed else "not_run",
                 ),
+                "reason": final.get("reason", observed.blocker if observed else None),
                 "recorded_verdict": None if final else (observed.verdict if observed else None),
                 "steps": steps,
                 "execution_status": final.get(

@@ -155,6 +155,7 @@ class JourneyResponse(BaseModel):
     execution_id: UUID | None
     attempt_number: int | None
     execution_status: str | None
+    runtime_name: str | None = None
     outcome: str | None
     started_at: datetime | None
     completed_at: datetime | None
@@ -199,22 +200,35 @@ def build_run_flow(
     collected: bool,
     report_status: str | None,
     execution_mode: str = "legacy_persona",
+    plan_recorded: bool | None = None,
 ) -> dict[str, object]:
     """Build a read-only map from saved planning, execution and evaluation records."""
-    nodes = [
+    discovery = [journey for journey in journeys if (
+        journey.get("runtime_name") in {"human_auth_bootstrap_v1", "browser_discovery_v1"}
+        or journey.get("ordinal") == 10_000
+    )]
+    cases = [journey for journey in journeys if journey not in discovery]
+    has_plan = bool(cases) if plan_recorded is None else plan_recorded
+    nodes = [{
+        "id": f"discovery:{journey['id']}", "kind": "discovery", "label": "Browser discovery",
+        "status": "awaiting_human"
+        if run_status == "awaiting_human" and journey["execution_status"] == "running"
+        else str(journey["execution_status"] or "not_started"),
+    } for journey in discovery]
+    nodes.extend([
         {
             "id": "meta",
             "kind": "meta",
             "label": "Feature plan" if execution_mode == "deep_feature_v1" else "Meta Agent",
             "status": "completed"
-            if journeys
+            if has_plan
             else "running"
             if run_status == "planning"
             else "failed"
-            if run_status == "failed"
+            if run_status == "failed" and not discovery
             else "not_started",
         }
-    ]
+    ])
     nodes.extend(
         {
             "id": f"journey:{journey['id']}",
@@ -222,7 +236,7 @@ def build_run_flow(
             "label": f"{journey['persona_name']} · {journey['mission_title']}",
             "status": str(journey["execution_status"] or "not_started"),
         }
-        for journey in journeys
+        for journey in cases
     )
     nodes.extend(
         [
@@ -290,6 +304,12 @@ async def get_test_run_flow(test_run_id: UUID, request: Request) -> dict[str, ob
             )
             .limit(1)
         )
+        plan_recorded = await session.scalar(
+            select(RunEvent.id).where(
+                RunEvent.test_run_id == test_run_id,
+                RunEvent.event_type == "test_plan.created",
+            ).limit(1)
+        )
         report_status = await session.scalar(
             select(Report.status)
             .where(
@@ -304,6 +324,8 @@ async def get_test_run_flow(test_run_id: UUID, request: Request) -> dict[str, ob
         collected=collected is not None,
         report_status=report_status,
         execution_mode=str(run.configuration_snapshot.get("execution_mode", "legacy_persona")),
+        plan_recorded=(plan_recorded is not None)
+        if run.configuration_snapshot.get("execution_mode") == "deep_feature_v1" else None,
     )
 
 

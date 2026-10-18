@@ -17,7 +17,24 @@ CaseKind = Literal[
     "exploratory",
     "business_rule",
 ]
-Oracle = Literal["visible_text", "visible", "enabled", "checked", "value", "url", "title", "count"]
+Oracle = Literal[
+    "visible_text", "visible", "enabled", "checked", "value", "url", "url_path_v1", "title", "count"
+]
+URL_PATH_MISMATCH = "different origin/path"
+
+
+def normalized_visible_text(value: str) -> str:
+    """Rendered whitespace equivalence, without changing words or punctuation."""
+    return " ".join(value.split())
+
+
+def require_public_url_path(value: str) -> None:
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"} or not parsed.hostname
+        or parsed.username or parsed.password or parsed.query or parsed.fragment
+    ):
+        raise ValueError("Path oracle requires an HTTP(S) origin/path without secrets.")
 
 
 class FrozenContract(BaseModel):
@@ -107,7 +124,7 @@ class ExpectedAssertion(FrozenContract):
 
     @model_validator(mode="after")
     def observable_oracle(self) -> Self:
-        if (self.oracle in {"url", "title"}) != (self.target is None):
+        if (self.oracle in {"url", "url_path_v1", "title"}) != (self.target is None):
             raise ValueError("Element oracles require a target; page oracles do not.")
         if self.oracle in {"visible", "enabled", "checked"}:
             if type(self.expected_value) is not bool:
@@ -117,6 +134,8 @@ class ExpectedAssertion(FrozenContract):
                 raise ValueError("Count expectations must be nonnegative integers.")
         elif not isinstance(self.expected_value, str) or len(self.expected_value) > 500:
             raise ValueError("Text expectations must be bounded strings.")
+        if self.oracle == "url_path_v1":
+            require_public_url_path(str(self.expected_value))
         if self.origin != "inferred" and not self.requirement_refs:
             raise ValueError("Grounded assertions require source references.")
         return self

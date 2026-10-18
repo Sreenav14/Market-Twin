@@ -22,7 +22,10 @@ def make_repository(*scalars: object) -> tuple[HumanActionLifecycleRepository, M
 
 
 @pytest.mark.asyncio
-async def test_create_login_request_persists_pending_and_fences_database_browser() -> None:
+@pytest.mark.parametrize("recovery", [False, True])
+async def test_create_login_request_persists_pending_and_fences_database_browser(
+    recovery: bool,
+) -> None:
     execution_id, browser_id, run_id = uuid4(), uuid4(), uuid4()
     browser = BrowserSession(
         id=browser_id,
@@ -38,14 +41,15 @@ async def test_create_login_request_persists_pending_and_fences_database_browser
         execution_id=execution_id,
         browser_session_id=browser_id,
         expires_at=datetime.now(UTC) + timedelta(minutes=3),
+        **({"assistance_reason": "absent_scope"} if recovery else {}),
     )
 
     request = session.add.call_args.args[0]
     assert isinstance(request, HumanActionRequest)
     assert request.id == request_id
-    assert request.request_type == "login"
+    assert request.request_type == ("other" if recovery else "login")
     assert request.status == "pending"
-    assert request.idempotency_key == "auth-preflight-v1"
+    assert request.idempotency_key == ("case-recovery-v1:0" if recovery else "auth-preflight-v1")
     assert browser.control_mode == "human_pending"
     session.flush.assert_awaited_once()
 

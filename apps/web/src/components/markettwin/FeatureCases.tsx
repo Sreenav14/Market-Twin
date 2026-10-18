@@ -17,6 +17,7 @@ interface FeatureCase {
 }
 interface CaseResults {
   available: boolean; evaluation_pending?: boolean;
+  failure?: { code: string; message: string };
   coverage: Record<string, number> | null; cases: FeatureCase[];
 }
 
@@ -39,10 +40,10 @@ function AuthenticatedCoverage({ runId, userId }: { runId: string; userId: strin
   if (!query.data) return query.isError ? <p>Human assistance summary is unavailable.</p> : null;
   const summary = query.data;
   return <details className="authenticated-coverage" aria-label="Authenticated coverage">
-    <summary><strong>Authentication and human contribution</strong><span>{summary.human_requests?.completed ?? 0} verified handoffs · {summary.reused_auth_cases ?? 0} reused cases · {summary.action_approvals?.consumed ?? 0} consumed approvals</span></summary>
+    <summary><strong>Authentication and human contribution</strong><span>{summary.human_requests?.completed ?? 0} completed handoffs · {summary.reused_auth_cases ?? 0} reused cases · {summary.action_approvals?.consumed ?? 0} consumed approvals</span></summary>
     <p>{summary.executor_mode === "deterministic_case_steps" ? "Deterministic case execution" : "Agent journey execution"}.
       Human login and approval decisions are recorded separately from agent test steps.</p>
-    <p>{summary.human_requests?.completed ?? 0} verified human handoffs · {summary.reused_auth_cases ?? 0} cases with reused authentication · {summary.action_approvals?.consumed ?? 0} consumed action approvals.</p>
+    <p>{summary.human_requests?.completed ?? 0} completed human handoffs · {summary.reused_auth_cases ?? 0} cases with reused authentication · {summary.action_approvals?.consumed ?? 0} consumed action approvals.</p>
     {summary.role_coverage?.length ? summary.role_coverage.map((row) => <p key={row.role}>
       Role {row.role}: {row.authenticated} authenticated · {row.executed} recorded cases · {row.passed} recorded passes · {row.blocked} blocked · {row.inconclusive} inconclusive · {row.not_run} not run.
     </p>) : <p>No role has been verified for a protected feature case.</p>}
@@ -58,7 +59,7 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
   const query = useQuery({
     queryKey: ["feature-cases", userId, runId],
     queryFn: ({ signal }) => request<CaseResults>(`/api/v1/test-runs/${runId}/test-cases`, { signal }),
-    refetchInterval: (state) => !state.state.data?.available || state.state.data?.evaluation_pending ? 5000 : false,
+    refetchInterval: (state) => state.state.data?.failure ? false : !state.state.data?.available || state.state.data?.evaluation_pending ? 5000 : false,
   });
   if (query.isPending) return <LoadingPanel label="Loading feature cases" />;
   if (query.isError) return <ErrorPanel message={query.error.message} />;
@@ -68,22 +69,22 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
     <h2>Feature cases</h2>
     <p>Coverage applies to the planned feature. Inferred expectations do not establish a product defect.</p>
     <AuthenticatedCoverage runId={runId} userId={userId} />
-    {!available ? <p>The feature plan has not been saved yet.</p> : null}
+    {query.data.failure ? <ErrorPanel message={`Feature planning stopped before cases were saved. ${query.data.failure.message}`} /> : !available ? <p>The feature plan has not been saved yet.</p> : null}
     {pending ? <p>Evaluation is pending. Completed verdicts appear after evidence verification.</p> : null}
     {coverage ? <p>{coverage.planned} planned · {coverage.passed} passed · {coverage.failed_assertions} failed assertions · {coverage.blocked} blocked · {coverage.inconclusive} inconclusive · {coverage.not_run} not run</p> : null}
     {cases.length ? <div className="feature-case-workbench">
       <ul className="feature-case-list" aria-label="Feature cases">
         {cases.map((item) => <li key={item.case_id}><button type="button" className="feature-case-choice" aria-pressed={(selected?.case_id ?? "") === item.case_id} onClick={() => setSelectedCaseId(item.case_id)}>
-          <strong>{item.title}</strong><span>{pending ? "Awaiting evaluation" : item.verdict.replaceAll("_", " ")}</span><span className="muted">{item.kind.replaceAll("_", " ")}</span>
+          <strong>{item.title}</strong><span>{item.reason === "human_assistance_skipped" ? "Not tested" : pending ? "Awaiting evaluation" : item.verdict.replaceAll("_", " ")}</span><span className="muted">{item.kind.replaceAll("_", " ")}</span>
           <span className="muted">Assertions: {item.assertions.length} · Sources: {[...new Set(item.assertions.map((assertion) => assertion.origin.replaceAll("_", " ")))].join(", ") || "not recorded"}</span>
         </button></li>)}
       </ul>
       {selected ? <article className="panel feature-case-detail" aria-live="polite">
-      <p className="section-label">{selected.kind.replaceAll("_", " ")} · {pending ? "Evaluation pending" : selected.verdict.replaceAll("_", " ")}</p>
+      <p className="section-label">{selected.kind.replaceAll("_", " ")} · {selected.reason === "human_assistance_skipped" ? "Not tested" : pending ? "Evaluation pending" : selected.verdict.replaceAll("_", " ")}</p>
       <h3>{selected.title}</h3>
-      {pending && selected.recorded_verdict ? <p>Recorded result awaiting verification: {selected.recorded_verdict.replaceAll("_", " ")}. This is not a confirmed defect yet.</p> : null}
+      {pending && selected.recorded_verdict && selected.reason !== "human_assistance_skipped" ? <p>Recorded result awaiting verification: {selected.recorded_verdict.replaceAll("_", " ")}. This is not a confirmed defect yet.</p> : null}
       {selected.verdict === "not_satisfied" ? <p>Next: open the supporting step and compare the screenshot with the expected value.</p> : null}
-      {selected.reason ? <p>{selected.reason.replaceAll("_", " ")}</p> : null}
+      {selected.reason ? <p>{selected.reason === "human_assistance_skipped" ? "Not tested—human assistance skipped." : selected.reason.replaceAll("_", " ")}</p> : null}
       {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}`}>Open recorded steps</Link> : null}
       {selected.assertions.map((assertion) => <section className="feature-assertion" key={assertion.assertion_id}>
         <h4>{assertion.assertion_id.replaceAll("_", " ")} · {assertion.status.replaceAll("_", " ")}</h4>

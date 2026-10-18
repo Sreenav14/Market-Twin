@@ -184,3 +184,14 @@ class TargetAuthorizationRepository:
         await self._session.flush()
 
         return _to_record(authorization)
+    async def request_scope_authorization(
+        self, *, target_id: UUID, user_id: UUID, request_basis: str,
+    ) -> TargetAuthorizationRecord:
+        """Record a scope request without granting execution authority."""
+        authorization = TargetAuthorization(
+            target_id=target_id, created_by_user_id=user_id, status="pending",
+            authorization_basis=request_basis,
+        )
+        self._session.add(authorization)
+        await self._session.flush()
+        return _to_record(authorization)

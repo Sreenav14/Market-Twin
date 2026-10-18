@@ -15,7 +15,7 @@ function FlowStep({ node, connected }: { node: RunFlow["nodes"][number]; connect
   return <li className={connected ? "run-flow-node connected" : "run-flow-node"}>
     <span className="run-flow-node-label">{node.label}</span>
     <StatusBadge status={node.status} />
-    {node.kind === "journey" ? <span className="run-flow-tools">Browser tools · Playwright</span> : null}
+    {["journey", "discovery"].includes(node.kind) ? <span className="run-flow-tools">Browser tools · Playwright</span> : null}
   </li>;
 }
 
@@ -42,7 +42,7 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
             <div><p className="error-text" role="alert">Could not load agent flow: {flow.error.message}</p><button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button></div>
           ) : flow.data ? (
             <>
-              {isFeaturePlan ? <p className="run-flow-caption">Each planned feature case runs once. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
+              {isFeaturePlan ? <p className="run-flow-caption">Discovery prepares the authorized page before planning. Each planned feature case runs once; discovery is not counted as a case. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
               <ol className="run-flow-nodes">
                 {flow.data.nodes.map((node, index) => {
                   const previous = flow.data.nodes[index - 1];

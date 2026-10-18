@@ -12,7 +12,7 @@ from typing import Annotated, Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -67,6 +67,18 @@ class RevokeEnvelope(BaseModel):
     lease_id: UUID | None = None
     browser_session_id: UUID | None = None
     generation: Annotated[int, Field(ge=1)]
+
+
+class ObserveEnvelope(BaseModel):
+    """Exact read-only frame request; carries no input, URL, script or protocol method."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    actor_id: UUID
+    browser_session_id: UUID
+    execution_id: UUID
+    journey_id: UUID
+    generation: Annotated[int, Field(ge=0)]
 
 
 class HITLWorkerService:
@@ -229,9 +241,34 @@ class HITLWorkerService:
                 raise HTTPException(status_code=409, detail="Browser handoff unavailable") from None
             return {"revoked": True}
 
+        async def observe(request: Request) -> Response:
+            envelope = await parse_signed(request, ObserveEnvelope)
+            assert isinstance(envelope, ObserveEnvelope)
+            try:
+                handle = self._registry.handle(
+                    session_id=envelope.browser_session_id,
+                    execution_id=envelope.execution_id,
+                    journey_id=envelope.journey_id,
+                )
+                if not await self._authority.observer_permitted(
+                    envelope.actor_id, handle, envelope.generation,
+                ):
+                    raise ViewerRejectedError("Observation is unavailable.")
+                image = await self._registry.observe(handle, generation=envelope.generation)
+            except Exception:
+                raise HTTPException(
+                    status_code=409, detail="Browser observation unavailable.",
+                ) from None
+            return Response(
+                content=image,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+            )
+
         router.add_api_route("/leases", attach, methods=["POST"])
         router.add_api_route("/leases/renew", renew, methods=["POST"])
         router.add_api_route("/leases/revoke", revoke, methods=["POST"])
+        router.add_api_route("/observe", observe, methods=["POST"])
         return router
 
     async def wait_for_revoke(self, request_id: UUID, timeout_seconds: float) -> None:

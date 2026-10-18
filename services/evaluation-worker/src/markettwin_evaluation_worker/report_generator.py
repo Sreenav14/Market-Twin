@@ -97,7 +97,7 @@ def _build_executive_summary(
         count
         for status, count
         in status_counts.items()
-        if status != "completed"
+        if status not in {"completed", "skipped"}
     )
 
     parts = [
@@ -113,6 +113,11 @@ def _build_executive_summary(
             f"{inconclusive} were inconclusive."
         ),
     ]
+
+    if status_counts["skipped"]:
+        parts.append(
+            f"{status_counts['skipped']} journey(s) not tested: human assistance skipped."
+        )
 
     if non_completed:
         parts.append(

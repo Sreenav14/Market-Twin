@@ -6,6 +6,18 @@ import { FeatureCases } from "./FeatureCases";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it("shows a failed planner reason instead of claiming the plan is still pending", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    available: false, coverage: null, cases: [],
+    failure: { code: "model_not_found", message: "The model provider could not find the configured model or endpoint." },
+  }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <MemoryRouter><FeatureCases runId="run-1" userId="user-1" /></MemoryRouter>
+  </QueryClientProvider>);
+  expect(await screen.findByText(/Feature planning stopped before cases were saved/)).toBeInTheDocument();
+  expect(screen.queryByText("The feature plan has not been saved yet.")).not.toBeInTheDocument();
+});
+
 it("shows expected and observed values with the exact supporting step", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
     available: true, evaluation_pending: false,
@@ -54,4 +66,21 @@ it("drills from the case list into assertion provenance without changing verdict
   expect(screen.getByRole("heading", { name: "Save profile" })).toBeInTheDocument();
   expect(screen.getByText("inconclusive", { exact: true })).toBeInTheDocument();
   expect(screen.getByText("inferred", { exact: true })).toBeInTheDocument();
+});
+
+
+it("shows a human skip as not tested even before evaluation", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    available: true, evaluation_pending: true, coverage: null,
+    cases: [{ case_id: "login", title: "Protected settings", kind: "positive", verdict: "not_run",
+      recorded_verdict: "unverified", reason: "human_assistance_skipped",
+      journey_id: "journey-1", assertions: [] }],
+  }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <MemoryRouter><FeatureCases runId="run-1" userId="user-1" /></MemoryRouter>
+  </QueryClientProvider>);
+  expect(await screen.findByText("Not tested—human assistance skipped.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Protected settings.*Not tested/ })).toBeInTheDocument();
+  expect(screen.queryByText("Awaiting evaluation")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Recorded result awaiting verification/)).not.toBeInTheDocument();
 });

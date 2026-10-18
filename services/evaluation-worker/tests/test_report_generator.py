@@ -143,3 +143,18 @@ def test_clean_run_report_has_no_findings() -> None:
 
     assert "No confirmed product issues" in summary
     assert "does not establish" in summary
+
+
+def test_report_counts_human_skip_separately_from_failed_journeys() -> None:
+    skipped = JourneyResultRecord(
+        journey_id=uuid4(), persona_id=uuid4(), mission_id=uuid4(), execution_id=uuid4(),
+        payload={"status": "skipped", "outcome": None,
+                 "summary": "Not tested—human assistance skipped."},
+    )
+    summary, payload = build_report_payload(
+        test_run_id=uuid4(), journey_results=(skipped, _journey(outcome="passed")), findings=(),
+    )
+    assert "1 journey(s) not tested: human assistance skipped" in summary
+    assert "0 failed" in summary
+    assert "ended before normal completion" not in summary
+    assert payload["journeys"]["status_counts"] == {"completed": 1, "skipped": 1}
