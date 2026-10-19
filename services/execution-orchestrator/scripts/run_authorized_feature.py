@@ -147,7 +147,8 @@ async def run(
             if public_navigation_only:
                 if target.base_url != "https://supermemory.ai/product/":
                     raise ValueError(
-                        "The frozen public checks apply only to the inspected Supermemory product page."
+                        'The frozen public checks apply only to the inspected '
+                        'Supermemory product page.'
                     )
                 scope = default_scope(build_run_request(test_run))
                 cases = []
@@ -224,7 +225,10 @@ async def run(
                                 expected_value=True,
                                 target=SemanticTarget(
                                     role="heading",
-                                    name="Memory that infers, updates and forgets. The engine, in one page.",
+                                    name=(
+                                        'Memory that infers, updates and forgets. The engine, '
+                                        'in one page.'
+                                    ),
                                 ),
                             ),
                         ),

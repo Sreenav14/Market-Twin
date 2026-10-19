@@ -70,7 +70,9 @@ async def test_create_login_request_fails_closed_when_frozen_authorization_is_mi
 
 
 @pytest.mark.asyncio
-async def test_finish_verification_marks_request_and_checkpoint_ready_only_on_verified_role() -> None:
+async def test_finish_verification_marks_request_and_checkpoint_ready_only_on_verified_role() -> (
+    None
+):
     request_id, browser_id = uuid4(), uuid4()
     request = HumanActionRequest(
         id=request_id,

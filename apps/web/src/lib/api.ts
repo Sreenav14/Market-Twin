@@ -176,6 +176,7 @@ export interface KnowledgePreviewIssue {
 export interface KnowledgePreviewResponse {
   source: {
     name: string;
+    original_url?: string | null;
     source_item_count: number;
     processed_item_count: number;
   };
@@ -201,6 +202,8 @@ export interface IngestionSummary {
   issue_count: number;
   processing_status?: "queued" | "processing" | "ready" | "failed";
   processing_error?: string | null;
+  original_source_url?: string | null;
+  processing_stage?: "queued" | "researching" | "generating" | "review" | "approved" | "failed";
   application_ids?: string[];
 }
 
@@ -302,6 +305,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      "X-MarketTwin-Request": "1",
       ...init?.headers,
     },
   });
@@ -349,6 +353,7 @@ async function requestForm<T>(path: string, form: FormData, signal?: AbortSignal
     method: "POST",
     credentials: "include",
     body: form,
+    headers: { "X-MarketTwin-Request": "1" },
     signal,
   });
   return readResponse<T>(response);

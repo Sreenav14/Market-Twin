@@ -179,30 +179,237 @@ async def test_transient_database_lookup_failure_retries_without_committing(
     execute.assert_awaited_once()
 
 
+class _TrackedBeginContext(_BeginContext):
+    def __init__(self, events: list[str], *, fail_commit: bool = False) -> None:
+        self.events = events
+        self.fail_commit = fail_commit
+
+    async def __aexit__(self, *args: object) -> None:
+        if args[0] is not None:
+            self.events.append("database_rollback")
+        elif self.fail_commit:
+            raise OperationalError("COMMIT", {}, RuntimeError("database unavailable"))
+        else:
+            self.events.append("database_commit")
+
+
 @pytest.mark.asyncio
-async def test_workspace_mismatch_is_not_misclassified_as_missing_run(
+async def test_workspace_poison_and_replay_are_receipted_before_ack_then_valid_command_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run_id = uuid4()
-    message = _message(run_id, offset=30)
-    run = SimpleNamespace(
-        id=run_id,
-        workspace_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
-        status="queued",
+    poison_id, valid_id = uuid4(), uuid4()
+    poison, valid = _message(poison_id, offset=30), _message(valid_id, offset=31)
+    events: list[str] = []
+    poison_run = SimpleNamespace(id=poison_id, workspace_id=uuid4(), status="running")
+    valid_run = SimpleNamespace(
+        id=valid_id, workspace_id=UUID("99999999-9999-4999-8999-999999999999"), status="planning"
     )
-    session = SimpleNamespace(
-        begin=Mock(side_effect=lambda: _BeginContext()),
-        get=AsyncMock(return_value=run),
-    )
-    _install_acceptance_repositories(monkeypatch)
-    consumer = _consumer([message])
+    receipt_names: set[tuple[str, str]] = set()
 
+    async def is_processed(**values: object) -> bool:
+        return (str(values["consumer_name"]), str(values["message_id"])) in receipt_names
+
+    async def record_receipt(**values: object) -> bool:
+        receipt_names.add((str(values["consumer_name"]), str(values["message_id"])))
+        events.append("receipt")
+        return True
+
+    async def get_run(_model: type[RunRecord], run_id: UUID) -> object:
+        return poison_run if run_id == poison_id else valid_run
+
+    session = SimpleNamespace(
+        begin=Mock(side_effect=lambda: _TrackedBeginContext(events)),
+        get=AsyncMock(side_effect=get_run),
+    )
+    claim, record = AsyncMock(return_value=True), AsyncMock(side_effect=record_receipt)
+    _install_acceptance_repositories(
+        monkeypatch,
+        is_processed=AsyncMock(side_effect=is_processed),
+        mark_processed=record,
+        claim=claim,
+    )
+    monkeypatch.setattr(worker, "build_run_request", Mock(return_value=object()))
+    execute = AsyncMock()
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    consumer = _consumer([poison, poison, valid])
+    consumer.commit.side_effect = lambda: events.append("kafka_ack")
     with pytest.raises(asyncio.CancelledError):
         await worker.run_worker(
             cast(KafkaConsumer, consumer),
             cast(async_sessionmaker[AsyncSession], lambda: _SessionContext(session)),
             retry_delay_seconds=0,
         )
+    assert events[:5] == ["receipt", "database_commit", "kafka_ack", "database_commit", "kafka_ack"]
+    assert consumer.commit.await_count == 3
+    assert record.await_count == 2
+    assert record.await_args_list[0].kwargs["consumer_name"] == (
+        run_request_handler.EXECUTION_REJECTION_CONSUMER_NAME
+    )
+    assert (
+        record.await_args_list[1].kwargs["consumer_name"]
+        == run_request_handler.EXECUTION_CONSUMER_NAME
+    )
+    claim.assert_awaited_once_with(test_run_id=valid_id)
+    execute.assert_awaited_once()
+    assert session.get.await_args_list.count(((RunRecord, poison_id), {})) == 1
+    assert poison_run.status == "running"
 
-    assert consumer.commit.await_count == 0
-    session.get.assert_awaited_once_with(RunRecord, run_id)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_status", ["completed", "failed", "cancelled"])
+async def test_terminal_cas_failure_is_refreshed_and_receipted_then_next_command_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    terminal_status: str,
+) -> None:
+    terminal_id, valid_id = uuid4(), uuid4()
+    workspace_id = UUID("99999999-9999-4999-8999-999999999999")
+    original = SimpleNamespace(id=terminal_id, workspace_id=workspace_id, status="queued")
+    current = SimpleNamespace(id=terminal_id, workspace_id=workspace_id, status=terminal_status)
+    valid_run = SimpleNamespace(id=valid_id, workspace_id=workspace_id, status="planning")
+
+    async def get_run(_model: type[RunRecord], run_id: UUID, **kwargs: object) -> object:
+        if run_id == valid_id:
+            return valid_run
+        return current if kwargs.get("populate_existing") else original
+
+    session = SimpleNamespace(
+        begin=Mock(side_effect=lambda: _BeginContext()), get=AsyncMock(side_effect=get_run)
+    )
+    record, claim = AsyncMock(return_value=True), AsyncMock(side_effect=[False, True])
+    _install_acceptance_repositories(monkeypatch, mark_processed=record, claim=claim)
+    monkeypatch.setattr(worker, "build_run_request", Mock(return_value=object()))
+    execute = AsyncMock()
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    consumer = _consumer([_message(terminal_id, offset=40), _message(valid_id, offset=41)])
+    with pytest.raises(asyncio.CancelledError):
+        await worker.run_worker(
+            cast(KafkaConsumer, consumer),
+            cast(async_sessionmaker[AsyncSession], lambda: _SessionContext(session)),
+            retry_delay_seconds=0,
+        )
+    session.get.assert_any_await(RunRecord, terminal_id, populate_existing=True)
+    assert record.await_args_list[0].kwargs["consumer_name"] == (
+        run_request_handler.EXECUTION_REJECTION_CONSUMER_NAME
+    )
+    assert consumer.commit.await_count == 2
+    execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["queued", "planning", "running", "awaiting_human"])
+async def test_nonterminal_claim_failure_stays_retryable_without_replay(
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+) -> None:
+    run_id = uuid4()
+    run = SimpleNamespace(
+        id=run_id, workspace_id=UUID("99999999-9999-4999-8999-999999999999"), status=status
+    )
+    session = SimpleNamespace(
+        begin=Mock(side_effect=lambda: _BeginContext()), get=AsyncMock(return_value=run)
+    )
+    record = AsyncMock(return_value=True)
+    _install_acceptance_repositories(
+        monkeypatch, mark_processed=record, claim=AsyncMock(return_value=False)
+    )
+    execute = AsyncMock()
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    consumer = _consumer([_message(run_id, offset=50)])
+    with pytest.raises(asyncio.CancelledError):
+        await worker.run_worker(
+            cast(KafkaConsumer, consumer),
+            cast(async_sessionmaker[AsyncSession], lambda: _SessionContext(session)),
+            retry_delay_seconds=0,
+        )
+    consumer.commit.assert_not_awaited()
+    record.assert_not_awaited()
+    execute.assert_not_awaited()
+    assert run.status == status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["receipt", "commit"])
+async def test_rejection_database_failure_cannot_acknowledge_command(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    run_id = uuid4()
+    events: list[str] = []
+    session = SimpleNamespace(
+        begin=Mock(
+            side_effect=lambda: _TrackedBeginContext(events, fail_commit=failure == "commit")
+        ),
+        get=AsyncMock(
+            return_value=SimpleNamespace(id=run_id, workspace_id=uuid4(), status="queued")
+        ),
+    )
+    record = AsyncMock(
+        return_value=True,
+        side_effect=OperationalError("INSERT", {}, RuntimeError("unavailable"))
+        if failure == "receipt"
+        else None,
+    )
+    claim = AsyncMock(return_value=True)
+    _install_acceptance_repositories(monkeypatch, mark_processed=record, claim=claim)
+    execute = AsyncMock()
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    consumer = _consumer([_message(run_id, offset=60)])
+    with pytest.raises(asyncio.CancelledError):
+        await worker.run_worker(
+            cast(KafkaConsumer, consumer),
+            cast(async_sessionmaker[AsyncSession], lambda: _SessionContext(session)),
+            retry_delay_seconds=0,
+        )
+    consumer.commit.assert_not_awaited()
+    claim.assert_not_awaited()
+    execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_accepted_receipt_with_mismatched_workspace_cannot_fail_active_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_id = uuid4()
+    run = SimpleNamespace(id=run_id, workspace_id=uuid4(), status="running")
+    session = SimpleNamespace(
+        begin=Mock(side_effect=lambda: _BeginContext()),
+        get=AsyncMock(return_value=run),
+        commit=AsyncMock(),
+    )
+
+    async def is_processed(*, consumer_name: str, message_id: str) -> bool:
+        return consumer_name == run_request_handler.EXECUTION_CONSUMER_NAME
+
+    record, claim = AsyncMock(return_value=True), AsyncMock(return_value=True)
+    _install_acceptance_repositories(
+        monkeypatch,
+        is_processed=AsyncMock(side_effect=is_processed),
+        mark_processed=record,
+        claim=claim,
+    )
+    abandon, fail, execute = AsyncMock(), AsyncMock(), AsyncMock()
+    monkeypatch.setattr(worker, "abandon_run_handoffs", abandon)
+    monkeypatch.setattr(
+        worker, "RunStateRepository", Mock(return_value=SimpleNamespace(mark_failed=fail))
+    )
+    monkeypatch.setattr(
+        worker, "RunEventRepository", Mock(return_value=SimpleNamespace(create=AsyncMock()))
+    )
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    consumer = _consumer([_message(run_id, offset=70)])
+    with pytest.raises(asyncio.CancelledError):
+        await worker.run_worker(
+            cast(KafkaConsumer, consumer),
+            cast(async_sessionmaker[AsyncSession], lambda: _SessionContext(session)),
+            retry_delay_seconds=0,
+        )
+    consumer.commit.assert_awaited_once()
+    assert record.await_args is not None
+    assert record.await_args.kwargs["consumer_name"] == (
+        run_request_handler.EXECUTION_REJECTION_CONSUMER_NAME
+    )
+    claim.assert_not_awaited()
+    abandon.assert_not_awaited()
+    fail.assert_not_awaited()
+    execute.assert_not_awaited()
+    assert run.status == "running"

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import textwrap
 import time
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 from markettwin_database.models import AgentExecution, ExecutionStep, PersonaJourney, TestRun
@@ -61,6 +62,7 @@ def origin_url(origin: AllowedOrigin) -> str:
 
 
 def default_scope(request: MarketTwinRunRequest) -> FeatureScope:
+    requirements, omitted = knowledge_requirements(request.knowledge_context)
     return FeatureScope(
         feature_key="selected_feature",
         goal=request.study_brief[:1000],
@@ -72,20 +74,71 @@ def default_scope(request: MarketTwinRunRequest) -> FeatureScope:
             SafeTestValue(key="invalid_email", value="invalid"),
             SafeTestValue(key="empty", value=""),
         ),
-        requirements=tuple(
-            Requirement(
-                requirement_id=f"knowledge_{index}",
-                source="approved_knowledge",
-                source_id=str(item["id"]),
-                text=json.dumps(item.get("application_knowledge", item.get("name", "")))[:1000]
-                or "Approved source",
-            )
-            for index, item in enumerate(request.knowledge_context)
-            if "id" in item
+        requirements=requirements,
+        unknown_requirements=("Undocumented behavior has inferred expectations only.",)
+        + (
+            (f"Requirement budget omitted {omitted} approved knowledge segments.",)
+            if omitted else ()
         ),
-        unknown_requirements=("Undocumented behavior has inferred expectations only.",),
         out_of_scope=("credentials", "payments", "uploads", "destructive actions"),
     )
+
+
+def knowledge_requirements(
+    knowledge: tuple[dict[str, object], ...],
+) -> tuple[tuple[Requirement, ...], int]:
+    """Select sourced prose segments and evidence references within the scope budget."""
+    selected: list[Requirement] = []
+    omitted = 0
+    for item in knowledge:
+        if "id" not in item:
+            continue
+        records: list[tuple[str, dict[str, object]]] = []
+        for kind in ("skills", "application_knowledge", "artifacts"):
+            values = item.get(kind)
+            if isinstance(values, list):
+                for record in cast(list[object], values):
+                    if isinstance(record, dict):
+                        records.append((kind, cast(dict[str, object], record)))
+        if not records:
+            records = [("source", {"name": item.get("name", "Approved source")})]
+        for kind, record in records:
+            evidence = json.dumps(record.get("evidence_ordinals", []), separators=(",", ":"))
+            # A bounded prefix is metadata, never a chopped JSON document.
+            prefix = f"{kind}; evidence_ordinals={evidence}"
+            if len(prefix) > 200:
+                omitted += 1
+                continue
+            for key in ("name", "content", "definition", "steps"):
+                value = record.get(key)
+                if not value:
+                    continue
+                fields = (
+                    cast(dict[str, object], value).items()
+                    if isinstance(value, dict) else ((key, value),)
+                )
+                for field, content in fields:
+                    texts = (
+                        cast(list[object] | tuple[object, ...], content)
+                        if isinstance(content, (list, tuple)) else (content,)
+                    )
+                    for text in texts:
+                        if not isinstance(text, str):
+                            continue
+                        # Keep JSON structure out of prose chunks; references stay on each segment.
+                        for segment in textwrap.wrap(
+                            text, width=750, break_long_words=False, break_on_hyphens=False,
+                        ):
+                            rendered = f"{prefix}; {field}: {segment}"
+                            if len(rendered) > 1000 or len(selected) >= 32:
+                                omitted += 1
+                                continue
+                            selected.append(Requirement(
+                                requirement_id=f"knowledge_{len(selected)}",
+                                source="approved_knowledge", source_id=str(item["id"]),
+                                text=rendered,
+                            ))
+    return tuple(selected), omitted
 
 
 def case_journey(case: TestCaseSpec) -> PersonaJourneySpec:

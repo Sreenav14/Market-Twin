@@ -8,6 +8,7 @@ from markettwin_execution_orchestrator.workflow.deep_run import (
     authorized_scope_snapshot,
     case_journey,
     coverage_summary,
+    knowledge_requirements,
     skip_reason,
 )
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
@@ -19,6 +20,37 @@ from markettwin_execution_orchestrator.workflow.test_case_planner import (
 )
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.deep_testing import AssertionResult, CaseExecutionResult
+
+
+def test_approved_scope_keeps_late_content_skills_and_evidence() -> None:
+    content = "This source establishes the workflow. " * 45 + "Final observable outcome."
+    requirements, omitted = knowledge_requirements(({
+        "id": "source-1",
+        "application_knowledge": [{"content": content, "evidence_ordinals": [7]}],
+        "skills": [{
+            "name": "Checkout", "evidence_ordinals": [9],
+            "definition": {"expected_outcomes": ["Order confirmation is visible"]},
+        }],
+    },))
+    assert omitted == 0
+    assert any("Final observable outcome." in item.text for item in requirements)
+    assert any("Order confirmation is visible" in item.text for item in requirements)
+    assert all(item.source_id == "source-1" for item in requirements)
+    assert all(len(item.text) <= 1000 for item in requirements)
+    assert all("evidence_ordinals=" in item.text for item in requirements)
+
+
+def test_approved_scope_reports_budget_omissions() -> None:
+    requirements, omitted = knowledge_requirements(({
+        "id": "source-1",
+        "application_knowledge": [
+            {"content": f"Requirement {index}", "evidence_ordinals": [index + 1]}
+            for index in range(40)
+        ],
+    },))
+    assert len(requirements) == 32
+    assert omitted == 8
+    assert len({item.requirement_id for item in requirements}) == 32
 
 
 def test_case_bridge_keys_and_assertion_criteria_are_distinct() -> None:

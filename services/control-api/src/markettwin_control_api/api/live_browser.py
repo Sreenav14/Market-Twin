@@ -71,7 +71,8 @@ class LiveBrowserResponse(BaseModel):
 
 def worker_client() -> HitlWorkerClient:
     settings = get_settings()
-    if settings.hitl_internal_secret is None:
+    if (settings.hitl_internal_secret is None
+            or len(settings.hitl_internal_secret.get_secret_value().strip()) < 32):
         raise HTTPException(503, "The supervised browser owner is unavailable.")
     try:
         parsed = urlsplit(settings.hitl_worker_url)

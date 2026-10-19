@@ -70,9 +70,6 @@ async def test_link_permission_checked_before_network(monkeypatch):
         raise HTTPException(403, "Denied")
 
     monkeypatch.setattr(ingestion, "require_ingestion_access", denied)
-    monkeypatch.setattr(
-        ingestion, "research_link", lambda *_: pytest.fail("No network before authorization")
-    )
     with pytest.raises(HTTPException) as error:
         await ingestion.ingest_link(
             SimpleNamespace(),
@@ -89,20 +86,13 @@ async def test_link_reuses_draft_ingestion_and_retains_references(monkeypatch):
         return "user"
 
     async def store(workspace, request, file, name, roles):
-        assert await file.read() == b"SOURCE URL: https://example.com/docs\nObserved instructions"
-        assert file.filename == "example.com-research.txt"
+        assert research.decode_link_marker(await file.read()) == "https://example.com/docs"
+        assert file.content_type == research.LINK_MARKER_TYPE
+        assert file.filename == "example.com-link.txt"
         assert roles == ["product_knowledge"]
         return SimpleNamespace(status="draft", processing_status="queued")
 
     monkeypatch.setattr(ingestion, "require_ingestion_access", allowed)
-    monkeypatch.setattr(
-        ingestion,
-        "research_link",
-        lambda *_: (
-            "example.com-research.txt",
-            b"SOURCE URL: https://example.com/docs\nObserved instructions",
-        ),
-    )
     monkeypatch.setattr(ingestion, "ingest_source", store)
     result = await ingestion.ingest_link(
         SimpleNamespace(),
@@ -112,6 +102,26 @@ async def test_link_reuses_draft_ingestion_and_retains_references(monkeypatch):
         SimpleNamespace(),
     )
     assert result.status == "draft"
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1/", "http://169.254.169.254/", "http://localhost/docs"])
+async def test_private_link_rejected_before_save_or_crawl(monkeypatch, url):
+    async def allowed(*_args, **_kwargs):
+        return "user"
+
+    monkeypatch.setattr(ingestion, "require_ingestion_access", allowed)
+
+    def saved(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("saved")
+
+    monkeypatch.setattr(ingestion, "ingest_source", saved)
+    with pytest.raises(HTTPException) as error:
+        await ingestion.ingest_link(
+            SimpleNamespace(),
+            ingestion.LinkKnowledgeRequest(url=url, name="Docs", roles=["product_knowledge"]),
+            SimpleNamespace(),
+        )
+    assert error.value.status_code == 422
 
 
 def test_browser_renders_javascript_expands_content_and_discovers_deep_pages(monkeypatch):
@@ -169,15 +179,41 @@ def test_asset_budget_never_blocks_later_page_navigation(monkeypatch):
 def test_off_origin_assets_do_not_block_page_text(monkeypatch):
     def page(url, _deadline, **_kwargs):
         if urlsplit(url).netloc != "example.com":
-            time.sleep(5)
-            return url, b"third-party", "application/javascript"
+            pytest.fail("Off-origin assets must not be downloaded")
         scripts = "".join(f'<script src="https://cdn.example/a{i}.js"></script>' for i in range(20))
         html = f"<h1>Visible product</h1><p>Open Settings then choose Profile.</p>{scripts}"
         return url, html.encode(), "text/html"
 
     monkeypatch.setattr(research, "download_page", page)
-    started = time.monotonic()
     _, content = research.research_link("https://example.com/")
-    assert time.monotonic() - started < 12
     assert b"Visible product" in content
     assert b"Browser rendering did not finish" not in content
+
+
+def test_second_page_render_failure_retains_downloaded_html(monkeypatch):
+    from playwright.sync_api import Error as BrowserError
+    from playwright.sync_api import Page
+
+    fetched = []
+
+    def download(url, _deadline, **kwargs):
+        fetched.append(url)
+        html = ('<h1>Home</h1><a href="/second">Second</a>' if url.endswith("/")
+                else '<h1>Second page facts</h1><p>Saved source instructions.</p>')
+        return url, html.encode(), "text/html"
+
+    original = Page.goto
+
+    def goto(page, url, **kwargs):
+        result = original(page, url, **kwargs)
+        if url.endswith("/second"):
+            raise BrowserError("Synthetic failure after HTML download")
+        return result
+
+    monkeypatch.setattr(research, "download_page", download)
+    monkeypatch.setattr(Page, "goto", goto)
+    _, content = research.research_link("https://example.com/")
+    assert fetched == ["https://example.com/", "https://example.com/second"]
+    assert b"SOURCE URL: https://example.com/second" in content
+    assert b"Saved source instructions" in content
+    assert b"This is not browser-rendered text" in content

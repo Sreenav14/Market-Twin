@@ -6,6 +6,7 @@ import socket
 import ssl
 import time
 from collections import deque
+from collections.abc import Callable
 from html import unescape
 from http.client import HTTPConnection
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -18,7 +19,45 @@ MAX_BYTES = 2 * 1024 * 1024
 MAX_SUBRESOURCE_REQUESTS = 1000
 MAX_DISCOVERED = 1000
 MAX_DISCLOSURES = 24
+MAX_CACHE_BYTES = 20 * MAX_BYTES
+MAX_CACHE_ENTRIES = 256
 RESEARCH_SECONDS = 20 * 60
+LINK_MARKER_TYPE = "text/x-markettwin-link"
+LINK_MARKER_HEADER = "MARKETTWIN_PUBLIC_LINK 1"
+
+
+def encode_link_marker(url: str) -> bytes:
+    """Queue payload for a public link. This is not source text for the knowledge model."""
+    return f"{LINK_MARKER_HEADER}\n{url.strip()}\n".encode()
+
+
+def decode_link_marker(body: bytes) -> str | None:
+    text = body.decode("utf-8", "replace")
+    header, _, rest = text.partition("\n")
+    if header.strip() != LINK_MARKER_HEADER:
+        return None
+    url = rest.strip()
+    return url or None
+
+
+def validate_link_target(url: str) -> str:
+    """Reject unsafe targets before any DNS lookup or connection."""
+    url = url.strip()
+    _scheme, host, _port = public_url(url)
+    lowered = host.lower().rstrip(".")
+    if (
+        lowered in {"localhost", "metadata", "metadata.google.internal"}
+        or lowered.endswith(".localhost")
+        or lowered.endswith(".local")
+    ):
+        raise ValueError("Linked sources must resolve only to public internet addresses.")
+    try:
+        address = ipaddress.ip_address(lowered)
+    except ValueError:
+        address = None
+    if address is not None and not address.is_global:
+        raise ValueError("Linked sources must resolve only to public internet addresses.")
+    return url
 
 
 def public_url(url: str) -> tuple[str, str, int]:
@@ -133,7 +172,9 @@ def readable_html_text(body: bytes) -> str:
     return re.sub(r"\s+", " ", unescape(raw)).strip()[:30_000]
 
 
-def research_link(url: str) -> tuple[str, bytes]:
+def research_link(
+    url: str, progress: Callable[[int, int], None] | None = None,
+) -> tuple[str, bytes]:
     """Inspect connected public pages and read-only controls in a real browser."""
     public_url(url)
     deadline = time.monotonic() + RESEARCH_SECONDS
@@ -148,7 +189,29 @@ def research_link(url: str) -> tuple[str, bytes]:
     discovered = {final_url}
     requests = 0
     bytes_read = 0
-    cache = {final_url: (final_url, content, content_type)}
+    cache: dict[str, tuple[str, bytes, str]] = {}
+    cache_bytes = 0
+
+    def cache_key(address: str) -> str:
+        parsed = urlsplit(address)
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, ""))
+
+    def remember(address: str, result: tuple[str, bytes, str]) -> None:
+        nonlocal cache_bytes
+        key = cache_key(address)
+        old = cache.pop(key, None)
+        if old is not None:
+            cache_bytes -= len(old[1])
+        size = len(result[1])
+        if size > MAX_CACHE_BYTES:
+            return
+        while cache and (cache_bytes + size > MAX_CACHE_BYTES
+                         or len(cache) >= MAX_CACHE_ENTRIES):
+            cache_bytes -= len(cache.pop(next(iter(cache)))[1])
+        cache[key] = result
+        cache_bytes += size
+
+    remember(final_url, (final_url, content, content_type))
 
     def route_request(route: Route) -> None:
         nonlocal requests, bytes_read
@@ -171,7 +234,7 @@ def research_link(url: str) -> tuple[str, bytes]:
             return
         requests += 1
         try:
-            result = cache.get(request.url)
+            result = cache.get(cache_key(request.url))
             if result is None:
                 result = download_page(request.url, deadline, assets=True)
             resolved, body, kind = result
@@ -180,6 +243,9 @@ def research_link(url: str) -> tuple[str, bytes]:
             ) is None:
                 route.abort()
                 return
+            remember(request.url, result)
+            if cache_key(resolved) != cache_key(request.url):
+                remember(resolved, result)
             bytes_read += len(body)
             route.fulfill(status=200, body=body, content_type=kind,
                           headers={"access-control-allow-origin": "*"})
@@ -187,7 +253,7 @@ def research_link(url: str) -> tuple[str, bytes]:
             route.abort()
 
     def saved_html_text(address: str) -> str | None:
-        saved = cache.get(address)
+        saved = cache.get(cache_key(address))
         if saved is None:
             return None
         _resolved, body, kind = saved
@@ -196,8 +262,14 @@ def research_link(url: str) -> tuple[str, bytes]:
         text = readable_html_text(body)
         if not text:
             return None
-        notes.append(f"Browser rendering did not finish on {address}; saved its visible HTML text.")
-        return "Saved visible HTML text because browser rendering did not finish.\n\n" + text
+        notes.append(
+            f"Browser rendering did not finish on {address}; "
+            "saved raw HTML text, not rendered text."
+        )
+        return (
+            "Saved raw HTML text because browser rendering did not finish. "
+            "This is not browser-rendered text.\n\n" + text
+        )
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -207,6 +279,17 @@ def research_link(url: str) -> tuple[str, bytes]:
             context.route_web_socket("**/*", lambda socket: socket.close())
             page = context.new_page()
             page.on("dialog", lambda dialog: dialog.dismiss())
+
+            def report() -> None:
+                if progress is None:
+                    return
+                inaccessible = sum(
+                    1 for note in notes
+                    if note.startswith("Could not inspect") or note.startswith("No readable")
+                )
+                progress(len(pages), inaccessible)
+
+            report()
             while queue and len(pages) < MAX_PAGES and time.monotonic() < deadline:
                 candidate = queue.popleft()
                 try:
@@ -269,10 +352,18 @@ def research_link(url: str) -> tuple[str, bytes]:
                         notes.append(
                             f"Could not inspect {candidate}; no knowledge extracted from it."
                         )
+                report()
         finally:
             browser.close()
     if not pages:
-        raise ValueError("No readable public pages were found. Check access or upload a document.")
+        reasons = [
+            note for note in notes
+            if note.startswith("Could not inspect") or note.startswith("No readable")
+        ][:3]
+        detail = "No readable public pages were found. Check access or upload a document."
+        if reasons:
+            detail = f"{detail} {' '.join(reasons)}"
+        raise ValueError(detail[:500])
     if queue:
         notes.append(f"Stopped with {len(queue)} discovered pages pending due to research limits.")
     notes.append("Public read-only inspection; login, submissions, downloads, images and media "

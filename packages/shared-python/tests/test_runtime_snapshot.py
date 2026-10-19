@@ -167,3 +167,24 @@ def test_snapshot_rejects_invalid_versions() -> None:
         assert "agent_version" in str(exc)
     else:
         raise AssertionError("Expected invalid agent_version to raise ValueError.")
+
+
+def test_extended_secret_names_removed_recursively() -> None:
+    from markettwin_shared.runtime_snapshot import sanitize_snapshot_value
+
+    assert sanitize_snapshot_value({"nested": {
+        "aws_secret_access_key": "secret", "DATABASE_URL": "postgres://user:pass@db/name",
+        "private-key": "private", "provider_key": "secret", "model_name": "model",
+    }}) == {"nested": {"model_name": "model"}}
+
+
+def test_semantic_identifier_keys_preserved_while_arbitrary_keys_are_removed() -> None:
+    from markettwin_shared.runtime_snapshot import sanitize_snapshot_value
+
+    assert sanitize_snapshot_value({"metadata": {
+        "journey_key": "journey-1", "mission_key": "mission-1", "persona_key": "persona-1",
+        "aws_secret_access_key": "secret", "private_key": "private",
+        "provider_key": "secret", "api_key": "secret",
+    }}) == {"metadata": {
+        "journey_key": "journey-1", "mission_key": "mission-1", "persona_key": "persona-1",
+    }}

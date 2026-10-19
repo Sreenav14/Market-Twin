@@ -201,6 +201,7 @@ async def test_result_event_shares_final_execution_commit(
         "journey_count": 3,
         "completed_count": 3 if status == JourneyExecutionStatus.COMPLETED else 0,
         "failed_count": 0 if status == JourneyExecutionStatus.COMPLETED else 3,
+        "skipped_count": 0,
         "journey_keys": [journey.journey_key for journey in journeys],
     }
     for index, call in enumerate(session.add.call_args_list[:-1]):

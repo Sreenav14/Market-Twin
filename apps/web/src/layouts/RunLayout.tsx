@@ -227,7 +227,17 @@ export function RunLayout() {
         context={{ ...appContext, run, results, refresh } satisfies RunContext}
       /></HumanAssistanceHost>
       </div>
-      {!location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") ? <RunFlowPanel runId={run.id} userId={appContext.user.id} runStatus={run.status} reportReady={results.status === "ready"} /> : null}
+      {!location.pathname.endsWith("/human-action") &&
+      !location.pathname.endsWith("/activity") &&
+      !location.pathname.endsWith("/report") &&
+      !location.pathname.endsWith("/evidence") ? (
+        <RunFlowPanel
+          runId={run.id}
+          userId={appContext.user.id}
+          runStatus={run.status}
+          reportReady={results.status === "ready"}
+        />
+      ) : null}
       </div>
     </>
   );

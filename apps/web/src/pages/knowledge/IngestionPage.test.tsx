@@ -52,11 +52,51 @@ async function selectSource() {
 }
 
 describe("workspace ingestion", () => {
+  it("switches source tabs with arrows, Home and End without duplicate tab stops", async () => {
+    renderPage();
+    const user = userEvent.setup();
+    const fileTab = await screen.findByRole("tab", { name: "Upload a file" });
+    const linkTab = screen.getByRole("tab", { name: "Research a link" });
+    expect(screen.queryByRole("combobox", { name: "Source type" })).not.toBeInTheDocument();
+    fileTab.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(linkTab).toHaveFocus();
+    expect(linkTab).toHaveAttribute("aria-selected", "true");
+    expect(fileTab).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tabpanel", { name: "Research a link" })).toHaveAttribute("id", linkTab.getAttribute("aria-controls"));
+    await user.tab();
+    expect(screen.getByLabelText("Public source link")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(linkTab).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(fileTab).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: "Upload a file" })).toBeInTheDocument();
+    await user.keyboard("{End}{ArrowRight}");
+    expect(fileTab).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    expect(linkTab).toHaveFocus();
+  });
+
+  it("keeps the original public link distinct from retained research and displays research stage", async () => {
+    renderPage("member", "/knowledge/review/entry", {
+      ...entry, original_source_url: "https://example.com/docs",
+      source_name: "example.com-research.txt", processing_status: "processing",
+      processing_stage: "researching",
+    });
+    expect(await screen.findByRole("link", { name: "Open original public source" }))
+      .toHaveAttribute("href", "https://example.com/docs");
+    expect(await screen.findByRole("link", { name: "Open retained source evidence" }))
+      .toHaveAttribute("href", "https://example.com/source");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Researching public pages");
+    expect(screen.queryByText("Extracting knowledge, artifacts, and testable skills")).not.toBeInTheDocument();
+    expect(screen.getByText("Public Link")).toBeInTheDocument();
+  });
+
   it("submits a public research link and keeps generated knowledge under review", async () => {
     const ingest = vi.spyOn(api, "ingestKnowledgeLink").mockResolvedValue(entry);
     renderPage();
     const user = userEvent.setup();
-    await user.selectOptions(await screen.findByLabelText("Source type"), "link");
+    await user.click(await screen.findByRole("tab", { name: "Research a link" }));
     expect(screen.queryByLabelText("Source file")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
     await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
@@ -66,6 +106,28 @@ describe("workspace ingestion", () => {
     expect(await screen.findByText("A documented feature")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve knowledge" })).toBeDisabled();
   });
+
+  it("opens the processing page as soon as a link is accepted", async () => {
+    const queued: IngestionEntry = {
+      ...entry,
+      processing_status: "queued",
+      knowledge_count: 0,
+      processing_error: "Researching public pages — 0 inspected, 0 inaccessible.",
+    };
+    vi.spyOn(api, "ingestKnowledgeLink").mockResolvedValue(queued);
+    renderPage();
+    vi.mocked(api.getIngestion).mockResolvedValue(queued);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "Research a link" }));
+    await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
+    await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
+    await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
+    await user.click(screen.getByRole("button", { name: "Ingest knowledge" }));
+    expect(await screen.findByRole("progressbar", { name: "Ingestion progress" })).toBeInTheDocument();
+    expect(screen.getByText("Researching public pages — 0 inspected, 0 inaccessible.")).toBeInTheDocument();
+    expect(screen.getByText(/You can leave this page/)).toBeInTheDocument();
+  });
+
   it("uploads a source, navigates to review, and requires review confirmation before approval", async () => {
     const ingest = vi.spyOn(api, "ingestKnowledge").mockResolvedValue(entry);
     const approve = vi.spyOn(api, "approveIngestion").mockResolvedValue({ ...entry, status: "approved" });
@@ -132,7 +194,7 @@ describe("workspace ingestion", () => {
     vi.mocked(api.listIngestion).mockResolvedValue([queued]);
     vi.mocked(api.getIngestion).mockResolvedValue({ ...queued, processing_status: "processing" });
     const user = await selectSource();
-    await waitFor(() => expect(screen.getByRole("progressbar", { name: "Ingestion progress" })).toHaveAttribute("value", "50"));
+    await waitFor(() => expect(screen.getByRole("progressbar", { name: "Ingestion progress" })).not.toHaveAttribute("value"));
     expect(screen.getByText(/You can leave this page/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve knowledge" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Back to review knowledge" }));

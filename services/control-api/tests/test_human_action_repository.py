@@ -405,9 +405,14 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
 
         async def dispatch() -> object:
             async with factory() as session:
-                return await SensitiveActionApproval(session, execution_id=execution_id).dispatch_authorized(
-                    step_id=approval_step.id, intent=intent, current_origin=await origin(),
-                    browser_session_id=browser_id, revalidate_origin=origin,
+                return await SensitiveActionApproval(
+                    session, execution_id=execution_id
+                ).dispatch_authorized(
+                    step_id=approval_step.id,
+                    intent=intent,
+                    current_origin=await origin(),
+                    browser_session_id=browser_id,
+                    revalidate_origin=origin,
                 )
 
         async def pending_general() -> UUID:
@@ -422,7 +427,10 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
                         if row is not None:
                             assert row.browser_session_id == browser_id
                             suspended_run = await session.get(RunModel, run_id)
-                            assert suspended_run is not None and suspended_run.status == "awaiting_human"
+                            assert (
+                                suspended_run is not None
+                                and suspended_run.status == "awaiting_human"
+                            )
                             return row.id
                     await asyncio.sleep(0.01)
 
@@ -865,7 +873,9 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
         await engine.dispose()
 
 
-async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution_id, monkeypatch, tmp_path):
+async def _exercise_viewer_release_lifecycle(
+    factory, user_id, run_id, execution_id, monkeypatch, tmp_path
+):
     """Real PG + signed API/worker + live Playwright + local WebSocket regressions."""
     import json
     import socket
@@ -882,6 +892,7 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
     from markettwin_control_api.config import Settings
     from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient
     from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
+    from markettwin_execution_orchestrator.browser.owner import OwnerLease
     from markettwin_execution_orchestrator.browser.owner_registry import BrowserOwnerRegistry
     from markettwin_execution_orchestrator.browser.owner_service import HITLWorkerService
     from markettwin_shared.auth_verification import AuthVerificationPolicy
@@ -890,11 +901,21 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
     from websockets.asyncio.client import connect
 
     fixture = Path(__file__).parents[2] / "execution-orchestrator/tests/fixtures/hitl_app"
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=str(fixture)))
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=str(fixture))
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     origin = f"http://127.0.0.1:{server.server_port}"
     registry = BrowserOwnerRegistry()
+    detached_events: dict[UUID, asyncio.Event] = {}
+    original_detach = registry.detach
+
+    async def record_detach(lease: OwnerLease) -> None:
+        await original_detach(lease)
+        detached_events[lease.handle.session_id].set()
+
+    monkeypatch.setattr(registry, "detach", record_detach)
     secret = "synthetic-integration-secret-for-local-hitl-only-012345"
     service = HITLWorkerService(session_factory=factory, registry=registry, internal_secret=secret,
         allowed_origins=frozenset({"http://localhost:5173"}),
@@ -907,9 +928,16 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
         transport=httpx.ASGITransport(app=service.app))
     monkeypatch.setattr(human_actions, "_worker_client", lambda: bridge)
     monkeypatch.setattr(human_actions, "get_authenticated_user_id", AsyncMock(return_value=user_id))
-    monkeypatch.setattr(human_actions, "get_database_runtime", lambda _: SimpleNamespace(session_factory=factory))
+    monkeypatch.setattr(
+        human_actions, "get_database_runtime", lambda _: SimpleNamespace(session_factory=factory)
+    )
     monkeypatch.setattr(human_actions, "get_settings", lambda: Settings(app_env="local", web_origin="http://localhost:5173"))
-    request = Request({"type": "http", "headers": [(b"origin", b"http://localhost:5173"), (b"x-markettwin-request", b"1")]})
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"origin", b"http://localhost:5173"), (b"x-markettwin-request", b"1")],
+        }
+    )
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
@@ -918,28 +946,66 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
     url = f"ws://127.0.0.1:{port}/api/v1/hitl-viewer"
     try:
         async with BrowserController(artifact_root=tmp_path / "integration") as controller:
-            for ordinal, scenario in enumerate(("disconnect", "active", "reconnect", "expired", "delivery_retry"), start=10):
+            for ordinal, scenario in enumerate(
+                ("disconnect", "active", "reconnect", "expired", "delivery_retry"), start=10
+            ):
                 journey_id = await _journey(factory, execution_id)
                 scenario_execution_id = uuid4()
                 async with factory.begin() as session:
-                    session.add(AgentExecution(id=scenario_execution_id, journey_id=journey_id,
-                        attempt_number=ordinal, status="running", runtime_name="hitl-integration-regression"))
-                handle = await controller.create_session(execution_id=scenario_execution_id, journey_id=journey_id,
+                    session.add(
+                        AgentExecution(
+                            id=scenario_execution_id,
+                            journey_id=journey_id,
+                            attempt_number=ordinal,
+                            status="running",
+                            runtime_name="hitl-integration-regression",
+                        )
+                    )
+                handle = await controller.create_session(
+                    execution_id=scenario_execution_id,
+                    journey_id=journey_id,
                     allowed_origins=(AllowedOrigin("http", "127.0.0.1", server.server_port),),
-                    network_policy="local_development", authenticated_session=True)
+                    network_policy="local_development",
+                    authenticated_session=True,
+                )
+                detached_events[handle.session_id] = asyncio.Event()
                 registry.register(controller, handle)
-                await controller.navigate(session_id=handle.session_id, url=origin + "/index.html?view=login")
+                await controller.navigate(
+                    session_id=handle.session_id, url=origin + "/index.html?view=login"
+                )
                 live = controller._get_session(session_id=handle.session_id)
                 context = live.context
                 async with factory.begin() as session:
-                    session.add(BrowserSession(id=handle.session_id, execution_id=scenario_execution_id, state="open", control_mode="agent", control_generation=0))
+                    session.add(
+                        BrowserSession(
+                            id=handle.session_id,
+                            execution_id=scenario_execution_id,
+                            state="open",
+                            control_mode="agent",
+                            control_generation=0,
+                        )
+                    )
                     await session.flush()
-                    action = await HumanActionRepository(session).create_request(execution_id=scenario_execution_id,
-                        browser_session_id=handle.session_id, request_type="login", idempotency_key=f"race-{scenario}",
-                        expires_at=datetime.now(UTC) + timedelta(minutes=2))
-                claim = await human_actions.claim_human_action(action.request_id, human_actions.ClaimRequest(), request)
-                lease_body = human_actions.LeaseRequest(lease_id=claim.lease_id, lease_token=claim.lease_token, generation=claim.generation)
-                websocket = await connect(url, origin="http://localhost:5173", additional_headers={"Cookie": "markettwin_session=synthetic-session"})
+                    action = await HumanActionRepository(session).create_request(
+                        execution_id=scenario_execution_id,
+                        browser_session_id=handle.session_id,
+                        request_type="login",
+                        idempotency_key=f"race-{scenario}",
+                        expires_at=datetime.now(UTC) + timedelta(minutes=2),
+                    )
+                claim = await human_actions.claim_human_action(
+                    action.request_id, human_actions.ClaimRequest(), request
+                )
+                lease_body = human_actions.LeaseRequest(
+                    lease_id=claim.lease_id,
+                    lease_token=claim.lease_token,
+                    generation=claim.generation,
+                )
+                websocket = await connect(
+                    url,
+                    origin="http://localhost:5173",
+                    additional_headers={"Cookie": "markettwin_session=synthetic-session"},
+                )
                 await websocket.send(json.dumps({"ticket": claim.viewer_ticket}))
                 assert isinstance(await websocket.recv(), bytes), scenario
                 assert live.control_generation == claim.generation
@@ -948,15 +1014,20 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
                 waiter = asyncio.create_task(service.wait_for_revoke(action.request_id, 5))
                 if scenario != "active":
                     await websocket.close()
-                    async with asyncio.timeout(2):
-                        while handle.session_id in service._gateway._connected:
-                            await asyncio.sleep(0.01)
+                    await asyncio.wait_for(detached_events[handle.session_id].wait(), 2)
+                    assert handle.session_id not in service._gateway._connected
                     assert live.control_generation == claim.generation, scenario
                     assert live.control_mode == "human"
                 if scenario == "reconnect":
-                    refresh = await human_actions.reconnect_human_action(action.request_id, lease_body, request)
+                    refresh = await human_actions.reconnect_human_action(
+                        action.request_id, lease_body, request
+                    )
                     assert refresh.viewer_ticket != claim.viewer_ticket
-                    websocket = await connect(url, origin="http://localhost:5173", additional_headers={"Cookie": "markettwin_session=synthetic-session"})
+                    websocket = await connect(
+                        url,
+                        origin="http://localhost:5173",
+                        additional_headers={"Cookie": "markettwin_session=synthetic-session"},
+                    )
                     await websocket.send(json.dumps({"ticket": refresh.viewer_ticket}))
                     assert isinstance(await websocket.recv(), bytes)
                     await websocket.send(json.dumps({"sequence": 1, "event": "key", "key": "Tab"}))
@@ -969,43 +1040,81 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
                         expired = await session.get(HumanControlLease, claim.lease_id)
                         expired.expires_at = datetime.now(UTC) - timedelta(seconds=1)
                     with pytest.raises(HTTPException):
-                        await human_actions.reconnect_human_action(action.request_id, lease_body, request)
+                        await human_actions.reconnect_human_action(
+                            action.request_id, lease_body, request
+                        )
                     with pytest.raises(HTTPException):
-                        await human_actions.release_human_action(action.request_id, lease_body, request)
+                        await human_actions.release_human_action(
+                            action.request_id, lease_body, request
+                        )
                     assert not waiter.done()
                     async with factory.begin() as session:
                         await HumanActionRepository(session).expire_due()
-                    claim = await human_actions.claim_human_action(action.request_id, human_actions.ClaimRequest(), request)
-                    lease_body = human_actions.LeaseRequest(lease_id=claim.lease_id, lease_token=claim.lease_token, generation=claim.generation)
+                    claim = await human_actions.claim_human_action(
+                        action.request_id, human_actions.ClaimRequest(), request
+                    )
+                    lease_body = human_actions.LeaseRequest(
+                        lease_id=claim.lease_id,
+                        lease_token=claim.lease_token,
+                        generation=claim.generation,
+                    )
                     assert claim.generation == 3
-                notification = {"request_id": str(action.request_id), "lease_id": str(claim.lease_id),
-                    "browser_session_id": str(handle.session_id), "generation": claim.generation + 1}
+                notification = {
+                    "request_id": str(action.request_id),
+                    "lease_id": str(claim.lease_id),
+                    "browser_session_id": str(handle.session_id),
+                    "generation": claim.generation + 1,
+                }
                 with pytest.raises(RuntimeError):
                     await bridge.notify(path="/internal/hitl/leases/revoke", payload=notification)
                 assert not waiter.done()  # uncommitted/forged generation cannot wake verification
                 if scenario == "delivery_retry":
                     notify = bridge.notify
-                    monkeypatch.setattr(bridge, "notify", AsyncMock(side_effect=RuntimeError("unavailable")))
+                    monkeypatch.setattr(
+                        bridge, "notify", AsyncMock(side_effect=RuntimeError("unavailable"))
+                    )
                     with pytest.raises(HTTPException) as error:
-                        await human_actions.release_human_action(action.request_id, lease_body, request)
+                        await human_actions.release_human_action(
+                            action.request_id, lease_body, request
+                        )
                     assert error.value.status_code == 503
                     assert not waiter.done()
                     monkeypatch.setattr(bridge, "notify", notify)
-                result = await human_actions.release_human_action(action.request_id, lease_body, request)
+                result = await human_actions.release_human_action(
+                    action.request_id, lease_body, request
+                )
                 await waiter
                 assert result["generation"] == claim.generation + 1
-                assert live.control_generation == result["generation"] and live.control_mode == "verifying"
+                assert (
+                    live.control_generation == result["generation"]
+                    and live.control_mode == "verifying"
+                )
                 await bridge.notify(path="/internal/hitl/leases/revoke", payload=notification)
                 assert not live.capture_enabled and not live.tracing_active
-                policy = AuthVerificationPolicy(origin=origin, marker_selector="#identity", expected_marker="Signed in as user",
-                    role="user", account_reference="fixture-user")
-                assert await controller.verify_authenticated_role(handle=handle, policy=policy) is not None
+                policy = AuthVerificationPolicy(
+                    origin=origin,
+                    marker_selector="#identity",
+                    expected_marker="Signed in as user",
+                    role="user",
+                    account_reference="fixture-user",
+                )
+                assert (
+                    await controller.verify_authenticated_role(handle=handle, policy=policy)
+                    is not None
+                )
                 async with factory.begin() as session:
-                    await HumanActionRepository(session).finish_verification(request_id=action.request_id,
-                        expected_generation=result["generation"], verified=True)
-                await controller.end_human_control(session_id=handle.session_id, verified=True, safe_to_capture=True)
+                    await HumanActionRepository(session).finish_verification(
+                        request_id=action.request_id,
+                        expected_generation=result["generation"],
+                        verified=True,
+                    )
+                await controller.end_human_control(
+                    session_id=handle.session_id, verified=True, safe_to_capture=True
+                )
                 await bridge.notify(path="/internal/hitl/leases/revoke", payload=notification)
-                assert live.control_mode == "agent"  # late duplicate cannot re-fence a verified browser
+                assert (
+                    live.control_mode == "agent"
+                )  # late duplicate cannot re-fence a verified browser
                 await websocket.close()
                 registry.unregister(handle)
                 await controller.close_session(session_id=handle.session_id)
@@ -1018,4 +1127,6 @@ async def _exercise_viewer_release_lifecycle(factory, user_id, run_id, execution
 
 async def _journey(factory, execution_id):
     async with factory() as session:
-        return await session.scalar(select(AgentExecution.journey_id).where(AgentExecution.id == execution_id))
+        return await session.scalar(
+            select(AgentExecution.journey_id).where(AgentExecution.id == execution_id)
+        )

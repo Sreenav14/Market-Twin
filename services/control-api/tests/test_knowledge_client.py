@@ -12,8 +12,9 @@ from markettwin_shared.knowledge_preview import (
 )
 
 
+@pytest.mark.parametrize("secret", [None, "shared-secret-for-knowledge-worker-123456789"])
 async def test_private_client_sends_multipart_and_validates_result(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, secret: str | None,
 ) -> None:
     result = KnowledgePreviewResponse(
         source=KnowledgePreviewSourceResponse(
@@ -27,6 +28,7 @@ async def test_private_client_sends_multipart_and_validates_result(
     )
 
     def handle(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("authorization") == (f"Bearer {secret}" if secret else None)
         assert request.url.path == "/internal/v1/knowledge/preview"
         assert request.headers["content-type"].startswith("multipart/form-data; boundary=")
         assert b"source bytes" in request.read()
@@ -38,7 +40,9 @@ async def test_private_client_sends_multipart_and_validates_result(
         "AsyncClient",
         lambda **kwargs: async_client(transport=httpx.MockTransport(handle), **kwargs),
     )
-    response = await KnowledgeWorkerClient(Settings(_env_file=None)).preview(
+    response = await KnowledgeWorkerClient(Settings(
+        _env_file=None, knowledge_internal_secret=secret,
+    )).preview(
         filename="source.txt",
         content_type="text/plain",
         stream=BytesIO(b"source bytes"),

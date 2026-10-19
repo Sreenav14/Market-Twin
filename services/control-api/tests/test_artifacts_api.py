@@ -125,11 +125,16 @@ async def test_artifact_from_other_test_run_is_not_signed(
     test_run_repository = SimpleNamespace(
         get_for_user=AsyncMock(
             return_value=SimpleNamespace(
-                test_run_id=test_run_id
+                test_run_id=test_run_id,
+                target_id=uuid4(),
             )
         )
     )
 
+    monkeypatch.setattr(
+        artifacts, "TargetAuthorizationRepository",
+        repository_factory(SimpleNamespace(get_active=AsyncMock(return_value=object()))),
+    )
     artifact_repository = SimpleNamespace(
         get_for_test_run=AsyncMock(return_value=None)
     )
@@ -193,7 +198,8 @@ async def test_authorized_artifact_returns_temporary_url(
     test_run_repository = SimpleNamespace(
         get_for_user=AsyncMock(
             return_value=SimpleNamespace(
-                test_run_id=test_run_id
+                test_run_id=test_run_id,
+                target_id=uuid4(),
             )
         )
     )
@@ -215,6 +221,10 @@ async def test_authorized_artifact_returns_temporary_url(
         sha256="abc123",
     )
 
+    monkeypatch.setattr(
+        artifacts, "TargetAuthorizationRepository",
+        repository_factory(SimpleNamespace(get_active=AsyncMock(return_value=object()))),
+    )
     artifact_repository = SimpleNamespace(
         get_for_test_run=AsyncMock(
             return_value=artifact_record
@@ -286,3 +296,29 @@ async def test_authorized_artifact_returns_temporary_url(
             "action-0001-navigate.png"
         ),
     )
+
+
+async def test_missing_current_target_grant_never_signs_retained_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target_id, run_id, artifact_id, user_id = (uuid4() for _ in range(4))
+    frozen = {"target_id": str(target_id), "authorization_id_at_creation": str(uuid4())}
+    run = SimpleNamespace(test_run_id=run_id, target_id=target_id, target_snapshot=frozen)
+    authorization_repository = SimpleNamespace(get_active=AsyncMock(return_value=None))
+    artifact_factory, signer_factory = Mock(), Mock()
+    monkeypatch.setattr(artifacts, "get_authenticated_user_id", AsyncMock(return_value=user_id))
+    monkeypatch.setattr(artifacts, "get_database_runtime", database_runtime)
+    monkeypatch.setattr(artifacts, "TestRunRepository", repository_factory(
+        SimpleNamespace(get_for_user=AsyncMock(return_value=run)),
+    ))
+    monkeypatch.setattr(artifacts, "TargetAuthorizationRepository",
+                        repository_factory(authorization_repository))
+    monkeypatch.setattr(artifacts, "ArtifactAccessRepository", artifact_factory)
+    monkeypatch.setattr(artifacts, "ArtifactUrlSigner", signer_factory)
+    with pytest.raises(HTTPException) as error:
+        await artifacts.get_artifact_access(run_id, artifact_id, request())
+    assert error.value.status_code == 403
+    authorization_repository.get_active.assert_awaited_once_with(target_id=target_id)
+    artifact_factory.assert_not_called()
+    signer_factory.assert_not_called()
+    assert run.target_snapshot == frozen

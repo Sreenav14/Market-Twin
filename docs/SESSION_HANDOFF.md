@@ -1,26 +1,156 @@
-# Active handoff: incremental live execution implementation (2026-10-18)
+# Active handoff: UI consistency and live-browser controls (2026-10-19)
 
-Knowledge link research fix (2026-10-18): link research shared one 180-request
-budget between page navigations and subresources. Pages after the budget was spent
-were silently recorded as "Could not inspect" (react.dev: 6 pages; docs.python.org:
-9 pages). Budgets now gate subresources only (1000 requests); navigation stays
-bounded by 30 pages, 2 MB per response and the 120 s deadline. Regression test
-`test_asset_budget_never_blocks_later_page_navigation` added; 15 link tests pass.
-Not verified: the full ingest flow with a running knowledge worker on port 8010,
-which was not listening during this session.
+Latest priorities: one palette/font/frame across pages, larger live browser, separate
+website scroll and macOS-style arrow. Root corrected shared workspace gutters/header
+margins; agents unified tokens/report/public/sign-in/journey styling and removed
+custom-property cycles. Report now fills the common content frame. Public opacity
+entrance effects were removed after axe caught unreadable text during transition.
+Chromium route checks pass for seven workspace + three public/sign-in routes at
+1440/390px: 20 rendered views with palette/font/frame/reflow/axe assertions.
+Current captures: `.local/design-consistency/`.
 
-Klaviyo link follow-up: `https://www.klaviyo.com/` downloaded, then browser
-research returned 422 "No readable public pages" after about 40 seconds.
-Third-party scripts were downloaded inside the page-load handler and the
-navigation timed out. Off-origin subresources are now aborted, and saved HTML
-text is kept when rendering does not finish. A direct research of that URL then
-inspected 4 pages in 121 seconds. The running Control API must be restarted
-before the UI uses this change. The form stays on "Researching source…" until that request returns.
-Research limits are now 100 pages or 20 minutes, with the dev proxy and
-knowledge-preview timeout extended to match. Restart the Control API and Vite
-before the next link submission.
+Viewer changes: full-width browser with activity below, actual frame aspect ratio,
+attached wrapper ref + native non-passive wheel listener; no duplicate React wheel
+handler; offline events remain uncaptured. Added compact up/down controls and
+`public/cursors/browser-arrow.svg` with CSS fallback. Existing protected-browser
+labels, 16:10 placeholder and escape prose preserved alongside user toolbar edits.
+Latest focused viewer/HumanAction23passed; Chromium synthetic connection test passed
+width/ratio/cursor, exactly one remote wheel, outer scroll isolation, button scrolling
+and normal outer scroll away from the canvas. Fixture WebSocket must be registered
+before page navigation; development StrictMode requests a fresh reconnect ticket.
+No real browser credentials, target site, or provider used for this verification.
 
-Latest pass (HEAD `b189d96`): reconciled the master spec against source. Replaced
+Other design fixes: report truthfulness/compact reading hierarchy20tests; linked
+journey pagination/history/error recovery4tests; source-tab/viewer keyboard23tests;
+application readiness/create-navigation6tests. Full frontend checkpoint137passed;
+latest viewer follow-up verified separately. Final typecheck/build passed after the
+viewer changes; existing bundle-size warning remains. Owned Vite5199 stopped;
+canonical frontend/services were not restarted.
+See `DESIGN_CRITIQUE_AND_IMPROVEMENTS_2026-10-18.md` for ten ranked issues and remaining
+composer/draft improvements. Preserve concurrent user label/canvas/toolbar edits.
+
+Audit final local checkpoint: API/Knowledge Worker430passed18skips; proxy execution
+463passed3skips + six focused socket tests; video/sourceformat/parser19passed plus
+final video4passed. Video probe/FFmpeg wrappers now bounded and child trees killed
+on timeout/cancellation; real FFmpeg absent so real transcoding remains unverified.
+Full Ruff0 and production-source Pyright0, test/script typing debt remains. Canonical
+local migration applied after verified backup (details below). No service restart.
+Identity/hosting and API spending questions are unanswered; design text was supplied
+instead of an API budget, so paid model calls remain pending. No deploy/commit/push.
+
+# Previous handoff: remaining audit remediation (2026-10-18)
+
+The user requested fixing the remaining audit gaps. Four agents resumed: root
+browser/socket boundary + integration, parser resource limits, typed ingestion
+contract, static debt/CI. Preserve all user UI redesign edits below.
+
+Implemented session-owned `browser/egress.py`: bounded local HTTP/CONNECT proxy
+dials validated numeric IPs; Chromium proxy bypass is disabled for loopback,
+QUIC/nonproxied WebRTC UDP disabled; origin/request/WebSocket policy retained.
+Full execution after integration: 463 passed, three DB opt-in skips. Six focused
+proxy tests pass, including changing DNS, Chromium HTTP/WebSocket and TLS hostname
+validation. No external target/model used.
+
+Document isolation: kill/reap on timeout/cancellation; 60s wall/45s CPU/2GiB memory
+limits on POSIX and Windows Job Objects. Archive/output limits and default two-slot
+admission before multipart added. Video isolation follow-up still being finished.
+MT-022: original public URL persists immediately and survives preview replacement;
+typed durable stage exposed. UI separates website from retained evidence. New-entry
+coverage passed 48 backend + ten UI tests; legacy entries require backfill/resubmit.
+Full Ruff now clean; all six production Pyright source trees clean. Approximately
+1,697 full-project test/script diagnostics remain. CI gates Ruff/source Pyright;
+full typing diagnostics remain nonblocking artifacts. Hosted CI not run.
+
+Canonical local DB upgraded `9e3a24b17c60` -> `a7d8e9201b34` after full verified
+custom-format backup `.local/audit/pre-audit-schema-20261019T015217Z.dump`
+(1,649,941 bytes). No service restarted, no data deletion/downgrade.
+Final combined API/worker/frontend runs are ongoing. Production identity/hosting
+selection was requested asynchronously and has no answer yet. No deploy/commit/push.
+
+# Previous handoff: UI/UX redesign implementation (2026-10-18)
+
+Comprehensive implementation of `MARKETTWIN_COMPLETE_UI_UX_REDESIGN_ALL_PAGES_IMPLEMENTATION_PLAN_2026-10-18.md`
+completed across 100% of application routes. Detailed plan and rationale documented in `.gemini/antigravity-cli/brain/3157089f-2b35-40bb-8af0-42da1e0b97f9/REDESIGN_EXECUTION_PLAN.md`.
+
+Highlights across suites:
+- Design Tokens & Foundation: Added `evidence-ledger.css` with responsive Evidence Ledger theme and WCAG 2.2 AA semantic tokens in `tokens.css`.
+- Results & Report Hub (`RunReportPage.tsx`): Rebuilt with high-impact Executive Verdict Card (`Verified Defect Found` vs `No Verified Defects · Coverage Incomplete`), 3-section partition (`01 / Verified Defect Findings`, `02 / Observations to Verify`, `03 / Execution Reliability`), grouped diagnostic clusters for duplicate timeouts, SVG coverage gauge, and 1-click clipboard summary copy.
+- Journey & Evidence (`JourneyDetailPage.tsx`, `journeys.css`): Upgraded into an interactive 3-part investigative workbench with structured metadata, scannable step timeline, contextual "What/Who/Why" cards, assertion evaluation grid, and screenshot containment.
+- Navigation Shell (`AppShell.tsx`, `RunOverviewPage.tsx`, `RunLayout.tsx`): Ordered primary navigation (Overview -> Applications -> Tests -> Knowledge); updated `RunOverviewPage.tsx` next-action buttons to link to the report when ready; suppressed `RunFlowPanel` on `/report` and `/evidence` in `RunLayout.tsx` for full screen width.
+- Public & Auth Suite (`PublicPages.tsx`, `LoginPage.tsx`, `public.css`, `signin.css`): Modernized Home and How pages with evidence metaphors, step-by-step workflow diagrams, jump links, and inconclusive test explanations; zero CLS login page with auto-focus and accessible authentication.
+- Applications & Targets Suite (`ApplicationsPage.tsx`, `NewApplicationPage.tsx`, `ApplicationOverviewPage.tsx`, `TargetsPage.tsx`, `NewTargetPage.tsx`, `TargetOverviewPage.tsx`, `TargetAuthorizationPage.tsx`, `TargetNetworkPolicyPage.tsx`): High-density applications ledger with concurrent target counts; inline URL validation; contextual tab strip; Targets inventory with Scope Receipts; Target Authorization attestation document with revocation safeguards; Network Policy origin diff panel (added/removed/retained).
+- Knowledge Suite (`IngestionPage.tsx`, `ReviewKnowledgePage.tsx`, `KnowledgeReviewPage.tsx`, `KnowledgeResult.tsx`): Segmented ingestion workspace with link constraints panel; searchable Knowledge Library with active filter chips; decision-first Knowledge Review page with verification checklist, approve/reject controls, and truthful 3-stage ledger; collapsible evidence snippets.
+- Test Operations & Secondary Pages (`RunsPage.tsx`, `RunJourneysPage.tsx`, `RunEvaluationPage.tsx`, `RunPerspectivesPage.tsx`, `RunMissionsPage.tsx`, `ForbiddenPage.tsx`, `NotFoundPage.tsx`, `UnexpectedErrorPage.tsx`): High-density test runs operations ledger with status filtering and dynamic action buttons (`Watch Live`, `Assist Now`, `Review Report`); Journeys page with goal-first grouping and discovery vs planned case partitioning; Evaluation page with criteria-to-evidence audit table; Missions and Perspectives pages with honest hypothetical tester framing and empty state explanations; calm neutral system error cards with safe return navigation.
+
+Verification:
+- `apps/web`: `npm run typecheck` passed (0 errors).
+- `apps/web`: `npm test -- --pool=threads --maxWorkers=1 --run` passed all 110 tests across 26 test files (100% pass rate).
+- `apps/web`: `npm run build` passed (production build completed in 2.59s).
+- All dirty workspace files preserved; no database migrations or external provider calls made.
+
+# Previous handoff: repository audit remediation (2026-10-18)
+
+Latest user authorized fixing the named repository audit with maximum agents.
+Four concurrent slots used; existing queued-link/CAPTCHA dirty source retained.
+Baseline HEAD matches audit SHA `660487b65984226002d1c6df743d5a1cb745cf45`.
+Detailed current disposition: `docs/REPOSITORY_AUDIT_REMEDIATION_2026-10-18.md`.
+
+Code now includes strict approval, durable manifests/crawl ownership, bounded
+cache and paginated dispatch; durable retry/quarantine fields for outbox/evaluation;
+safe input/request observations/log defaults; internal knowledge bearer auth;
+shared browser origin checks; target/grant checks for evidence; execution poison
+command receipts; source-grounded semantic scope; frontend/Compose/CI corrections.
+No user service restarted, canonical database migrated, or provider called.
+
+Migration `a7d8e9201b34` passed head upgrade/downgrade/re-upgrade in generated
+disposable PostgreSQL, with seven opt-in tests and retained message assertions.
+Generated DB removed. Canonical migration remains unapplied: load it before new
+service code. Configure matching `KNOWLEDGE_INTERNAL_SECRET` in nonlocal API/worker;
+canonical HITL env is now `MARKETTWIN_HITL_INTERNAL_SECRET` (legacy API alias kept).
+Browser mutation requests require configured `WEB_ORIGIN` plus custom header;
+updated JSON/multipart client supplies the header. Do not create duplicate workers.
+
+Final verification: combined Control API/Knowledge Worker suites 412 passed,
+18 opt-in skipped, 13 warnings; execution-orchestrator 459 passed, three opt-in
+database skips, 72 warnings; frontend unit suite 109 passed; frontend typecheck
+and production build passed. Disposable PostgreSQL migration round-trip and seven
+opt-in tests passed. The popup expiry fixture now asserts both input and frame
+rejection while its mocked clock is active. Browser cases were covered in composite
+runs, not one full green Playwright invocation. Exact evidence is in
+`docs/REPOSITORY_AUDIT_REMEDIATION_2026-10-18.md`.
+
+Estimated audit scope completion is about 60%. Existing repository static debt is
+not resolved (Ruff 284; Pyright concurrent checkpoint 1,746 including legacy/new
+test typing, with subsequent scoped typing corrections).
+Production browser connection egress, identity/deployment, provider benchmark and
+trace delivery remain outside verified completion. No commit/push authorized.
+
+# Previous handoff: incremental live execution implementation (2026-10-18)
+
+LangSmith check (2026-10-18). `.env` has observability enabled, content capture on, endpoint `https://api.smith.langchain.com/otel/v1/traces`, and project `markettwin-local`. No LangSmith SDK variables; export is OpenTelemetry. A flushed smoke span arrived. Recent agent roots exist as `invocation [markettwin_run_workflow]` (12:30 PM local) and `invocation [markettwin_feature_planning]`. `knowledge.preview` traces from 1:01 PM are newer. Morning OTLP batches timed out and were dropped. The web app has no trace view.
+
+Human browser captcha assets (2026-10-18). `validate_captcha_subresource` allows
+HTTPS widget requests for reCAPTCHA (`www.google.com/recaptcha/`,
+`www.gstatic.com/recaptcha/`, `www.recaptcha.net/recaptcha/`), hCaptcha, and
+Cloudflare Turnstile. Main-frame navigation to those hosts stays blocked, and
+other third parties stay blocked. The route still resolves the hostname before
+continuing. Restart the existing execution worker (do not start a second one)
+before the next human login attempt. Policy tests: `test_browser_policy.py`.
+
+Link ingestion is queued first (2026-10-18). `POST /ingestion/link` now validates
+the public URL and saves a link marker, then returns 202. The review page opens
+immediately. The existing ingestion processor researches the link, stores the
+source-attributed bundle, and only then calls the knowledge worker. A failed
+crawl stays on that entry with the specific error and can be retried. Raw HTML
+kept when rendering does not finish is labeled as raw HTML, not rendered text.
+Restart the Control API before the next link submission. Research still allows
+up to 100 pages or 20 minutes in the background.
+
+Latest audit pass (HEAD `b189d96`, 2026-10-18): full section 19 static and test
+audit. Consolidated register at `.local/audit/findings-register.md`. Test results
+are per-service because root pytest cannot collect; the Playwright suite ran against
+an isolated Vite on port 5199. Nothing fixed; the user has not authorized fixes.
+Earlier pass (HEAD `b189d96`): reconciled the master spec against source. Replaced
 the Perspectives/Missions placeholders with saved-journey views (uncommitted,
 see `apps/web/src/lib/testerWork.ts`). Open items are listed at the top of
 `docs/LIVE_EXECUTION_AUDIT_CHECKPOINT.md`: LangSmith trace verification (needs

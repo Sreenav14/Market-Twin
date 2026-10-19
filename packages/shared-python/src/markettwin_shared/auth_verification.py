@@ -93,7 +93,10 @@ class AuthVerificationPolicy(BaseModel):
         cleaned = value.strip()
         if (
             not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", cleaned)
-            or any(term in cleaned.casefold() for term in ("password", "token", "secret", "credential", "cookie", "bearer"))
+            or any(
+                term in cleaned.casefold()
+                for term in ("password", "token", "secret", "credential", "cookie", "bearer")
+            )
         ):
             raise ValueError("Account reference must be a nonsecret identifier.")
         return cleaned

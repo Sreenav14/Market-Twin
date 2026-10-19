@@ -12,6 +12,8 @@ import pytest
 from markettwin_control_api.config import get_settings
 from sqlalchemy.engine import make_url
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
 
 @pytest.mark.skipif(os.environ.get("MARKETTWIN_TEST_DATABASE") != "1", reason="Local DB opt-in")
 async def test_hitl_migration_upgrade_downgrade_and_model_readiness() -> None:
@@ -34,7 +36,7 @@ async def test_hitl_migration_upgrade_downgrade_and_model_readiness() -> None:
                           ("downgrade", "a1b2c3d4e5f6"), ("upgrade", "head"), ("check",)):
             process = await asyncio.create_subprocess_exec(
                 sys.executable, "-m", "alembic", "-c", "database/alembic.ini", *arguments,
-                cwd=Path(__file__).resolve().parents[3], env=environment,
+                cwd=REPOSITORY_ROOT, env=environment,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             )
             output, _ = await asyncio.wait_for(process.communicate(), timeout=30)

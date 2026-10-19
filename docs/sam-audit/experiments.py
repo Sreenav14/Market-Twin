@@ -4,16 +4,16 @@ Run with an existing Python. Databases live in a temporary audit subdirectory.
 These demonstrate mechanisms, not production correctness or throughput.
 """
 import concurrent.futures
-from contextlib import closing
 import json
 import os
-from pathlib import Path
 import platform
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
+from contextlib import closing
+from pathlib import Path
 
 
 def connect(path):

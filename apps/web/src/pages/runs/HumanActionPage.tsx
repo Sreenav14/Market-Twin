@@ -243,31 +243,34 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
 
       {claim.isError ? <p role="alert">Browser control could not be claimed. The request remains available until it expires.</p> : null}
       {activeLease && activeRequestId ? (
-        <article className="study-summary">
-          <UserRound aria-hidden="true" />
-          <div>
-            <h2>Controlling browser</h2>
-            {activeAction ? <RequestContext action={activeAction} runId={run.id} /> : null}
-            <p>{activeAction?.instructions ?? "Complete the requested interaction within approved origins, then choose Done to return control to the agent."}</p>
-            <p className="muted">Lease expires {new Date(activeLease.expires_at).toLocaleTimeString()}.</p>
-            {activeLease.viewer_available && activeLease.viewer_url && activeLease.viewer_ticket ? (
-              <HumanBrowserViewer autoConnect url={activeLease.viewer_url} ticket={activeLease.viewer_ticket}
-                onReconnect={async () => {
-                  const grant = await api.reconnectHumanAction(activeRequestId, activeLease);
-                  const renewed = { ...activeLease, expires_at: grant.expires_at, viewer_url: grant.viewer_url, viewer_ticket: grant.viewer_ticket };
-                  activeLeaseRef.current = renewed;
-                  setActiveLease(renewed);
-                  return grant;
-                }} />
-            ) : (
-              <p role="alert">The browser owner did not provide a secure viewer. Control remains unavailable.</p>
-            )}
-            <button className="primary-button" type="button" disabled={release.isPending || skip.isPending} onClick={() => release.mutate(activeRequestId)}>
-              {release.isError ? "Retry Done—resume agent" : "Done—resume agent"}
-            </button>
-            <button className="secondary-button" type="button" disabled={skip.isPending || release.isPending} onClick={() => skip.mutate(activeRequestId)}>Skip this case/journey</button>
+        <div className="hbv-active-section">
+          <div className="hbv-active-header">
+            <div className="hbv-active-header__info">
+              <h2>Controlling browser</h2>
+              {activeAction ? <RequestContext action={activeAction} runId={run.id} /> : null}
+              <p>{activeAction?.instructions ?? "Complete the requested interaction within approved origins, then choose Done to return control to the agent."}</p>
+              <p className="muted">Lease expires {new Date(activeLease.expires_at).toLocaleTimeString()}.</p>
+            </div>
+            <div className="button-row hbv-active-header__actions">
+              <button className="primary-button" type="button" disabled={release.isPending || skip.isPending} onClick={() => release.mutate(activeRequestId)}>
+                {release.isError ? "Retry Done—resume agent" : "Done—resume agent"}
+              </button>
+              <button className="secondary-button" type="button" disabled={skip.isPending || release.isPending} onClick={() => skip.mutate(activeRequestId)}>Skip this case/journey</button>
+            </div>
           </div>
-        </article>
+          {activeLease.viewer_available && activeLease.viewer_url && activeLease.viewer_ticket ? (
+            <HumanBrowserViewer autoConnect url={activeLease.viewer_url} ticket={activeLease.viewer_ticket}
+              onReconnect={async () => {
+                const grant = await api.reconnectHumanAction(activeRequestId, activeLease);
+                const renewed = { ...activeLease, expires_at: grant.expires_at, viewer_url: grant.viewer_url, viewer_ticket: grant.viewer_ticket };
+                activeLeaseRef.current = renewed;
+                setActiveLease(renewed);
+                return grant;
+              }} />
+          ) : (
+            <p role="alert">The browser owner did not provide a secure viewer. Control remains unavailable.</p>
+          )}
+        </div>
       ) : null}
       {release.isError ? <p role="alert">Resume delivery failed. Retry Done to notify the worker. Agent control remains blocked until the handoff is verified.</p> : null}
 

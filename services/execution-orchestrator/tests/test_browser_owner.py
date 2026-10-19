@@ -15,6 +15,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -65,7 +66,9 @@ async def test_owner_same_context_login_fencing_and_volatile_frames(
             execution_id=uuid4(), journey_id=uuid4(), network_policy="local_development",
             allowed_origins=(AllowedOrigin("http", "127.0.0.1", port),),
         )
-        await controller.navigate(session_id=handle.session_id, url=origin + "/index.html?view=login")
+        await controller.navigate(
+            session_id=handle.session_id, url=origin + "/index.html?view=login"
+        )
         session = cast(Any, controller)._get_session(session_id=handle.session_id)
         context = session.context
         browser_channel = await session.browser.new_browser_cdp_session()
@@ -74,7 +77,9 @@ async def test_owner_same_context_login_fencing_and_volatile_frames(
         working_set_bytes: int | None = None
         if sys.platform == "win32":
             command = "Get-Process -Id " + ",".join(str(pid) for pid in pids)
-            command += " | Measure-Object -Property WorkingSet64 -Sum | Select-Object -ExpandProperty Sum"
+            command += (
+                " | Measure-Object -Property WorkingSet64 -Sum | Select-Object -ExpandProperty Sum"
+            )
             output = await asyncio.to_thread(subprocess.check_output,
                 ["powershell.exe", "-NoProfile", "-Command", command], text=True,
             )
@@ -229,21 +234,24 @@ async def test_popup_remains_in_owned_context_and_expired_input_is_rejected(
         context = session.context
         await controller.begin_human_control(session_id=handle.session_id)
         owner = ControllerBrowserOwner(controller)
-        lease = OwnerLease(handle, uuid4(), uuid4(), 1, datetime.now(UTC) + timedelta(seconds=1))
+        lease = OwnerLease(handle, uuid4(), uuid4(), 1, datetime.now(UTC) + timedelta(minutes=1))
         await owner.attach(lease)
         async with context.expect_page() as popup:
-            await session.page.evaluate("url => window.open(url)", origin + "/index.html?view=login")
+            await session.page.evaluate(
+                "url => window.open(url)", origin + "/index.html?view=login"
+            )
         page = await popup.value
         await page.wait_for_load_state()
         await asyncio.sleep(0.05)
         assert session.page is page
         assert session.context is context
         assert await owner.frame(lease)
-        await asyncio.sleep(max(0, (lease.expires_at - datetime.now(UTC)).total_seconds()) + 0.02)
-        with pytest.raises(ViewerRejectedError):
-            await owner.input(lease, ViewerInput(sequence=1, event="key", key="Tab"))
-        with pytest.raises(ViewerRejectedError):
-            await owner.frame(lease)
+        with patch("markettwin_execution_orchestrator.browser.owner.datetime") as clock:
+            clock.now.return_value = lease.expires_at + timedelta(seconds=1)
+            with pytest.raises(ViewerRejectedError):
+                await owner.input(lease, ViewerInput(sequence=1, event="key", key="Tab"))
+            with pytest.raises(ViewerRejectedError):
+                await owner.frame(lease)
         await owner.revoke(handle, 2)
 
 

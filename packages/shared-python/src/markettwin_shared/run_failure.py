@@ -1,10 +1,17 @@
 """Public run failure diagnostics; never include provider or browser payloads."""
 
 import re
+from typing import cast
 
 MESSAGES = {
-    "execution_failed": "Execution stopped before results were collected. The original error was not retained.",
-    "model_authentication": "The model provider rejected authentication. Check the worker's model credentials.",
+    "execution_failed": (
+        'Execution stopped before results were collected. The '
+        'original error was not retained.'
+    ),
+    "model_authentication": (
+        'The model provider rejected authentication. Check the '
+        "worker's model credentials."
+    ),
     "model_permission": "The model provider denied access to the configured model.",
     "model_not_found": "The model provider could not find the configured model or endpoint.",
     "model_rate_limit": "The model provider rejected the request because of a rate or quota limit.",
@@ -12,7 +19,10 @@ MESSAGES = {
     "model_request": "The model provider rejected the planning request or its parameters.",
     "invalid_plan": "The run configuration or generated feature cases failed validation.",
     "timeout": "Planning or browser discovery exceeded its time limit.",
-    "browser_navigation": "Browser discovery could not navigate within the authorized target policy.",
+    "browser_navigation": (
+        'Browser discovery could not navigate within the '
+        'authorized target policy.'
+    ),
     "interrupted": "The worker was interrupted. The run was stopped to avoid replaying actions.",
 }
 
@@ -97,17 +107,18 @@ def validation_locations(error: BaseException) -> str | None:
     if not isinstance(items, list):
         return None
     parts: list[str] = []
-    for item in items[:8]:
+    for item in cast(list[object], items)[:8]:
         if not isinstance(item, dict):
             continue
-        loc = item.get("loc")
-        kind = item.get("type")
+        fields = cast(dict[object, object], item)
+        loc = fields.get("loc")
+        kind = fields.get("type")
         if not isinstance(loc, tuple) or not isinstance(kind, str):
             continue
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", kind):
             continue
         safe_loc: list[str] = []
-        for part in loc:
+        for part in cast(tuple[object, ...], loc):
             if isinstance(part, int) and 0 <= part <= 128:
                 safe_loc.append(str(part))
             elif isinstance(part, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", part):
@@ -128,16 +139,20 @@ def reviewed_failure_reason(error: BaseException) -> str | None:
     reasons = getattr(error, "safe_reasons", None)
     if (
         isinstance(reasons, tuple)
-        and 1 <= len(reasons) <= 9
-        and all(isinstance(item, str) and _piece_ok(item) for item in reasons)
+        and 1 <= len(cast(tuple[object, ...], reasons)) <= 9
+        and all(
+            isinstance(item, str) and _piece_ok(item)
+            for item in cast(tuple[object, ...], reasons)
+        )
     ):
-        head, *rest = reasons
+        safe_reasons = cast(tuple[str, ...], reasons)
+        head, *rest = safe_reasons
         if head in ALLOWED_REASONS and rest:
             return f"{head} ({'; '.join(rest)})"
         if head in ALLOWED_REASONS:
             return head
-        if all(_LOCATION.fullmatch(item) for item in reasons):
-            return "; ".join(reasons)
+        if all(_LOCATION.fullmatch(item) for item in safe_reasons):
+            return "; ".join(safe_reasons)
     message = str(error).splitlines()[0].strip()
     if message in ALLOWED_REASONS:
         return message
@@ -184,12 +199,12 @@ def failure_event_payload(error: BaseException) -> dict[str, str]:
 def public_failure_details(payload: object) -> dict[str, str]:
     code = "execution_failed"
     if isinstance(payload, dict):
-        raw_code = payload.get("code")
+        raw_code = cast(dict[object, object], payload).get("code")
         if isinstance(raw_code, str):
             code = raw_code
     details = failure_details(code)
     if isinstance(payload, dict):
-        reason = accept_stored_reason(payload.get("reason"))
+        reason = accept_stored_reason(cast(dict[object, object], payload).get("reason"))
         if reason is not None:
             details["message"] = f"{details['message']} {reason}"
     return details

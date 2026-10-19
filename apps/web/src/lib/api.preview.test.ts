@@ -30,11 +30,18 @@ it("sends workspace ingestion as browser-encoded multipart data", async () => {
   const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(path).toBe("/api/v1/workspaces/workspace/ingestion");
   expect(init.credentials).toBe("include");
-  expect(init.headers).toBeUndefined();
+  expect(init.headers).toEqual({ "X-MarketTwin-Request": "1" });
   expect(init.body).toBeInstanceOf(FormData);
   expect((init.body as FormData).get("file")).toBe(file);
   expect((init.body as FormData).get("name")).toBe("Source knowledge");
   expect((init.body as FormData).getAll("roles")).toEqual(["product_knowledge"]);
+});
+
+it("marks JSON mutations for the shared browser origin policy", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal("fetch", fetchMock);
+  await api.logout();
+  expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ "X-MarketTwin-Request": "1" });
 });
 
 it("starts ordinary runs with runtime assistance and no upfront identity policy", async () => {

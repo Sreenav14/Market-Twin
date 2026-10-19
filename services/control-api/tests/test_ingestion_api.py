@@ -19,6 +19,7 @@ from markettwin_database.models.knowledge import (
     ProductBlueprint,
 )
 from markettwin_shared.knowledge_preview import KnowledgePreviewResponse
+from starlette.datastructures import Headers
 
 
 class Context:
@@ -76,10 +77,40 @@ def record(status="draft") -> IngestionRecord:
         ),
         ProductBlueprint(id=blueprint_id, name="Source knowledge"),
         AssetVersion(
-            id=asset_id, original_filename="source.txt", bucket="sources", object_key="source"
+            id=asset_id, original_filename="source.txt", bucket="sources", object_key="source",
+            status="needs_user_review", processed_at=datetime.now(UTC),
         ),
         BlueprintVersionAsset(roles=["product_knowledge"]),
     )
+
+
+@pytest.mark.parametrize("asset_status,content_type,expected", [
+    ("uploaded", ingestion.LINK_MARKER_TYPE, "queued"),
+    ("processing", ingestion.LINK_MARKER_TYPE, "researching"),
+    ("processing", "text/plain", "generating"),
+    ("parsing_failed", ingestion.LINK_MARKER_TYPE, "failed"),
+    ("needs_user_review", "text/plain", "review"),
+])
+def test_original_url_and_stage_follow_durable_state(asset_status, content_type, expected):
+    saved = record()
+    saved.asset.status = asset_status
+    saved.asset.declared_content_type = content_type
+    source = saved.entry.preview["source"]
+    assert isinstance(source, dict)
+    source["original_url"] = "https://example.com/docs"
+    response = ingestion.ingestion_response(saved)
+    assert response.processing_stage == expected
+    assert response.original_source_url == "https://example.com/docs"
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)", "https://user:secret@example.com/", "file:///etc/passwd"])
+def test_original_source_contract_rejects_unsafe_links(url):
+    from pydantic import ValidationError
+
+    payload = preview().model_dump(mode="json")
+    payload["source"]["original_url"] = url
+    with pytest.raises(ValidationError):
+        KnowledgePreviewResponse.model_validate(payload)
 
 
 def patch_database(monkeypatch):
@@ -141,6 +172,28 @@ async def test_upload_persists_a_draft_and_original_bytes(monkeypatch):
     assert len(create.await_args.kwargs["sha256"]) == 64
     assert create.await_args.kwargs["pending"] is True
     assert create.await_args.kwargs["preview"].skills == ()
+
+
+async def test_link_manifest_persists_original_url_before_processing(monkeypatch):
+    patch_database(monkeypatch)
+    saved = record()
+    create = AsyncMock(return_value=saved)
+    put = AsyncMock()
+    monkeypatch.setattr(ingestion, "require_ingestion_access", AsyncMock(return_value=uuid4()))
+    monkeypatch.setattr(ingestion, "validate_link_target", lambda url: url)
+    monkeypatch.setattr(ingestion, "IngestionRepository", lambda _: SimpleNamespace(create=create))
+    monkeypatch.setattr(
+        ingestion, "KnowledgeSourceStorage", lambda _: SimpleNamespace(bucket="sources", put=put)
+    )
+    manifest = ingestion.encode_link_marker("https://example.com/docs")
+    await ingestion.ingest_source(
+        saved.entry.workspace_id, request(),
+        UploadFile(file=BytesIO(manifest), filename="example.com-link.txt",
+                   headers=Headers({"content-type": ingestion.LINK_MARKER_TYPE})),
+        "Product docs", ["product_knowledge"],
+    )
+    assert create.await_args.kwargs["preview"].source.original_url == "https://example.com/docs"
+    assert put.await_args.kwargs["stream"].getvalue() == manifest
 
 
 async def test_source_storage_failure_does_not_persist_a_job(monkeypatch):
@@ -319,10 +372,12 @@ async def test_attach_requires_approval_and_workspace_applications(
         assert failure.value.status_code == 404
 
 
-async def test_processing_content_cannot_be_approved(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("status", ["uploaded", "processing", "parsing_failed", "unsupported",
+                                  "too_large", "included"])
+async def test_processing_content_cannot_be_approved(monkeypatch: pytest.MonkeyPatch, status):
     patch_database(monkeypatch)
     saved = record()
-    saved.asset.status = "processing"
+    saved.asset.status = status
     monkeypatch.setattr(ingestion, "require_ingestion_access", AsyncMock(return_value=uuid4()))
     approve = AsyncMock()
     monkeypatch.setattr(
@@ -333,3 +388,20 @@ async def test_processing_content_cannot_be_approved(monkeypatch: pytest.MonkeyP
         await ingestion.approve_ingestion(saved.entry.workspace_id, saved.entry.id, request())
     assert failure.value.status_code == 409
     approve.assert_not_awaited()
+
+
+@pytest.mark.parametrize("version_status,processed", [("approved", True), ("draft", False)])
+async def test_repository_rejects_invalid_approval_without_mutating(
+    version_status: str, processed: bool,
+) -> None:
+    from markettwin_control_api.knowledge.repository import IngestionRepository
+
+    saved = record(version_status)
+    if not processed:
+        saved.asset.processed_at = None
+    session = SimpleNamespace(flush=AsyncMock())
+    with pytest.raises(ValueError, match="ready for review"):
+        await IngestionRepository(session).approve(saved, uuid4())
+    assert saved.version.status == version_status
+    assert saved.asset.status == "needs_user_review"
+    session.flush.assert_not_awaited()

@@ -4,7 +4,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_control_api.auth.providers.local import LocalAuthProvider
@@ -29,7 +29,14 @@ router = APIRouter(
 class LocalLoginRequest(BaseModel):
     """Local-development login request."""
 
-    email: str
+    email: str = Field(max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def nonempty_email(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Email is required.")
+        return value
 
 
 class CurrentUserResponse(BaseModel):

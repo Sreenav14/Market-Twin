@@ -76,11 +76,18 @@ async def _evaluate_and_generate_report(
     session: AsyncSession,
     visual_storage: VisualArtifactStorage | None = None,
 ) -> EvaluationWorkflowResult:
-    """Create findings and report in one transaction."""
+    """Persist immutable provenance first, then atomically commit findings/report.
+
+    A failure after the provenance commit leaves its deduplicated runtime snapshot
+    available for retry; findings and the final report roll back together.
+    """
 
     try:
         run = await session.get(TestRun, test_run_id)
-        if run is not None and run.configuration_snapshot.get("execution_mode") == "deep_feature_v1":
+        if (
+            run is not None
+            and run.configuration_snapshot.get("execution_mode") == "deep_feature_v1"
+        ):
             from markettwin_evaluation_worker.deep_evaluator import evaluate_deep_run
 
             await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)

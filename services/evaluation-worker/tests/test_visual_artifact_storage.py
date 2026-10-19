@@ -64,6 +64,7 @@ async def test_download_uses_exact_artifact_location(
         region="us-east-1",
         endpoint_url="http://localhost:9000",
         client=client,
+        bucket="markettwin",
     )
 
     path = await storage.download(
@@ -90,3 +91,21 @@ async def test_download_uses_exact_artifact_location(
             str(path),
         )
     ]
+
+@pytest.mark.parametrize("provider,bucket,key", [
+    ("s3", "markettwin", "executions/test/image.png"),
+    ("minio", "private-bucket", "executions/test/image.png"),
+    ("minio", "markettwin", "secrets/config.json"),
+    ("minio", "markettwin", "executions/../config.json"),
+])
+async def test_download_rejects_unconfigured_locations_before_io(
+    tmp_path: Path, provider: str, bucket: str, key: str,
+) -> None:
+    artifact = VisualArtifactRecord(artifact_id=uuid4(), step_id=1, kind="viewport",
+        storage_provider=provider, bucket=bucket, object_key=key, content_type="image/png")
+    client = FakeS3Client()
+    storage = VisualArtifactStorage(region="us-east-1", endpoint_url="http://localhost:9000",
+                                    bucket="markettwin", client=client)
+    with pytest.raises(ValueError):
+        await storage.download(artifact=artifact, directory=tmp_path)
+    assert client.downloads == []

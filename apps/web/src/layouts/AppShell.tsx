@@ -196,15 +196,6 @@ export function AppShell({
         </div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <NavLink to="/overview" aria-label="Overview" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="home" /><span>Overview</span></NavLink>
-
-          <NavLink
-            to="/knowledge/review"
-            aria-label="Knowledge"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="knowledge" />
-            <span>Knowledge</span>
-          </NavLink>
           <NavLink
             to="/applications"
             aria-label="Applications"
@@ -220,6 +211,14 @@ export function AppShell({
           >
             <Icon name="runs" />
             <span>Tests</span>
+          </NavLink>
+          <NavLink
+            to="/knowledge/review"
+            aria-label="Knowledge"
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+          >
+            <Icon name="knowledge" />
+            <span>Knowledge</span>
           </NavLink>
         </nav>
         <nav

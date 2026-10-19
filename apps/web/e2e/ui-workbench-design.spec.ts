@@ -341,8 +341,8 @@ test("populated feature case inspector and exact More routing reflow across the 
     const more = page.locator(".run-more-nav summary");
     await expect(more).toBeVisible();
     await more.click();
-    await page.getByRole("link", { name: "Activity", exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/runs/${runId}/activity$`));
+    await page.getByRole("link", { name: "Human Assistance", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${runId}/human-action$`));
   }
 });
 
@@ -376,7 +376,7 @@ test("100-case workbench stress stays usable at 320px and 1440px with keyboard s
     if (viewport.width === 1440) {
       const coverage = page.locator(".authenticated-coverage");
       const summary = coverage.locator("summary");
-      await expect(summary).toContainText("1 verified handoffs");
+      await expect(summary).toContainText("1 completed handoffs");
       await expect(summary).toContainText("4 reused cases");
       await expect(summary).toContainText("2 consumed approvals");
       await summary.focus();
@@ -413,7 +413,7 @@ test("pending human request and action approval are explicit without opening the
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`/runs/${runId}/overview`);
   await expect(page.getByRole("heading", { name: "A human action is holding this test" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open Human Assistance for this test" })).toHaveAttribute("href", `/runs/${runId}/human-action`);
+  await expect(page.getByRole("link", { name: "Open Human Assistance for this test" })).toHaveAttribute("href", `/runs/${runId}/activity`);
   for (const viewport of viewportMatrix) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto(`/runs/${runId}/human-action`);
@@ -498,6 +498,7 @@ test("new test zones reflow and default legacy creation payload stays unchanged"
     study_brief: "Can a synthetic user save a profile preference?",
     knowledge_entry_ids: [],
     testing_depth: "medium",
+    runtime_human_assistance: true,
   });
 });
 
@@ -511,4 +512,143 @@ test("capture a synthetic empty overview for visual review", async ({ page }, te
   const directory = path.resolve(process.cwd(), "../../.local/ui-redesign/screenshots");
   await mkdir(directory, { recursive: true });
   await page.screenshot({ path: path.join(directory, "workbench-empty-overview.png"), fullPage: true });
+});
+
+for (const width of [1440, 390]) {
+  test(`workspace theme and alignment stay consistent across pages at ${width}px`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "The test explicitly controls both viewport widths.");
+    test.setTimeout(120_000);
+    await installWorkspace(page);
+    await page.setViewportSize({ width, height: 1000 });
+    const directory = path.resolve(process.cwd(), "../../.local/design-consistency");
+    await mkdir(directory, { recursive: true });
+    const routes = [
+      ["overview", "/overview"], ["applications", "/applications"], ["tests", "/runs"],
+      ["knowledge", "/knowledge/review"], ["ingestion", "/ingestion"],
+      ["report", `/runs/${runId}/report`],
+      ["journey", `/runs/${runId}/journeys/${journeyId}`],
+    ];
+    for (const [name, route] of routes) {
+      await page.goto(route);
+      await expect(page.locator("main h1").first()).toBeVisible();
+      await page.evaluate(async () => { await document.fonts.ready; });
+      const metrics = await page.evaluate(() => {
+        const main = document.querySelector("main.page-container")!;
+        const header = main.querySelector(".page-header")!;
+        const style = getComputedStyle(main);
+        return {
+          overflow: document.documentElement.scrollWidth - window.innerWidth,
+          mainLeft: main.getBoundingClientRect().left,
+          headerLeft: header.getBoundingClientRect().left,
+          pageColor: style.getPropertyValue("--page").trim(),
+          fonts: [...main.querySelectorAll("h1,h2,h3")].map((item) => getComputedStyle(item).fontFamily),
+          gutter: Number.parseFloat(style.getPropertyValue("--page-gutter")),
+          topbarPadding: Number.parseFloat(getComputedStyle(document.querySelector(".topbar")!).paddingLeft),
+        };
+      });
+      expect(metrics.overflow, name).toBeLessThanOrEqual(1);
+      expect(Math.abs(metrics.mainLeft - metrics.headerLeft), name).toBeLessThanOrEqual(1);
+      expect(metrics.pageColor, name).toBe("#10171b");
+      expect(metrics.fonts.every((font) => font.includes("Instrument Sans")), name).toBe(true);
+      expect(metrics.topbarPadding, name).toBe(metrics.gutter);
+      if (name === "report") {
+        const reportWidth = await page.locator(".ledger-paper").evaluate((node) => node.getBoundingClientRect().width);
+        const frameWidth = await page.locator("main.page-container").evaluate((node) => node.getBoundingClientRect().width);
+        expect(Math.abs(reportWidth - frameWidth)).toBeLessThanOrEqual(1);
+      }
+      await checkViewportAndA11y(page);
+      await page.screenshot({ path: path.join(directory, `${name}-${width}.png`), fullPage: true });
+    }
+  });
+}
+
+test("public and sign-in pages use the same product palette and type at desktop and phone widths", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "The test explicitly controls viewport widths.");
+  test.setTimeout(120_000);
+  await installWorkspace(page);
+  await page.route("**/api/v1/me", (route) => route.fulfill({
+    status: 401, contentType: "application/json", body: JSON.stringify({ detail: "Synthetic signed-out fixture" }),
+  }));
+  const directory = path.resolve(process.cwd(), "../../.local/design-consistency");
+  await mkdir(directory, { recursive: true });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const [name, route] of [["home", "/"], ["how-it-works", "/how-it-works"], ["sign-in", "/login"]]) {
+      await page.goto(route);
+      await expect(page.locator("h1").first()).toBeVisible();
+      await page.evaluate(async () => { await document.fonts.ready; });
+      const metrics = await page.evaluate(() => {
+        const surface = document.querySelector(".mt-public,.signin-page")!;
+        return {
+          color: getComputedStyle(surface).backgroundColor,
+          body: getComputedStyle(document.body).backgroundColor,
+          font: getComputedStyle(document.querySelector("h1")!).fontFamily,
+        };
+      });
+      expect(metrics.color, name).toBe(metrics.body);
+      expect(metrics.font, name).toContain("Instrument Sans");
+      await checkViewportAndA11y(page);
+      await page.screenshot({ path: path.join(directory, `${name}-${width}.png`), fullPage: true });
+    }
+  }
+});
+
+test("live viewer is full width and scrolls its website without moving the workspace", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "One explicit desktop browser boundary check.");
+  await installWorkspace(page, { runStatus: "awaiting_human" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const image = Buffer.from(await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280; canvas.height = 720;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#ffffff"; context.fillRect(0, 0, 1280, 720);
+    context.fillStyle = "#111111"; context.font = "32px sans-serif";
+    context.fillText("Synthetic live website — scroll input fixture", 40, 70);
+    return canvas.toDataURL("image/png").split(",")[1];
+  }), "base64");
+  const inputs: { event: string; delta?: number }[] = [];
+  await page.routeWebSocket(/\/api\/v1\/hitl-viewer$/, (socket) => {
+    socket.onMessage((message) => {
+      const payload = JSON.parse(String(message));
+      if (payload.ticket) socket.send(image);
+      else inputs.push(payload);
+    });
+  });
+  await page.route(`**/api/v1/human-actions/${humanAction.id}/claim`, (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({
+      request_id: humanAction.id, browser_session_id: humanAction.browser_session_id,
+      lease_id: "ffffffff-ffff-4fff-8fff-ffffffffffff", lease_token: "synthetic-local-only",
+      generation: 1, expires_at: "2099-10-18T12:06:00Z", viewer_available: true,
+      viewer_url: page.url().replace(/^http/, "ws").split("/runs/")[0] + "/api/v1/hitl-viewer",
+      viewer_ticket: "synthetic-local-only-ticket",
+    }),
+  }));
+  await page.route(`**/api/v1/human-actions/${humanAction.id}/viewer`, (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({
+      expires_at: "2099-10-18T12:06:00Z",
+      viewer_url: page.url().replace(/^http/, "ws").split("/runs/")[0] + "/api/v1/hitl-viewer",
+      viewer_ticket: "synthetic-fresh-ticket",
+    }),
+  }));
+  await page.goto(`/runs/${runId}/human-action`);
+  await page.getByRole("button", { name: /Take browser control/ }).click();
+  await expect(page.locator(".hbv-status")).toHaveText(/^Connected\./);
+  await expect(page.getByRole("button", { name: "Scroll live website down" })).toBeEnabled();
+  const canvas = page.getByLabel("Live protected browser");
+  const frame = await canvas.boundingBox();
+  const main = await page.locator("main.page-container").boundingBox();
+  expect(frame!.width).toBeGreaterThan(main!.width * 0.9);
+  expect(Math.abs(frame!.width / frame!.height - 1280 / 720)).toBeLessThan(0.01);
+  expect(await canvas.evaluate((node) => getComputedStyle(node).cursor)).toContain("browser-arrow.svg");
+  expect((await page.request.get("/cursors/browser-arrow.svg")).ok()).toBe(true);
+  await canvas.hover();
+  const before = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 250);
+  await expect.poll(() => inputs.filter((input) => input.event === "scroll").length).toBe(1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
+  await page.getByRole("button", { name: "Scroll live website down" }).click();
+  await expect.poll(() => inputs.filter((input) => input.event === "scroll").length).toBe(2);
+  await page.mouse.move(1430, 500);
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
 });

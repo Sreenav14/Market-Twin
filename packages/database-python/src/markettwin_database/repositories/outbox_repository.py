@@ -1,9 +1,9 @@
 """Persistence for durable transactional-outbox messages."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_database.models import OutboxEvent
@@ -56,7 +56,10 @@ class OutboxRepository:
         statement = (
             select(OutboxEvent)
             .where(
-                OutboxEvent.published_at.is_(None)
+                OutboxEvent.published_at.is_(None),
+                OutboxEvent.quarantined_at.is_(None),
+                or_(OutboxEvent.next_attempt_at.is_(None),
+                    OutboxEvent.next_attempt_at <= datetime.now(UTC)),
             )
             .order_by(OutboxEvent.id)
             .with_for_update(
@@ -93,6 +96,27 @@ class OutboxRepository:
         """Record one failed publication attempt."""
 
         event.attempts += 1
+        # Store a safe classification, never transport exception payloads/credentials.
         event.last_error = error
+        now = datetime.now(UTC)
+        event.next_attempt_at = now + timedelta(
+            seconds=min(3600, 5 * 2 ** min(event.attempts - 1, 10))
+        )
+        if event.attempts >= 8:
+            event.quarantined_at = now
 
+        await self._session.flush()
+
+    async def retry_quarantined(self, event: OutboxEvent) -> None:
+        """Operator recovery after diagnosing a retained, unpublished event.
+
+        Caller must hold the row lock and commit this change. Publication can be
+        duplicated after ambiguous broker timeouts, so consumers must deduplicate.
+        """
+        if event.published_at is not None:
+            raise ValueError("Published events cannot be retried.")
+        event.attempts = 0
+        event.next_attempt_at = None
+        event.quarantined_at = None
+        event.last_error = None
         await self._session.flush()

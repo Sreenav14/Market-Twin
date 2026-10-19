@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_control_api.persistence.models import (
@@ -129,6 +129,10 @@ class TargetAuthorizationRepository:
 
         now = datetime.now(UTC)
 
+        # Caller serializes grants on the target row. Retire retained/expired
+        # grants as well so a later revocation cannot expose an older grant.
+        await self._revoke_retained_grants(target_id=target_id, revoked_at=now)
+
         authorization = TargetAuthorization(
             target_id=target_id,
             created_by_user_id=user_id,
@@ -178,12 +182,24 @@ class TargetAuthorizationRepository:
         if authorization is None:
             return None
 
+        await self._revoke_retained_grants(target_id=target_id, revoked_at=now)
         authorization.status = "revoked"
         authorization.revoked_at = now
 
         await self._session.flush()
 
         return _to_record(authorization)
+
+    async def _revoke_retained_grants(self, *, target_id: UUID, revoked_at: datetime) -> None:
+        """Retain attestations while retiring every grant for this exact target."""
+        await self._session.execute(
+            update(TargetAuthorization).where(
+                TargetAuthorization.target_id == target_id,
+                TargetAuthorization.status == "authorized",
+                TargetAuthorization.revoked_at.is_(None),
+            ).values(status="revoked", revoked_at=revoked_at)
+        )
+
     async def request_scope_authorization(
         self, *, target_id: UUID, user_id: UUID, request_basis: str,
     ) -> TargetAuthorizationRecord:

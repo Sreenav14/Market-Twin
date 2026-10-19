@@ -2,6 +2,34 @@
 
 import os
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel, Field, SecretStr, model_validator
+
+
+class KnowledgeWorkerSettings(BaseModel):
+    app_env: Literal["local", "development", "test", "production"] = "local"
+    knowledge_internal_secret: SecretStr | None = None
+    preview_max_concurrency: int = Field(default=2, ge=1, le=16)
+    preview_timeout_seconds: float = Field(default=600, gt=0, le=1800)
+
+    @model_validator(mode="after")
+    def validate_internal_secret(self) -> "KnowledgeWorkerSettings":
+        secret = self.knowledge_internal_secret
+        if secret is not None and len(secret.get_secret_value().strip()) < 32:
+            raise ValueError("KNOWLEDGE_INTERNAL_SECRET must contain at least 32 characters.")
+        if secret is None and self.app_env not in {"local", "test"}:
+            raise ValueError("KNOWLEDGE_INTERNAL_SECRET is required outside local/test.")
+        return self
+
+    @classmethod
+    def from_env(cls) -> "KnowledgeWorkerSettings":
+        return cls.model_validate({
+            "app_env": os.getenv("APP_ENV", "local"),
+            "knowledge_internal_secret": os.getenv("KNOWLEDGE_INTERNAL_SECRET"),
+            "preview_max_concurrency": os.getenv("KNOWLEDGE_PREVIEW_MAX_CONCURRENCY", "2"),
+            "preview_timeout_seconds": os.getenv("KNOWLEDGE_PREVIEW_TIMEOUT_SECONDS", "600"),
+        })
 
 
 class KnowledgeConfigurationError(ValueError):

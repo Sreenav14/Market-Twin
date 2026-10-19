@@ -42,6 +42,7 @@ test("inspect saved agent YAML and create an edited rerun draft", async ({ page 
     }
     else if (path === "/api/v1/test-runs/source") data = source;
     else if (path === "/api/v1/test-runs/fork") data = draft;
+    else if (path.endsWith("/journeys")) data = [];
     else if (path.endsWith("/flow")) data = { nodes: ["meta", "collector", "evaluation", "report"].map((id) => ({ id, kind: id, label: id, status: "completed" })), edges: [{ source: "meta", target: "collector" }, { source: "collector", target: "evaluation" }, { source: "evaluation", target: "report" }], revision: "fixture", execution_policy: "once_per_journey" };
     else if (path === "/api/v1/health/kafka") data = { status: "connected", outbox_relay_enabled: true };
     else { await route.fulfill({ status: 404, json: { detail: "No results yet." } }); return; }
@@ -51,6 +52,7 @@ test("inspect saved agent YAML and create an edited rerun draft", async ({ page 
   await page.getByRole("button", { name: "Demo application View test agent flows" }).click();
   await page.getByRole("link", { name: /source.*Test/ }).click();
   await expect(page).toHaveURL(/runs\/source\/agents$/);
+  await page.getByText("Advanced agent configuration and recorded diagnostics", { exact: true }).click();
   const editor = page.getByLabel("Prompt YAML");
   if (testInfo.project.name === "chromium") {
     await page.setViewportSize({ width: 1600, height: 1000 });
@@ -104,6 +106,7 @@ test("inspect saved agent YAML and create an edited rerun draft", async ({ page 
   await page.goto("/agents");
   await page.getByRole("button", { name: "Demo application View test agent flows" }).click();
   await page.getByRole("link", { name: /source.*Test/ }).click();
+  await page.getByText("Advanced agent configuration and recorded diagnostics", { exact: true }).click();
   await expect(editor).toHaveValue(edited);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
   const audit = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();

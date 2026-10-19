@@ -57,6 +57,7 @@ class RecordingOwner:
         self.inputs = 0
         self.revoked = 0
         self.detached = 0
+        self.detached_event = asyncio.Event()
 
     async def attach(self, lease: OwnerLease) -> None:
         pass
@@ -75,6 +76,7 @@ class RecordingOwner:
 
     async def detach(self, lease: OwnerLease) -> None:
         self.detached += 1
+        self.detached_event.set()
 
 
 @pytest.fixture
@@ -273,9 +275,8 @@ async def test_disconnect_retains_durable_lease_for_release_and_fresh_ticket(
     ) as websocket:
         await websocket.send(json.dumps({"ticket": ticket}))
         assert await websocket.recv() == b"synthetic-frame"
-    async with asyncio.timeout(2):
-        while lease.handle.session_id in gateway._connected:
-            await asyncio.sleep(0.01)
+    await asyncio.wait_for(owner.detached_event.wait(), 2)
+    assert lease.handle.session_id not in gateway._connected
     assert owner.detached == 1
     assert owner.revoked == 0
     assert gateway._leases[lease.lease_id] == lease

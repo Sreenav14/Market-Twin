@@ -15,10 +15,19 @@ from markettwin_control_api.persistence.repositories.execution_pause_repository 
 @pytest.fixture
 def paused_api(monkeypatch):
     actor, run_id, browser_id = uuid4(), uuid4(), uuid4()
-    pause = SimpleNamespace(id=uuid4(), status="requested", execution_id=uuid4(), journey_id=uuid4(),
-        browser_session_id=browser_id, generation=0, human_request_id=None,
-        created_at=datetime.now(UTC), expires_at=datetime.now(UTC) + timedelta(minutes=5),
-        acknowledged_at=None, completed_at=None)
+    pause = SimpleNamespace(
+        id=uuid4(),
+        status="requested",
+        execution_id=uuid4(),
+        journey_id=uuid4(),
+        browser_session_id=browser_id,
+        generation=0,
+        human_request_id=None,
+        created_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        acknowledged_at=None,
+        completed_at=None,
+    )
     repository = SimpleNamespace(request=AsyncMock(return_value=pause),
                                  resume=AsyncMock(return_value=pause))
 

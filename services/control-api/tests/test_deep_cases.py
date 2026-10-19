@@ -73,8 +73,12 @@ async def test_case_reads_authorize_before_reading_events(monkeypatch, accessibl
     get_run = AsyncMock(return_value=object() if accessible else None)
     view = AsyncMock(return_value={"cases": [{"case_id": "owned"}], "available": True})
     monkeypatch.setattr(deep_cases, "get_authenticated_user_id", authenticate)
-    monkeypatch.setattr(deep_cases, "get_database_runtime", lambda _: SimpleNamespace(session_factory=Context))
-    monkeypatch.setattr(deep_cases, "TestRunRepository", lambda _: SimpleNamespace(get_for_user=get_run))
+    monkeypatch.setattr(
+        deep_cases, "get_database_runtime", lambda _: SimpleNamespace(session_factory=Context)
+    )
+    monkeypatch.setattr(
+        deep_cases, "TestRunRepository", lambda _: SimpleNamespace(get_for_user=get_run)
+    )
     monkeypatch.setattr(deep_cases, "case_view", view)
     if accessible:
         assert (await deep_cases.get_case(run_id, "owned", SimpleNamespace()))["case_id"] == "owned"
@@ -92,7 +96,9 @@ async def test_case_reads_authorize_before_reading_events(monkeypatch, accessibl
 async def test_partial_plan_omits_private_scope_data_and_never_claims_pass() -> None:
     scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
     plan = select_feature_cases(
-        request=DeepFeaturePlanningRequest(test_run_id=uuid4(), scope=scope, allow_fixture_truth=True),
+        request=DeepFeaturePlanningRequest(
+            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True
+        ),
         candidates=fixture_case_candidates(scope),
     )
     session = SimpleNamespace(
@@ -170,9 +176,13 @@ async def test_case_steps_reject_invalid_pages(monkeypatch) -> None:
 
 
 async def test_legacy_run_has_explicit_unavailable_cases() -> None:
-    response = await deep_cases.case_view(SimpleNamespace(
-        scalar=AsyncMock(return_value=None), get=AsyncMock(return_value=SimpleNamespace(status="completed")),
-    ), uuid4())
+    response = await deep_cases.case_view(
+        SimpleNamespace(
+            scalar=AsyncMock(return_value=None),
+            get=AsyncMock(return_value=SimpleNamespace(status="completed")),
+        ),
+        uuid4(),
+    )
     assert response["available"] is False
     assert response["cases"] == []
 

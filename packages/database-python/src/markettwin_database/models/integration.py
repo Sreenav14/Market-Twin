@@ -7,6 +7,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     Identity,
+    Index,
     Integer,
     String,
     Text,
@@ -23,7 +24,11 @@ class OutboxEvent(Base):
     """A message waiting for durable publication."""
 
     __tablename__ = "outbox_events"
-    __table_args__ = {"schema": "integration"}
+    __table_args__ = (
+        Index("ix_outbox_pending_retry", "id", "next_attempt_at",
+              postgresql_where=text("published_at IS NULL AND quarantined_at IS NULL")),
+        {"schema": "integration"},
+    )
 
     id: Mapped[int] = mapped_column(
         BigInteger,
@@ -71,6 +76,9 @@ class OutboxEvent(Base):
         Text,
         nullable=True,
     )
+
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -14,8 +14,11 @@ def test_signer_uses_configured_storage_credentials(monkeypatch) -> None:
     monkeypatch.setattr(module, "Session", factory)
     module.ArtifactUrlSigner(region="us-east-1", endpoint_url="http://localhost:9000",
                             access_key_id="local-test-key", secret_access_key="local-test-secret")
-    factory.assert_called_once_with(aws_access_key_id="local-test-key",
-                                    aws_secret_access_key="local-test-secret", aws_session_token=None)
+    factory.assert_called_once_with(
+        aws_access_key_id="local-test-key",
+        aws_secret_access_key="local-test-secret",
+        aws_session_token=None,
+    )
 
 
 def test_create_download_url_signs_exact_object() -> None:

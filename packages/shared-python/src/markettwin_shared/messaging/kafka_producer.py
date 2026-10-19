@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, cast
 
 from aiokafka import AIOKafkaProducer  # pyright: ignore[reportMissingTypeStubs]
@@ -35,7 +35,7 @@ class KafkaProducerSettings:
 
     sasl_mechanism: KafkaSaslMechanism | None = None
     username: str | None = None
-    password: str | None = None
+    password: str | None = field(default=None, repr=False)
 
     ssl_ca_file: str | None = None
 
@@ -137,6 +137,8 @@ class KafkaProducer:
             return
 
         settings = self._settings
+        if settings.security_protocol == "SASL_PLAINTEXT":
+            raise ValueError("Kafka SASL credentials require SASL_SSL.")
 
         ssl_context: ssl.SSLContext | None = None
 
@@ -157,12 +159,12 @@ class KafkaProducer:
                     "Kafka SASL mechanism is required."
                 )
 
-            if settings.username is None:
+            if not settings.username or not settings.username.strip():
                 raise ValueError(
                     "Kafka username is required."
                 )
 
-            if settings.password is None:
+            if not settings.password or not settings.password.strip():
                 raise ValueError(
                     "Kafka password is required."
                 )

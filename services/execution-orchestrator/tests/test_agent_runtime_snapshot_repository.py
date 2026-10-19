@@ -92,9 +92,8 @@ async def test_create_persists_safe_runtime_snapshot() -> None:
         "max_tokens": 512,
     }
 
-    assert persisted.metadata_json == {
-        "safe_key": "safe-value",
-    }
+    # The credential-shaped _key suffix is removed even when its value looks harmless.
+    assert persisted.metadata_json == {}
 
     assert persisted.success_criteria == [
         "Main heading is visible.",

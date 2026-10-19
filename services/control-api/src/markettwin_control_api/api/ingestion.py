@@ -1,11 +1,11 @@
 """Workspace ingestion, review, and approval of source-backed knowledge."""
 
-import asyncio
 import hashlib
 import logging
 from datetime import datetime
 from io import BytesIO
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
@@ -25,8 +25,17 @@ from markettwin_control_api.api.dependencies import get_authenticated_user_id
 from markettwin_control_api.api.permissions import WORKSPACE_WRITE_ROLES
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.evidence.artifact_url_signer import ArtifactUrlSigner
-from markettwin_control_api.knowledge.link_research import research_link
-from markettwin_control_api.knowledge.repository import IngestionRecord, IngestionRepository
+from markettwin_control_api.knowledge.link_research import (
+    LINK_MARKER_TYPE,
+    decode_link_marker,
+    encode_link_marker,
+    validate_link_target,
+)
+from markettwin_control_api.knowledge.repository import (
+    IngestionRecord,
+    IngestionRepository,
+    validate_approval,
+)
 from markettwin_control_api.knowledge.storage import KnowledgeSourceStorage
 from markettwin_control_api.persistence.repositories import WorkspaceRepository
 
@@ -62,6 +71,8 @@ class IngestionSummaryResponse(BaseModel):
     issue_count: int
     processing_status: Literal["queued", "processing", "ready", "failed"]
     processing_error: str | None
+    original_source_url: str | None = None
+    processing_stage: Literal["queued", "researching", "generating", "review", "approved", "failed"]
     application_ids: list[UUID] = Field(default_factory=list[UUID])
 
 
@@ -107,15 +118,15 @@ async def ingest_link(
             or not set(payload.roles) <= SOURCE_ROLES):
         raise HTTPException(422, "Enter a name and valid source purposes.")
     try:
-        filename, content = await asyncio.to_thread(research_link, payload.url.strip())
+        url = validate_link_target(payload.url)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    except OSError as error:
-        raise HTTPException(
-            502, "The linked source could not be reached. Check the link or upload a document.",
-        ) from error
-    source = UploadFile(filename=filename, file=BytesIO(content),
-                        headers=Headers({"content-type": "text/plain"}))
+    host = urlsplit(url).hostname or "link"
+    source = UploadFile(
+        filename=f"{host}-link.txt",
+        file=BytesIO(encode_link_marker(url)),
+        headers=Headers({"content-type": LINK_MARKER_TYPE}),
+    )
     try:
         return await ingest_source(workspace_id, request, source, payload.name, payload.roles)
     finally:
@@ -124,6 +135,7 @@ async def ingest_link(
 
 def ingestion_response(record: IngestionRecord) -> IngestionEntryResponse:
     preview = KnowledgePreviewResponse.model_validate(record.entry.preview)
+    asset_status = record.asset.status
     return IngestionEntryResponse(
         id=record.entry.id,
         workspace_id=record.entry.workspace_id,
@@ -144,6 +156,16 @@ def ingestion_response(record: IngestionRecord) -> IngestionEntryResponse:
             else "ready"
         ),
         processing_error=record.asset.status_message,
+        original_source_url=preview.source.original_url,
+        processing_stage=(
+            "queued" if asset_status == "uploaded"
+            else "researching" if asset_status == "processing"
+            and record.asset.declared_content_type == LINK_MARKER_TYPE
+            else "generating" if asset_status == "processing"
+            else "failed" if asset_status in {"unsupported", "too_large", "parsing_failed"}
+            else "approved" if record.version.status == "approved"
+            else "review"
+        ),
         application_ids=[link.application_id for link in record.entry.application_links],
         preview=preview,
     )
@@ -230,9 +252,22 @@ async def ingest_source(
     if size == 0:
         raise HTTPException(status_code=422, detail="The source file is empty.")
     await file.seek(0)
+    original_url = None
+    if file.content_type == LINK_MARKER_TYPE:
+        if size > 4096:
+            raise HTTPException(status_code=422, detail="The link manifest is invalid.")
+        original_url = decode_link_marker(await file.read())
+        if original_url is None:
+            raise HTTPException(status_code=422, detail="The link manifest is invalid.")
+        try:
+            original_url = validate_link_target(original_url)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        await file.seek(0)
     preview = KnowledgePreviewResponse(
         source=KnowledgePreviewSourceResponse(
-            name=file.filename, source_item_count=0, processed_item_count=0
+            name=file.filename, source_item_count=0, processed_item_count=0,
+            original_url=original_url,
         ),
         application_knowledge=(), artifacts=(), skills=(), evidence=(), extraction_issues=(),
     )
@@ -356,13 +391,10 @@ async def approve_ingestion(
             record = await repository.get(workspace_id, entry_id, lock=True)
             if record is None:
                 raise HTTPException(status_code=404, detail="Knowledge set not found.")
-            if record.asset.status in {"uploaded", "processing"}:
-                raise HTTPException(status_code=409, detail="Knowledge is still processing.")
-            preview = KnowledgePreviewResponse.model_validate(record.entry.preview)
-            if not (preview.application_knowledge or preview.artifacts or preview.skills):
-                raise HTTPException(
-                    status_code=409, detail="There is no generated knowledge to approve."
-                )
+            try:
+                validate_approval(record)
+            except ValueError as error:
+                raise HTTPException(status_code=409, detail=str(error)) from error
             await repository.approve(record, user_id)
             return ingestion_response(record)
 

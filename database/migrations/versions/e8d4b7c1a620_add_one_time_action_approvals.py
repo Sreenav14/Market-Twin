@@ -29,18 +29,30 @@ def upgrade() -> None:
         sa.Column("action_summary", sa.String(300), nullable=False),
         sa.Column("status", sa.String(16), server_default=sa.text("'pending'"), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(
             "status IN ('pending', 'approved', 'rejected', 'expired', 'consumed')",
             name="ck_action_approval_requests_status_allowed",
         ),
-        sa.CheckConstraint("length(action_fingerprint) = 64", name="ck_action_approval_fingerprint_sha256"),
-        sa.CheckConstraint("length(resource_fingerprint) = 64", name="ck_action_approval_resource_sha256"),
+        sa.CheckConstraint(
+            "length(action_fingerprint) = 64", name="ck_action_approval_fingerprint_sha256"
+        ),
+        sa.CheckConstraint(
+            "length(resource_fingerprint) = 64", name="ck_action_approval_resource_sha256"
+        ),
         sa.CheckConstraint("policy_version >= 1", name="ck_action_approval_policy_positive"),
         sa.ForeignKeyConstraint(["test_run_id"], ["testing.test_runs.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["execution_id"], ["execution.agent_executions.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["execution_id", "step_id"], ["execution.execution_steps.execution_id", "execution.execution_steps.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["execution_id"], ["execution.agent_executions.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["execution_id", "step_id"],
+            ["execution.execution_steps.execution_id", "execution.execution_steps.id"],
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["requested_by_user_id"], ["core.users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["decision_by_user_id"], ["core.users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
@@ -58,14 +70,20 @@ def upgrade() -> None:
         "action_approval_receipts",
         sa.Column("approval_id", sa.Uuid(), nullable=False),
         sa.Column("action_fingerprint", sa.String(64), nullable=False),
-        sa.Column("dispatch_state", sa.String(32), server_default=sa.text("'claimed'"), nullable=False),
-        sa.Column("claimed_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "dispatch_state", sa.String(32), server_default=sa.text("'claimed'"), nullable=False
+        ),
+        sa.Column(
+            "claimed_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(
             "dispatch_state IN ('claimed', 'completed', 'failed_before_effect')",
             name="ck_action_approval_receipts_state_allowed",
         ),
-        sa.ForeignKeyConstraint(["approval_id"], ["execution.action_approval_requests.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["approval_id"], ["execution.action_approval_requests.id"], ondelete="CASCADE"
+        ),
         sa.PrimaryKeyConstraint("approval_id"),
         schema="execution",
     )

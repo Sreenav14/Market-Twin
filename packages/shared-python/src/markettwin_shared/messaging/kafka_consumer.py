@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, cast
 
 from aiokafka import AIOKafkaConsumer  # pyright: ignore[reportMissingTypeStubs]
@@ -44,7 +44,7 @@ class KafkaConsumerSettings:
 
     sasl_mechanism: KafkaSaslMechanism | None = None
     username: str | None = None
-    password: str | None = None
+    password: str | None = field(default=None, repr=False)
 
     ssl_ca_file: str | None = None
 
@@ -166,6 +166,8 @@ class KafkaConsumer:
             return
 
         settings = self._settings
+        if settings.security_protocol == "SASL_PLAINTEXT":
+            raise ValueError("Kafka SASL credentials require SASL_SSL.")
 
         ssl_context: ssl.SSLContext | None = None
 
@@ -186,12 +188,12 @@ class KafkaConsumer:
                     "Kafka SASL mechanism is required."
                 )
 
-            if settings.username is None:
+            if not settings.username or not settings.username.strip():
                 raise ValueError(
                     "Kafka username is required."
                 )
 
-            if settings.password is None:
+            if not settings.password or not settings.password.strip():
                 raise ValueError(
                     "Kafka password is required."
                 )

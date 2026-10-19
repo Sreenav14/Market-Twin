@@ -1,7 +1,7 @@
 """Tests for the complete MarketTwin evaluation workflow."""
 
 from types import SimpleNamespace
-from typing import cast
+from typing import Literal, cast
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 @pytest.mark.parametrize("visual_status", [None, "satisfied", "unsatisfied", "unverified"])
 async def test_workflow_runs_visual_evaluation_before_report(
     monkeypatch: pytest.MonkeyPatch,
-    visual_status,
+    visual_status: Literal["satisfied", "unsatisfied", "unverified"] | None,
 ) -> None:
     """Visual verification must run before final report generation."""
 
@@ -116,10 +116,15 @@ async def test_workflow_runs_visual_evaluation_before_report(
             test_run_id=test_run_id,
         )
 
-    async def fake_assessment(**kwargs):
+    expected_test_run_id = test_run_id
+
+    async def fake_assessment(
+        *, test_run_id: UUID, session: AsyncSession,
+        evaluation_records: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
         events.append("assessment")
-        assert kwargs["test_run_id"] == test_run_id
-        assert len(kwargs["evaluation_records"]) == (0 if visual_status is None else 1)
+        assert test_run_id == expected_test_run_id
+        assert len(evaluation_records) == (0 if visual_status is None else 1)
         return {"status": "completed", "test_run_id": str(test_run_id)}
 
     monkeypatch.setattr(workflow, "assess_completed_run", fake_assessment)
@@ -217,3 +222,56 @@ async def test_workflow_runs_visual_evaluation_before_report(
 
     assert session.commit.await_count == 2
     session.rollback.assert_not_awaited()
+
+
+@pytest.mark.parametrize("failure_stage", ["provenance", "evaluation", "report"])
+async def test_retry_after_each_commit_boundary(
+    monkeypatch: pytest.MonkeyPatch, failure_stage: str,
+) -> None:
+    """An intermediate snapshot commit cannot be mistaken for final completion."""
+    run_id, snapshot_id, report_id = uuid4(), uuid4(), uuid4()
+    session = AsyncMock(spec=AsyncSession)
+    session.get.return_value = None
+    repository = SimpleNamespace(validate_run_ready=AsyncMock())
+    snapshot_repository = SimpleNamespace(
+        ensure_run_level_snapshot=AsyncMock(return_value=snapshot_id)
+    )
+    def make_evaluation_repository(session: AsyncSession) -> SimpleNamespace:
+        return repository
+
+    def make_snapshot_repository(session: AsyncSession) -> SimpleNamespace:
+        return snapshot_repository
+
+    monkeypatch.setattr(workflow, "EvaluationRepository", make_evaluation_repository)
+    monkeypatch.setattr(
+        workflow, "EvaluationRuntimeSnapshotRepository", make_snapshot_repository
+    )
+    deterministic = AsyncMock(return_value=DeterministicEvaluationResult(
+        test_run_id=run_id, finding_ids=(),
+    ))
+    report = AsyncMock(return_value=SimpleNamespace(report_id=report_id))
+    monkeypatch.setattr(workflow, "evaluate_completed_run", deterministic)
+    monkeypatch.setattr(workflow, "evaluate_visual_criteria_for_run", AsyncMock(
+        return_value=VisualBatchEvaluationResult(test_run_id=run_id, evaluations=()),
+    ))
+    monkeypatch.setattr(workflow, "persist_visual_findings", AsyncMock(return_value=()))
+    monkeypatch.setattr(workflow, "assess_completed_run", AsyncMock())
+    monkeypatch.setattr(workflow, "generate_deterministic_report", report)
+    failing = {"provenance": snapshot_repository.ensure_run_level_snapshot,
+               "evaluation": deterministic, "report": report}[failure_stage]
+    failing.side_effect = RuntimeError("injected failure")
+    with pytest.raises(RuntimeError, match="injected failure"):
+        await workflow.evaluate_and_generate_report(
+            test_run_id=run_id, session=session,
+            visual_storage=cast(VisualArtifactStorage, object()),
+        )
+    assert session.commit.await_count == (0 if failure_stage == "provenance" else 1)
+    session.rollback.assert_awaited_once()
+    failing.side_effect = None
+    result = await workflow.evaluate_and_generate_report(
+        test_run_id=run_id, session=session, visual_storage=cast(VisualArtifactStorage, object()),
+    )
+    assert result.report_id == report_id
+    assert result.finding_ids == ()
+    assert snapshot_repository.ensure_run_level_snapshot.await_count == 2
+    assert session.commit.await_count == (2 if failure_stage == "provenance" else 3)

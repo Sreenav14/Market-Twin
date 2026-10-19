@@ -28,7 +28,11 @@ async def main() -> int:
     litellm.suppress_debug_info = True
     config = resolve_model_runtime_configuration(max_tokens=256)
     if config.provider != "openai":
-        print(json.dumps({"status": "not_sent", "reason": "This diagnostic supports OpenAI configuration."}))
+        print(
+            json.dumps(
+                {"status": "not_sent", "reason": "This diagnostic supports OpenAI configuration."}
+            )
+        )
         return 1
     key = os.getenv("MODEL_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not key:

@@ -8,6 +8,8 @@ from uuid import uuid4
 import pytest
 from markettwin_execution_orchestrator.browser import BrowserController
 from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
+from markettwin_execution_orchestrator.browser.sensitive_action_policy import classify_click_action
+from markettwin_execution_orchestrator.persistence.step_recorder import ExecutionStepRecorder
 from markettwin_execution_orchestrator.workflow import case_execution
 from markettwin_execution_orchestrator.workflow.deep_run import case_journey
 from markettwin_execution_orchestrator.workflow.journey_executor import (
@@ -17,8 +19,6 @@ from markettwin_execution_orchestrator.workflow.test_case_planner import (
     fixture_case_candidates,
     fixture_feature_scope,
 )
-from markettwin_execution_orchestrator.persistence.step_recorder import ExecutionStepRecorder
-from markettwin_execution_orchestrator.browser.sensitive_action_policy import classify_click_action
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,9 @@ async def test_registration_fixture_receipt_is_consumed_immediately_before_click
     async def origin(**_kwargs: object) -> str:
         return "http://127.0.0.1:5191"
 
-    controller = cast(BrowserController, SimpleNamespace(click=async_click(order), current_origin=origin))
+    controller = cast(
+        BrowserController, SimpleNamespace(click=async_click(order), current_origin=origin)
+    )
     intent = classify_click_action(role="button", name="Save", label=None, text=None)
     assert intent is not None
     started = asyncio.get_running_loop().time()

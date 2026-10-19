@@ -56,8 +56,10 @@ async def test_human_session_never_becomes_a_verified_identity_or_crosses_run() 
         with pytest.raises(AuthSessionReuseRejected):
             broker.take_human_session(run_id=run_id, target_id=target_id, case_id="b")
     with pytest.raises(AuthSessionReuseRejected):
-        broker.take(scope=AuthSessionScope(scope.run_id, scope.target_id, "admin", "x", scope.origin),
-                    case_id="b")
+        broker.take(
+            scope=AuthSessionScope(scope.run_id, scope.target_id, "admin", "x", scope.origin),
+            case_id="b",
+        )
     target = InstallContext()
     await broker.install_snapshot(snapshot=grant, context=target)
     assert target.cookies and all(cookie["domain"] == "fixture.test" for cookie in target.cookies)

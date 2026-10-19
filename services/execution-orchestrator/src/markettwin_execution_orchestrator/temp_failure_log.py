@@ -1,7 +1,9 @@
-"""Temporary local failure log. Remove after the planner failure is identified.
+"""Opt-in local diagnostics; normal worker failures use structured safe logs.
 
 Writes under the ignored .local directory. Exception text is kept so a ValueError
-can be read after the terminal is gone. Credential-shaped values are redacted.
+can be read after the terminal is gone. Enable only for local diagnosis with
+MARKETTWIN_TEMP_FAILURE_LOG_ENABLED=true. Credential-shaped values are redacted;
+arbitrary application text is suitable only for a deliberately enabled local log.
 """
 
 import logging
@@ -10,6 +12,7 @@ import re
 import traceback
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 _RUN_ID: ContextVar[str | None] = ContextVar("markettwin_temp_run_id", default=None)
@@ -37,16 +40,6 @@ def reset_temp_run(token: object) -> None:
 
 def redact(text: str) -> str:
     return _SECRET.sub("[redacted]", text)
-
-
-def install_temp_log_handler() -> None:
-    """Copy worker log lines to the same file and flush each line."""
-    path = temp_log_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handler = logging.FileHandler(path, encoding="utf-8")
-    handler.setLevel(logging.INFO)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
-    logging.getLogger().addHandler(handler)
 
 
 def record_temp_note(*, stage: str, detail: str) -> None:
@@ -92,12 +85,16 @@ def record_temp_failure(*, stage: str, error: BaseException) -> None:
 
 
 def _append(text: str) -> None:
+    # Explicit diagnostic calls only: never copy arbitrary root logger content.
+    if os.environ.get("MARKETTWIN_TEMP_FAILURE_LOG_ENABLED") != "true":
+        return
     try:
         path = temp_log_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(text if text.endswith("\n") else f"{text}\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+        try:
+            handler.emit(logging.LogRecord(__name__, logging.INFO, "", 0, text, (), None))
+        finally:
+            handler.close()
     except Exception:
         logging.getLogger(__name__).warning("Temporary failure log could not be written")

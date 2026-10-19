@@ -24,7 +24,10 @@
 }
 
 :root {
-  font-family: "Instrument Sans Variable", "Segoe UI", sans-serif;
+  --font-sans: "Instrument Sans Variable", "Segoe UI", sans-serif;
+  --font-ui: var(--font-sans);
+  --font-mono: "IBM Plex Mono", monospace;
+  font-family: var(--font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -88,4 +91,18 @@
   --scrim: #060c11b3;
   --shadow: var(--mt-shadow);
   --shadow-overlay: 0 20px 60px #00000066;
+
+  /* Reports share the workspace palette; these aliases keep existing components compatible. */
+  --ledger-paper: var(--surface);
+  --ledger-surface: var(--surface-muted);
+  --ledger-ink: var(--text);
+  --ledger-muted: var(--text-2);
+  --ledger-rule: var(--border);
+  --ledger-accent: var(--primary);
+  --ledger-accent-soft: var(--mt-accent-subtle);
+  --ledger-caution: var(--warning);
+  --ledger-caution-soft: var(--warning-bg);
+  --ledger-failed: var(--danger);
+  --ledger-technical: var(--info);
+  --ledger-focus: var(--mt-focus);
 }

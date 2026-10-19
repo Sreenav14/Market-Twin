@@ -66,6 +66,7 @@ class ReportRepository:
             .where(
                 Report.test_run_id == test_run_id,
                 Report.version == 1,
+                Report.status == "completed",
             )
             .limit(1)
         )

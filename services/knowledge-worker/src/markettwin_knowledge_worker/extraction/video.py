@@ -1,19 +1,18 @@
 """Deterministic video clipping and timestamp provenance for direct multimodal generation."""
 
 import asyncio
+import math
 import os
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import mkdtemp
-
-import av
 
 from markettwin_knowledge_worker.extraction.contracts import (
     ExtractedEvidence,
     ExtractionResult,
 )
+from markettwin_knowledge_worker.extraction.isolated import probe_video_duration, trim_video
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +52,12 @@ class VideoExtractor:
         if not await asyncio.to_thread(path.is_file):
             raise VideoExtractionError("parsing_failed", f"Video does not exist: {path.name}")
         try:
-            duration = await asyncio.to_thread(self._duration_seconds, path)
+            duration = await self._duration_seconds(path)
         except Exception as exc:
             raise VideoExtractionError(
                 "parsing_failed", f"Unable to inspect video: {path.name}"
             ) from exc
-        if duration <= 0:
+        if not math.isfinite(duration) or duration <= 0:
             raise VideoExtractionError(
                 "parsing_failed", f"Video has no readable duration: {path.name}"
             )
@@ -107,16 +106,8 @@ class VideoExtractor:
         )
 
     @staticmethod
-    def _duration_seconds(path: Path) -> float:
-        with av.open(str(path)) as container:
-            if container.duration is not None:
-                return float(container.duration / av.time_base)
-            durations = [
-                float(stream.duration * stream.time_base)
-                for stream in container.streams
-                if stream.duration is not None and stream.time_base is not None
-            ]
-        return max(durations, default=0.0)
+    async def _duration_seconds(path: Path) -> float:
+        return await probe_video_duration(path)
 
     def _clip_ranges(self, duration: float) -> tuple[tuple[float, float], ...]:
         if duration <= self._clip_seconds:
@@ -125,6 +116,8 @@ class VideoExtractor:
         ranges: list[tuple[float, float]] = []
         start = 0.0
         while start < duration:
+            if len(ranges) >= 64:
+                raise VideoExtractionError("video_limit_exceeded", "Video requires too many clips.")
             end = min(start + self._clip_seconds, duration)
             ranges.append((start, end))
             if end >= duration:
@@ -141,9 +134,15 @@ class VideoExtractor:
     ) -> tuple[VideoClip, ...]:
         ffmpeg = self._find_ffmpeg()
         clips: list[VideoClip] = []
+        total_bytes = 0
         for index, (start, end) in enumerate(ranges, start=1):
             output = temp_root / f"clip-{index:04d}.mp4"
-            await asyncio.to_thread(self._trim_clip, ffmpeg, source, output, start, end)
+            await self._trim_clip(ffmpeg, source, output, start, end)
+            total_bytes += output.stat().st_size
+            if total_bytes > 512 * 1024**2:
+                raise VideoExtractionError(
+                    "video_limit_exceeded", "Prepared video clips exceed the extraction limit.",
+                )
             clips.append(VideoClip(output, start, end))
         return tuple(clips)
 
@@ -158,49 +157,16 @@ class VideoExtractor:
         return resolved
 
     @staticmethod
-    def _trim_clip(
+    async def _trim_clip(
         ffmpeg: str, source: Path, output: Path, start_seconds: float, end_seconds: float
     ) -> None:
-        result = subprocess.run(
-            [
-                ffmpeg,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-ss",
-                f"{start_seconds:.3f}",
-                "-i",
-                str(source),
-                "-t",
-                f"{end_seconds - start_seconds:.3f}",
-                "-map",
-                "0:v:0?",
-                "-map",
-                "0:a:0?",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "96k",
-                "-movflags",
-                "+faststart",
-                "-y",
-                str(output),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0 or not output.exists() or output.stat().st_size == 0:
+        try:
+            await trim_video(ffmpeg, source, output, start_seconds, end_seconds)
+        except (ValueError, TimeoutError) as exc:
             raise VideoExtractionError(
                 "video_chunking_failed",
                 f"FFmpeg failed to create video clip starting at {start_seconds:.3f} seconds.",
-            )
+            ) from exc
 
     @staticmethod
     def _media_type(path: Path) -> str:

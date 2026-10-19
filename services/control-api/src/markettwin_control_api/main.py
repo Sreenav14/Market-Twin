@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Final, Literal
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from markettwin_shared.messaging import KafkaProducer
 from pydantic import BaseModel
 
@@ -14,12 +14,14 @@ from markettwin_control_api.api.applications import router as applications_route
 from markettwin_control_api.api.artifacts import router as artifacts_router
 from markettwin_control_api.api.auth import router as auth_router
 from markettwin_control_api.api.deep_cases import router as deep_cases_router
+from markettwin_control_api.api.dependencies import get_authenticated_user_id
 from markettwin_control_api.api.execution_pause import router as execution_pause_router
 from markettwin_control_api.api.hitl_summary import router as hitl_summary_router
 from markettwin_control_api.api.human_actions import router as human_actions_router
 from markettwin_control_api.api.ingestion import router as ingestion_router
 from markettwin_control_api.api.lifecycle import router as lifecycle_router
 from markettwin_control_api.api.live_browser import router as live_browser_router
+from markettwin_control_api.api.mutation_origin import require_mutation_origin
 from markettwin_control_api.api.runtime_snapshots import router as runtime_snapshots_router
 from markettwin_control_api.api.target_authorizations import router as target_authorizations_router
 from markettwin_control_api.api.targets import router as targets_router
@@ -117,10 +119,11 @@ def create_app() -> FastAPI:
         title=APP_NAME,
         version=APP_VERSION,
         description="Control plane API for MarketTwin V1.",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if settings.app_env in {"local", "test"} else None,
+        redoc_url="/redoc" if settings.app_env in {"local", "test"} else None,
+        openapi_url="/openapi.json" if settings.app_env in {"local", "test"} else None,
         lifespan=lifespan,
+        dependencies=[Depends(require_mutation_origin)],
     )
 
     async def health() -> HealthResponse:
@@ -142,8 +145,10 @@ def create_app() -> FastAPI:
         summary="Check API process health",
     )
 
-    async def kafka_health() -> KafkaHealthResponse:
+    async def kafka_health(request: Request) -> KafkaHealthResponse:
         """Probe Kafka authentication and connectivity without publishing events."""
+        if settings.app_env not in {"local", "test"}:
+            await get_authenticated_user_id(request=request)
         status: Literal["connected", "unavailable"] = "unavailable"
         producer: KafkaProducer | None = None
         try:

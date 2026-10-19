@@ -37,17 +37,16 @@ from markettwin_execution_orchestrator.persistence import RunStateRepository
 from markettwin_execution_orchestrator.persistence.run_event_repository import RunEventRepository
 from markettwin_execution_orchestrator.temp_failure_log import (
     bind_temp_run,
-    install_temp_log_handler,
     record_temp_failure,
     record_temp_note,
     reset_temp_run,
-    temp_log_path,
 )
 from markettwin_execution_orchestrator.workflow.run_executor import execute_markettwin_run
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
 from markettwin_execution_orchestrator.workflow.run_request_handler import (
     EXECUTION_CONSUMER_NAME,
     MissingRunRequestError,
+    RejectedRunRequest,
     accept_run_requested,
 )
 
@@ -116,6 +115,12 @@ async def process_command(
             logger.warning(
                 "Discarding stale run.requested event %s for missing TestRun %s",
                 envelope.event_id, error.test_run_id,
+            )
+            return
+        if isinstance(accepted, RejectedRunRequest):
+            logger.warning(
+                "Rejected run.requested event %s for TestRun %s (%s)",
+                envelope.event_id, accepted.test_run_id, accepted.reason,
             )
             return
         if accepted is None:
@@ -261,8 +266,6 @@ def build_hitl_worker_service(
 async def main() -> None:
     """Run the worker until stopped by its process supervisor."""
     logging.basicConfig(level=logging.INFO)
-    install_temp_log_handler()
-    logger.info("Temporary execution log: %s", temp_log_path())
     engine = create_database_engine(
         URL.create(
             "postgresql+asyncpg",

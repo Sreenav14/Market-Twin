@@ -165,8 +165,7 @@ class IngestionRepository:
         return IngestionRecord(entry, version, blueprint, asset, pin)
 
     async def approve(self, record: IngestionRecord, user_id: UUID) -> None:
-        if record.version.status == "approved":
-            return
+        validate_approval(record)
         now = datetime.now(UTC)
         record.version.status = "approved"
         record.version.approved_by_user_id = user_id
@@ -175,6 +174,7 @@ class IngestionRepository:
         record.pin.roles_confirmed_at = now
         record.asset.status = "included"
         await self.session.flush()
+
 
     async def archive(self, record: IngestionRecord) -> None:
         """Remove a set from the active library while preserving its source and history."""
@@ -192,3 +192,12 @@ class IngestionRepository:
             .order_by(BlueprintVersion.created_at.desc())
         )
         return [IngestionRecord(*row) for row in result.all()]
+
+
+def validate_approval(record: IngestionRecord) -> None:
+    if (record.version.status != "draft" or record.asset.status != "needs_user_review"
+            or record.asset.processed_at is None):
+        raise ValueError("Knowledge must be ready for review before approval.")
+    preview = KnowledgePreviewResponse.model_validate(record.entry.preview)
+    if not (preview.application_knowledge or preview.artifacts or preview.skills):
+        raise ValueError("There is no generated knowledge to approve.")

@@ -1,0 +1,78 @@
+name: Repository checks
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - services/control-api/tests
+          - services/knowledge-worker/tests
+          - services/execution-orchestrator/tests
+          - services/evaluation-worker/tests
+          - packages/shared-python/tests
+          - packages/database-python/tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.7'
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest ${{ matrix.suite }} -q
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm --workspace @markettwin/web run test -- --pool=threads --maxWorkers=1
+
+  python-static:
+    # Ruff and production typing block failures. Test/script typing debt remains
+    # visible in the full Pyright artifact without weakening the source checks.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.7'
+      - run: uv sync --locked
+      - name: Check repository lint
+        run: uv run ruff check .
+      - name: Check production source types
+        run: >-
+          uv run pyright
+          services/control-api/src
+          services/knowledge-worker/src
+          services/evaluation-worker/src
+          services/execution-orchestrator/src
+          packages/shared-python/src
+          packages/database-python/src
+      - run: uv run pyright > pyright.txt 2>&1
+        name: Record full typing diagnostics
+        if: always()
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-diagnostics
+          path: pyright.txt

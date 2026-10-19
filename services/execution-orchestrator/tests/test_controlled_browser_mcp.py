@@ -37,6 +37,15 @@ class FakeController:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
 
+    async def cooperative_checkpoint(self, handle: BrowserSessionHandle) -> None:
+        pass
+
+    def require_agent_control(self, handle: BrowserSessionHandle) -> None:
+        pass
+
+    async def inspect_click_approval(self, **kwargs: object) -> None:
+        return None
+
     async def _call(self, name: str, /, **kwargs: object) -> BrowserActionResult:
         self.calls.append((name, kwargs))
         await asyncio.sleep(0)

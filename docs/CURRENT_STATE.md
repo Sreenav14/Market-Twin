@@ -1,4 +1,132 @@
-## Latest: spec reconciliation (2026-10-18)
+## Active: UI consistency and live-browser improvements completed (2026-10-19)
+
+Latest user priority was larger live browser, independent scrolling and macOS-style
+arrow cursor. The viewer now gets the full content width, follows incoming frame
+aspect ratio, has compact internal scroll controls, and forwards native non-passive
+wheel input exactly once while ready. Offline scrolling remains ordinary. The
+custom outlined arrow replaces crosshair; keyboard escape and existing exact labels
+are preserved. Real Chromium synthetic-frame test verifies width/ratio/cursor,
+remote wheel forwarding, unchanged outer scroll, internal controls and ordinary
+page scrolling outside the viewer. Latest viewer/HumanAction unit batch: 23 passed.
+
+Shared palette/fonts/gutters now unify workspace, reports, public and sign-in.
+Ten routes passed at desktop/phone widths (20 views), checking fonts, palette,
+alignment, reflow and WCAG-tagged axe rules. Public entrance fading removed after
+it produced transient contrast failures. Full frontend checkpoint: 137 passed;
+Final TypeScript and production build passed after viewer changes. Owned test Vite
+5199 stopped; canonical frontend unchanged. Critique and ten priorities:
+`DESIGN_CRITIQUE_AND_IMPROVEMENTS_2026-10-18.md`.
+Report confidence, evidence deep links/history, authorization readiness, source tabs
+and pending form navigation also fixed and covered by focused interaction tests.
+
+Audit continuation completed local migration with verified backup, IP-pinned browser
+proxy, bounded document/video children, typed ingestion stages and lint/source-type
+CI gates. Latest combined API/Knowledge Worker checkpoint: 430 passed, 18 opt-in
+skips. Production identity/hosting and model-benchmark budget remain unanswered;
+test/script type debt and deployment acceptance remain explicitly open.
+No production deployment, service restart, provider calls, commit or push.
+
+## Previous: remaining repository audit fixes (2026-10-18)
+
+Continuation now includes an IP-pinning HTTP/CONNECT proxy owned by each Chromium
+session, typed original-source URLs and ingestion stages, killable document
+parsers with Windows/POSIX hard CPU/memory limits, pre-multipart worker admission,
+and CI gates for full Ruff plus production Pyright. Full Ruff and all six
+production Python source trees are clean; test/script typing debt remains.
+Browser suite after proxy integration: 463 passed, three explicit DB skips;
+six focused proxy tests cover changing DNS, HTTP, CONNECT, TLS and Chromium sockets.
+Final API/worker/frontend integration checks are running; video isolation is being
+finished. See `REPOSITORY_AUDIT_REMEDIATION_2026-10-18.md` for exact scopes.
+
+Canonical local schema is now `a7d8e9201b34`. Full backup verified before upgrade:
+`.local/audit/pre-audit-schema-20261019T015217Z.dump` (1,649,941 bytes).
+No service restart or deployment. Production identity/hosting selection requested
+from user; no answer yet. Earlier "canonical migration unapplied"/60% checkpoints
+below are historical and superseded.
+
+## Previous: complete application-wide UI/UX redesign implemented (2026-10-18)
+
+User requested comprehensive implementation of `MARKETTWIN_COMPLETE_UI_UX_REDESIGN_ALL_PAGES_IMPLEMENTATION_PLAN_2026-10-18.md`
+with a detailed understanding of rationale, fixing suboptimal elements, high interactivity, and attractive, easily decodable results.
+Executed across 7 parallel and coordinated tracks covering 100% of application routes.
+Detailed plan and rationale: `.gemini/antigravity-cli/brain/3157089f-2b35-40bb-8af0-42da1e0b97f9/REDESIGN_EXECUTION_PLAN.md`.
+
+Implemented across all page suites:
+- Design System & Foundations: Added `evidence-ledger.css` with responsive Evidence Ledger styling. Added semantic tokens in `tokens.css` with WCAG 2.2 AA contrast compliance.
+- Track A (Results & Report Hub - `RunReportPage.tsx`): High-impact Executive Verdict Card (`Verified Defect Found` vs `No Verified Defects · Coverage Incomplete`), 3-tier partitioning (`01 / Verified Defect Findings`, `02 / Observations to Verify`, `03 / Execution Reliability`), grouped diagnostic clusters for duplicate timeouts/policy blocks, SVG execution coverage completion gauge, and 1-click clipboard summary copy.
+- Track B (Evidence & Journey Inspector - `JourneyDetailPage.tsx`, `journeys.css`): 2-column investigative workbench with structured metadata, scannable step timeline buttons (`navigate`, `click`, `fill`, `assert`), contextual "What/Who/Why" cards, assertion evaluation grid (Expected vs Observed code tags), and screenshot containment.
+- Track C (Navigation & Shell - `AppShell.tsx`, `RunOverviewPage.tsx`, `RunLayout.tsx`): Reordered primary navigation (Overview -> Applications -> Tests -> Knowledge); dynamic next-action buttons (linking directly to Report when ready, or Live Execution when running); suppressed `RunFlowPanel` on `/report` and `/evidence` for full screen width.
+- Track D (Public & Auth Suite - `PublicPages.tsx`, `LoginPage.tsx`, `public.css`, `signin.css`): Home page hero with evidence metaphor, illustrative observation sequence, and 4-stage visual workflow; How page numbered guide with jump links and common reasons for inconclusive tests; Login page with 2-column layout, auto-focus, zero CLS reserved error banner, and accessible email authentication.
+- Track E (Applications & Targets Suite - `ApplicationsPage.tsx`, `NewApplicationPage.tsx`, `ApplicationOverviewPage.tsx`, `TargetsPage.tsx`, `NewTargetPage.tsx`, `TargetOverviewPage.tsx`, `TargetAuthorizationPage.tsx`, `TargetNetworkPolicyPage.tsx`): High-density applications ledger with concurrent target counts and live search; New Application modal-style card with inline URL validation; Application Overview with contextual tab strips and smart primary actions (`Add target` -> `Authorize target` -> `New test`); Targets inventory with Scope Receipts; Target Authorization security approval attestation document with revocation safeguards; Network Policy origin diff panel (added/removed/retained).
+- Track F (Knowledge Suite - `IngestionPage.tsx`, `ReviewKnowledgePage.tsx`, `KnowledgeReviewPage.tsx`, `KnowledgeResult.tsx`): Ingestion workspace with segmented controls, live link constraints, and format specifications; Knowledge Library list with source icons, purpose mapping, active filter chips, and empty states; Review page with decision-first layout, verification checklist, approve/reject controls, and truthful 3-stage ledger; numbered evidence markers with collapsible text snippets.
+- Track G (Test Operations & Secondary Pages - `RunsPage.tsx`, `RunJourneysPage.tsx`, `RunEvaluationPage.tsx`, `RunPerspectivesPage.tsx`, `RunMissionsPage.tsx`, `ForbiddenPage.tsx`, `NotFoundPage.tsx`, `UnexpectedErrorPage.tsx`): High-density test runs operations ledger with status filtering and dynamic action buttons (`Watch Live`, `Assist Now`, `Review Report`); Journeys page with goal-first grouping, discovery vs planned case partitioning, and dual execution/outcome badges; Evaluation page with criteria-to-evidence audit table; Missions and Perspectives pages with honest hypothetical tester framing and empty state explanations; calm neutral system error cards with safe return navigation.
+
+Verification:
+- `apps/web`: TypeScript `npm run typecheck` passed cleanly (0 errors).
+- `apps/web`: Vitest `npm test -- --pool=threads --maxWorkers=1 --run` passed all 110 tests across 26 test files (100% pass rate).
+- `apps/web`: Production bundle `npm run build` passed cleanly (dist created in 2.59s).
+- All pre-existing dirty changes preserved; no database mutations or provider calls performed.
+
+## Previous: repository audit remediation (2026-10-18)
+
+User authorized detailed study, maximum useful parallel agents and fixes to
+`MARKETTWIN_REPOSITORY_AUDIT_2026-10-18.md`. Four agents used; baseline HEAD
+`660487b65984226002d1c6df743d5a1cb745cf45`, existing dirty changes preserved.
+Current disposition/evidence and remaining gates:
+[Remediation report](REPOSITORY_AUDIT_REMEDIATION_2026-10-18.md).
+
+Implemented ingestion approval/cache/pagination, outbox/evaluation retry and
+quarantine, browser input/privacy guards, worker authentication, mutation-origin
+checks, artifact/grant authorization, execution poison-command receipts, semantic
+knowledge selection, frontend safety/progress/contrast, Compose hardening and CI.
+Final Control API/Knowledge Worker suites passed (412 passed, 18 opt-in skips),
+execution-orchestrator passed (459 passed, three opt-in database skips), frontend
+unit tests passed (109), and typecheck/build passed. Disposable PostgreSQL migration
+round-trip plus seven opt-in tests passed. Canonical database/services untouched;
+apply `a7d8e9201b34` before service upgrade. Full Python static checks remain dirty.
+Network-level Chromium egress, production identity/deployment, provider effectiveness
+and actual trace delivery remain open. Approximate audit scope completion: 60%.
+No commit/push/deploy/provider calls.
+
+## LangSmith agent traces are reaching markettwin-local (2026-10-18)
+
+Observability is enabled and the OTLP endpoint accepted a live span. Agent
+traces are root runs named `invocation [markettwin_run_workflow]` and
+`invocation [markettwin_feature_planning]` in project `markettwin-local`.
+The latest workflow trace is 12:30 PM local. Knowledge preview traces are
+newer and crowd the project list. Export batches at 8:49–8:58 AM timed out
+against api.smith.langchain.com and were not delivered.
+
+## Human browser can load captcha widgets (2026-10-18)
+
+The test browser still blocks off-origin navigation. Captcha widget assets
+(reCAPTCHA, hCaptcha, Turnstile) are now allowed inside an approved page, and
+DNS checks still apply. Restart the execution worker to load this. That drops
+the current human-control lease; take control again and refresh the login page.
+
+## Link ingestion is queued before research (2026-10-18)
+
+Submitting a public link now creates the ingestion entry and opens the review
+page immediately. Page research runs in the existing background processor, then
+the researched text is stored and sent to the knowledge worker. Restart the
+Control API to load this. Details: `docs/SESSION_HANDOFF.md`.
+
+## Latest: full repository audit (2026-10-18)
+
+Consolidated register: `.local/audit/findings-register.md` (git-ignored). No code
+was changed for the audit. Per-service pytest: control-api 278 passed; orchestrator
+426 passed with 9 failing (7 MCP fakes missing `cooperative_checkpoint`, 2 stale
+`skipped_count` assertions); evaluation-worker 94; knowledge-worker 65; shared 30;
+database 1. Root-level `pytest` cannot collect (duplicate basenames, relative
+imports). Web: typecheck clean, Vitest 102 passed, Playwright 92 passed / 17 failed
+(mocked API; includes one real axe contrast violation on the public home page).
+Highest-priority items: compose literal fallback Postgres password and unrestricted
+published ports; `select()` bypasses the sensitive-fill guard; outbox head-of-line
+blocking; knowledge preview drive-relative filename escape on Windows (no auth).
+Decisions needed before fixing: HITL secret env name (F1), whether claim auto-connects
+the viewer (e2e test assumes not), and whether `skipped_count` is intended.
+
+## Previous: spec reconciliation (2026-10-18)
 
 HEAD is `b189d96`; the prior live-execution work and master spec are committed.
 This pass replaced the Perspectives and Missions placeholders with views of the

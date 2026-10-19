@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
 
+const viewerUrl = `ws://${window.location.host}/api/v1/hitl-viewer`;
+
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   static OPEN = 1;
@@ -43,6 +45,17 @@ class MockWebSocket {
 }
 
 describe("HumanBrowserViewer", () => {
+  it.each([
+    "wss://evil.test/api/v1/hitl-viewer",
+    `ws://${window.location.host}/wrong-path`,
+    `ws://${window.location.host}/api/v1/hitl-viewer?ticket=leak`,
+    "javascript:alert(1)",
+  ])("rejects an untrusted viewer URL before sending a ticket: %s", async (url) => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    render(<HumanBrowserViewer autoConnect url={url} ticket="must-stay-local" />);
+    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnect unavailable");
+  });
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       drawImage: vi.fn(), clearRect: vi.fn(),
@@ -58,12 +71,12 @@ describe("HumanBrowserViewer", () => {
 
   it("uses the one-time ticket only in the first protected websocket message", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
-    render(<HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="single-use-ticket" />);
+    render(<HumanBrowserViewer url={viewerUrl} ticket="single-use-ticket" />);
 
     expect(MockWebSocket.instances).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
     const socket = MockWebSocket.instances[0];
-    expect(socket.url).toBe("wss://local.test/api/v1/hitl-viewer");
+    expect(socket.url).toBe(viewerUrl);
     expect(socket.url).not.toContain("ticket=");
     act(() => socket.open());
     expect(socket.sent).toEqual([JSON.stringify({ ticket: "single-use-ticket" })]);
@@ -82,9 +95,9 @@ describe("HumanBrowserViewer", () => {
   it("requests a fresh ticket after disconnect and resets input sequence", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     const reconnect = vi.fn().mockResolvedValue({
-      viewer_url: "wss://local.test/api/v1/hitl-viewer", viewer_ticket: "fresh-ticket",
+      viewer_url: viewerUrl, viewer_ticket: "fresh-ticket",
     });
-    render(<HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="first-ticket" onReconnect={reconnect} />);
+    render(<HumanBrowserViewer url={viewerUrl} ticket="first-ticket" onReconnect={reconnect} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
     const first = MockWebSocket.instances[0];
     act(() => first.open());
@@ -103,9 +116,15 @@ describe("HumanBrowserViewer", () => {
   });
 
   it("lets a keyboard operator leave browser-page tab control and continue to Release", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
     const user = userEvent.setup();
-    render(<><HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="one-time" /><button>Release control for verification</button></>);
+    render(<><HumanBrowserViewer url={viewerUrl} ticket="one-time" /><button>Release control for verification</button></>);
+    fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+    await socket.frame();
     const canvas = screen.getByLabelText("Live protected browser");
+    expect(canvas).toHaveAccessibleDescription(/Press Shift\+Escape/);
     canvas.focus();
     fireEvent.keyDown(canvas, { key: "Escape", shiftKey: true });
     const leave = screen.getByRole("button", { name: "Leave browser keyboard control" });
@@ -114,10 +133,37 @@ describe("HumanBrowserViewer", () => {
     await user.tab();
     expect(screen.getByRole("button", { name: "Release control for verification" })).toHaveFocus();
   });
+
+  it("keeps local Tab navigation available before readiness and after disconnect", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    const user = userEvent.setup();
+    render(<HumanBrowserViewer url={viewerUrl} ticket="one-time" />);
+    const canvas = screen.getByLabelText("Live protected browser");
+    const input = screen.getByLabelText("Type into the protected browser");
+    expect(input).toBeDisabled();
+    canvas.focus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Leave browser keyboard control" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+    expect(fireEvent.keyDown(canvas, { key: "Tab" })).toBe(true);
+    expect(socket.sent).toHaveLength(1);
+    await socket.frame();
+    expect(input).toBeEnabled();
+    expect(fireEvent.keyDown(canvas, { key: "Tab" })).toBe(false);
+    expect(JSON.parse(socket.sent[1])).toEqual({ sequence: 1, event: "key", key: "Tab" });
+    act(() => socket.disconnect());
+    expect(input).toBeDisabled();
+    canvas.focus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Leave browser keyboard control" })).toHaveFocus();
+    expect(socket.sent).toHaveLength(2);
+  });
   it("maps pointer input to the unchanged browser viewport after responsive resize", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.stubGlobal("PointerEvent", MouseEvent);
-    render(<HumanBrowserViewer url="wss://local.test/api/v1/hitl-viewer" ticket="synthetic-ticket" />);
+    render(<HumanBrowserViewer url={viewerUrl} ticket="synthetic-ticket" />);
     fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
@@ -136,7 +182,7 @@ describe("HumanBrowserViewer", () => {
 
   it("connects immediately after an explicit control claim, without claiming readiness on socket open", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
-    render(<HumanBrowserViewer autoConnect url="wss://local.test/api/v1/hitl-viewer" ticket="one-use" />);
+    render(<HumanBrowserViewer autoConnect url={viewerUrl} ticket="one-use" />);
     expect(MockWebSocket.instances).toHaveLength(1);
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
@@ -148,7 +194,7 @@ describe("HumanBrowserViewer", () => {
   it("times out a connection with no first frame and never enables input", () => {
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", MockWebSocket);
-    render(<HumanBrowserViewer autoConnect url="wss://local.test/api/v1/hitl-viewer" ticket="one-use" />);
+    render(<HumanBrowserViewer autoConnect url={viewerUrl} ticket="one-use" />);
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
     act(() => vi.advanceTimersByTime(15_000));
@@ -161,12 +207,41 @@ describe("HumanBrowserViewer", () => {
   it("does not claim a connection is ready when a frame cannot be decoded", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.stubGlobal("createImageBitmap", vi.fn().mockRejectedValue(new Error("Invalid image")));
-    render(<HumanBrowserViewer autoConnect url="wss://local.test/api/v1/hitl-viewer" ticket="one-use" />);
+    render(<HumanBrowserViewer autoConnect url={viewerUrl} ticket="one-use" />);
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
     await socket.frame();
     expect(screen.getByRole("status")).toHaveTextContent("could not be displayed");
     expect(socket.readyState).toBe(3);
+  });
+
+  it("isolates wheel input exactly once while ready and exposes compact scroll controls", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    render(<HumanBrowserViewer autoConnect url={viewerUrl} ticket="one-use" />);
+    const socket = MockWebSocket.instances[0];
+    const canvas = screen.getByLabelText("Live protected browser");
+    const down = screen.getByRole("button", { name: "Scroll live website down" });
+    expect(down).toBeDisabled();
+    const offline = new WheelEvent("wheel", { deltaY: 90, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(offline);
+    expect(offline.defaultPrevented).toBe(false);
+    act(() => socket.open());
+    await socket.frame();
+    expect(down).toBeEnabled();
+    const wheel = new WheelEvent("wheel", { deltaY: 3, deltaMode: 1, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(socket.sent.map((item) => JSON.parse(item))).toEqual([
+      { ticket: "one-use" }, { sequence: 1, event: "scroll", delta: 48 },
+    ]);
+    fireEvent.click(down);
+    expect(JSON.parse(socket.sent[2])).toEqual({ sequence: 2, event: "scroll", delta: 400 });
+    expect(canvas.parentElement?.style.getPropertyValue("--viewer-aspect-ratio")).toBe("1280 / 720");
+    act(() => socket.disconnect());
+    const disconnected = new WheelEvent("wheel", { deltaY: 90, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(disconnected);
+    expect(disconnected.defaultPrevented).toBe(false);
+    expect(down).toBeDisabled();
   });
 
 });

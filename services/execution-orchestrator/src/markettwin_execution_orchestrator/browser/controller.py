@@ -27,6 +27,9 @@ from playwright.async_api import (
     async_playwright,
 )
 from playwright.async_api import (
+    Error as PlaywrightError,
+)
+from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
@@ -67,6 +70,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
     ScopeRole,
 )
+from markettwin_execution_orchestrator.browser.egress import PinnedEgressProxy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserActionBlockedError,
     BrowserActionError,
@@ -77,6 +81,7 @@ from markettwin_execution_orchestrator.browser.errors import (
     BrowserSessionStateError,
     BrowserTimeoutError,
     HumanControlActiveError,
+    TargetUrlValidationError,
 )
 from markettwin_execution_orchestrator.browser.evidence import (
     bounding_box_intersects_viewport,
@@ -96,6 +101,8 @@ from markettwin_execution_orchestrator.browser.observations import (
     inspect_form_fields,
 )
 from markettwin_execution_orchestrator.browser.policy import (
+    ValidatedUrl,
+    validate_captcha_subresource,
     validate_target_url,
     validate_websocket_url,
 )
@@ -124,6 +131,7 @@ class BrowserController:
         self._max_pages_per_session = max_pages_per_session
         self._playwright: Playwright | None = None
         self._sessions: dict[UUID, JourneyBrowserSession] = {}
+        self._egress_proxies: dict[UUID, PinnedEgressProxy] = {}
         self._auth_session_broker = AuthSessionBroker()
         self._authentication_handlers: dict[UUID, Callable[[], Awaitable[None]]] = {}
         self._authentication_locks: dict[UUID, asyncio.Lock] = {}
@@ -198,8 +206,18 @@ class BrowserController:
         artifact_directory.mkdir(parents=True, exist_ok=True)
 
         browser: Browser | None = None
+        egress = PinnedEgressProxy(network_policy)
         try:
-            browser = await self._playwright.chromium.launch(headless=self._headless)
+            proxy_url = await egress.start()
+            browser = await self._playwright.chromium.launch(
+                headless=self._headless,
+                proxy={"server": proxy_url, "bypass": "<-loopback>"},
+                args=[
+                    "--disable-quic",
+                    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                ],
+            )
+            self._egress_proxies[session_id] = egress
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 900},
                 device_scale_factor=1,
@@ -252,8 +270,12 @@ class BrowserController:
             browser_owner_registry.register(self, handle)
         except Exception:
             self._sessions.pop(session_id, None)
-            if browser is not None:
-                await browser.close()
+            try:
+                if browser is not None:
+                    await browser.close()
+            finally:
+                self._egress_proxies.pop(session_id, None)
+                await egress.close()
             raise
 
         return handle
@@ -464,11 +486,7 @@ class BrowserController:
                         and route.request.frame.parent_frame is None):
                     self._pending_authentication.add(session.session_id)
                 raise BrowserActionBlockedError("Authentication-only request blocked.")
-            validated = validate_target_url(
-                route.request.url,
-                session.allowed_origins,
-                session.network_policy,
-            )
+            validated = self._validated_request_url(session, route.request)
             await resolve_and_validate_host(
                 validated.hostname,
                 session.network_policy,
@@ -476,6 +494,32 @@ class BrowserController:
             await route.continue_()
         except Exception:
             await route.abort("blockedbyclient")
+
+    def _validated_request_url(
+        self,
+        session: JourneyBrowserSession,
+        request: Request,
+    ) -> ValidatedUrl:
+        """Approve the target origin, or a captcha widget asset inside the page."""
+
+        # Playwright has no frame yet for a popup's first navigation request.
+        # Treat that request as a top-level navigation: it needs target authority.
+        main_frame = request.is_navigation_request()
+        if main_frame:
+            try:
+                main_frame = request.frame.parent_frame is None
+            except PlaywrightError:
+                main_frame = True
+        if not main_frame:
+            try:
+                return validate_captcha_subresource(request.url)
+            except TargetUrlValidationError:
+                pass
+        return validate_target_url(
+            request.url,
+            session.allowed_origins,
+            session.network_policy,
+        )
 
     async def _route_web_socket(
         self,
@@ -486,11 +530,14 @@ class BrowserController:
             http_url = route.url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
             if session.control_mode != "human" and session.is_auth_only_url(http_url):
                 raise BrowserActionBlockedError("Authentication-only socket blocked.")
-            validated = validate_websocket_url(
-                route.url,
-                session.allowed_origins,
-                session.network_policy,
-            )
+            try:
+                validated = validate_captcha_subresource(http_url)
+            except TargetUrlValidationError:
+                validated = validate_websocket_url(
+                    route.url,
+                    session.allowed_origins,
+                    session.network_policy,
+                )
             await resolve_and_validate_host(
                 validated.hostname,
                 session.network_policy,
@@ -557,10 +604,11 @@ class BrowserController:
                 and not session.authenticated_session):
             session.event_buffer.record_failed_request(
                 FailedRequestRecord(
-                    url=request.url,
+                    url=f"{urlsplit(request.url).scheme}://"
+                    f"{urlsplit(request.url).netloc.rsplit('@', 1)[-1]}",
                     method=request.method,
                     resource_type=request.resource_type,
-                    error_text=request.failure or "Unknown network error",
+                    error_text="Network request failed",
                 )
             )
 
@@ -1050,6 +1098,11 @@ class BrowserController:
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = root.get_by_label(label, exact=True)
             await require_unique(locator)
+            ensure_non_sensitive_fill(
+                label=label,
+                input_type=await locator.get_attribute("type"),
+                autocomplete=await locator.get_attribute("autocomplete"),
+            )
             session.next_action_number()
             try:
                 await locator.select_option(
@@ -1569,7 +1622,12 @@ class BrowserController:
                 try:
                     await session.context.close()
                 finally:
-                    await session.browser.close()
+                    try:
+                        await session.browser.close()
+                    finally:
+                        egress = self._egress_proxies.pop(session_id, None)
+                        if egress is not None:
+                            await egress.close()
                     self._sessions.pop(session_id, None)
                     self._authentication_handlers.pop(session_id, None)
                     self._authentication_locks.pop(session_id, None)

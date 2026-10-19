@@ -102,6 +102,7 @@ test("journey step selection never substitutes another step's screenshot", async
   const state = await mockRun(page);
   await page.goto(`/runs/${runId}/journeys/checkout`);
   await expect(page.getByRole("heading", { name: "Place an order", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Step 1/ }).click();
   await expect(page.getByRole("img", { name: "Recorded screenshot evidence" })).toBeVisible();
   const initialAccessRequests = state.accessRequests;
   await page.getByRole("button", { name: /Step 2/ }).click();

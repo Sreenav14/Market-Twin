@@ -71,6 +71,12 @@ def local_settings() -> SimpleNamespace:
     )
 
 
+def test_blank_local_login_is_validation_error() -> None:
+    with TestClient(app) as client:
+        response = client.post("/api/v1/auth/local/login", json={"email": "   "})
+    assert response.status_code == 422
+
+
 def patch_database(
     monkeypatch: pytest.MonkeyPatch,
     session: MagicMock,
@@ -345,7 +351,8 @@ def test_logout_revokes_session_and_clears_cookie(
         logout_response = cast(
             Response,
             client.post(  # pyright: ignore[reportUnknownMemberType]
-                "/api/v1/auth/logout"
+                "/api/v1/auth/logout",
+                headers={"Origin": "http://localhost:5173", "X-MarketTwin-Request": "1"},
             ),
         )
 

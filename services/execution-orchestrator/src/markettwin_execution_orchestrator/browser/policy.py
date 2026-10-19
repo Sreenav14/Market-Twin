@@ -166,6 +166,73 @@ def validate_target_url(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _CaptchaProvider:
+    hostname: str
+    path_prefix: str
+    include_subdomains: bool = False
+
+
+# Widget assets only. These hosts are not approved navigation targets.
+_CAPTCHA_PROVIDERS: tuple[_CaptchaProvider, ...] = (
+    _CaptchaProvider("www.google.com", "/recaptcha/"),
+    _CaptchaProvider("www.recaptcha.net", "/recaptcha/"),
+    _CaptchaProvider("www.gstatic.com", "/recaptcha/"),
+    _CaptchaProvider("hcaptcha.com", "/", include_subdomains=True),
+    _CaptchaProvider("challenges.cloudflare.com", "/turnstile/"),
+)
+
+
+def _matches_captcha_provider(
+    hostname: str,
+    path: str,
+    provider: _CaptchaProvider,
+) -> bool:
+    allowed = normalize_hostname(provider.hostname)
+    host_matches = hostname == allowed
+    if provider.include_subdomains:
+        host_matches = host_matches or hostname.endswith(f".{allowed}")
+    return host_matches and path.startswith(provider.path_prefix)
+
+
+def validate_captcha_subresource(raw_url: str) -> ValidatedUrl:
+    """Allow one public captcha widget asset. Main-frame navigation stays blocked."""
+
+    try:
+        parsed = urlsplit(raw_url)
+    except ValueError as exc:
+        raise TargetUrlValidationError("Captcha URL must be a valid URL.") from exc
+
+    scheme = parsed.scheme.lower()
+    if scheme != "https":
+        raise TargetUrlValidationError("Captcha providers must use HTTPS.")
+    if parsed.username is not None or parsed.password is not None:
+        raise TargetUrlValidationError("Credentials cannot be embedded in the URL.")
+    if not parsed.hostname:
+        raise TargetUrlValidationError("Captcha URL must include a hostname.")
+
+    hostname = normalize_hostname(parsed.hostname)
+    port = normalize_port(scheme, _parsed_port(parsed))
+    if port is not None:
+        raise TargetUrlValidationError("Captcha providers must use the standard HTTPS port.")
+    path = parsed.path or "/"
+    if not any(
+        _matches_captcha_provider(hostname, path, provider)
+        for provider in _CAPTCHA_PROVIDERS
+    ):
+        raise TargetUrlValidationError("URL is not a captcha provider asset.")
+
+    _validate_direct_network_location(hostname, "public_only")
+    href = urlunsplit((scheme, hostname, parsed.path, parsed.query, ""))
+    return ValidatedUrl(
+        href=href,
+        scheme=scheme,
+        hostname=hostname,
+        port=None,
+        origin=_origin_text(scheme, hostname, None),
+    )
+
+
 def validate_websocket_url(
     raw_url: str,
     allowed_origins: tuple[AllowedOrigin, ...] | list[AllowedOrigin],

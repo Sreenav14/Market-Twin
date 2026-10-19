@@ -156,7 +156,7 @@ async def test_video_adapter_returns_timestamped_clips(
         VideoClip(path, 0.0, 90.0),
         VideoClip(path, 85.0, 120.0),
     )
-    def duration_seconds(_path: Path) -> float:
+    async def duration_seconds(_path: Path) -> float:
         return 120.0
 
     monkeypatch.setattr(extractor, "_duration_seconds", duration_seconds)
@@ -187,7 +187,7 @@ async def test_video_cancellation_cleans_prepared_clips(
     (clips_root / "partial.mp4").write_bytes(b"partial")
     extractor = VideoExtractor()
 
-    def duration_seconds(_path: Path) -> float:
+    async def duration_seconds(_path: Path) -> float:
         return 120.0
 
     def temporary_directory(*, prefix: str) -> str:

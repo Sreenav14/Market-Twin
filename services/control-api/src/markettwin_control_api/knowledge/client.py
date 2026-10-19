@@ -20,6 +20,10 @@ class KnowledgeWorkerClient:
     def __init__(self, settings: Settings) -> None:
         self._url = settings.knowledge_worker_url.rstrip("/")
         self._timeout = settings.knowledge_preview_timeout_seconds
+        secret = settings.knowledge_internal_secret
+        self._headers = (
+            {"Authorization": f"Bearer {secret.get_secret_value()}"} if secret else {}
+        )
 
     async def preview(
         self,
@@ -34,6 +38,7 @@ class KnowledgeWorkerClient:
             ) as client:
                 response = await client.post(
                     f"{self._url}/internal/v1/knowledge/preview",
+                    headers=self._headers,
                     files={"file": (filename, stream, content_type or "application/octet-stream")},
                 )
         except httpx.TimeoutException as exc:

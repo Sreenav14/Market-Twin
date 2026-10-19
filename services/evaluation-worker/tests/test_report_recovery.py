@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from markettwin_database.models import Report
+from markettwin_database.models import TestRun as RunModel
 from markettwin_evaluation_worker.persistence.report_repository import ReportRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,3 +38,13 @@ async def test_reuses_incomplete_report_and_preserves_completed_report(status: s
         assert report.report_payload == {"retried": True}
         assert report.generated_at is not None
         session.flush.assert_awaited_once()
+
+
+async def test_readiness_checks_only_completed_report() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    run_id = uuid4()
+    session.get.return_value = RunModel(id=run_id, status="completed")
+    session.scalar.return_value = None
+    await ReportRepository(cast(AsyncSession, session)).validate_run_ready(test_run_id=run_id)
+    statement = session.scalar.await_args.args[0]
+    assert "completed" in statement.compile().params.values()

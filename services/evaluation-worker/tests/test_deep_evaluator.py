@@ -8,8 +8,16 @@ from markettwin_database.models import Artifact, ExecutionStep
 from markettwin_evaluation_worker.deep_evaluator import grounded_failure, valid_case_evidence
 from markettwin_shared.deep_testing import AssertionResult, CaseExecutionResult
 from markettwin_shared.feature_plan import (
-    CaseAction, DeepFeaturePlan, ExpectedAssertion, FeatureScope, PlanBudget, Requirement,
-    SemanticTarget, TestCaseSpec as CaseSpec,
+    CaseAction,
+    DeepFeaturePlan,
+    ExpectedAssertion,
+    FeatureScope,
+    PlanBudget,
+    Requirement,
+    SemanticTarget,
+)
+from markettwin_shared.feature_plan import (
+    TestCaseSpec as CaseSpec,
 )
 from pydantic import ValidationError
 
@@ -35,27 +43,64 @@ def recorded_case():
     )
     execution_id, artifact_id = uuid4(), uuid4()
     observed = AssertionResult(
-        case_id=case.case_id, assertion_id="error", oracle="visible_text",
-        expected_value="Email required", observed_value="absent", status="not_satisfied",
-        execution_id=execution_id, step_id=3, artifact_ids=(artifact_id,),
-        origin="fixture_truth", requirement_refs=("email",), elapsed_ms=1500,
+        case_id=case.case_id,
+        assertion_id="error",
+        oracle="visible_text",
+        expected_value="Email required",
+        observed_value="absent",
+        status="not_satisfied",
+        execution_id=execution_id,
+        step_id=3,
+        artifact_ids=(artifact_id,),
+        origin="fixture_truth",
+        requirement_refs=("email",),
+        elapsed_ms=1500,
     )
     result = CaseExecutionResult(
-        case_id=case.case_id, execution_id=execution_id, execution_status="completed",
-        verdict="not_satisfied", action_step_ids=(1, 2), assertion_results=(observed,), elapsed_ms=2000,
+        case_id=case.case_id,
+        execution_id=execution_id,
+        execution_status="completed",
+        verdict="not_satisfied",
+        action_step_ids=(1, 2),
+        assertion_results=(observed,),
+        elapsed_ms=2000,
     )
     steps = {
-        1: ExecutionStep(id=1, execution_id=execution_id, step_number=1,
-                         action_type="navigate", status="completed"),
-        2: ExecutionStep(id=2, execution_id=execution_id, step_number=2,
-                         action_type="click", status="completed"),
-        3: ExecutionStep(id=3, execution_id=execution_id, step_number=3,
-                         action_type="assertion", status="completed",
-                         observation_summary=json.dumps(observed.model_dump(mode="json"))),
+        1: ExecutionStep(
+            id=1,
+            execution_id=execution_id,
+            step_number=1,
+            action_type="navigate",
+            status="completed",
+        ),
+        2: ExecutionStep(
+            id=2, execution_id=execution_id, step_number=2, action_type="click", status="completed"
+        ),
+        3: ExecutionStep(
+            id=3,
+            execution_id=execution_id,
+            step_number=3,
+            action_type="assertion",
+            status="completed",
+            observation_summary=json.dumps(observed.model_dump(mode="json")),
+        ),
     }
-    artifacts = {artifact_id: Artifact(id=artifact_id, execution_id=execution_id, step_id=3,
-                                      artifact_type="screenshot", metadata_json={"kind": "viewport"})}
-    return case, result, steps, artifacts, DeepFeaturePlan(scope=scope, budget=PlanBudget(), cases=(case,))
+    artifacts = {
+        artifact_id: Artifact(
+            id=artifact_id,
+            execution_id=execution_id,
+            step_id=3,
+            artifact_type="screenshot",
+            metadata_json={"kind": "viewport"},
+        )
+    }
+    return (
+        case,
+        result,
+        steps,
+        artifacts,
+        DeepFeaturePlan(scope=scope, budget=PlanBudget(), cases=(case,)),
+    )
 
 
 def test_exact_observation_actions_and_source_support_case() -> None:

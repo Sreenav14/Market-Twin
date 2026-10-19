@@ -22,6 +22,10 @@ type SnapshotValue = (
 _SENSITIVE_KEYS = frozenset(
     {
         "api_key",
+        "database_url",
+        "connection_string",
+        "private_key",
+        "aws_secret_access_key",
         "apikey",
         "authorization",
         "authorization_header",
@@ -47,7 +51,13 @@ _SENSITIVE_KEYS = frozenset(
     }
 )
 
+# These are domain identifiers used to correlate immutable runtime provenance.
+_SEMANTIC_IDENTIFIER_KEYS = frozenset({"journey_key", "mission_key", "persona_key"})
+
 _SENSITIVE_SUFFIXES = (
+    "_key",
+    "_database_url",
+    "_connection_string",
     "_api_key",
     "_password",
     "_secret",
@@ -73,6 +83,8 @@ def _is_sensitive_key(key: str) -> bool:
 
     normalized = _normalized_key(key)
 
+    if normalized in _SEMANTIC_IDENTIFIER_KEYS:
+        return False
     return normalized in _SENSITIVE_KEYS or normalized.endswith(_SENSITIVE_SUFFIXES)
 
 

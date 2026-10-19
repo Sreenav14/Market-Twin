@@ -1,5 +1,6 @@
 """Application service around the existing source-to-knowledge pipeline."""
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,14 +26,19 @@ class InvalidPreviewSourceError(ValueError):
 
 
 class KnowledgePreviewService:
-    def __init__(self, builder: KnowledgeBuilder) -> None:
+    def __init__(self, builder: KnowledgeBuilder, *, timeout_seconds: float = 600) -> None:
         self._builder = builder
+        self._timeout_seconds = timeout_seconds
 
     @trace.get_tracer(__name__).start_as_current_span("knowledge.preview")
     async def preview(self, source_path: Path) -> KnowledgePreview:
+        async with asyncio.timeout(self._timeout_seconds):
+            return await self._preview(source_path)
+
+    async def _preview(self, source_path: Path) -> KnowledgePreview:
         try:
             extraction = await extract_source(source_path)
-        except UnsupportedSourceFormatError:
+        except (UnsupportedSourceFormatError, TimeoutError):
             raise
         except Exception as exc:
             raise InvalidPreviewSourceError("The source could not be read.") from exc

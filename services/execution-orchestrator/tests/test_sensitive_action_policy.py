@@ -1,20 +1,23 @@
 """Hard-denied and opaque actions cannot acquire generic approval."""
 
 import pytest
+from markettwin_execution_orchestrator.browser.errors import BrowserActionBlockedError
+from markettwin_execution_orchestrator.browser.sensitive_action_policy import classify_click_action
 from markettwin_shared.action_approval import SensitiveActionRule
 from pydantic import ValidationError
 
-from markettwin_execution_orchestrator.browser.errors import BrowserActionBlockedError
-from markettwin_execution_orchestrator.browser.sensitive_action_policy import classify_click_action
 
-
-@pytest.mark.parametrize("name", ["Delete", "Send invitation", "Checkout", "Grant access", "Continue", "Confirm"])
+@pytest.mark.parametrize(
+    "name", ["Delete", "Send invitation", "Checkout", "Grant access", "Continue", "Confirm"]
+)
 def test_denied_and_opaque_actions_are_not_approvable(name: str) -> None:
     with pytest.raises(BrowserActionBlockedError):
         classify_click_action(role="button", name=name, label=None, text=None)
 
 
-@pytest.mark.parametrize("name", ["Save", "Create record", "Update profile", "Publish draft", "Submit"])
+@pytest.mark.parametrize(
+    "name", ["Save", "Create record", "Update profile", "Publish draft", "Submit"]
+)
 def test_eligible_actions_bind_the_current_resource_state(name: str) -> None:
     original = classify_click_action(
         role="button", name=name, label=None, text=None, state_digest="state-one",

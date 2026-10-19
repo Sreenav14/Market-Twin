@@ -22,6 +22,9 @@ from markettwin_control_api.evidence.artifact_url_signer import (
 from markettwin_control_api.persistence.repositories.artifact_access_repository import (
     ArtifactAccessRepository,
 )
+from markettwin_control_api.persistence.repositories.authorization_repository import (
+    TargetAuthorizationRepository,
+)
 from markettwin_control_api.persistence.repositories.test_run_repository import (
     TestRunRepository,
 )
@@ -72,6 +75,17 @@ async def get_artifact_access(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Test run not found.",
+            )
+
+        # Retained run/report history remains readable, but private evidence bytes
+        # require a current grant for this exact target, including scope revisions.
+        authorization = await TargetAuthorizationRepository(database_session).get_active(
+            target_id=test_run.target_id
+        )
+        if authorization is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Target is not currently authorized for artifact access.",
             )
 
         artifact_repository = ArtifactAccessRepository(

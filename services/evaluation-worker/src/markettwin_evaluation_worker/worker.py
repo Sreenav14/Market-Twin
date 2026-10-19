@@ -3,12 +3,13 @@
 import asyncio
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from markettwin_database import create_database_engine
 from markettwin_database.models import Report, TestRun
 from opentelemetry import trace
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -41,9 +42,35 @@ async def process_run(engine: AsyncEngine, test_run_id: UUID) -> EvaluationWorkf
                 ))
                 if report_id is not None:
                     return None
-                result = await evaluate_and_generate_report(
-                    test_run_id=test_run_id, session=session
-                )
+                now = datetime.now(UTC)
+                if run.evaluation_quarantined_at is not None or (
+                    run.evaluation_next_attempt_at is not None
+                    and run.evaluation_next_attempt_at > now
+                ):
+                    return None
+                attempts = run.evaluation_attempts + 1
+                try:
+                    result = await evaluate_and_generate_report(
+                        test_run_id=test_run_id, session=session
+                    )
+                except Exception as error:
+                    now = datetime.now(UTC)
+                    await session.rollback()
+                    await session.execute(update(TestRun).where(TestRun.id == test_run_id).values(
+                        evaluation_attempts=attempts,
+                        evaluation_last_error=type(error).__name__,
+                        evaluation_next_attempt_at=now + timedelta(
+                            seconds=min(3600, 30 * 2 ** min(attempts - 1, 7))
+                        ),
+                        evaluation_quarantined_at=now if attempts >= 5 else None,
+                    ))
+                    await session.commit()
+                    raise
+                await session.execute(update(TestRun).where(TestRun.id == test_run_id).values(
+                    evaluation_attempts=0, evaluation_last_error=None,
+                    evaluation_next_attempt_at=None, evaluation_quarantined_at=None,
+                ))
+                await session.commit()
                 logger.info("Evaluated TestRun %s; report %s", test_run_id, result.report_id)
                 return result
         finally:
@@ -65,6 +92,9 @@ async def run_worker(engine: AsyncEngine) -> None:
             async with AsyncSession(engine) as session:
                 pending = (await session.scalars(select(TestRun.id).where(
                     TestRun.status == "completed",
+                    TestRun.evaluation_quarantined_at.is_(None),
+                    or_(TestRun.evaluation_next_attempt_at.is_(None),
+                        TestRun.evaluation_next_attempt_at <= datetime.now(UTC)),
                     ~select(Report.id).where(
                         Report.test_run_id == TestRun.id, Report.version == 1,
                         Report.status == "completed",

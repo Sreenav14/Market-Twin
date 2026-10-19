@@ -34,7 +34,50 @@ export function RunOverviewPage() {
   const emptySummary = ready && results.data.findings.length === 0 ? emptyFindingsSummary(results.data) : null;
   return (
     <>
-      {!["draft", "failed", "cancelled"].includes(run.status) ? <section className="run-action-required"><div><h2>{pausedForHuman ? "Human assistance required" : run.status === "completed" ? "Review recorded execution" : "Watch this test execute"}</h2><p>{pausedForHuman ? "Open the requesting journey and protected browser. The agent waits while you assist." : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}</p></div><Link className="primary-button" to={`/runs/${run.id}/activity`}>Open Live Execution</Link></section> : null}
+      {!["draft", "failed", "cancelled"].includes(run.status) ? (
+        <section className="run-action-required">
+          <div>
+            <h2>
+              {pausedForHuman
+                ? "Human assistance required"
+                : run.status === "completed"
+                ? ready
+                  ? "Verified test results ready"
+                  : "Execution completed · Evaluation in progress"
+                : "Watch this test execute"}
+            </h2>
+            <p>
+              {pausedForHuman
+                ? "Open the requesting journey and protected browser. The agent waits while you assist."
+                : run.status === "completed"
+                ? ready
+                  ? "Review verified defect findings, observations, and supporting visual evidence."
+                  : "Evaluation is currently compiling recorded journeys and step assertions."
+                : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}
+            </p>
+          </div>
+          <Link
+            className="primary-button"
+            to={
+              pausedForHuman
+                ? `/runs/${run.id}/activity`
+                : run.status === "completed"
+                ? ready
+                  ? `/runs/${run.id}/report`
+                  : `/runs/${run.id}/journeys`
+                : `/runs/${run.id}/activity`
+            }
+          >
+            {pausedForHuman
+              ? "Open Live Execution"
+              : run.status === "completed"
+              ? ready
+                ? "Review Verified Report"
+                : "Inspect Journeys"
+              : "Open Live Execution"}
+          </Link>
+        </section>
+      ) : null}
       {pausedForHuman ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
       <ol className="lifecycle-rail" aria-label="Test lifecycle">
         {stages.map((label, index) => (
@@ -158,7 +201,7 @@ export function RunOverviewPage() {
         <summary>Test configuration</summary>
         <dl className="definition-list">
           <div><dt>Testing goal</dt><dd>{testBrief(run.configuration_snapshot)}</dd></div>
-          <div><dt>Testing depth</dt><dd>{typeof run.configuration_snapshot.testing_depth === "string" ? run.configuration_snapshot.testing_depth[0].toUpperCase() + run.configuration_snapshot.testing_depth.slice(1) : "Legacy coverage (up to 4 missions)"}</dd></div>
+          <div><dt>Testing depth</dt><dd>{typeof run.configuration_snapshot.testing_depth === "string" && run.configuration_snapshot.testing_depth.length > 0 ? run.configuration_snapshot.testing_depth[0].toUpperCase() + run.configuration_snapshot.testing_depth.slice(1) : "Legacy coverage (up to 4 missions)"}</dd></div>
           <div>
             <dt>Target</dt>
             <dd>{textValue(run.target_snapshot.name, "Target")}</dd>

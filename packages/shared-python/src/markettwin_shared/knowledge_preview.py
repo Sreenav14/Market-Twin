@@ -1,6 +1,8 @@
 """Typed HTTP contract for a temporary knowledge preview."""
 
-from pydantic import BaseModel, ConfigDict
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from markettwin_shared.knowledge import (
     ApplicationKnowledgeDraft,
@@ -15,6 +17,17 @@ class KnowledgePreviewSourceResponse(BaseModel):
     name: str
     source_item_count: int
     processed_item_count: int
+    original_url: str | None = None
+
+    @field_validator("original_url")
+    @classmethod
+    def validate_original_url(cls, value: str | None) -> str | None:
+        if value is not None:
+            parsed = urlsplit(value)
+            if (len(value) > 2048 or parsed.scheme not in {"http", "https"}
+                    or not parsed.hostname or parsed.username or parsed.password):
+                raise ValueError("Original source must be an HTTP(S) URL without credentials.")
+        return value
 
 
 class KnowledgePreviewEvidenceResponse(BaseModel):

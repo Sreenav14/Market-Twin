@@ -278,6 +278,13 @@ class TestRun(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    evaluation_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    evaluation_next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    evaluation_quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    evaluation_last_error: Mapped[str | None] = mapped_column(Text)
+
 
 
 class RunPersona(Base):

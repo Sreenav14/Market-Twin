@@ -6,8 +6,9 @@ from typing import Literal
 from markettwin_shared.messaging import (
     KafkaProducerSettings,
 )
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
@@ -21,7 +22,12 @@ class Settings(BaseSettings):
     control_api_port: int = Field(default=8000, ge=1, le=65535)
     web_origin: str = "http://localhost:5173"
     hitl_worker_url: str = "http://127.0.0.1:8020"
-    hitl_internal_secret: SecretStr | None = None
+    hitl_internal_secret: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "MARKETTWIN_HITL_INTERNAL_SECRET", "HITL_INTERNAL_SECRET", "hitl_internal_secret"
+        ),
+    )
     hitl_worker_timeout_seconds: float = Field(default=5, gt=0, le=30)
     session_idle_timeout_minutes: int = Field(
     default = 30,
@@ -42,6 +48,7 @@ class Settings(BaseSettings):
     postgres_password: str = "markettwin"
     outbox_relay_enabled: bool = False
     knowledge_worker_url: str = "http://127.0.0.1:8010"
+    knowledge_internal_secret: SecretStr | None = None
     knowledge_model_timeout_seconds: float = Field(default=180, gt=0)
     knowledge_preview_timeout_seconds: float = Field(default=1800, gt=0)
     knowledge_preview_max_bytes: int = Field(default=52428800, gt=0)
@@ -80,20 +87,25 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_knowledge_timeout(self) -> "Settings":
+        secret = self.knowledge_internal_secret
+        if secret is not None and len(secret.get_secret_value().strip()) < 32:
+            raise ValueError("KNOWLEDGE_INTERNAL_SECRET must contain at least 32 characters.")
+        if secret is None and self.app_env not in {"local", "test"}:
+            raise ValueError("KNOWLEDGE_INTERNAL_SECRET is required outside local/test.")
         if self.knowledge_preview_timeout_seconds <= self.knowledge_model_timeout_seconds:
             raise ValueError("Knowledge preview timeout must exceed model timeout.")
         return self
     @property
     def database_url(self) -> str:
         """Return the async PostgreSQL database URL."""
-        return (
-            "postgresql+asyncpg://"
-            f"{self.postgres_user}:"
-            f"{self.postgres_password}@"
-            f"{self.postgres_host}:"
-            f"{self.postgres_port}/"
-            f"{self.postgres_db}"
-        )
+        return URL.create(
+            "postgresql+asyncpg",
+            username=self.postgres_user,
+            password=self.postgres_password,
+            host=self.postgres_host,
+            port=self.postgres_port,
+            database=self.postgres_db,
+        ).render_as_string(hide_password=False)
         
     @property
     def kafka_producer_settings(

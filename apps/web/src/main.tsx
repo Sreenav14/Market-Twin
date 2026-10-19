@@ -6,6 +6,7 @@ import "@fontsource-variable/instrument-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 
 import { App } from "./app/App";
+import { RenderErrorBoundary } from "./app/RenderErrorBoundary";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -17,7 +18,7 @@ if (rootElement === null) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <RenderErrorBoundary><App /></RenderErrorBoundary>
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -6,17 +6,21 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-
 from markettwin_control_api.api import hitl_summary
 from markettwin_execution_orchestrator.workflow.test_case_planner import (
-    DeepFeaturePlanningRequest, fixture_case_candidates, fixture_feature_scope, select_feature_cases,
+    DeepFeaturePlanningRequest,
+    fixture_case_candidates,
+    fixture_feature_scope,
+    select_feature_cases,
 )
 
 
 def test_login_only_has_no_passed_or_executed_feature_cases() -> None:
     scope = fixture_feature_scope("http://127.0.0.1:5191/index.html")
     plan = select_feature_cases(
-        request=DeepFeaturePlanningRequest(test_run_id=uuid4(), scope=scope, allow_fixture_truth=True),
+        request=DeepFeaturePlanningRequest(
+            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True
+        ),
         candidates=fixture_case_candidates(scope),
     )
     response = hitl_summary.summarize_authenticated_coverage([
@@ -46,8 +50,14 @@ async def test_summary_rejects_foreign_run_before_reading_events(monkeypatch) ->
             return False
 
     monkeypatch.setattr(hitl_summary, "get_authenticated_user_id", AsyncMock(return_value=uuid4()))
-    monkeypatch.setattr(hitl_summary, "get_database_runtime", lambda _: SimpleNamespace(session_factory=Context))
-    monkeypatch.setattr(hitl_summary, "TestRunRepository", lambda _: SimpleNamespace(get_for_user=AsyncMock(return_value=None)))
+    monkeypatch.setattr(
+        hitl_summary, "get_database_runtime", lambda _: SimpleNamespace(session_factory=Context)
+    )
+    monkeypatch.setattr(
+        hitl_summary,
+        "TestRunRepository",
+        lambda _: SimpleNamespace(get_for_user=AsyncMock(return_value=None)),
+    )
     with pytest.raises(HTTPException) as error:
         await hitl_summary.get_hitl_summary(uuid4(), SimpleNamespace())
     assert error.value.status_code == 404
@@ -59,7 +69,9 @@ def test_skipped_assistance_counts_as_not_tested_not_inconclusive() -> None:
 
     scope = fixture_feature_scope("http://127.0.0.1:5191/index.html")
     plan = select_feature_cases(
-        request=DeepFeaturePlanningRequest(test_run_id=uuid4(), scope=scope, allow_fixture_truth=True),
+        request=DeepFeaturePlanningRequest(
+            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True
+        ),
         candidates=fixture_case_candidates(scope),
     )
     skipped = CaseExecutionResult(

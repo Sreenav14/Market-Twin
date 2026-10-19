@@ -73,7 +73,9 @@ async def test_skip_survives_actual_mcp_transport():
             await tools[0].run_async(args={}, tool_context=None)
 
 
-@pytest.mark.parametrize("error", [RuntimeError("verification failed"), HumanAssistanceSkipped("skip")])
+@pytest.mark.parametrize(
+    "error", [RuntimeError("verification failed"), HumanAssistanceSkipped("skip")]
+)
 async def test_failed_runtime_handoff_revokes_any_provisional_session(monkeypatch, error):
     controller = MagicMock()
     monkeypatch.setattr(case_execution, "verify_or_request_login", AsyncMock(side_effect=error))

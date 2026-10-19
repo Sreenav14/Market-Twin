@@ -1,5 +1,6 @@
 """Completed tests are evaluated once; failures release ownership for a later retry."""
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -10,9 +11,12 @@ from markettwin_evaluation_worker import worker
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 
-@pytest.mark.parametrize("state", ["busy", "already_reported", "ready", "failed"])
+@pytest.mark.parametrize(
+    "state", ["busy", "already_reported", "ready", "failed", "quarantined", "delayed", "exhausted"]
+)
 async def test_evaluation_claim_retry_and_completion(
-    monkeypatch: pytest.MonkeyPatch, state: str,
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
 ) -> None:
     run_id = uuid4()
     connection = AsyncMock(spec=AsyncConnection)
@@ -22,26 +26,38 @@ async def test_evaluation_claim_retry_and_completion(
     engine = MagicMock(spec=AsyncEngine)
     engine.connect.return_value = connection_context
     session = AsyncMock(spec=AsyncSession)
-    session.get.return_value = SimpleNamespace(status="completed")
+    session.get.return_value = SimpleNamespace(
+        status="completed",
+        evaluation_attempts=0,
+        evaluation_next_attempt_at=(datetime.now(UTC) + timedelta(hours=1))
+        if state == "delayed"
+        else None,
+        evaluation_quarantined_at=datetime.now(UTC) if state == "quarantined" else None,
+    )
+    if state == "exhausted":
+        session.get.return_value.evaluation_attempts = 4
     session.scalar.return_value = uuid4() if state == "already_reported" else None
     session_context = AsyncMock()
     session_context.__aenter__.return_value = session
+
     def session_factory(*args: object, **kwargs: object) -> AsyncMock:
         return session_context
 
     monkeypatch.setattr(worker, "AsyncSession", session_factory)
     evaluate = AsyncMock(
         return_value=SimpleNamespace(report_id=uuid4()),
-        side_effect=RuntimeError("provider unavailable") if state == "failed" else None,
+        side_effect=RuntimeError("provider unavailable")
+        if state in {"failed", "exhausted"}
+        else None,
     )
     monkeypatch.setattr(worker, "evaluate_and_generate_report", evaluate)
-    if state == "failed":
+    if state in {"failed", "exhausted"}:
         with pytest.raises(RuntimeError, match="provider unavailable"):
             await worker.process_run(cast(AsyncEngine, engine), run_id)
     else:
         result = await worker.process_run(cast(AsyncEngine, engine), run_id)
         assert (result is not None) == (state == "ready")
-    if state in {"ready", "failed"}:
+    if state in {"ready", "failed", "exhausted"}:
         evaluate.assert_awaited_once_with(test_run_id=run_id, session=session)
     else:
         evaluate.assert_not_awaited()
@@ -52,3 +68,12 @@ async def test_evaluation_claim_retry_and_completion(
         assert "pg_advisory_unlock" in str(connection.execute.await_args.args[0])
     else:
         connection.execute.assert_not_awaited()
+
+    if state in {"failed", "exhausted"}:
+        values = session.execute.await_args.args[0].compile().params
+        assert values["evaluation_attempts"] == (5 if state == "exhausted" else 1)
+        assert values["evaluation_last_error"] == "RuntimeError"
+        assert values["evaluation_next_attempt_at"] > datetime.now(UTC)
+        assert (values["evaluation_quarantined_at"] is not None) == (state == "exhausted")
+        session.rollback.assert_awaited_once()
+        session.commit.assert_awaited_once()

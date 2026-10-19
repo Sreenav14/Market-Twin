@@ -74,6 +74,8 @@
 }
 .enterprise-shell {
   grid-template-columns: 232px minmax(0, 1fr);
+  --page-gutter: 32px;
+  --page-max-width: 1320px;
 }
 .sidebar {
   padding: 26px 16px 18px;
@@ -166,7 +168,7 @@
 }
 .topbar {
   min-height: 60px;
-  padding: 0 36px;
+  padding: 0 max(var(--page-gutter), calc((100% - var(--page-max-width)) / 2));
   background: var(--surface);
   backdrop-filter: none;
 }
@@ -187,7 +189,7 @@
   color: var(--primary);
 }
 .page-container {
-  width: min(1320px, calc(100% - 64px));
+  width: min(var(--page-max-width), calc(100% - 2 * var(--page-gutter)));
   padding: 30px 0 64px;
 }
 .search-trigger {
@@ -1092,9 +1094,7 @@
 
 /* Responsive layouts retain readable text and named controls. */
 @media (max-width: 1180px) {
-  .page-container {
-    width: calc(100% - 48px);
-  }
+  .enterprise-shell { --page-gutter: 24px; }
   .overview-layout {
     grid-template-columns: minmax(0, 1fr) 240px;
     gap: 24px;
@@ -1134,7 +1134,7 @@
   .composer-target select { flex-basis: 100%; padding: 4px 22px 4px 0; order: 3; }
   .authorized-label { margin-left: auto; }
   .topbar {
-    padding: 0 18px;
+    padding-inline: var(--page-gutter);
     min-height: 60px;
     gap: 8px;
   }
@@ -1183,7 +1183,6 @@
     display: none;
   }
   .page-container {
-    width: calc(100% - 36px);
     padding: 24px 0 64px;
   }
   .page-header {
@@ -1345,18 +1344,17 @@
 .navigation-drawer .sidebar-footer > .user-avatar { display: grid; }
 .navigation-drawer .workspace-copy select { max-width: 180px; }
 @media (max-width: 980px) {
-  .enterprise-shell { display: block; }
+  .enterprise-shell { display: block; --page-gutter: 20px; }
   .desktop-sidebar { display: none; }
   .navigation-trigger { display: grid; flex-shrink: 0; width: 44px; height: 44px; }
-  .topbar { gap: 12px; padding: 0 20px; }
+  .topbar { gap: 12px; }
   .topbar .breadcrumb { margin-right: auto; }
-  .page-container { width: calc(100% - 40px); }
 }
 @media (max-width: 760px) {
-  .topbar { padding: 0 12px; gap: 8px; }
+  .enterprise-shell { --page-gutter: 16px; }
+  .topbar { gap: 8px; }
   .topbar .mobile-account-actions { display: none; }
   .topbar .search-trigger { width: 44px; height: 44px; justify-content: center; }
-  .page-container { width: calc(100% - 32px); }
   .page-header { flex-direction: column; }
   .page-header .page-action { max-width: 100%; }
 }

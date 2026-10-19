@@ -15,8 +15,8 @@ import pytest
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
 from markettwin_execution_orchestrator.browser.contracts import BrowserActionResult
 from markettwin_execution_orchestrator.browser.errors import (
-    BrowserActionError,
     BrowserActionBlockedError,
+    BrowserActionError,
     BrowserSessionOwnershipError,
     BrowserSessionStateError,
     HumanControlActiveError,
@@ -35,14 +35,15 @@ def scoped_fixture(tmp_path: Path) -> Iterator[tuple[str, int]]:
     (tmp_path / "index.html").write_text(
         '<form aria-label="Registration"><label>Name<input value="PRIVATE-TEXT"></label>'
         '<label>Password<input type="password" value="SECRET-TEXT"></label>'
-        '<label>Team<select><option>Research</option>'
-        '<option selected>Viewer</option></select></label>'
+        "<label>Team<select><option>Research</option>"
+        "<option selected>Viewer</option></select></label>"
         '<label>Show tips<input type="checkbox"></label>'
         '<button type="button" onclick="document.title=\'Registration saved\'">Save</button></form>'
         '<section aria-label="Draft"><button onclick="document.title=\'Draft saved\'">Save</button>'
-        '</section><form aria-label="Long form">' + fields + '</form>'
-        '<button onclick="document.title=\'DESTRUCTIVE\'">Delete account</button>'
-        '<nav aria-label="Site"><a href="#pricing" onclick="document.title=\'Pricing destination\'">Pricing</a></nav>'
+        '</section><form aria-label="Long form">' + fields + "</form>"
+        "<button onclick=\"document.title='DESTRUCTIVE'\">Delete account</button>"
+        '<nav aria-label="Site"><a href="#pricing" '
+        'onclick="document.title=\'Pricing destination\'">Pricing</a></nav>'
         '<footer><a href="#footer">Pricing</a></footer>',
         encoding="utf-8",
     )

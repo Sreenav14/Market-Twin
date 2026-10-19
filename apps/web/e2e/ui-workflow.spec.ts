@@ -358,7 +358,7 @@ test("empty evaluation is honest about scope", async ({ page }) => {
   await mockApi(page, { empty: true });
   await page.goto(`/runs/${runId}/findings`);
   await expect(
-    page.getByRole("heading", { name: "No findings in this evaluation" }),
+    page.getByRole("heading", { name: "No verified findings" }),
   ).toBeVisible();
 });
 
@@ -392,6 +392,7 @@ test("test creation sends a real request with the chosen brief", async ({
     target_id: targetId,
     knowledge_entry_ids: [],
     testing_depth: "low",
+    runtime_human_assistance: true,
     name: "Pricing clarity",
     study_brief:
       "Can a first-time customer understand our pricing and confidently choose the right plan?",
@@ -596,7 +597,7 @@ test("starting a draft updates status and continues polling", async ({ page }) =
   await expect(page.locator(".page-action .status-badge")).toHaveText("queued");
   await expect(page.locator(".page-action .status-badge"))
     .toHaveText("completed", { timeout: 10_000 });
-  await expect(page.getByRole("heading", { name: "2 findings to review" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live Execution", exact: true })).toBeVisible();
 });
 
 test("expired target authorization is visible and does not offer an authorized test", async ({ page }) => {

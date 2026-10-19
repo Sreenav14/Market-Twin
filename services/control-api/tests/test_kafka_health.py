@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 from markettwin_control_api import main
+from markettwin_control_api.config import Settings
 
 
 @pytest.mark.asyncio
@@ -55,3 +56,20 @@ async def test_kafka_health_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
         response = await asyncio.wait_for(client.get("/api/v1/health/kafka"), 1)
     assert response.json()["status"] == "unavailable"
     producer.stop.assert_awaited_once()
+
+
+async def test_nonlocal_diagnostics_do_not_expose_schema_or_probe_anonymously(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        main, "get_settings", lambda: Settings.model_construct(app_env="production")
+    )
+    producer = Mock()
+    monkeypatch.setattr(main, "KafkaProducer", producer)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=main.create_app()), base_url="http://test",
+    ) as client:
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert (await client.get(path)).status_code == 404
+        assert (await client.get("/api/v1/health/kafka")).status_code == 401
+    producer.assert_not_called()

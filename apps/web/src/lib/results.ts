@@ -97,6 +97,68 @@ export function reportMetrics(results: RunResults) {
   };
 }
 
+export function reportVerdict(results: RunResults) {
+  const metrics = reportMetrics(results);
+  const statusCounts = new Map(metrics.statuses);
+  const total = metrics.journeyTotal;
+  const completed = metrics.statuses.length ? statusCounts.get("completed") ?? 0 : null;
+  const coverageKnown = total !== null && Number.isInteger(total) && total > 0
+    && completed !== null && metrics.statuses.every(([, count]) => Number.isInteger(count))
+    && metrics.statuses.reduce((sum, [, count]) => sum + count, 0) <= total;
+  const coverageComplete = coverageKnown && completed === total;
+  const completionRate = coverageKnown ? Math.round((completed / total) * 100) : null;
+  const verified = results.findings.filter(isConfirmedFinding);
+  const diagnostics = results.findings.filter(
+    (finding) => findingClassification(finding) === "Test execution issue",
+  );
+  const observations = results.findings.filter(
+    (finding) => !isConfirmedFinding(finding) && !diagnostics.includes(finding),
+  );
+  const coverage = { total, completed, completionRate };
+
+  if (verified.length) {
+    const visual = verified.some((finding) => finding.verification_status === "verified_visual");
+    const assertion = verified.some((finding) => finding.verification_status === "verified_deterministic");
+    const method = visual && assertion ? "Recorded visual checks and deterministic assertions"
+      : visual ? "Recorded visual checks" : "Recorded deterministic assertions";
+    return {
+      ...coverage, tone: "failed" as const, label: "Issues found",
+      title: `${verified.length} verified product ${verified.length === 1 ? "issue" : "issues"}`,
+      description: `${method} support these findings. ${coverageComplete
+        ? "Conclusions apply to the recorded scope."
+        : "Execution coverage remains incomplete or unavailable."}`,
+    };
+  }
+  if (!coverageKnown) {
+    return {
+      ...coverage, tone: "caution" as const, label: "Insufficient evidence",
+      title: "Coverage is not established",
+      description: "No verified product issues were recorded. Missing or inconsistent completion data, or an empty test scope, prevents a conclusion about the tested product.",
+    };
+  }
+  if (!coverageComplete || diagnostics.length) {
+    return {
+      ...coverage, tone: "caution" as const, label: "Review test coverage",
+      title: "No verified issues · Test coverage needs review",
+      description: `${completed} of ${total} journeys completed. ${diagnostics.length
+        ? "Execution issues were recorded; inspect them before drawing conclusions."
+        : "Unfinished work limits the conclusions available from this test."}`,
+    };
+  }
+  if (observations.length) {
+    return {
+      ...coverage, tone: "caution" as const, label: "Needs review",
+      title: "No verified issues · Observations need review",
+      description: `All ${total} journeys completed, with ${observations.length} unverified ${observations.length === 1 ? "observation" : "observations"} to inspect. Completion alone does not establish that the product works correctly.`,
+    };
+  }
+  return {
+    ...coverage, tone: "clean" as const, label: "Recorded scope completed",
+    title: "No verified product issues recorded",
+    description: `All ${total} journeys completed without recorded product findings or execution issues. This result applies only to the recorded scope and is not a product quality guarantee.`,
+  };
+}
+
 export function formatDate(value: string | null) {
   if (!value || Number.isNaN(Date.parse(value))) return "Not recorded";
   return new Intl.DateTimeFormat(undefined, {

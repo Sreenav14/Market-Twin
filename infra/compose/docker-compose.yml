@@ -8,10 +8,10 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-marketTwin}
       POSTGRES_USER: ${POSTGRES_USER:-marketTwin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sreenav1}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your local environment}
 
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
 
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
 
     environment:
       KAFKA_NODE_ID: 1
@@ -88,7 +88,7 @@ services:
       - marketTwin-network
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: marketTwin-minio
     restart: unless-stopped
 
@@ -100,11 +100,11 @@ services:
 
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-marketTwin-local}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-sreenav1}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in your local environment}
 
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
 
     volumes:
       - minio_data:/data
@@ -113,7 +113,7 @@ services:
       - marketTwin-network
 
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     container_name: marketTwin-minio-init
 
     depends_on:
@@ -122,7 +122,7 @@ services:
 
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-marketTwin-local}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-sreenav1}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in your local environment}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-markettwin-local}
 
     entrypoint:

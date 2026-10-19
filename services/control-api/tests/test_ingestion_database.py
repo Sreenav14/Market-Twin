@@ -84,6 +84,12 @@ async def test_saved_source_and_review_use_the_asset_boundary():
                     assert record.pin.asset_version_id == record.asset.id
                     assert record.entry.asset_version_id == record.asset.id
                     assert await repository.get(uuid4(), entry_id) is None
+                    record.asset.status = "parsing_failed"
+                    await session.flush()
+                    with pytest.raises(ValueError, match="ready for review"):
+                        await repository.approve(record, user_id)
+                    assert record.version.status == "draft"
+                    record.asset.status = "needs_user_review"
                     await repository.approve(record, user_id)
                     session.add(Workspace(
                         id=foreign_workspace, name="Other workspace", created_by_user_id=user_id,

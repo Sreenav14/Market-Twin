@@ -2,7 +2,7 @@
 
 import logging
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from tempfile import TemporaryDirectory
 from typing import Annotated
 
@@ -33,8 +33,11 @@ DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 def _safe_filename(filename: str | None) -> str:
     if (
         not filename
+        or len(filename) > 255
         or filename in {".", ".."}
-        or any(character in filename for character in ("/", "\\", "\x00"))
+        or filename.endswith((".", " "))
+        or PureWindowsPath(filename).is_reserved()
+        or any(ord(character) < 32 or character in '/\\<>:"|?*' for character in filename)
     ):
         raise HTTPException(status_code=422, detail="A valid source filename is required.")
     return filename
@@ -106,22 +109,22 @@ async def preview_knowledge(
         except UnsupportedSourceFormatError as exc:
             raise HTTPException(status_code=415, detail="Unsupported source format.") from exc
         except (TimeoutError, ModelTimeout) as exc:
-            logger.exception("Knowledge preview model timed out")
+            logger.warning("Knowledge preview model timed out (%s)", type(exc).__name__)
             raise HTTPException(status_code=504, detail="Knowledge preview timed out.") from exc
         except InvalidPreviewSourceError as exc:
-            logger.exception("Knowledge preview could not read the source")
+            logger.warning("Knowledge preview could not read the source (%s)", type(exc).__name__)
             raise HTTPException(status_code=422, detail="The source could not be read.") from exc
         except KnowledgeOutputLimitError as exc:
-            logger.exception("Knowledge generation reached its output limit")
+            logger.warning("Knowledge generation reached its output limit (%s)", type(exc).__name__)
             raise HTTPException(
                 status_code=502,
                 detail="Knowledge generation reached its output limit. "
                 "Try a smaller source or a model with a larger output limit.",
             ) from exc
         except (ValueError, RuntimeError, ValidationError, APIError) as exc:
-            logger.exception("Knowledge preview model failed")
+            logger.warning("Knowledge preview model failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="Knowledge preview failed.") from exc
         except Exception as exc:
-            logger.exception("Knowledge preview failed unexpectedly")
+            logger.warning("Knowledge preview failed unexpectedly (%s)", type(exc).__name__)
             raise HTTPException(status_code=500, detail="Knowledge preview failed.") from exc
         return _response(preview)

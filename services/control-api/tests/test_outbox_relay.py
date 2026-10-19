@@ -195,6 +195,29 @@ async def test_outbox_relay_records_kafka_failure(
     assert repository.failures == [
         (
             event,
-            "RuntimeError: Kafka unavailable",
+            "RuntimeError",
         )
     ]
+
+@pytest.mark.asyncio
+async def test_publish_timeout_preserves_unpublished_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    event = SimpleNamespace(topic="commands", message_key=None, payload={})
+    repository = FakeOutboxRepository(event)
+    def make_repository(session: object) -> FakeOutboxRepository:
+        return repository
+
+    monkeypatch.setattr(relay_module, "OutboxRepository", make_repository)
+    producer = AsyncMock()
+
+    async def blocked_publish(**kwargs: object) -> None:
+        import asyncio
+        await asyncio.Event().wait()
+
+    producer.publish.side_effect = blocked_publish
+    relay = OutboxRelay(
+        session_factory=cast(async_sessionmaker[AsyncSession], FakeSessionFactory()),
+        producer=cast(KafkaProducer, producer), publish_timeout_seconds=0.001,
+    )
+    assert await relay.publish_next() is False
+    assert repository.published == []
+    assert repository.failures == [(event, "TimeoutError")]

@@ -48,7 +48,12 @@ class VisualArtifactStorage:
         region: str,
         endpoint_url: str | None,
         client: S3DownloadClient | None = None,
+        bucket: str | None = None,
     ) -> None:
+        self._bucket = (bucket or os.environ.get("S3_BUCKET", "")).strip()
+        if not self._bucket:
+            raise ValueError("S3_BUCKET must be configured for visual evidence.")
+        self._provider = "minio" if endpoint_url else "s3"
         if client is not None:
             self._client = client
             return
@@ -94,6 +99,13 @@ class VisualArtifactStorage:
         directory: Path,
     ) -> Path:
         """Download one selected visual artifact to a local temporary path."""
+
+        if artifact.storage_provider != self._provider or artifact.bucket != self._bucket:
+            raise ValueError("Visual evidence location does not match configured storage.")
+        if not artifact.object_key.startswith("executions/") or any(
+            segment in {"", ".", ".."} for segment in artifact.object_key.split("/")
+        ) or "\\" in artifact.object_key:
+            raise ValueError("Visual evidence key must be within executions/.")
 
         await asyncio.to_thread(
             directory.mkdir,
