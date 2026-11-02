@@ -14,17 +14,36 @@ from markettwin_shared.feature_plan import (
 
 AssertionStatus = Literal["satisfied", "not_satisfied", "unverified"]
 AssertionReason = Literal[
-    "page_not_loaded", "unsupported_safe_value_read", "ambiguous_target", "page_closed",
-    "inspection_failed", "missing_evidence", "evidence_persistence_failed",
+    "page_not_loaded",
+    "unsupported_safe_value_read",
+    "ambiguous_target",
+    "page_closed",
+    "inspection_failed",
+    "missing_evidence",
+    "evidence_persistence_failed",
     "unsupported_safe_url_read",
 ]
 CaseExecutionStatus = Literal[
-    "completed", "policy_blocked", "failed", "timed_out", "budget_exhausted", "cancelled",
+    "completed",
+    "policy_blocked",
+    "failed",
+    "timed_out",
+    "budget_exhausted",
+    "cancelled",
     "skipped",
 ]
 CaseBlocker = Literal[
-    "policy_blocked", "action_failed", "runtime_failed", "time_limit", "action_limit",
-    "evidence_persistence_failed", "cancelled", "human_assistance_skipped",
+    "policy_blocked",
+    "action_failed",
+    "runtime_failed",
+    "time_limit",
+    "action_limit",
+    "evidence_persistence_failed",
+    "cancelled",
+    "human_assistance_skipped",
+    "authentication_challenge_blocked",
+    "human_takeover_required",
+    "assertion_precondition_failed",
 ]
 
 
@@ -41,7 +60,7 @@ class AssertionResult(BaseModel):
     execution_id: UUID
     step_id: StrictInt = Field(gt=0)
     artifact_ids: tuple[UUID, ...] = Field(default=(), max_length=64)
-    origin: Literal["approved_requirement", "fixture_truth", "inferred"]
+    origin: Literal["approved_requirement", "fixture_truth", "inferred", "user_approved"]
     requirement_refs: tuple[str, ...] = Field(default=(), max_length=8)
     elapsed_ms: StrictInt = Field(ge=0)
     reason: AssertionReason | None = None
@@ -50,8 +69,13 @@ class AssertionResult(BaseModel):
     def require_evidence(self) -> "AssertionResult":
         if self.reason is not None and self.status != "unverified":
             raise ValueError("An unsupported or failed inspection cannot establish a verdict.")
-        expected_type = (bool if self.oracle in {"visible", "enabled", "checked"}
-                         else int if self.oracle == "count" else str)
+        expected_type = (
+            bool
+            if self.oracle in {"visible", "enabled", "checked"}
+            else int
+            if self.oracle == "count"
+            else str
+        )
         if type(self.expected_value) is not expected_type:
             raise ValueError("Oracle expectation has an invalid type.")
         if isinstance(self.expected_value, str) and len(self.expected_value) > 500:
@@ -66,8 +90,10 @@ class AssertionResult(BaseModel):
             raise ValueError("A deterministic verdict requires a typed observation.")
         if self.status != "unverified" and not self.artifact_ids:
             raise ValueError("A deterministic verdict requires exact persisted evidence.")
-        matches = (type(self.observed_value) is type(self.expected_value)
-                   and self.observed_value == self.expected_value)
+        matches = (
+            type(self.observed_value) is type(self.expected_value)
+            and self.observed_value == self.expected_value
+        )
         if self.oracle == "visible_text" and isinstance(self.observed_value, str):
             matches = normalized_visible_text(self.observed_value) == normalized_visible_text(
                 str(self.expected_value)
@@ -98,11 +124,27 @@ class CaseExecutionResult(BaseModel):
     @model_validator(mode="after")
     def validate_provenance_and_verdict(self) -> "CaseExecutionResult":
         if self.execution_status == "skipped":
-            if (self.blocker != "human_assistance_skipped" or self.assertion_results
-                    or self.verdict != "unverified"):
+            if (
+                self.blocker != "human_assistance_skipped"
+                or self.assertion_results
+                or self.verdict != "unverified"
+            ):
                 raise ValueError("Skipped assistance cannot establish assertions or a verdict.")
         elif self.blocker == "human_assistance_skipped":
             raise ValueError("Skipped assistance requires a skipped execution.")
+        if self.blocker == "human_takeover_required" and self.execution_status != "policy_blocked":
+            raise ValueError("Human takeover blockers require a policy-blocked execution.")
+        if self.blocker == "assertion_precondition_failed" and (
+            self.execution_status != "completed"
+            or self.verdict != "not_satisfied"
+            or not any(
+                assertion.origin == "user_approved"
+                and assertion.oracle in {"visible", "enabled"}
+                and assertion.status == "not_satisfied"
+                for assertion in self.assertion_results
+            )
+        ):
+            raise ValueError("A failed assertion precondition requires its deterministic evidence.")
         if any(step <= 0 for step in self.action_step_ids):
             raise ValueError("Action step IDs must be positive.")
         if len(set(self.action_step_ids)) != len(self.action_step_ids):
@@ -121,10 +163,18 @@ class CaseExecutionResult(BaseModel):
         if self.execution_status == "completed" and not self.action_step_ids:
             raise ValueError("A completed case requires real browser actions.")
         expected: AssertionStatus = "unverified"
-        if (self.execution_status == "completed" and self.assertion_results
-                and all(a.status != "unverified" for a in self.assertion_results)):
-            expected = ("not_satisfied" if any(a.status == "not_satisfied"
-                                              for a in self.assertion_results) else "satisfied")
+        if self.blocker == "assertion_precondition_failed":
+            expected = "not_satisfied"
+        elif (
+            self.execution_status == "completed"
+            and self.assertion_results
+            and all(a.status != "unverified" for a in self.assertion_results)
+        ):
+            expected = (
+                "not_satisfied"
+                if any(a.status == "not_satisfied" for a in self.assertion_results)
+                else "satisfied"
+            )
         if self.verdict != expected:
             raise ValueError("Case verdict disagrees with authoritative assertion results.")
         return self

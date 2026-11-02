@@ -147,7 +147,7 @@ describe("workspace ingestion", () => {
   it("keeps the selected file available for retry after upload failure", async () => {
     const ingest = vi.spyOn(api, "ingestKnowledge").mockRejectedValue(new Error("Knowledge processing is unavailable."));
     renderPage();
-    const user = await selectSource();
+    await selectSource();
     expect(await screen.findByRole("alert")).toHaveTextContent("Knowledge processing is unavailable.");
     expect(screen.getByRole("button", { name: "Ingest knowledge" })).toBeEnabled();
     await act(async () => {

@@ -19,6 +19,8 @@ class SessionContext:
 
 
 def configure(monkeypatch, *, run, results):
+    if run is not None and not hasattr(run, "configuration_snapshot"):
+        run.configuration_snapshot = {}
     get_run = AsyncMock(return_value=run)
     get_results = AsyncMock(return_value=results)
     monkeypatch.setattr(
@@ -72,3 +74,41 @@ async def test_completed_report_is_returned_after_pending_evaluation(monkeypatch
     assert response.report.id == report_id
     assert response.report.status == "completed"
     assert response.findings == []
+
+
+@pytest.mark.parametrize("approved", [False, True])
+async def test_api_rejects_unapproved_or_unreplayed_confirmation(monkeypatch, approved):
+    import httpx
+    from fastapi import FastAPI
+    from markettwin_shared.discovery_contract import DiscoveryMap, TestContract
+
+    run_id, finding_id = uuid4(), uuid4()
+    contract = TestContract(
+        contract_id=uuid4(), test_run_id=run_id, status="frozen" if approved else "draft",
+        approved_at=datetime.now(UTC) if approved else None,
+        approved_by_user_id=uuid4() if approved else None,
+    )
+    identity = {"contract_id": str(contract.contract_id), "contract_version": 1,
+                "contract_hash": contract.content_hash()}
+    snapshot = {
+        "execution_mode": "discovery_contract_v1",
+        "frozen_contract": contract.model_dump(mode="json"),
+        "frozen_contract_hash": contract.content_hash(),
+        "discovery_map": DiscoveryMap(target_origin="https://example.test").model_dump(mode="json"),
+    }
+    configure(monkeypatch, run=SimpleNamespace(status="completed", configuration_snapshot=snapshot),
+              results=SimpleNamespace(
+                  report=SimpleNamespace(report_payload={
+                      **identity, "confirmed": [{"finding_id": str(finding_id),
+                                                  "verification": "verified_deterministic"}],
+                      "coverage": {"verified_findings": 1},
+                  }), findings=(SimpleNamespace(finding_id=finding_id),),
+              ))
+    app = FastAPI()
+    app.include_router(test_run_results.router)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(f"/api/v1/test-runs/{run_id}/results")
+    assert response.status_code == 409
+    assert "verified_findings" not in response.text

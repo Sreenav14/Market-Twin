@@ -1,14 +1,17 @@
 """Meta Agent planning workflow for MarketTwin test runs."""
 
+import asyncio
 import json
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Final, cast
 from uuid import UUID, uuid4
 
+from google.adk.agents.run_config import RunConfig
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
+from markettwin_database.model_budget import model_budget, model_role
 from markettwin_shared.observability import (
     use_observability_correlation,
 )
@@ -185,17 +188,19 @@ async def generate_meta_agent_plan(
             test_run_id=request.test_run_id,
             agent_snapshot_id=snapshot_id,
             agent_role="meta",
-        ):
-            async for event in runner.run_async(
-                user_id=user_id,
-                session_id=session_id,
-                new_message=user_context,
-            ):
-                if (event.author == agent.name and event.is_final_response()
-                        and event.content and event.content.parts):
-                    response_parts = [part.text for part in event.content.parts if part.text]
-                    if response_parts:
-                        final_response = "\n".join(response_parts)
+        ), model_budget(session, request.test_run_id), model_role("meta"):
+            async with asyncio.timeout(90):
+                async for event in runner.run_async(
+                    user_id=user_id,
+                    session_id=session_id,
+                    new_message=user_context,
+                    run_config=RunConfig(max_llm_calls=2 * max(1, len(root_agent.sub_agents))),
+                ):
+                    if (event.author == agent.name and event.is_final_response()
+                            and event.content and event.content.parts):
+                        response_parts = [part.text for part in event.content.parts if part.text]
+                        if response_parts:
+                            final_response = "\n".join(response_parts)
     finally:
         try:
             await runner.close()

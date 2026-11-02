@@ -117,7 +117,7 @@
 }
 
 .journey-selected-evidence h3 {
-  font: 650 18px var(--font-ui);
+  font: 600 18px var(--font-heading);
   margin: 0 0 16px;
   color: var(--text);
 }

@@ -25,6 +25,10 @@ class HostResolutionError(BrowserPolicyError):
     """Raised when a hostname cannot be resolved safely."""
 
 
+class UnsafeDestinationAddressError(HostResolutionError):
+    """DNS succeeded, but at least one destination address was unsafe."""
+
+
 class BrowserSessionNotFoundError(BrowserRuntimeError):
     """Raised when a browser session does not exist."""
 

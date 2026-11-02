@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     postgres_user: str = "markettwin"
     postgres_password: str = "markettwin"
     outbox_relay_enabled: bool = False
+    model_provider: str = "openai"
+    model_name: str | None = None
+    ollama_model_name: str | None = None
+    model_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
     knowledge_worker_url: str = "http://127.0.0.1:8010"
     knowledge_internal_secret: SecretStr | None = None
     knowledge_model_timeout_seconds: float = Field(default=180, gt=0)

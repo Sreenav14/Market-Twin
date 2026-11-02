@@ -8,6 +8,8 @@ from google.adk.models.lite_llm import LiteLlm
 from markettwin_shared.agent_configuration import DEFAULT_TEMPERATURE
 from markettwin_shared.model_parameters import completion_parameters
 
+from markettwin_execution_orchestrator.models.budgeted_client import BudgetedLiteLLMClient
+
 DEFAULT_MODEL_PROVIDER: Final[str] = "openai"
 DEFAULT_OPENAI_MODEL_NAME: Final[str] = "openai/gpt-4o-mini"
 DEFAULT_OPENAI_NUM_RETRIES: Final[int] = 2
@@ -36,6 +38,7 @@ class ModelRuntimeConfiguration:
 
         parameters: dict[str, object] = {
             "max_tokens": self.max_tokens,
+            "timeout": 60,
             "requested_temperature": self.temperature,
             "temperature": completion_parameters(
                 self.model_name, self.max_tokens, temperature=self.temperature,
@@ -155,6 +158,7 @@ def create_model(
         if api_key:
             return LiteLlm(
                 model=configuration.model_name,
+                llm_client=BudgetedLiteLLMClient(),
                 api_key=api_key,
                 **completion_parameters(
                     configuration.model_name, configuration.max_tokens, temperature=temperature,
@@ -164,6 +168,7 @@ def create_model(
 
         return LiteLlm(
             model=configuration.model_name,
+            llm_client=BudgetedLiteLLMClient(),
             **completion_parameters(
                 configuration.model_name, configuration.max_tokens, temperature=temperature,
             ),
@@ -188,6 +193,7 @@ def create_model(
 
         return LiteLlm(
             model=configuration.model_name,
+            llm_client=BudgetedLiteLLMClient(),
             api_base=api_base,
             max_tokens=configuration.max_tokens,
             temperature=temperature,
@@ -201,5 +207,6 @@ def create_model(
     api_key = os.getenv("MODEL_API_KEY")
     return LiteLlm(
         model=configuration.model_name, api_key=api_key,
+        llm_client=BudgetedLiteLLMClient(),
         num_retries=configuration.num_retries, **parameters,
     )

@@ -10,6 +10,12 @@ import { findingClassification } from "../../lib/results";
 import { api, type ArtifactAccess } from "../../lib/api";
 
 export function ArtifactEvidence({
+  runId, artifactId, autoLoad = false,
+}: { runId: string; artifactId: string; autoLoad?: boolean }) {
+  return <ArtifactPreview key={`${runId}:${artifactId}`} runId={runId} artifactId={artifactId} autoLoad={autoLoad} />;
+}
+
+function ArtifactPreview({
   runId,
   artifactId,
   autoLoad = false,

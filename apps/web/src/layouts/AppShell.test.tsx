@@ -23,7 +23,7 @@ function WorkspacePage() {
   return <h1>{workspace.name}</h1>;
 }
 
-function renderShell(initialEntry = "/overview") {
+function renderShell(initialEntry = "/dashboard") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
@@ -32,7 +32,7 @@ function renderShell(initialEntry = "/overview") {
       {
         element: <AppShell user={user} onLogout={vi.fn().mockResolvedValue(undefined)} />,
         children: [
-          { path: "/overview", element: <WorkspacePage /> },
+          { path: "/dashboard", element: <WorkspacePage /> },
           { path: "/settings/profile", element: <WorkspacePage /> },
         ],
       },
@@ -74,7 +74,7 @@ describe("AppShell responsive navigation", () => {
 
     await userEvents.click(await screen.findByRole("button", { name: "Open navigation" }));
     const dialog = await screen.findByRole("dialog", { name: "Workspace navigation" });
-    await userEvents.click(within(dialog).getByRole("link", { name: "Overview" }));
+    await userEvents.click(within(dialog).getByRole("link", { name: "Dashboard" }));
 
     expect(await screen.findByRole("heading", { name: "Alpha workspace" })).toBeVisible();
     await waitFor(() => expect(dialog).not.toBeInTheDocument());

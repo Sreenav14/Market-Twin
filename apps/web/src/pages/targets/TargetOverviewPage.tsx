@@ -87,7 +87,7 @@ export function TargetOverviewPage() {
           authorized && canWrite ? (
             <Link
               className="primary-button"
-              to={`/applications/${target.application_id}/runs/new`}
+              to={`/applications/${target.application_id}/runs/new?target=${encodeURIComponent(target.id)}`}
             >
               <Icon name="plus" size={16} /> New test
             </Link>
@@ -204,7 +204,7 @@ export function TargetOverviewPage() {
           <div style={{ marginTop: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {authorized && canWrite ? (
               <Link
-                to={`/applications/${target.application_id}/runs/new`}
+                to={`/applications/${target.application_id}/runs/new?target=${encodeURIComponent(target.id)}`}
                 className="primary-button"
               >
                 <Icon name="plus" size={16} /> New test against target

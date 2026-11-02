@@ -31,6 +31,7 @@ def create_browser_tools(
     controller: BrowserController,
     handle: BrowserSessionHandle,
     step_recorder: BrowserStepRecorder | None = None,
+    discovery: bool = False,
 ) -> list[BrowserTool]:
     """Create a least-privilege tool set permanently bound to one Journey."""
     # ADK may dispatch several tool calls concurrently. Serialize the complete
@@ -458,7 +459,17 @@ def create_browser_tools(
             ),
         )
 
-    return [
+    async def browser_get_page_index(cursor: int = 0) -> dict[str, object]:
+        """List full-page interactive controls, 80 per page; follow next_cursor."""
+        return await run_recorded_action(
+            action_type="get_page_index", action_summary="Index public-page controls.",
+            operation=lambda: controller.get_page_index(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, cursor=cursor,
+            ),
+        )
+
+    tools: list[BrowserTool] = [
         browser_get_state,
         browser_navigate,
         browser_click,
@@ -475,6 +486,9 @@ def create_browser_tools(
         browser_check,
         browser_uncheck,
     ]
+    if discovery:
+        tools.append(browser_get_page_index)
+    return tools
 
 class BrowserStepRecorder(Protocol):
     """Optional audit recorder used by bounded browser tools."""
@@ -529,10 +543,12 @@ def _observation_summary(
     result: BrowserActionResult,
 ) -> str:
     observation = result.observation
+    strategy = f"locator_strategy={result.locator_strategy};" if result.locator_strategy else ""
 
     return (
         f"url={_safe_url_summary(observation.url)};"
         f"action={result.action};"
+        f"{strategy}"
         f"page_count={observation.page_count};"
         f"console_errors="
         f"{len(observation.console_errors_since_last_action)};"

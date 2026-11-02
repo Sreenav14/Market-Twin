@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from playwright.async_api import Page
 
+from markettwin_execution_orchestrator.browser.policy import validate_captcha_subresource
+
 
 class VerifiedPrincipal(NamedTuple):
     role: str
@@ -30,6 +32,58 @@ def _origin(url: str) -> str | None:
     return f"{parsed.scheme}://{host}{port}"
 
 
+def _anchor_location(url: str) -> tuple[str, str] | None:
+    resource = validate_captcha_subresource(url)
+    source = urlsplit(resource.href)
+    if (source.hostname not in {"www.google.com", "www.recaptcha.net"}
+            or source.path not in {"/recaptcha/api2/anchor", "/recaptcha/enterprise/anchor"}):
+        return None
+    return source.hostname, source.path
+
+
+async def has_active_sensitive_challenge(page: Page) -> bool:
+    """Inspect visible challenge UI only, never challenge tokens or credentials.
+
+    A persistent provider anchor is cleared only by its checked checkbox. Missing,
+    unreadable or ambiguous widget state remains an active challenge.
+    """
+    if await page.locator(
+        'input[type="password"]:visible, input[autocomplete="one-time-code"]:visible, '
+        'input[autocomplete="username"]:visible, input[name*="otp" i]:visible, '
+        'input[name*="captcha" i]:visible, [data-captcha]:visible'
+    ).count():
+        return True
+    widgets = page.locator(
+        'iframe[title*="captcha" i]:visible, '
+        'iframe[title*="Cloudflare security challenge" i]:visible'
+    )
+    for index in range(await widgets.count()):
+        widget = widgets.nth(index)
+        try:
+            element = await widget.element_handle()
+            frame = await element.content_frame()
+            # The src attribute can remain an anchor URL after an in-frame redirect.
+            # Use the live document's host/path; never read challenge token fields.
+            location = _anchor_location(frame.url) if frame is not None else None
+            if frame is None or location is None:
+                return True
+            document = await frame.locator("html").element_handle()
+            checkboxes = frame.get_by_role("checkbox")
+            if await checkboxes.count() != 1 or not await checkboxes.is_visible():
+                return True
+            solved = await checkboxes.get_attribute("aria-checked") == "true"
+            if not solved and await checkboxes.get_attribute("type") == "checkbox":
+                solved = await checkboxes.is_checked()
+            if (not solved or frame.is_detached() or _anchor_location(frame.url) != location
+                    or not await document.is_visible()
+                    or not await element.is_visible()
+                    or await element.content_frame() is not frame):
+                return True
+        except Exception:
+            return True
+    return False
+
+
 async def verify_authenticated_role(
     *,
     page: Page,
@@ -44,12 +98,7 @@ async def verify_authenticated_role(
     if policy.origin not in allowed_origins or _origin(page.url) != policy.origin:
         return None
     try:
-        challenges = page.locator(
-            'input[type="password"]:visible, input[autocomplete="one-time-code"]:visible, '
-            'input[name*="otp" i]:visible, input[name*="captcha" i]:visible, '
-            'iframe[title*="captcha" i]:visible, [data-captcha]:visible'
-        )
-        if await challenges.count():
+        if await has_active_sensitive_challenge(page):
             return None
         locator = page.locator(policy.marker_selector)
         if await locator.count() != 1 or not await locator.is_visible():
@@ -58,6 +107,8 @@ async def verify_authenticated_role(
     except Exception:
         return None
     if marker != policy.expected_marker:
+        return None
+    if _origin(page.url) != policy.origin:
         return None
     return VerifiedPrincipal(
         role=policy.role,

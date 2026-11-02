@@ -1,0 +1,222 @@
+/* MarketTwin Arize-Inspired Concept Tokens and Typography */
+/* Exact specification from §2, §2A, §2B, §2C, §11A.3 */
+
+:root {
+  --paper: #FAF7F1;
+  --card: #FFFFFF;
+  --ink: #111111;
+  --ink-2: #5F5C52;
+  --ink-faint: #6E6A5E;
+  --line: #E4E0D6;
+  --plum: #221244;
+  --footer-deep: #17102E;
+  --band-lilac: #E4E0F5;
+  --band-peach: #FCE8D8;
+  --band-rose: #F9DEE4;
+  --flame: #E4572E;
+  --flame-deep: #BC4218;
+  --flame-deep-hover: #A83A15;
+  --works: #1F7A3D;
+  --works-tint: #EAF6EE;
+  --broken: #C62F3B;
+  --broken-tint: #FDECEC;
+  --couldnot: #8A5F00;
+  --couldnot-tint: #FFF4D6;
+  --notchecked: #62625C;
+  --notchecked-tint: #F0EEE7;
+  --tom: #6842D6;
+  --maya: #0F766E;
+  --priya: #96521F;
+  --tester-4: #1D64C8;
+  --tester-5: #AE2F7D;
+  --tester-6: #667A12;
+  --focus-ring: 2px solid #111111;
+  --focus-ring-dark: 2px solid #FFFFFF;
+  --shadow-soft: 0 1px 2px rgba(17,17,17,.05);
+  --shadow-panel: 0 8px 24px rgba(17,17,17,.08);
+}
+
+/* Accessibility: Focus Rings */
+:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 2px;
+}
+
+.on-dark:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .triptych-panel {
+    opacity: 1 !important;
+  }
+}
+
+/* Typography Scale (§2B) */
+.font-display {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 56px;
+  line-height: 64px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 899px) {
+  .font-display {
+    font-size: 40px;
+    line-height: 46px;
+  }
+}
+
+.font-h1-workspace {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+@media (max-width: 639px) {
+  .font-h1-workspace {
+    font-size: 24px;
+    line-height: 32px;
+  }
+}
+
+.font-verdict-word {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 48px;
+  line-height: 52px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 639px) {
+  .font-verdict-word {
+    font-size: 36px;
+    line-height: 40px;
+  }
+}
+
+.font-h2-marketing {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.font-h2-workspace {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.font-h3 {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.font-body {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 26px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.font-body-small {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.font-meta-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.font-button-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.font-quote {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 22px;
+  line-height: 32px;
+  font-weight: 500;
+}
+
+.font-stat-numeral {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 500;
+}
+
+.font-grid-cell {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+.font-mono-data {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+/* Base Layout Containers (§2C.2) */
+.concept-marketing-container {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+@media (max-width: 639px) {
+  .concept-marketing-container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+.concept-workspace-container {
+  width: 100%;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+@media (max-width: 899px) {
+  .concept-workspace-container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

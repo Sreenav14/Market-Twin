@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Icon } from "../../components/ui/Icon";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Spinner } from "../../components/ui/StateViews";
@@ -30,10 +30,11 @@ function validateTargetUrl(rawUrl: string): string | null {
 export function NewTargetPage() {
   const { applicationId = "" } = useParams();
   const navigate = useNavigate();
+  const [parameters] = useSearchParams();
   const { workspace } = useOutletContext<AppShellContext>();
   const [name, setName] = useState("");
   const [environment, setEnvironment] = useState("local");
-  const [baseUrl, setBaseUrl] = useState("http://localhost:3000/");
+  const [baseUrl, setBaseUrl] = useState(parameters.get("url") ?? "http://localhost:3000/");
   const [requiresAuth, setRequiresAuth] = useState(false);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -234,7 +235,7 @@ export function NewTargetPage() {
             <button
               className="secondary-button"
               type="button"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate(`/applications/${applicationId}/targets`)}
               disabled={busy}
             >
               Cancel

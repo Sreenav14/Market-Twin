@@ -1,8 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
-import { expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { api } from "../../lib/api";
 import type { Finding, RunResults } from "../../lib/api";
 import { RunReportPage } from "./RunReportPage";
+beforeEach(() => { vi.spyOn(api, "getRunJourneys").mockResolvedValue([]); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 function renderReport(payload: Record<string, unknown>, findings: Finding[] = []) {
   const data: RunResults = {
@@ -12,12 +16,13 @@ function renderReport(payload: Record<string, unknown>, findings: Finding[] = []
       executive_summary: null, payload,
     },
   };
-  return render(<MemoryRouter initialEntries={["/report"]}>
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/report"]}>
     <Routes><Route element={<Outlet context={{
       run: { id: "run", status: "completed", configuration_snapshot: {} },
       user: { id: "user" }, results: { status: "ready", data },
     }} />}><Route path="/report" element={<RunReportPage />} /></Route></Routes>
-  </MemoryRouter>);
+  </MemoryRouter></QueryClientProvider>);
 }
 
 it("shows an evidence limit for unknown scope and keeps method details available", () => {
@@ -45,4 +50,16 @@ it("keeps a visual finding and its evidence link directly available after the co
   expect(screen.getByRole("link", { name: /Inspect step 8 evidence/ }))
     .toHaveAttribute("href", "/runs/run/journeys/journey?step=8");
   expect(screen.getByRole("link", { name: "1 verified issue" })).toHaveAttribute("href", "#report-verified");
+});
+
+it("does not invent a step-to-journey association for a finding spanning several journeys", () => {
+  renderReport({}, [{
+    id: "combined", title: "Repeated issue", summary: "Recorded across different journeys.",
+    category: "visual_criterion", severity: "high", status: "open", recommendation: null,
+    finding_kind: "observed_product_issue", verification_status: "verified_visual",
+    journey_ids: ["first", "second"], evidence: { step_ids: [8], artifact_ids: ["image"] },
+  }]);
+  expect(screen.getByRole("link", { name: /Review linked evidence/ }))
+    .toHaveAttribute("href", "/runs/run/findings/combined");
+  expect(screen.queryByRole("link", { name: /Inspect step 8 evidence/ })).not.toBeInTheDocument();
 });

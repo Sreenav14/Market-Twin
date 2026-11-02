@@ -11,6 +11,7 @@ from markettwin_evaluation_worker.persistence.evaluation_repository import (
     VisualArtifactRecord,
     VisualEvidenceSet,
 )
+from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCache
 from markettwin_evaluation_worker.visual_artifact_storage import (
     VisualArtifactStorage,
 )
@@ -76,6 +77,68 @@ class FakeStorage:
         )
 
         return path
+
+
+async def test_visual_retry_reuses_only_matching_pixels_prompt_model_and_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[tuple[UUID, UUID, str], VisualVerificationResult] = {}
+    calls = 0
+
+    class Cache:
+        async def get(
+            self, *, run_id: UUID, execution_id: UUID, key: str,
+        ) -> VisualVerificationResult | None:
+            return saved.get((run_id, execution_id, key))
+
+        async def put(
+            self, *, run_id: UUID, execution_id: UUID, key: str,
+            result: VisualVerificationResult,
+        ) -> None:
+            saved[run_id, execution_id, key] = result
+
+    class Storage(FakeStorage):
+        pixels = b"first"
+
+        async def download(self, *, artifact: VisualArtifactRecord, directory: Path) -> Path:
+            path = await super().download(artifact=artifact, directory=directory)
+            path.write_bytes(self.pixels)
+            return path
+
+    async def verify(**_kwargs: object) -> VisualVerificationResult:
+        nonlocal calls
+        calls += 1
+        return VisualVerificationResult("satisfied", "Visible.", ())
+
+    monkeypatch.setattr(visual_evaluation, "verify_visual_criterion", verify)
+    monkeypatch.setenv("VISUAL_MODEL_NAME", "openai/gpt-4o-mini")
+    run_id, execution_id = uuid4(), uuid4()
+    storage, cache = Storage(), Cache()
+    evidence = (VisualEvidenceSet(step_id=1, viewport=VisualArtifactRecord(
+        artifact_id=uuid4(), step_id=1, kind="viewport", storage_provider="minio",
+        bucket="markettwin", object_key="executions/image.png", content_type="image/png",
+    )),)
+
+    async def evaluate(criterion: str, execution: UUID = execution_id) -> None:
+        await visual_evaluation.evaluate_visual_criterion_from_evidence(
+            test_run_id=run_id, journey_id=uuid4(), execution_id=execution,
+            agent_snapshot_id=uuid4(), criterion=criterion, evidence=evidence,
+            storage=cast(VisualArtifactStorage, storage), cache=cast(VisualResultCache, cache),
+        )
+
+    await evaluate("Heading is visible.")
+    await evaluate("Heading is visible.")
+    assert calls == 1  # Simulated later report failure/retry reuses the judgment.
+    await evaluate("Button is visible.")
+    assert calls == 2
+    storage.pixels = b"changed"
+    await evaluate("Button is visible.")
+    assert calls == 3
+    monkeypatch.setenv("VISUAL_MODEL_NAME", "openai/gpt-4o")
+    await evaluate("Button is visible.")
+    assert calls == 4
+    await evaluate("Button is visible.", uuid4())
+    assert calls == 5
 
 
 @pytest.mark.parametrize("focused", [False, True])

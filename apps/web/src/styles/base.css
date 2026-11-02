@@ -45,7 +45,8 @@ h2,
 h3,
 h4 {
   color: var(--text);
-  font-weight: 650;
+  font-family: var(--font-heading);
+  font-weight: 600;
   text-wrap: pretty;
   overflow-wrap: anywhere;
 }

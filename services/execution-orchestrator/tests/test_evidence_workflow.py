@@ -223,6 +223,10 @@ async def test_result_event_shares_final_execution_commit(
             "status": status.value,
             "outcome": outcome.value if outcome is not None else None,
             "summary": "Checkout observed.",
+            "partial": False,
+            "steps_completed": 0,
+            "last_completed_step_id": None,
+            "assertion_results": [],
             "actions": ["Clicked checkout"],
             "observations": ["Saw confirmation"],
             "friction_points": ["Slow page"],
@@ -239,6 +243,8 @@ async def test_result_event_shares_final_execution_commit(
     [
         None,
         "completed",
+        "invalid_once",
+        "invalid_twice",
         "storage",
         "close",
         "persist_and_close",
@@ -286,7 +292,11 @@ async def test_session_artifacts_after_browser_close(
     snapshot_repository = MagicMock()
     snapshot_repository.create = AsyncMock()
 
-    async def final_events() -> AsyncIterator[MagicMock]:
+    attempts = 0
+
+    async def final_events(**_kwargs: object) -> AsyncIterator[MagicMock]:
+        nonlocal attempts
+        attempts += 1
         helper = MagicMock()
         helper.author = "Agent_2_sub_1"
         helper.is_final_response.return_value = True
@@ -295,12 +305,15 @@ async def test_session_artifacts_after_browser_close(
         event = MagicMock()
         event.author = "Agent_2"
         event.is_final_response.return_value = True
-        event.content.parts = [MagicMock(text='{"outcome":"passed","summary":"Order confirmed"}')]
+        invalid = failure == "invalid_twice" or (failure == "invalid_once" and attempts == 1)
+        event.content.parts = [MagicMock(text=(
+            '{"outcome":' if invalid else '{"outcome":"passed","summary":"Order confirmed"}'
+        ))]
         yield event
 
-    runner.run_async.return_value = final_events()
+    runner.run_async.side_effect = final_events
     # Even a failed Journey must upload evidence once its browser closes successfully.
-    if failure not in {"completed", "mcp_close", "runner_close"}:
+    if failure not in {"completed", "invalid_once", "invalid_twice", "mcp_close", "runner_close"}:
         factory.create_persona_runtime.side_effect = RuntimeError("Agent failed")
     if failure == "runner_close":
         runner.close.side_effect = RuntimeError("Runner close failed")
@@ -371,7 +384,7 @@ async def test_session_artifacts_after_browser_close(
             )
             assert result.status == (
                 JourneyExecutionStatus.COMPLETED
-                if failure == "completed"
+                if failure in {"completed", "invalid_once"}
                 else JourneyExecutionStatus.FAILED
             )
             if failure == "completed":
@@ -381,6 +394,12 @@ async def test_session_artifacts_after_browser_close(
                 )
                 payload = snapshot_repository.create.call_args.kwargs["payload"]
                 assert payload.metadata["browser_tool_transport"] == "mcp_memory"
+            if failure in {"invalid_once", "invalid_twice"}:
+                assert runner.run_async.call_count == 2
+                assert runner.run_async.call_args.kwargs["run_config"].max_llm_calls == 1
+                assert factory.create_persona_runtime.return_value.agent.tools == []
+                assert runner.agent is factory.create_persona_runtime.return_value.agent
+                assert result.partial is (failure == "invalid_twice")
 
     controller.close_session.assert_awaited_once_with(
         session_id=handle.session_id,
@@ -390,7 +409,8 @@ async def test_session_artifacts_after_browser_close(
     if failure in {"mcp_close", "runner_close"}:
         assert mcp_closed == [True]
         runner.close.assert_awaited_once()
-    if failure in {None, "completed", "upload", "mcp_close", "runner_close"}:
+    if failure in {None, "completed", "invalid_once", "invalid_twice",
+                   "upload", "mcp_close", "runner_close"}:
         recorder_class.assert_called_once_with(
             session=session,
             execution_id=request.execution_id,

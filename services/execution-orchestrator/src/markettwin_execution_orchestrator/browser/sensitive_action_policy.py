@@ -80,6 +80,7 @@ def classify_click_action(
     navigation_origin_authorized: bool = False,
     element_tag: str | None = None,
     has_form: bool = False,
+    explicit_fixture_approval: bool = False,
 ) -> SensitiveActionIntent | None:
     """Classify a semantic click; hard-denied categories never become approvable."""
 
@@ -114,10 +115,14 @@ def classify_click_action(
         if normalized_type == "submit" or any(
             term in description for term in ("continue", "confirm")
         ):
-            raise BrowserActionBlockedError(
-                "An opaque confirmation requires human browser takeover."
-            )
-        return None
+            if explicit_fixture_approval:
+                category = "form_submit"
+            else:
+                raise BrowserActionBlockedError(
+                    "An opaque confirmation requires human browser takeover."
+                )
+        else:
+            return None
     summaries: dict[ActionCategory, str] = {
         "form_submit": "Submit a form on the authorized target",
         "save": "Save a change on the authorized target",

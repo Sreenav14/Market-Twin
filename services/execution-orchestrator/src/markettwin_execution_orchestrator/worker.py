@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from collections import deque
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
@@ -19,6 +20,7 @@ from markettwin_database.models.execution import (
     HumanControlLease,
 )
 from markettwin_database.models.testing import PersonaJourney, TestRun
+from markettwin_database.worker_heartbeat import run_worker_heartbeat
 from markettwin_shared.messaging import (
     EXECUTION_COMMANDS_TOPIC,
     EventEnvelope,
@@ -27,9 +29,9 @@ from markettwin_shared.messaging import (
     load_kafka_consumer_settings,
 )
 from markettwin_shared.run_failure import failure_details, failure_event_payload, failure_site
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.engine import URL
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
 from markettwin_execution_orchestrator.browser.owner_registry import browser_owner_registry
 from markettwin_execution_orchestrator.browser.owner_service import HITLWorkerService
@@ -128,6 +130,10 @@ async def process_command(
             # must not be used to recover deliveries across concurrent workers.
             # Do not replay potentially state-changing browser actions.
             run = await session.get(TestRun, UUID(str(envelope.payload["test_run_id"])))
+            if (run is not None and run.status == "awaiting_human"
+                    and run.configuration_snapshot.get("execution_mode") == "discovery_contract_v1"
+                    and run.configuration_snapshot.get("discovery_stage") == "awaiting_approval"):
+                return
             if run is not None and run.status in {"planning", "running", "awaiting_human"}:
                 await abandon_run_handoffs(session, test_run_id=run.id)
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
@@ -190,14 +196,16 @@ async def run_worker(
     *,
     retry_delay_seconds: float = 5.0,
     hitl_service: HITLWorkerService | None = None,
+    max_concurrent_runs: int = 1,
 ) -> None:
-    """Retry transport failures; commit only after a run reaches a terminal state.
-
-    Human waits remain inside process_command: this single consumer cannot receive
-    another run until the current run resumes or terminates. The viewer listener
-    remains responsive on the same event loop. Do not add parallel consumers as a
-    workaround without execution-owner leases and coordinated recovery.
-    """
+    """Run isolated commands concurrently; acknowledge terminal partition prefixes."""
+    if not 1 <= max_concurrent_runs <= 4:
+        raise ValueError("Execution concurrency must be between 1 and 4.")
+    connected = False
+    heartbeat = asyncio.create_task(run_worker_heartbeat(
+        session_factory, "execution", lambda: {"connected": connected,
+                                               "capacity": max_concurrent_runs},
+    ))
     try:
         if hitl_service is not None:
             await hitl_service.start(
@@ -209,20 +217,109 @@ async def run_worker(
         while True:
             try:
                 await consumer.start()
+                connected = True
                 logger.info("Execution worker connected; waiting for commands")
-                while True:
-                    message = await consumer.receive()
-                    await process_command(message, session_factory)
-                    await consumer.commit()
+                if max_concurrent_runs == 1:
+                    while True:
+                        message = await consumer.receive()
+                        await process_command(message, session_factory)
+                        await consumer.commit()
+                else:
+                    await _consume_concurrently(consumer, session_factory, max_concurrent_runs)
             except Exception as error:
+                connected = False
                 record_temp_failure(stage="worker-iteration", error=error)
                 logger.exception("Execution worker iteration failed; reconnecting")
                 await consumer.stop()
                 await asyncio.sleep(retry_delay_seconds)
     finally:
+        heartbeat.cancel()
+        await asyncio.gather(heartbeat, return_exceptions=True)
         await consumer.stop()
         if hitl_service is not None:
             await hitl_service.stop()
+
+
+async def _consume_concurrently(
+    consumer: KafkaConsumer,
+    session_factory: async_sessionmaker[AsyncSession],
+    limit: int,
+) -> None:
+    """Keep sessions/contexts isolated and drain all work before transport recovery."""
+    pending: dict[tuple[str, int], deque[tuple[KafkaMessage, asyncio.Task[None]]]] = {}
+    active: set[asyncio.Task[None]] = set()
+    run_locks: dict[str, asyncio.Lock] = {}
+    run_users: dict[str, int] = {}
+    receiving: asyncio.Task[KafkaMessage] | None = None
+
+    async def process(message: KafkaMessage) -> None:
+        envelope = EventEnvelope.from_json(message.value.decode("utf-8"))
+        run_id = str(envelope.payload.get("test_run_id"))
+        lock = run_locks.setdefault(run_id, asyncio.Lock())
+        run_users[run_id] = run_users.get(run_id, 0) + 1
+        try:
+            async with lock:
+                await process_command(message, session_factory)
+        finally:
+            run_users[run_id] -= 1
+            if run_users[run_id] == 0:
+                run_users.pop(run_id)
+                run_locks.pop(run_id)
+
+    try:
+        while True:
+            # Inspect every completion, including failures behind an unfinished
+            # prefix. Never acknowledge a later offset past an active command.
+            for task in tuple(active):
+                if task.done():
+                    task.result()
+                    active.remove(task)
+            completed: list[KafkaMessage] = []
+            for partition, queue in tuple(pending.items()):
+                latest: KafkaMessage | None = None
+                while queue and queue[0][1].done():
+                    message, task = queue.popleft()
+                    task.result()
+                    latest = message
+                if latest is not None:
+                    completed.append(latest)
+                if not queue:
+                    pending.pop(partition)
+            if completed:
+                await consumer.commit_messages(tuple(completed))
+            # Bound both running tasks and unacknowledged completed work. A human
+            # wait cannot create an unbounded backlog behind its partition prefix.
+            buffered = sum(len(queue) for queue in pending.values())
+            if receiving is None and len(active) < limit and buffered < limit * 8:
+                receiving = asyncio.create_task(consumer.receive())
+            waiting: set[asyncio.Task[object]] = set(active)
+            if receiving is not None:
+                waiting.add(receiving)
+            await asyncio.wait(waiting, return_when=asyncio.FIRST_COMPLETED)
+            if receiving is not None and receiving.done():
+                message = receiving.result()
+                receiving = None
+                task = asyncio.create_task(process(message))
+                active.add(task)
+                pending.setdefault((message.topic, message.partition), deque()).append(
+                    (message, task)
+                )
+    finally:
+        tasks: list[asyncio.Task[object]] = list(active)
+        if receiving is not None:
+            tasks.append(receiving)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _watch_execution_owner(connection: AsyncConnection) -> None:
+    """A lost ownership connection stops all executions before restarting intake."""
+    while True:
+        await asyncio.sleep(2)
+        async with asyncio.timeout(5):
+            await connection.execute(text("SELECT 1"))
+            await connection.commit()
 
 
 def build_hitl_worker_service(
@@ -287,11 +384,33 @@ async def main() -> None:
     try:
         session_factory = create_session_factory(engine)
         hitl_service = build_hitl_worker_service(session_factory)
-        await run_worker(
-            KafkaConsumer(settings),
-            session_factory,
-            hitl_service=hitl_service,
-        )
+        # One process owns the configured viewer endpoint/registry. Concurrency
+        # stays inside that owner; another process cannot recover its live runs.
+        async with engine.connect() as ownership:
+            key = {"key": "markettwin-execution-owner"}
+            locked = await ownership.scalar(text(
+                "SELECT pg_try_advisory_lock(hashtextextended(:key, 0))"
+            ), key)
+            await ownership.commit()
+            if not locked:
+                raise RuntimeError("Another execution worker owns the live browser registry.")
+            try:
+                async with asyncio.TaskGroup() as group:
+                    group.create_task(_watch_execution_owner(ownership))
+                    group.create_task(run_worker(
+                        KafkaConsumer(settings), session_factory, hitl_service=hitl_service,
+                        max_concurrent_runs=int(os.getenv("MARKETTWIN_EXECUTION_CONCURRENCY", "2")),
+                    ))
+            finally:
+                try:
+                    await ownership.rollback()
+                    await ownership.execute(text(
+                        "SELECT pg_advisory_unlock(hashtextextended(:key, 0))"
+                    ), key)
+                    await ownership.commit()
+                except BaseException:
+                    await ownership.invalidate()
+                    raise
     finally:
         await engine.dispose()
 

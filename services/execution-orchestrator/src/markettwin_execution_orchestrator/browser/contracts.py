@@ -96,6 +96,7 @@ class VisibleElement:
     enabled: bool
     bounding_box: ElementBoundingBox
     level: int | None = None
+    name_source: Literal["playwright", "approximate", "unavailable"] = "approximate"
 
 @dataclass(frozen=True, slots=True)
 class BrowserObservation:
@@ -141,14 +142,23 @@ class BrowserActionResult:
 
     action: str
     observation: BrowserObservation
+    locator_strategy: str | None = None
+    page_index: tuple[dict[str, object], ...] | None = None
+    next_cursor: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Return an ADK/tool-safe dictionary."""
 
-        return {
+        result: dict[str, object] = {
             "action": self.action,
             "observation": self.observation.to_dict(),
         }
+        if self.locator_strategy is not None:
+            result["locator_strategy"] = self.locator_strategy
+        if self.page_index is not None:
+            result["page_index"] = list(self.page_index)
+            result["next_cursor"] = self.next_cursor
+        return result
 
 
 def _string_list() -> list[str]:

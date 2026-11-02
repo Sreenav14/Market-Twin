@@ -72,3 +72,32 @@ class RunDispatchService:
         )
 
         return queued_run
+
+    async def queue_contract_run(
+        self,
+        *,
+        test_run_id: UUID,
+    ) -> TestRunRecord:
+        queued_run = await self._test_runs.queue_if_awaiting_human_or_draft(
+            test_run_id=test_run_id,
+        )
+        if queued_run is None:
+            raise RunNotQueueableError(
+                "TestRun cannot transition to queued for contract execution."
+            )
+        message = RunRequestedMessage(
+            event_id=uuid4(),
+            test_run_id=queued_run.test_run_id,
+            workspace_id=queued_run.workspace_id,
+            occurred_at=datetime.now(UTC),
+        )
+        envelope = message.to_envelope()
+        await self._outbox.add(
+            aggregate_type="test_run",
+            aggregate_id=queued_run.test_run_id,
+            event_type=envelope.event_type,
+            topic=EXECUTION_COMMANDS_TOPIC,
+            message_key=str(queued_run.test_run_id),
+            payload=envelope.to_dict(),
+        )
+        return queued_run

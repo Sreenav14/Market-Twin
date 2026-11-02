@@ -308,17 +308,48 @@ async function installWorkspace(page: Page, options: {
 }
 
 async function checkViewportAndA11y(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(() => window.innerWidth) + 1);
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  const metrics = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
+    outside: [...document.querySelectorAll('body *')].filter(node => node.getBoundingClientRect().right > innerWidth + 1 && getComputedStyle(node).position !== 'fixed').slice(0, 12).map(node => ({ class: node.className, right: node.getBoundingClientRect().right })) }));
+  expect(metrics.scroll, JSON.stringify(metrics.outside)).toBeLessThanOrEqual(metrics.width + 1);
   const audit = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(audit.violations).toEqual([]);
 }
 
 const viewportMatrix = [
   { name: "desktop", width: 1440, height: 1000 },
+  { name: "compact-desktop", width: 1024, height: 1000 },
   { name: "tablet", width: 768, height: 1024 },
   { name: "mobile", width: 390, height: 844 },
   { name: "small-mobile", width: 320, height: 740 },
 ];
+
+test("shared navigation has one current destination and the compact menu restores focus", async ({ page }) => {
+  test.setTimeout(90000);
+  await installWorkspace(page);
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const [route, label] of [["/overview", "Overview"], ["/ingestion", "Knowledge"], ["/settings/security", "Settings"], [`/applications/${appId}/runs`, "Tests"], [`/targets/${targetId}/network`, "Applications"]]) {
+      await page.goto(route);
+      await expect(page.locator("main")).toBeVisible();
+      const trigger = page.getByRole("button", { name: "Open navigation" });
+      if (width < 1280) await trigger.click();
+      const nav = page.getByRole("navigation", { name: "Primary navigation" }).filter({ visible: true });
+      await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+      await expect(nav.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+      if (width < 1280) {
+        await page.keyboard.press("Escape");
+        await expect(trigger).toBeFocused();
+        await trigger.click();
+        await page.getByRole("dialog").getByRole("link", { name: "Agents", exact: true }).click();
+        await expect(page).toHaveURL(/\/agents$/);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        await expect(page.locator("main")).toBeFocused();
+      }
+    }
+  }
+});
 
 test("populated feature case inspector and exact More routing reflow across the viewport matrix", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "This test drives its own four viewport matrix.");
@@ -398,9 +429,9 @@ test("100-case workbench stress stays usable at 320px and 1440px with keyboard s
     await expect(page.getByRole("heading", { name: longTitle })).toBeVisible();
     if (viewport.width === 320) {
       const list = page.locator(".feature-case-list");
-      const listMetrics = await list.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
+      const listMetrics = await list.evaluate((element) => ({ clientHeight: element.clientHeight, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
       expect(listMetrics.clientHeight).toBeLessThanOrEqual(360);
-      expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
+      expect(listMetrics.scrollWidth).toBeGreaterThan(listMetrics.clientWidth);
     }
     await checkViewportAndA11y(page);
   }
@@ -482,7 +513,9 @@ test("new test zones reflow and default legacy creation payload stays unchanged"
     await page.goto(`/applications/${appId}/runs/new`);
     await expect(page.getByRole("heading", { name: "What to test" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "How to execute" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Security and authorization" })).toBeVisible();
+    await expect(page.locator(".security-disclosure summary")).toBeVisible();
+    await page.locator(".security-disclosure summary").click();
+    await expect(page.getByRole("heading", { name: "Security and authorization" })).toBeAttached();
     await expect(page.getByLabel("Testing mode")).toHaveValue("legacy_persona");
     await checkViewportAndA11y(page);
     if (viewport.width === 1440 || viewport.width === 320) {
@@ -538,22 +571,19 @@ for (const width of [1440, 390]) {
         const style = getComputedStyle(main);
         return {
           overflow: document.documentElement.scrollWidth - window.innerWidth,
-          mainLeft: main.getBoundingClientRect().left,
+          mainLeft: main.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft),
           headerLeft: header.getBoundingClientRect().left,
           pageColor: style.getPropertyValue("--page").trim(),
           fonts: [...main.querySelectorAll("h1,h2,h3")].map((item) => getComputedStyle(item).fontFamily),
-          gutter: Number.parseFloat(style.getPropertyValue("--page-gutter")),
-          topbarPadding: Number.parseFloat(getComputedStyle(document.querySelector(".topbar")!).paddingLeft),
         };
       });
       expect(metrics.overflow, name).toBeLessThanOrEqual(1);
       expect(Math.abs(metrics.mainLeft - metrics.headerLeft), name).toBeLessThanOrEqual(1);
-      expect(metrics.pageColor, name).toBe("#10171b");
-      expect(metrics.fonts.every((font) => font.includes("Instrument Sans")), name).toBe(true);
-      expect(metrics.topbarPadding, name).toBe(metrics.gutter);
+      expect(metrics.pageColor, name).toBe("#eae6dd");
+      expect(metrics.fonts.every((font) => font.includes("IBM Plex Sans Condensed")), name).toBe(true);
       if (name === "report") {
         const reportWidth = await page.locator(".ledger-paper").evaluate((node) => node.getBoundingClientRect().width);
-        const frameWidth = await page.locator("main.page-container").evaluate((node) => node.getBoundingClientRect().width);
+        const frameWidth = await page.locator("main.page-container").evaluate((node) => node.clientWidth - Number.parseFloat(getComputedStyle(node).paddingLeft) - Number.parseFloat(getComputedStyle(node).paddingRight));
         expect(Math.abs(reportWidth - frameWidth)).toBeLessThanOrEqual(1);
       }
       await checkViewportAndA11y(page);
@@ -585,11 +615,48 @@ test("public and sign-in pages use the same product palette and type at desktop 
           font: getComputedStyle(document.querySelector("h1")!).fontFamily,
         };
       });
-      expect(metrics.color, name).toBe(metrics.body);
-      expect(metrics.font, name).toContain("Instrument Sans");
+      expect(["rgb(234, 230, 221)", "rgb(251, 250, 247)"], name).toContain(metrics.color);
+      expect(metrics.font, name).toContain("IBM Plex Sans Condensed");
       await checkViewportAndA11y(page);
       await page.screenshot({ path: path.join(directory, `${name}-${width}.png`), fullPage: true });
     }
+  }
+});
+
+test("Tests opens applications before showing their tests on desktop and phone", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Explicit responsive viewport checks.");
+  await installWorkspace(page);
+  await page.route(`**/api/v1/applications/${appId}/test-runs`, (route) => route.fulfill({ json: [
+    { ...run, id: "older-run", test_number: 9999, created_at: "2026-01-01T00:00:00Z",
+      configuration_snapshot: { ...run.configuration_snapshot, test_name: "Older test" } },
+    { ...run, created_at: "2026-10-19T00:00:00Z" },
+  ] }));
+  for (const width of [1440, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto("/runs");
+    await expect(page.getByText("Choose an application to see its tests.")).toBeVisible();
+    await checkViewportAndA11y(page);
+    await page.getByRole("link", { name: /Synthetic storefront.*View tests/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/applications/${appId}/runs$`));
+    const testRows = page.locator("main .deletable-row .data-row");
+    await expect(page.getByRole("combobox", { name: "Sort tests" })).toHaveValue("recent");
+    await expect(testRows.first()).toContainText("Synthetic profile review");
+    await page.getByRole("combobox", { name: "Sort tests" }).selectOption("oldest");
+    await expect(testRows.first()).toContainText("Older test");
+    await page.getByRole("combobox", { name: "Sort tests" }).selectOption("recent");
+    const navigation = page.locator('nav[aria-label="Primary navigation"]').first();
+    await expect(navigation.locator('a[aria-label="Tests"]')).toHaveAttribute("aria-current", "page");
+    await expect(navigation.locator('a[aria-label="Applications"]')).not.toHaveAttribute("aria-current", "page");
+    await page.getByRole("searchbox", { name: "Find a test" }).fill("no matching test");
+    await expect(page.getByRole("heading", { name: "No matching tests" })).toBeVisible();
+    await page.getByRole("button", { name: "Clear filters" }).first().click();
+    await checkViewportAndA11y(page);
+    await page.screenshot({ path: testInfo.outputPath(`application-tests-${width}.png`), fullPage: true });
+    await page.locator(`main a[href='/runs/${runId}/overview']`).click();
+    await page.getByRole("link", { name: "Application tests", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/applications/${appId}/runs$`));
+    await page.getByRole("link", { name: "All applications", exact: true }).click();
+    await expect(page).toHaveURL(/\/runs$/);
   }
 });
 
@@ -636,8 +703,8 @@ test("live viewer is full width and scrolls its website without moving the works
   await expect(page.getByRole("button", { name: "Scroll live website down" })).toBeEnabled();
   const canvas = page.getByLabel("Live protected browser");
   const frame = await canvas.boundingBox();
-  const main = await page.locator("main.page-container").boundingBox();
-  expect(frame!.width).toBeGreaterThan(main!.width * 0.9);
+  const contentWidth = await page.locator("main.page-container").evaluate(node => node.clientWidth - Number.parseFloat(getComputedStyle(node).paddingLeft) - Number.parseFloat(getComputedStyle(node).paddingRight));
+  expect(frame!.width).toBeGreaterThan(contentWidth * 0.9);
   expect(Math.abs(frame!.width / frame!.height - 1280 / 720)).toBeLessThan(0.01);
   expect(await canvas.evaluate((node) => getComputedStyle(node).cursor)).toContain("browser-arrow.svg");
   expect((await page.request.get("/cursors/browser-arrow.svg")).ok()).toBe(true);

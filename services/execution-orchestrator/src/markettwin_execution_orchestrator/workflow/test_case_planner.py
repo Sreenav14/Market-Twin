@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from google.adk.agents import LlmAgent
 from google.adk.agents.run_config import RunConfig
+from markettwin_database.model_budget import model_budget, model_role
 from markettwin_shared.run_failure import reviewed_failure_reason
 from markettwin_shared.runtime_snapshot import AgentRuntimeSnapshotPayload
 from pydantic import ValidationError
@@ -446,18 +447,19 @@ async def generate_feature_plan(
     )
     response = None
     try:
-        async with asyncio.timeout(min(90, request.budget.max_total_seconds)):
-            async for event in runner.run_async(
-                user_id=str(request.test_run_id),
-                session_id=conversation.id,
-                new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
-                run_config=RunConfig(max_llm_calls=2),
-            ):
-                if event.author == agent.name and event.is_final_response() and event.content:
-                    response = "".join(
-                        part.text for part in event.content.parts or []
-                        if part.text and not part.thought
-                    )
+        with model_budget(session, request.test_run_id), model_role("meta"):
+            async with asyncio.timeout(min(90, request.budget.max_total_seconds)):
+                async for event in runner.run_async(
+                    user_id=str(request.test_run_id),
+                    session_id=conversation.id,
+                    new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
+                    run_config=RunConfig(max_llm_calls=2),
+                ):
+                    if event.author == agent.name and event.is_final_response() and event.content:
+                        response = "".join(
+                            part.text for part in event.content.parts or []
+                            if part.text and not part.thought
+                        )
     finally:
         await runner.close()
     if not response or not response.strip():

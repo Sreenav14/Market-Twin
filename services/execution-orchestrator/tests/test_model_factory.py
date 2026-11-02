@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 from markettwin_execution_orchestrator.models import model_factory
+from markettwin_execution_orchestrator.models.budgeted_client import BudgetedLiteLLMClient
 from markettwin_execution_orchestrator.models.model_factory import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_OLLAMA_API_BASE,
@@ -30,6 +31,7 @@ def test_create_model_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> Non
 
     create_model()
 
+    assert isinstance(captured.pop("llm_client"), BudgetedLiteLLMClient)
     assert captured == {
         "model": DEFAULT_OPENAI_MODEL_NAME,
         "max_completion_tokens": DEFAULT_MAX_TOKENS,
@@ -76,6 +78,7 @@ def test_create_model_uses_ollama_when_requested(
 
     create_model()
 
+    assert isinstance(captured.pop("llm_client"), BudgetedLiteLLMClient)
     assert captured == {
         "model": DEFAULT_OLLAMA_MODEL_NAME,
         "api_base": DEFAULT_OLLAMA_API_BASE,
@@ -137,6 +140,7 @@ def test_resolved_openai_configuration_is_safe(
 
     assert configuration.snapshot_parameters() == {
         "max_tokens": 512,
+        "timeout": 60,
         "num_retries": 2,
         "requested_temperature": 0.05,
         "temperature": 0.05,

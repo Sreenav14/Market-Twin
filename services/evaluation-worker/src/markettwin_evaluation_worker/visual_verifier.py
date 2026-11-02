@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import litellm
-from litellm.exceptions import RateLimitError
+from litellm.exceptions import RateLimitError, Timeout
+from markettwin_database.model_budget import ModelBudgetExceeded, model_call, model_role
 from markettwin_shared.model_parameters import completion_parameters
 from markettwin_shared.runtime_snapshot import (
     AgentRuntimeSnapshotPayload,
@@ -29,6 +30,8 @@ VISUAL_MAX_TOKENS = 300
 VISUAL_RATE_LIMIT_MAX_ATTEMPTS = 4
 VISUAL_RATE_LIMIT_INITIAL_DELAY_SECONDS = 1.0
 VISUAL_CRITERION_PLACEHOLDER = "{{criterion}}"
+VISUAL_CALL_TIMEOUT_SECONDS = 45
+VISUAL_CRITERION_TIMEOUT_SECONDS = 100
 
 def build_visual_verifier_prompt(
     criterion: str,
@@ -100,6 +103,7 @@ class VisualVerificationResult:
     status: VisualVerificationStatus
     rationale: str
     observed_details: tuple[str, ...]
+    cacheable: bool = True
 
 
 def _image_data_url(
@@ -142,7 +146,16 @@ async def _acompletion_with_rate_limit_retry(
 
     for attempt in range(VISUAL_RATE_LIMIT_MAX_ATTEMPTS):
         try:
-            return await litellm.acompletion(**request)  # pyright: ignore[reportUnknownMemberType]
+            input_tokens = litellm.token_counter(  # pyright: ignore[reportUnknownMemberType]
+                model=request["model"], messages=request["messages"],
+            )
+            async with model_call(
+                model=request["model"], input_tokens=input_tokens,
+                output_tokens=VISUAL_MAX_TOKENS,
+            ) as call:
+                response = await litellm.acompletion(**request)  # pyright: ignore[reportUnknownMemberType]
+                call.record(response)
+                return response
         except RateLimitError:
             if attempt == VISUAL_RATE_LIMIT_MAX_ATTEMPTS - 1:
                 raise
@@ -205,6 +218,8 @@ async def verify_visual_criterion(
         "response_format": {
             "type": "json_object",
         },
+        "timeout": VISUAL_CALL_TIMEOUT_SECONDS,
+        "num_retries": 0,
     }
 
     api_key = (
@@ -216,7 +231,16 @@ async def verify_visual_criterion(
         request["api_key"] = api_key
 
     try:
-        response = await _acompletion_with_rate_limit_retry(request)
+        with model_role("visual_verifier"):
+            async with asyncio.timeout(VISUAL_CRITERION_TIMEOUT_SECONDS):
+                response = await _acompletion_with_rate_limit_retry(request)
+    except (TimeoutError, Timeout, ModelBudgetExceeded):
+        return VisualVerificationResult(
+            status="unverified",
+            rationale="Visual verification reached its model-call time or run budget limit.",
+            observed_details=(),
+            cacheable=False,
+        )
     except RateLimitError:
         return VisualVerificationResult(
             status="unverified",
@@ -225,6 +249,7 @@ async def verify_visual_criterion(
                 "the model provider remained rate-limited."
             ),
             observed_details=(),
+            cacheable=False,
         )
 
     raw_content = (
@@ -333,6 +358,9 @@ def build_visual_runtime_snapshot_payload(
             "rate_limit_max_attempts": (
                 VISUAL_RATE_LIMIT_MAX_ATTEMPTS
             ),
+            "timeout": VISUAL_CALL_TIMEOUT_SECONDS,
+            "criterion_timeout_seconds": VISUAL_CRITERION_TIMEOUT_SECONDS,
+            "num_retries": 0,
             "rate_limit_initial_delay_seconds": (
                 VISUAL_RATE_LIMIT_INITIAL_DELAY_SECONDS
             ),

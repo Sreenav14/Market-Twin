@@ -4,7 +4,8 @@ import { CurrentUser } from "../lib/api";
 import { AppShell } from "../layouts/AppShell";
 import { RunLayout } from "../layouts/RunLayout";
 import { SettingsLayout } from "../layouts/SettingsLayout";
-import { OverviewPage } from "../pages/overview/OverviewPage";
+import { WorkspaceDashboardPage } from "../pages/concept/WorkspaceDashboardPage";
+import { LiveTestPage } from "../pages/concept/LiveTestPages";
 import { ApplicationsPage } from "../pages/applications/ApplicationsPage";
 import { NewApplicationPage } from "../pages/applications/NewApplicationPage";
 import { ApplicationOverviewPage } from "../pages/applications/ApplicationOverviewPage";
@@ -21,6 +22,7 @@ import { EditTargetPage } from "../pages/targets/EditTargetPage";
 import { TargetNetworkPolicyPage } from "../pages/targets/TargetNetworkPolicyPage";
 import { RunsPage } from "../pages/runs/RunsPage";
 import { NewRunPage } from "../pages/runs/NewRunPage";
+import { ContractApprovalPage } from "../pages/runs/ContractApprovalPage";
 import { RunOverviewPage } from "../pages/runs/RunOverviewPage";
 import { AgentPromptsPage } from "../pages/runs/AgentPromptsPage";
 import { RunPerspectivesPage } from "../pages/runs/RunPerspectivesPage";
@@ -28,12 +30,10 @@ import { RunMissionsPage } from "../pages/runs/RunMissionsPage";
 import { RunJourneysPage } from "../pages/runs/RunJourneysPage";
 import { RunEvaluationPage } from "../pages/runs/RunEvaluationPage";
 import { JourneyDetailPage } from "../pages/runs/JourneyDetailPage";
-import { RunActivityPage } from "../pages/runs/RunActivityPage";
 import { RunFindingsPage } from "../pages/runs/RunFindingsPage";
 import { FindingDetailPage } from "../pages/runs/FindingDetailPage";
 import { RunEvidencePage } from "../pages/runs/RunEvidencePage";
 import { EvidenceDetailPage } from "../pages/runs/EvidenceDetailPage";
-import { RunReportPage } from "../pages/runs/RunReportPage";
 import { HumanActionPage } from "../pages/runs/HumanActionPage";
 import { ProfileSettingsPage } from "../pages/settings/ProfileSettingsPage";
 import { WorkspaceSettingsPage } from "../pages/settings/WorkspaceSettingsPage";
@@ -53,13 +53,18 @@ export function AuthenticatedRouter({
   return (
     <Routes>
       <Route element={<AppShell user={user} onLogout={onLogout} />}>
-        <Route index element={<Navigate to="/overview" replace />} />
-        <Route path="/login" element={<Navigate to="/overview" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/auth/callback"
-          element={<Navigate to="/overview" replace />}
+          element={<Navigate to="/dashboard" replace />}
         />
-        <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<WorkspaceDashboardPage />} />
+        <Route path="/results" element={<Navigate to="/runs" replace />} />
+        <Route path="/test-results" element={<Navigate to="/runs" replace />} />
+        <Route path="/watch" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/watch-live" element={<Navigate to="/dashboard" replace />} />
         <Route path="/ingestion" element={<IngestionPage />} />
         <Route path="/knowledge/review" element={<ReviewKnowledgePage />} />
         <Route path="/knowledge/review/:entryId" element={<KnowledgeReviewPage />} />
@@ -114,12 +119,15 @@ export function AuthenticatedRouter({
           <Route path="journeys" element={<RunJourneysPage />} />
           <Route path="evaluation" element={<RunEvaluationPage />} />
           <Route path="journeys/:journeyId" element={<JourneyDetailPage />} />
-          <Route path="activity" element={<RunActivityPage />} />
+          <Route path="activity" element={<LiveTestPage view="watch" />} />
+          <Route path="watch" element={<LiveTestPage view="watch" />} />
           <Route path="findings" element={<RunFindingsPage />} />
           <Route path="findings/:findingId" element={<FindingDetailPage />} />
           <Route path="evidence" element={<RunEvidencePage />} />
           <Route path="evidence/:artifactId" element={<EvidenceDetailPage />} />
-          <Route path="report" element={<RunReportPage />} />
+          <Route path="report" element={<LiveTestPage view="results" />} />
+          <Route path="results" element={<LiveTestPage view="results" />} />
+          <Route path="contract" element={<ContractApprovalPage />} />
           <Route path="human-action" element={<HumanActionPage />} />
         </Route>
         <Route path="/settings" element={<SettingsLayout />}>

@@ -3,21 +3,21 @@ import { Link, NavLink } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
-  Check,
   CheckCircle2,
-  AlertTriangle,
-  AlertCircle,
   Route,
   ScanLine,
   ShieldCheck,
-  Layers,
   FileCheck2,
-  Lock,
   ChevronDown,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { BrandMark } from "../../components/ui/BrandMark";
+import { useTheme } from "../../lib/theme";
 
 function PublicLayout({ title, children }: { title: string; children: ReactNode }) {
+  const { isDark, toggleTheme } = useTheme();
+
   useEffect(() => {
     document.title = `${title} · MarketTwin`;
     if (!window.location.hash) window.scrollTo({ top: 0 });
@@ -36,8 +36,17 @@ function PublicLayout({ title, children }: { title: string; children: ReactNode 
             <span className="mt-brand-note">Product testing, with evidence.</span>
           </span>
         </Link>
-        <nav aria-label="Product navigation">
+        <nav aria-label="Product navigation" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <NavLink to="/how-it-works">How it works</NavLink>
+          <button
+            className="icon-button theme-toggle-btn"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+            title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          </button>
           <Link className="mt-button mt-button-small" to="/login">
             Open workspace <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
@@ -86,33 +95,33 @@ interface EvidenceStep {
 const illustrativeSteps: EvidenceStep[] = [
   {
     stepNumber: "01",
-    action: "Load /pricing page",
-    targetUrl: "https://app.example.com/pricing",
-    observation: "Browser navigates to target. 3 subscription tiers and billing frequency toggle are rendered in the DOM.",
-    evidenceKind: "Screenshot & DOM Snapshot",
-    evidenceId: "art-01-pricing.png",
-    statusText: "Verified in target scope",
-    criterion: "Page loads with HTTP 200 within authorized target origin",
+    action: "Open profile",
+    targetUrl: "https://target.example.invalid/profile",
+    observation: "Profile opened.",
+    evidenceKind: "Recorded browser step",
+    evidenceId: "step-11",
+    statusText: "Recorded",
+    criterion: "Profile page is available",
   },
   {
     stepNumber: "02",
-    action: "Toggle annual billing switch",
-    targetUrl: "https://app.example.com/pricing",
-    observation: "User activates annual discount switch. Pricing cards recalculate prices to reflect 20% annual savings.",
-    evidenceKind: "Visual State Diff & DOM Event",
-    evidenceId: "art-02-toggle.png",
-    statusText: "Verified in target scope",
-    criterion: "Element [data-tier='pro'] updates price text from $49 to $39",
+    action: "Choose email updates",
+    targetUrl: "https://target.example.invalid/profile",
+    observation: "Control selected.",
+    evidenceKind: "Recorded browser step",
+    evidenceId: "step-12",
+    statusText: "Recorded",
+    criterion: "Email updates can be selected",
   },
   {
     stepNumber: "03",
-    action: "Select Pro plan & open checkout",
-    targetUrl: "https://app.example.com/checkout?plan=pro",
-    observation: "Modal mounts with order summary. POST /api/checkout completes without policy violation or console error.",
-    evidenceKind: "Network Payload & DOM Snapshot",
-    evidenceId: "art-03-checkout.png",
-    statusText: "Verified in target scope",
-    criterion: "Checkout modal mounts with active session in approved origin",
+    action: "Verify saved state",
+    targetUrl: "https://target.example.invalid/profile",
+    observation: "Email updates enabled.",
+    evidenceKind: "Recorded assertion",
+    evidenceId: "step-13",
+    statusText: "Passed assertion",
+    criterion: "Email updates enabled",
   },
 ];
 
@@ -125,7 +134,7 @@ function HeroEvidenceSequence() {
       <div className="mt-instrument-bar">
         <span id="hero-evidence-title">
           <span className="mt-light" aria-hidden="true" />
-          Evidence Ledger Explorer
+          Inspect a recorded step
         </span>
         <span className="mt-badge-demo" aria-label="Illustrative demonstration label">
           Illustrative observation sequence
@@ -136,12 +145,12 @@ function HeroEvidenceSequence() {
         <div className="mt-question-callout">
           <span className="mt-kicker">Testing Question</span>
           <p className="mt-question-text">
-            “Can a first-time customer compare plans, select annual billing, and reach checkout without network errors?”
+            “Can a test user update a profile using the documented form?”
           </p>
         </div>
         <div className="mt-target-tag">
           <span className="mt-kicker">Authorized target:</span>
-          <code>https://app.example.com</code>
+          <code>https://target.example.invalid</code>
         </div>
       </div>
 
@@ -167,28 +176,11 @@ function HeroEvidenceSequence() {
         </ol>
 
         <div className="mt-demo-evidence" aria-live="polite">
-          <div className="mt-mini-browser" aria-hidden="true">
-            <div className="mt-mini-browser-bar">
-              <span className="mt-mini-dot" />
-              <span className="mt-mini-dot" />
-              <span className="mt-mini-dot" />
-              <span className="mt-mini-url">{step.targetUrl}</span>
-            </div>
-            <div className={`mt-mini-canvas mt-canvas-step-${selected + 1}`}>
-              <div className="mt-canvas-header">
-                <span className="mt-skeleton-pill" />
-                <span className="mt-skeleton-line" />
-              </div>
-              <div className="mt-canvas-plans">
-                <div className={`mt-plan-card ${selected >= 1 ? "active-plan" : ""}`} />
-                <div className="mt-plan-card" />
-              </div>
-              <div className="mt-canvas-badge">
-                <Check size={14} aria-hidden="true" />
-                <span>Step {step.stepNumber} verified</span>
-              </div>
-            </div>
-          </div>
+          <h3>{step.action}</h3>
+          <dl className="mt-demo-comparison">
+            <div><dt>Expected</dt><dd>{step.criterion}</dd></div>
+            <div><dt>Observed</dt><dd>{step.observation}</dd></div>
+          </dl>
 
           <div className="mt-evidence-card">
             <div className="mt-evidence-card-header">
@@ -214,7 +206,7 @@ function HeroEvidenceSequence() {
       </div>
 
       <p className="mt-example-note">
-        Illustration only. Live workspaces record actual browser screenshots, DOM snapshots, network payloads, and signed artifacts.
+        Illustrative example. Your workspace shows the steps and artifacts recorded for your test; unavailable evidence stays explicit.
       </p>
     </div>
   );
@@ -231,14 +223,11 @@ export function HomePage() {
             Authorized browser testing · Evidence-backed verification
           </p>
           <h1 id="hero-heading">
-            From a product question<br />
-            to verifiable<br />
-            <em>browser evidence.</em>
+            Test real journeys.<br />
+            <em>Read the evidence.</em>
           </h1>
           <p className="mt-lead">
-            MarketTwin executes planned browser journeys and deterministic feature cases against
-            authorized targets. Every click, network request, and visual state is captured into a
-            verifiable Evidence Ledger.
+            Run browser tests against authorized targets. Inspect recorded actions, assertions, and available artifacts to understand what the evidence supports.
           </p>
 
           <div className="mt-actions">
@@ -278,11 +267,10 @@ export function HomePage() {
           <p className="mt-kicker">Structured Testing Pipeline</p>
           <h2 id="workflow-heading">
             A clear path from question<br />
-            to definitive review.
+            to evidence review.
           </h2>
           <p>
-            MarketTwin eliminates guesswork by anchoring every conclusion to observable browser actions
-            and verifiable artifacts.
+            Move from a testing goal to recorded steps, then review what those steps establish and what remains uncertain.
           </p>
         </div>
 
@@ -299,16 +287,14 @@ export function HomePage() {
             <span className="mt-kicker">02 / Execution</span>
             <h3>Observe action</h3>
             <p>
-              Watch sandboxed browser execution live or replay sequential actions. Pause and take human control
-              whenever a sensitive step, CAPTCHA, or MFA checkpoint arises.
+              Follow browser execution and recorded activity. When the agent requests assistance, use the available controls within the approved target scope.
             </p>
           </article>
           <article className="mt-workflow-step">
             <span className="mt-kicker">03 / Verification</span>
             <h3>Check evidence</h3>
             <p>
-              Inspect time-stamped screenshots, console outputs, and network calls attached directly to each individual step.
-              Missing evidence is never masked or substituted.
+              Inspect recorded steps, assertions, and the artifacts available for that step. Missing evidence remains visible.
             </p>
           </article>
           <article className="mt-workflow-step">
@@ -316,7 +302,7 @@ export function HomePage() {
             <h3>Decide next action</h3>
             <p>
               Review results categorized into verified findings, unverified observations, and test runner limitations.
-              Export an audit-ready Evidence Ledger.
+              Open the evidence supporting each conclusion.
             </p>
           </article>
         </div>
@@ -343,8 +329,7 @@ export function HomePage() {
             Understand the result categories <ArrowRight size={17} aria-hidden="true" />
           </Link>
           <p className="mt-sample-disclaimer">
-            Explicitly illustrative: This sample demonstrates MarketTwin's triage classification.
-            MarketTwin does not display fabricated customer scores, false pass-rates, or synthetic testimonials.
+            Illustrative result categories. Your report reflects the evidence recorded for your test.
           </p>
         </div>
 

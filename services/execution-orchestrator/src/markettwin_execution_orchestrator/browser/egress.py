@@ -6,23 +6,31 @@ origin and request authorization; this boundary independently rejects unsafe IPs
 
 import asyncio
 import socket
+from collections.abc import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from markettwin_execution_orchestrator.browser.contracts import NetworkPolicy
+from markettwin_execution_orchestrator.browser.errors import UnsafeDestinationAddressError
 from markettwin_execution_orchestrator.browser.network import (
     resolve_and_validate_host,
     system_host_lookup,
 )
+from markettwin_execution_orchestrator.browser.network_diagnostics import NetworkDiagnosticReason
+
+EgressFailureCallback = Callable[[NetworkDiagnosticReason, str, str, int], None]
 
 
 class PinnedEgressProxy:
     """Private, bounded proxy whose sockets never resolve an unchecked hostname."""
 
-    def __init__(self, network_policy: NetworkPolicy) -> None:
+    def __init__(
+        self, network_policy: NetworkPolicy, *, on_failure: EgressFailureCallback | None = None,
+    ) -> None:
         self._policy: NetworkPolicy = network_policy
         self._server: asyncio.Server | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         self._writers: set[asyncio.StreamWriter] = set()
+        self._on_failure = on_failure
 
     async def start(self) -> str:
         self._server = await asyncio.start_server(
@@ -59,6 +67,8 @@ class PinnedEgressProxy:
         upstream: asyncio.StreamWriter | None = None
         pumps: list[asyncio.Task[None]] = []
         established = False
+        reason: NetworkDiagnosticReason = "browser_transport_failed"
+        scheme, hostname, port = "", "", 0
         try:
             async with asyncio.timeout(10):
                 header = (await reader.readuntil(b"\r\n\r\n")).decode("latin-1")
@@ -74,12 +84,15 @@ class PinnedEgressProxy:
                 ):
                     raise ValueError("Invalid proxy target.")
                 port = parsed.port or (443 if tunnel else 80)
+                scheme, hostname = parsed.scheme, parsed.hostname
+                reason = "dns_resolution_failed"
                 addresses = await resolve_and_validate_host(
                     parsed.hostname, self._policy, system_host_lookup,
                 )
                 # Pass only a validated numeric IP to the TCP dialer. Chromium
                 # cannot perform a second hostname lookup for this connection.
                 address = addresses[0]
+                reason = "upstream_connection_failed"
                 remote, upstream = await asyncio.open_connection(
                     address.address, port,
                     family=socket.AF_INET if address.family == 4 else socket.AF_INET6,
@@ -108,6 +121,7 @@ class PinnedEgressProxy:
                     upstream.write(("\r\n".join(forwarded) + "\r\n\r\n").encode("latin-1"))
                     await upstream.drain()
                 established = True
+                reason = "browser_transport_failed"
             pumps = [
                 asyncio.create_task(self._copy(reader, upstream)),
                 asyncio.create_task(self._copy(remote, writer)),
@@ -117,7 +131,12 @@ class PinnedEgressProxy:
                 completed.result()
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as error:
+            if self._on_failure is not None:
+                self._on_failure(
+                    "unsafe_destination_ip" if isinstance(error, UnsafeDestinationAddressError)
+                    else reason, scheme, hostname, port,
+                )
             if not established:
                 writer.write(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
         finally:

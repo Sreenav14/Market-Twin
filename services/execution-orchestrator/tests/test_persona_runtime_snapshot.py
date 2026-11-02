@@ -95,6 +95,7 @@ def test_build_persona_runtime_snapshot_payload(
 
     assert payload.model_configuration == {
         "max_tokens": 2048,
+        "timeout": 60,
         "num_retries": 2,
         "requested_temperature": 0.05,
         "temperature": 0.05,

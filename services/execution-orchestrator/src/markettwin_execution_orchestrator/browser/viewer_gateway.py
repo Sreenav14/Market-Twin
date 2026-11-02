@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import secrets
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
@@ -15,6 +16,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, WebSocket
 
+from markettwin_execution_orchestrator.browser.network_diagnostics import (
+    NETWORK_DIAGNOSTIC_DESTINATIONS,
+    NETWORK_DIAGNOSTIC_REASONS,
+)
 from markettwin_execution_orchestrator.browser.owner import (
     BrowserOwner,
     OwnerLease,
@@ -91,11 +96,34 @@ class ViewerGateway:
         return token
 
     async def _permitted(self, cookie: str, lease: OwnerLease) -> bool:
+        if lease.expires_at <= datetime.now(UTC):
+            return False
+        combined = getattr(self._authority, "permitted_session", None)
+        if callable(combined):
+            return await cast(Callable[[str, OwnerLease], Awaitable[bool]], combined)(cookie, lease)
         return (
-            lease.expires_at > datetime.now(UTC)
-            and await self._authority.actor(cookie) == lease.actor_id
+            await self._authority.actor(cookie) == lease.actor_id
             and await self._authority.permitted(lease.actor_id, lease)
         )
+
+    async def prune_expired(self) -> None:
+        """Release expired disconnected bookkeeping without breaking live renewal."""
+        now = datetime.now(UTC)
+        self._tickets = {
+            key: ticket for key, ticket in self._tickets.items() if ticket.expires_at > now
+        }
+        for lease_id, lease in tuple(self._leases.items()):
+            if lease.expires_at > now or lease.handle.session_id in self._connected:
+                continue
+            # Remove before awaiting: a newer ticket must not be removed by this sweep.
+            self._leases.pop(lease_id, None)
+            was_attached = lease_id in self._attached
+            self._attached.discard(lease_id)
+            if was_attached:
+                try:
+                    await self._owner.detach(lease)
+                except ViewerRejectedError:
+                    pass  # The live browser may already have been disposed.
 
     async def renew(self, actor_id: UUID, lease: OwnerLease) -> None:
         previous = self._leases.get(lease.lease_id)
@@ -193,6 +221,7 @@ class ViewerGateway:
             self._attached.add(lease.lease_id)
 
             async def send_frames() -> None:
+                previous_diagnostics: list[dict[str, str | int]] = []
                 while True:
                     current = self._leases[lease.lease_id]
                     if not await self._permitted(cookie, current):
@@ -200,7 +229,33 @@ class ViewerGateway:
                     frame = await self._owner.frame(current)
                     if not await self._permitted(cookie, current):
                         break
-                    await websocket.send_bytes(frame)
+                    async with asyncio.timeout(5):
+                        await websocket.send_bytes(frame)
+                    diagnostics = getattr(self._owner, "diagnostics", None)
+                    if callable(diagnostics):
+                        snapshot = await cast(
+                            Callable[[OwnerLease], Awaitable[tuple[dict[str, str | int], ...]]],
+                            diagnostics,
+                        )(current)
+                        # Rebuild the fixed schema here: no owner payload can leak
+                        # a URL, cookie, exception or private page content.
+                        safe_snapshot: list[dict[str, str | int]] = []
+                        for entry in snapshot[:18]:
+                            reason, destination, count = (
+                                entry.get("reason"), entry.get("destination"), entry.get("count")
+                            )
+                            if (reason in NETWORK_DIAGNOSTIC_REASONS
+                                    and destination in NETWORK_DIAGNOSTIC_DESTINATIONS
+                                    and type(count) is int and 1 <= count <= 128):
+                                safe_snapshot.append({
+                                    "reason": reason, "destination": destination, "count": count,
+                                })
+                        if not await self._permitted(cookie, current):
+                            break
+                        if safe_snapshot != previous_diagnostics:
+                            async with asyncio.timeout(5):
+                                await websocket.send_json({"network_diagnostics": safe_snapshot})
+                            previous_diagnostics = safe_snapshot
                     await asyncio.sleep(0.5)
                 raise ViewerRejectedError("Viewer authority is unavailable.")
 
@@ -229,7 +284,14 @@ class ViewerGateway:
             if lease is not None and registered:
                 if attached:
                     try:
-                        await self._owner.detach(lease)
+                        # Renewals change expiry while retaining this connection's
+                        # identity. Detach its current lease so a held drag releases.
+                        current = self._leases.get(lease.lease_id, lease)
+                        if (current.handle == lease.handle and current.actor_id == lease.actor_id
+                                and current.generation == lease.generation):
+                            await self._owner.detach(current)
+                            self._attached.discard(lease.lease_id)
                     except Exception:
                         pass
                 self._connected.discard(lease.handle.session_id)
+                await self.prune_expired()

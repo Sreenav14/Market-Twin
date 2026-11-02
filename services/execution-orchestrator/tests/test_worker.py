@@ -1,6 +1,7 @@
 """Persistent worker transport and execution behavior."""
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, Mock
@@ -21,6 +22,93 @@ class SessionContext:
 
     async def __aexit__(self, *args: object) -> None:
         pass
+
+
+@pytest.mark.parametrize("second_partition", [0, 1])
+async def test_concurrent_human_wait_preserves_partition_acknowledgements(
+    monkeypatch: pytest.MonkeyPatch, second_partition: int,
+) -> None:
+    incoming: asyncio.Queue[KafkaMessage] = asyncio.Queue()
+    messages = tuple(KafkaMessage("commands", partition, index, None, EventEnvelope(
+        event_id=uuid4(), event_type="run.requested", event_version=1,
+        occurred_at=datetime.now(UTC), producer="test", workspace_id=uuid4(),
+        trace_id=None, correlation_id=None, causation_id=None,
+        payload={"test_run_id": str(uuid4())},
+    ).to_json().encode()) for index, partition in enumerate((0, second_partition)))
+    for message in messages:
+        incoming.put_nowait(message)
+    human_waiting, other_completed, resume = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    acknowledged: list[KafkaMessage] = []
+    committed = asyncio.Event()
+
+    async def process(message: KafkaMessage, *_args: object) -> None:
+        if message == messages[0]:
+            human_waiting.set()
+            await resume.wait()
+        else:
+            await human_waiting.wait()
+            other_completed.set()
+
+    async def commit(batch: tuple[KafkaMessage, ...]) -> None:
+        acknowledged.extend(batch)
+        committed.set()
+
+    consumer = SimpleNamespace(receive=incoming.get, commit_messages=commit)
+    monkeypatch.setattr(worker, "process_command", process)
+    task = asyncio.create_task(worker._consume_concurrently(
+        cast(KafkaConsumer, consumer), cast(async_sessionmaker[AsyncSession], object()), 2,
+    ))
+    try:
+        await asyncio.wait_for(other_completed.wait(), 2)
+        if second_partition == 1:
+            await asyncio.wait_for(committed.wait(), 2)
+            assert acknowledged == [messages[1]]
+        else:
+            # Let the scheduler observe the second completion.
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert acknowledged == []
+        committed.clear()
+        resume.set()
+        await asyncio.wait_for(committed.wait(), 2)
+        assert acknowledged[-1] == messages[0 if second_partition == 1 else 1]
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+async def test_concurrent_intake_cancellation_drains_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    incoming: asyncio.Queue[KafkaMessage] = asyncio.Queue()
+    envelope = EventEnvelope(
+        event_id=uuid4(), event_type="run.requested", event_version=1,
+        occurred_at=datetime.now(UTC), producer="test", workspace_id=uuid4(),
+        trace_id=None, correlation_id=None, causation_id=None,
+        payload={"test_run_id": str(uuid4())},
+    )
+    incoming.put_nowait(KafkaMessage("commands", 0, 0, None, envelope.to_json().encode()))
+    started, cleaned = asyncio.Event(), asyncio.Event()
+
+    async def process(*_args: object) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    consumer = SimpleNamespace(receive=incoming.get, commit_messages=AsyncMock())
+    monkeypatch.setattr(worker, "process_command", process)
+    task = asyncio.create_task(worker._consume_concurrently(
+        cast(KafkaConsumer, consumer), cast(async_sessionmaker[AsyncSession], object()), 2,
+    ))
+    await asyncio.wait_for(started.wait(), 2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cleaned.is_set()
+    consumer.commit_messages.assert_not_awaited()
 
 
 async def test_human_wait_occupies_the_single_execution_consumer(monkeypatch) -> None:

@@ -235,8 +235,10 @@ test("repeated persona claims stay under Needs Verification and out of confirmed
   await page.getByRole("link", { name: "Open finding details" }).click();
   await expect(page.getByText(/No evidence references were attached/)).toBeVisible();
   await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report" }).click();
-  await expect(page.getByText("1 confirmed issues. Severity totals below include confirmed issues only.")).toBeVisible();
-  await expect(page.locator(".severity-summary").getByText("0", { exact: true })).toHaveCount(4);
+  await expect(page.getByRole("region", { name: "Test result" })).toContainText("1 verified product issue");
+  await expect(page.locator("#report-verified .ledger-finding-card")).toHaveCount(1);
+  await expect(page.locator("#report-verified")).toContainText(observations[2].title);
+  await expect(page.locator("#report-verified")).not.toContainText(observations[0].title);
 });
 
 test("completed test: triage, detail and report", async ({
@@ -281,10 +283,10 @@ test("completed test: triage, detail and report", async ({
     .getByRole("link", { name: "Report" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "What this test found" }),
+    page.getByRole("region", { name: "Test result" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Journey outcomes" }),
+    page.getByRole("heading", { name: "Journey Outcomes" }),
   ).toBeVisible();
   await checkLayoutAndAccessibility(page);
   await page.screenshot({
@@ -320,7 +322,8 @@ test("pending evaluation automatically displays the persisted report when ready"
   await expect(page.getByRole("heading", { name: "Preparing evaluation" })).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
   ready = true;
-  await expect(page.getByRole("heading", { name: "What this test found" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("region", { name: "Test result" })).toBeVisible({ timeout: 15_000 });
+  await page.getByText("Read full generated narrative summary").click();
   await expect(page.getByText(results.report.executive_summary, { exact: true })).toBeVisible();
   expect(requests).toBeGreaterThan(1);
   await checkLayoutAndAccessibility(page);
@@ -455,7 +458,7 @@ for (const item of [
   {
     kind: "test",
     id: runId,
-    page: "/runs",
+    page: `/applications/${appId}/runs`,
     endpoint: `/api/v1/test-runs/${runId}`,
     list: `/api/v1/applications/${appId}/test-runs`,
   },
@@ -568,11 +571,11 @@ test("active workspace tests refresh to completed without navigation", async ({ 
     return route.fulfill({ json: [{ ...run, status: requests === 1 ? "running" : "completed" }] });
   });
   await page.goto("/overview");
-  await expect(page.locator(".study-row .status-badge")).toHaveText("running");
-  await expect(page.locator(".metric-signal")).toHaveCount(1);
-  await expect(page.locator(".study-row .status-badge"))
+  await expect(page.locator(".overview-featured-test .status-badge")).toHaveText("running");
+  await expect(page.locator(".overview-status-index a").filter({ hasText: "In progress" }).locator("strong")).toHaveText("1");
+  await expect(page.locator(".overview-featured-test .status-badge"))
     .toHaveText("completed", { timeout: 10_000 });
-  await expect(page.locator(".metric-signal")).toHaveCount(0);
+  await expect(page.locator(".overview-status-index a").filter({ hasText: "In progress" }).locator("strong")).toHaveText("0");
 });
 
 test("starting a draft updates status and continues polling", async ({ page }) => {
@@ -610,7 +613,7 @@ test("expired target authorization is visible and does not offer an authorized t
     id: "authorization", target_id: targetId, status: "authorized", expires_at: "2020-01-01T00:00:00Z",
   } }));
   await page.goto(`/targets/${targetId}`);
-  await expect(page.getByText("expired", { exact: true })).toBeVisible();
+  await expect(page.getByText("expired", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "New test", exact: true })).toHaveCount(0);
   await checkLayoutAndAccessibility(page);
 });
@@ -622,6 +625,8 @@ test("empty workspace and tests offer clear next actions", async ({ page }) => {
   await checkLayoutAndAccessibility(page);
   await mockApi(page, { emptyRuns: true });
   await page.goto("/runs");
+  await expect(page.getByText("Choose an application to see its tests.")).toBeVisible();
+  await page.locator('main a[href^="/applications/"][href$="/runs"]').first().click();
   await expect(page.getByRole("heading", { name: "No tests yet" })).toBeVisible();
   await checkLayoutAndAccessibility(page);
 });
@@ -632,7 +637,7 @@ test("reduced motion disables decorative transitions", async ({ page }) => {
   await page.goto("/overview");
   const trigger = page.getByRole("button", { name: "Open quick navigation" });
   await expect(trigger).toBeVisible();
-  expect(await trigger.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe("0s");
+  expect(await trigger.evaluate((element) => Number.parseFloat(getComputedStyle(element).transitionDuration))).toBeLessThanOrEqual(0.00001);
   await trigger.click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(await page.locator(".dialog-overlay").evaluate((element) => getComputedStyle(element).animationName))
@@ -652,7 +657,7 @@ for (const path of ["/overview", "/runs", `/applications/${appId}/runs/new`, `/r
   });
 }
 
-test("320px draft controls stay usable and Start matches other button heights", async ({ page }, testInfo) => {
+test("320px draft controls stay usable with a full-width Start action and consistent heights", async ({ page }, testInfo) => {
   await mockApi(page, { runStatus: "draft" });
   await page.setViewportSize({ width: 320, height: 780 });
   await page.goto(`/runs/${runId}/overview`);
@@ -660,12 +665,13 @@ test("320px draft controls stay usable and Start matches other button heights", 
   const start = await page.getByRole("button", { name: "Start test", exact: true }).boundingBox();
   const remove = await page.getByRole("button", { name: /^Delete test:/ }).boundingBox();
   expect(start?.height).toBe(remove?.height);
-  expect(start?.width).toBeLessThan(180);
+  const actions = await page.locator(".header-actions").boundingBox();
+  expect(start?.width).toBe(actions?.width);
   await checkLayoutAndAccessibility(page);
   await page.screenshot({ path: testInfo.outputPath("start-test-narrow.png"), fullPage: true });
 });
 
-for (const path of ["/overview", "/runs"]) {
+for (const path of ["/overview", `/applications/${appId}/runs`]) {
   test(`background refresh failure preserves data and retry recovers: ${path}`, async ({ page }) => {
     await mockApi(page);
     let requests = 0;
@@ -677,12 +683,13 @@ for (const path of ["/overview", "/runs"]) {
         : route.fulfill({ json: [{ ...run, status: failing ? "running" : "completed" }] });
     });
     await page.goto(path);
-    await expect(page.locator(".study-row .status-badge")).toHaveText("running");
+    const badge = page.locator(path === "/overview" ? ".overview-featured-test .status-badge" : ".data-row .status-badge");
+    await expect(badge).toHaveText("running");
     await expect(page.getByRole("alert")).toContainText("Showing the last loaded data", { timeout: 15_000 });
-    await expect(page.locator(".study-row .status-badge")).toHaveText("running");
+    await expect(badge).toHaveText("running");
     failing = false;
     await page.getByRole("button", { name: "Try again", exact: true }).click();
-    await expect(page.locator(".study-row .status-badge")).toHaveText("completed");
+    await expect(badge).toHaveText("completed");
     await expect(page.getByRole("alert")).toHaveCount(0);
   });
 }

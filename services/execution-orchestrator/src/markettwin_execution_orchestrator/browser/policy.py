@@ -195,6 +195,16 @@ def _matches_captcha_provider(
     return host_matches and path.startswith(provider.path_prefix)
 
 
+def is_known_captcha_host(hostname: str) -> bool:
+    """Classify a host for sanitized diagnostics, without granting request authority."""
+    normalized = normalize_hostname(hostname)
+    return any(
+        normalized == provider.hostname
+        or (provider.include_subdomains and normalized.endswith(f".{provider.hostname}"))
+        for provider in _CAPTCHA_PROVIDERS
+    )
+
+
 def validate_captcha_subresource(raw_url: str) -> ValidatedUrl:
     """Allow one public captcha widget asset. Main-frame navigation stays blocked."""
 

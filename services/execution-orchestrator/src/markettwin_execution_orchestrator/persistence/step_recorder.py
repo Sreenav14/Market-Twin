@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -30,6 +31,7 @@ class ExecutionStepRecorder:
     session: AsyncSession
     execution_id: UUID
     storage: S3ArtifactStorage
+    approval_wait: Callable[[], AbstractAsyncContextManager[None]] | None = None
     
     _next_step_number: int = field(
         default = 1,
@@ -70,17 +72,18 @@ class ExecutionStepRecorder:
         remaining_ms: int = 0,
     ) -> UUID:
         """Wait for and consume an exact approval before the browser mutation."""
-        return await SensitiveActionApproval(
-            self.session, execution_id=self.execution_id
-        ).dispatch_authorized(
-            step_id=step_id,
-            intent=intent,
-            current_origin=current_origin,
-            browser_session_id=browser_session_id,
-            revalidate_origin=revalidate_origin,
-            planned_step_index=planned_step_index,
-            remaining_ms=remaining_ms,
-        )
+        async with self.approval_wait() if self.approval_wait is not None else nullcontext():
+            return await SensitiveActionApproval(
+                self.session, execution_id=self.execution_id
+            ).dispatch_authorized(
+                step_id=step_id,
+                intent=intent,
+                current_origin=current_origin,
+                browser_session_id=browser_session_id,
+                revalidate_origin=revalidate_origin,
+                planned_step_index=planned_step_index,
+                remaining_ms=remaining_ms,
+            )
 
     async def finish_sensitive_action(
         self, *, approval_id: UUID, outcome: str

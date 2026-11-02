@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from boto3.s3.transfer import TransferConfig
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     VisualArtifactRecord,
 )
@@ -23,6 +24,7 @@ class FakeS3Client:
         Bucket: str,
         Key: str,
         Filename: str,
+        Config: TransferConfig | None = None,
     ) -> None:
         self.downloads.append(
             (

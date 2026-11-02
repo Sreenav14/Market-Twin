@@ -1,80 +1,84 @@
-# Current V1 product and evidence contract
+# V1 product contract
 
-The active plan is `MKT.md`. `CURRENT_STATE.md` records validated progress;
-`SESSION_HANDOFF.md` and `NEXT_SESSION.md` preserve the implementation history.
-This document describes current behavior, not a production-readiness claim.
+**Status (2026-11-02): implementation description; acceptance is pending.** The
+`discovery_contract_v1` mode is opt-in. New runs still default to
+`legacy_persona`; do not treat this document as a Phase 7 release declaration.
+See [current status](CURRENT_STATE.md) and [session handoff](SESSION_HANDOFF.md)
+for the active acceptance results.
 
-## Agent settings and linked knowledge
+## User-facing behavior
 
-Agent Settings groups applications (projects), then tests. Each test shows all
-recorded agent roles in creation order. Sequential runtimes show their entire
-child tree, including the final structured reporter. Planner/persona edits fork
-new drafts; historical snapshots remain immutable. Unknown fields, invalid or
-duplicate names, unsupported types, excessive/nested children, non-finite or
-out-of-range temperatures, and unregistered tools are rejected. LLM temperature
-defaults to 0.05 (range 0–0.2). Models that do not support the requested sampling
-setting show requested and effective settings separately. Additional agents reuse
-the same controlled browser session and evidence rules; their agreement is not
-independent product evidence. Up to three extra LLM children run before the reporter.
+1. The owner selects an authorized application and describes its purpose. The
+   discovery run explores within that application's allowed origin and records
+   observed features, journey steps, blockers, and links to persisted execution
+   evidence. An interaction is required for a journey to count as completed.
+   Blocked or incomplete exploration remains visible as such.
+2. MarketTwin proposes a draft of plain-language checks from observed journeys.
+   The owner can edit checks or exclude checks and journeys. Draft checks have no
+   authority to establish a defect.
+3. On approval, the API marks each included check `user_approved`, records the
+   approving user and time, and advances the contract. Starting execution freezes
+   the contract and stores its identity and content hash with the run. The frozen
+   checks and actions define the run's test plan.
+4. The deterministic runner executes the approved journeys for three configured
+   persona variants, records steps and artifacts, and retries a failed check once
+   in a fresh browser execution. It links that replay to the original execution.
+5. A product defect is confirmed only when the evidence belongs to the run and
+   approved plan, the approved check fails in the original execution, and that
+   same check fails again in the linked replay under the same frozen contract.
+   Confirmed findings include evidence from both attempts. A passing replay is an
+   unverified `did_not_reproduce` observation. Missing or invalid replay evidence
+   remains unverified, including `replay_unavailable`; blocked and timed-out work
+   is reported as incomplete rather than a product defect.
+6. Experience scores are a separate assessment based on recorded journey facts
+   and, when available, screenshots. Missing model configuration or invalid
+   fact citations can make a score unavailable. Experience scores cannot create,
+   confirm, change, or remove findings.
+7. The market-readiness verdict is deterministic and reports its inputs. Coverage
+   below 60% or fewer than two completed personas yields `insufficient_evidence`;
+   a confirmed high or critical defect yields `not_ready`; otherwise confirmed
+   defects or a persona mean below 3 yield `ready_with_issues`; the remaining
+   case is `ready`. Experience data does not replace functional evidence.
 
-Knowledge ingestion accepts files or public HTTP(S) links. Link research reads
-the submitted HTML/text page and up to four relevant same-site pages. It stores
-source URLs and readable content as the original research source, then reuses the
-existing evidence-grounded knowledge/skill generator and draft approval process.
-This is a bounded source review, not an exhaustive site audit. Private/reserved
-addresses, embedded credentials and nonstandard ports are rejected; connections
-pin validated public IPs and preserve TLS identity. Redirects are validated and
-response size/time/page counts are bounded. JavaScript-only and authenticated
-content may require an exported document. Proposed skills are never auto-approved.
+An owner may explicitly reuse a completed run's approved frozen contract through
+the create-run API's `frozen_contract_source_run_id`. Reuse requires the same owner,
+workspace, application, target, and unchanged target snapshot. It preserves the
+contract ID, version, approval, checks, and content hash, while binding a new run ID
+for execution ownership. Discovery is not repeated; every new action, assertion,
+confirmation replay, and screenshot belongs to the new run. The source contract
+and its discovery evidence remain unchanged. Runtime action-policy permissions
+remain separate from approval of the test contract.
 
-## Browser execution
+## Limits and guarantees
 
-Google ADK personas use controlled tools backed by the existing Python Playwright
-BrowserController. Target/network policy is enforced on actions and navigation.
-The existing execution store holds journeys, attempts, ordered steps and artifacts.
-Read-only recovery after failed actions preserves the original failure.
-No new browser service, history store or production infrastructure is required.
-Interactive user takeover for OTP, MFA or CAPTCHA is deferred.
+- The system reports only behavior it observed and checks the owner approved. It
+  does not establish that undiscovered routes, unapproved behavior, unexecuted
+  journeys, or untested environments work.
+- A failed check by itself is not a confirmed finding. Approval, contract/hash
+  consistency, run ownership, saved step/artifact evidence, and linked replay
+  evidence are verified before a report can expose a confirmed finding.
+- Timeouts, policy blocks, authentication barriers, provider failures, and
+  incomplete journeys describe test limitations. They do not prove a product bug.
+- Persona experience scores are model assessments grounded in supplied facts;
+  they are not deterministic usability measurements or defect oracles.
+- This contract does not promise a readiness outcome, comprehensive coverage,
+  security certification, or generalization beyond the tested target and run.
 
-## Evidence and results
+## Current mode and acceptance status
 
-- Confirmed product issues require relevant browser evidence belonging to the
-  cited run, journey, execution and step. An artifact link alone is not proof.
-- Needs Verification retains synthetic observations, repeated claims and
-  inconclusive judgments. Repetition is not independent proof, never raises
-  severity and never contributes to confirmed totals.
-- Execution issues describe failed actions, timeouts and policy limitations.
-- Execution completion and evaluation completion are separate states.
-- No findings does not establish complete coverage or a defect-free application.
-- Exact selected-step evidence is shown; missing evidence is explicit.
-- Signed artifact access reuses existing authorization; raw storage locations and
-  credentials are not returned by journey read endpoints.
-- Journey reads authorize the run and enforce journey ownership. Ordered step
-  pages and artifact metadata are bounded; safe summaries exclude entered values
-  and raw browser exception text.
+`legacy_persona`, `deep_feature_v1`, and `discovery_contract_v1` remain separate
+execution modes. The current server and new-run UI defaults are still
+`legacy_persona`; Phase 7 may change that default only after every benchmark gate
+in section 8.2 of the [fix specification](../MARKETTWIN_FIX_SPEC_FOR_CODEX.md) passes.
+The final six-run acceptance and full regression-suite gate are pending as of this
+document's date. Benchmark measurements belong in the separate
+`V1_BENCHMARK_RESULTS.md`; none are asserted here.
 
-## Planning context
+## Implementation references
 
-The creator chooses an authorized target, goal, depth and optional approved
-knowledge. Approved sets are copied into the run configuration. `build_run_request`
-forwards that snapshot into planning. Configuration displays selected set names.
-This preserves provenance; knowledge describes intent rather than proving behavior.
-Creation produces a draft; Start test is explicit.
-
-## User interface
-
-Public `/` explains the product with an interactive illustration labelled as an
-example. `/how-it-works` describes setup, execution, categories and limitations.
-`/login` opens the existing local workspace identity flow. Workspace read access
-continues to use authenticated and authorized APIs. Test navigation focuses on
-Summary, Journeys, Findings and Report. Advanced records remain accessible.
-Animations are finite, use transform/opacity, and honor reduced-motion settings.
-
-## Release checks
-
-After implementation: backend suites and focused authorization/evidence regression
-tests; frontend typecheck, tests and build; desktop/mobile browser interactions,
-keyboard navigation and accessibility checks; reproducible local benchmark with
-actual database and object-store artifact checks. Preserve fixture checksums and
-historical failed runs. Detection recall and false confirmations remain unresolved
-until measured release criteria pass. See `V1_BENCHMARK_RESULTS.md`.
+- Contract schema and hash: `packages/shared-python/src/markettwin_shared/discovery_contract.py`
+- Approval and freeze API: `services/control-api/src/markettwin_control_api/api/test_contracts.py`
+- Evidence and replay evaluation: `services/evaluation-worker/src/markettwin_evaluation_worker/contract_evaluator.py`
+- Report proof validation: `services/control-api/src/markettwin_control_api/api/contract_report_validation.py`
+- Experience assessment: `services/evaluation-worker/src/markettwin_evaluation_worker/experience_evaluator.py`
+- Readiness rule: `services/evaluation-worker/src/markettwin_evaluation_worker/market_verdict.py`

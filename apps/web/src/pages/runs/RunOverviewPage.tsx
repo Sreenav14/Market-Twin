@@ -11,6 +11,7 @@ import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
 export function RunOverviewPage() {
   const { run, results } = useOutletContext<RunContext>();
   const ready = results.status === "ready";
+  const awaitingApproval = run.configuration_snapshot.discovery_stage === "awaiting_approval";
   const stages = ["Created", "Planning", "Execution", "Evaluation"];
   const pausedForHuman = run.status === "awaiting_human";
   const stage = ready
@@ -34,11 +35,12 @@ export function RunOverviewPage() {
   const emptySummary = ready && results.data.findings.length === 0 ? emptyFindingsSummary(results.data) : null;
   return (
     <>
+      {run.status_reason ? <p className="panel" role="status">{run.status_reason}</p> : null}
       {!["draft", "failed", "cancelled"].includes(run.status) ? (
         <section className="run-action-required">
           <div>
             <h2>
-              {pausedForHuman
+              {awaitingApproval ? "Approve the tests" : pausedForHuman
                 ? "Human assistance required"
                 : run.status === "completed"
                 ? ready
@@ -47,7 +49,7 @@ export function RunOverviewPage() {
                 : "Watch this test execute"}
             </h2>
             <p>
-              {pausedForHuman
+              {awaitingApproval ? "Exploration is complete. Review the journeys and checks before testing begins." : pausedForHuman
                 ? "Open the requesting journey and protected browser. The agent waits while you assist."
                 : run.status === "completed"
                 ? ready
@@ -59,7 +61,7 @@ export function RunOverviewPage() {
           <Link
             className="primary-button"
             to={
-              pausedForHuman
+              awaitingApproval ? `/runs/${run.id}/contract` : pausedForHuman
                 ? `/runs/${run.id}/activity`
                 : run.status === "completed"
                 ? ready
@@ -68,7 +70,7 @@ export function RunOverviewPage() {
                 : `/runs/${run.id}/activity`
             }
           >
-            {pausedForHuman
+            {awaitingApproval ? "Approve the tests" : pausedForHuman
               ? "Open Live Execution"
               : run.status === "completed"
               ? ready
@@ -78,7 +80,7 @@ export function RunOverviewPage() {
           </Link>
         </section>
       ) : null}
-      {pausedForHuman ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
+      {pausedForHuman && !awaitingApproval ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
       <ol className="lifecycle-rail" aria-label="Test lifecycle">
         {stages.map((label, index) => (
           <li
@@ -157,7 +159,7 @@ export function RunOverviewPage() {
               </dl>
             </div>
             {emptySummary?.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
-            <div className="outcome-counts" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : outcome.replaceAll("_", " ")}: {count}</span>)}</div>
+            <div className="outcome-counts" role="group" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : outcome.replaceAll("_", " ")}: {count}</span>)}</div>
             {results.data.findings.length > 0 ? (
               <section className="section-block">
                 <div className="section-heading">

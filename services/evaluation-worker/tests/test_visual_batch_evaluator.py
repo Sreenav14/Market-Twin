@@ -14,6 +14,7 @@ from markettwin_evaluation_worker.persistence.evaluation_repository import (
     VisualArtifactRecord,
     VisualEvidenceSet,
 )
+from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCache
 from markettwin_evaluation_worker.visual_artifact_storage import (
     VisualArtifactStorage,
 )
@@ -127,6 +128,7 @@ async def test_batch_runs_vision_only_for_explicit_visual_steps(
         evidence: tuple[VisualEvidenceSet, ...],
         storage: VisualArtifactStorage,
         execution_context: tuple[VisualEvidenceSet, ...] = (),
+        cache: VisualResultCache | None = None,
     ) -> VisualCriterionEvaluation:
         assert test_run_id == expected_test_run_id
         assert journey_id == repository.journey_id

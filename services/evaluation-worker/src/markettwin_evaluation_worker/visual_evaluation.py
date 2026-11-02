@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,11 +17,14 @@ from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
     VisualEvidenceSet,
 )
+from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCache
 from markettwin_evaluation_worker.visual_artifact_storage import (
     VisualArtifactStorage,
 )
 from markettwin_evaluation_worker.visual_verifier import (
     VisualVerificationStatus,
+    build_visual_runtime_snapshot_payload,
+    build_visual_verifier_prompt,
     verify_visual_criterion,
 )
 
@@ -66,6 +71,7 @@ async def evaluate_visual_criterion_from_evidence(
     evidence: tuple[VisualEvidenceSet, ...],
     storage: VisualArtifactStorage,
     execution_context: tuple[VisualEvidenceSet, ...] = (),
+    cache: VisualResultCache | None = None,
 ) -> VisualCriterionEvaluation:
     """Verify one criterion from already-selected visual evidence."""
 
@@ -116,18 +122,36 @@ async def evaluate_visual_criterion_from_evidence(
             agent_snapshot_id=agent_snapshot_id,
             agent_role="visual_verifier",
         ):
-            verification = await verify_visual_criterion(
-                criterion=criterion,
-                viewport_path=viewport_path,
-                focused_path=focused_path,
-                execution_context=tuple(
-                    {"step_id": item.step_id, "action_type": item.action_type,
-                     "status": item.step_status,
-                     **({"target": item.action_summary} if item.action_summary is not None else {})}
-                    for item in sorted(execution_context or evidence, key=lambda item: item.step_id)
-                    if item.step_id <= selected.step_id
-                ),
+            context: tuple[dict[str, object], ...] = tuple(
+                {"step_id": item.step_id, "action_type": item.action_type,
+                 "status": item.step_status,
+                 **({"target": item.action_summary} if item.action_summary is not None else {})}
+                for item in sorted(execution_context or evidence, key=lambda item: item.step_id)
+                if item.step_id <= selected.step_id
             )
+            fingerprint = hashlib.sha256(json.dumps({
+                "schema_version": 1,
+                "runtime_sha256": build_visual_runtime_snapshot_payload().sha256(),
+                "prompt": build_visual_verifier_prompt(criterion, context),
+                "viewport_sha256": hashlib.sha256(viewport_path.read_bytes()).hexdigest(),
+                "focused_sha256": hashlib.sha256(focused_path.read_bytes()).hexdigest()
+                if focused_path is not None else None,
+            }, sort_keys=True, default=str).encode()).hexdigest()
+            verification = await cache.get(
+                run_id=test_run_id, execution_id=execution_id, key=fingerprint,
+            ) if cache is not None else None
+            if verification is None:
+                verification = await verify_visual_criterion(
+                    criterion=criterion,
+                    viewport_path=viewport_path,
+                    focused_path=focused_path,
+                    execution_context=context,
+                )
+                if cache is not None:
+                    await cache.put(
+                        run_id=test_run_id, execution_id=execution_id,
+                        key=fingerprint, result=verification,
+                    )
 
     artifact_ids = [
         selected.viewport.artifact_id,

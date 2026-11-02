@@ -47,8 +47,10 @@ from .testing import (
     TargetAuthorization,
     TestRun,
 )
+from .worker_heartbeat import WorkerHeartbeat
 
 __all__ = [
+    "WorkerHeartbeat",
     "ActionApprovalRequest",
     "ActionApprovalReceipt",
     "User",

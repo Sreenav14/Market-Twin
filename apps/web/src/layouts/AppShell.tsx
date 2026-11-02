@@ -8,7 +8,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { ChevronRight, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { BrandMark } from "../components/ui/BrandMark";
 import { ErrorPanel, LoadingPanel } from "../components/ui/StateViews";
 import { Icon } from "../components/ui/Icon";
@@ -22,64 +22,6 @@ export interface AppShellContext {
   workspace: Workspace;
 }
 
-function breadcrumbItems(path: string) {
-  const parts = path.split("/").filter(Boolean);
-  const section = parts[0];
-  if (section === "overview") return [{ label: "Overview", href: "/overview" }];
-  if (section === "ingestion") return [{ label: "Ingestion", href: "/ingestion" }];
-  if (section === "agents") return [{ label: "Agents", href: "/agents" }];
-  if (section === "knowledge") return [
-    { label: "Review knowledge", href: "/knowledge/review" },
-    ...(parts[2] ? [{ label: "Knowledge set", href: path }] : []),
-  ];
-  if (section === "runs")
-    return [
-      { label: "Tests", href: "/runs" },
-      ...(parts[1]
-        ? [{ label: "Test", href: `/runs/${parts[1]}/overview` }]
-        : []),
-      ...(parts[2] && parts[2] !== "overview"
-        ? [{ label: parts[2].replaceAll("-", " "), href: path }]
-        : []),
-    ];
-  if (section === "targets")
-    return [
-      { label: "Applications", href: "/applications" },
-      { label: "Target", href: `/targets/${parts[1]}` },
-      ...(parts[2] ? [{ label: parts[2], href: path }] : []),
-    ];
-  if (section === "applications")
-    return [
-      { label: "Applications", href: "/applications" },
-      ...(parts[1]
-        ? [
-            {
-              label: parts[1] === "new" ? "New application" : "Application",
-              href: `/applications/${parts[1]}`,
-            },
-          ]
-        : []),
-      ...(parts[2]
-        ? [
-            {
-              label:
-                parts.at(-1) === "new"
-                  ? parts[2] === "runs"
-                    ? "New test"
-                    : "New target"
-                  : parts[2] === "runs"
-                    ? "Tests"
-                    : parts[2],
-              href: path,
-            },
-          ]
-        : []),
-    ];
-  return [
-    { label: "Settings", href: "/settings/profile" },
-    { label: parts[1] || "Profile", href: path },
-  ];
-}
 export function AppShell({
   user,
   onLogout,
@@ -96,6 +38,7 @@ export function AppShell({
   const [workspaceId, setWorkspaceId] = useState("");
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const previousPath = useRef(location.pathname);
+
   useEffect(() => {
     if (previousPath.current !== location.pathname) {
       previousPath.current = location.pathname;
@@ -105,6 +48,7 @@ export function AppShell({
       window.scrollTo({ top: 0 });
     }
   }, [location.pathname]);
+
   if (workspaceState.status === "loading")
     return (
       <div className="boot-screen">
@@ -137,49 +81,217 @@ export function AppShell({
         <ErrorPanel message="No workspace is available for your account. Ask your workspace administrator for access." />
       </div>
     );
-  const crumbs = breadcrumbItems(location.pathname);
+
+  const applicationTests = /^\/applications\/[^/]+\/runs(?:\/|$)/.test(location.pathname);
+  const applicationsRoute = (location.pathname.startsWith("/applications") && !applicationTests) || location.pathname.startsWith("/targets/");
+  const knowledgeRoute = location.pathname === "/ingestion" || location.pathname.startsWith("/knowledge/");
+
   const signOut = () => {
     setLogoutError(null);
     void onLogout().catch(() =>
       setLogoutError("Could not sign out. Please try again."),
     );
   };
-  const navigation = (mobile: boolean) => (<>
 
-        <Link
-          to="/overview"
-          className="sidebar-brand"
-          aria-label="MarketTwin overview"
-        >
-          <BrandMark />
-          <div>
-            <strong>MarketTwin</strong>
-            <span>Testing workspace</span>
+  const switchWorkspace = (nextWorkspace: string) => {
+    void queryClient.cancelQueries().then(() => {
+      queryClient.removeQueries();
+      setWorkspaceId(nextWorkspace);
+      navigationChangedContext.current = true;
+      setNavigationOpen(false);
+      navigate("/dashboard");
+    });
+  };
+
+  // Primary nav links used in both desktop topbar and mobile drawer
+  const primaryLinks = (
+    <nav className="topnav-links" aria-label="Primary navigation">
+      <NavLink
+        to="/dashboard"
+        aria-label="Dashboard"
+        className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
+      >
+        Dashboard
+      </NavLink>
+      <Link
+        to="/applications"
+        aria-label="Your apps"
+        aria-current={applicationsRoute ? "page" : undefined}
+        className={`topnav-link${applicationsRoute ? " active" : ""}`}
+      >
+        Your apps
+      </Link>
+      <Link
+        to="/runs"
+        aria-label="Tests"
+        aria-current={
+          applicationTests || location.pathname.startsWith("/runs")
+            ? "page"
+            : undefined
+        }
+        className={`topnav-link${applicationTests || location.pathname.startsWith("/runs") ? " active" : ""}`}
+      >
+        Tests
+      </Link>
+      <Link
+        to="/knowledge/review"
+        aria-label="Knowledge"
+        aria-current={knowledgeRoute ? "page" : undefined}
+        className={`topnav-link${knowledgeRoute ? " active" : ""}`}
+      >
+        Knowledge
+      </Link>
+      <NavLink
+        to="/agents"
+        aria-label="Testers"
+        className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
+      >
+        Testers
+      </NavLink>
+      <NavLink
+        to="/settings"
+        aria-label="Settings"
+        className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
+      >
+        Settings
+      </NavLink>
+    </nav>
+  );
+
+  // Workspace selector shown in both desktop and mobile
+  const workspaceSelector = workspaceState.data.length > 1 ? (
+    <>
+      <label className="visually-hidden" htmlFor="workspace-select">Workspace</label>
+      <select
+        id="workspace-select"
+        className="topnav-workspace-select"
+        value={workspace.id}
+        onChange={(e) => switchWorkspace(e.target.value)}
+      >
+        {workspaceState.data.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name}
+          </option>
+        ))}
+      </select>
+    </>
+  ) : (
+    <span className="topnav-workspace-name">{workspace.name}</span>
+  );
+
+  return (
+    <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
+      <div className="mt-shell concept-workspace">
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
+
+        {/* Desktop top navigation bar */}
+        <header className="mt-topbar" role="banner">
+          <div className="mt-topbar-inner">
+            {/* Brand */}
+            <Link
+              to="/dashboard"
+              className="mt-topbar-brand"
+              aria-label="MarketTwin — Dashboard"
+            >
+              <BrandMark />
+              <span className="mt-topbar-wordmark">MarketTwin</span>
+            </Link>
+
+            {/* Primary nav — hidden on mobile, shown via drawer */}
+            <div className="mt-topbar-nav">
+              {primaryLinks}
+            </div>
+
+            {/* Workspace and account */}
+            <div className="mt-topbar-end">
+              <div className="mt-topbar-workspace">
+                {workspaceSelector}
+                <span className="mt-topbar-role">{roleLabel(workspace.role)}</span>
+              </div>
+              <CommandMenu />
+              <button
+                className="icon-button"
+                type="button"
+                onClick={signOut}
+                aria-label="Sign out"
+              >
+                <Icon name="logout" />
+              </button>
+              {/* Mobile menu trigger */}
+              <Dialog.Trigger asChild>
+                <button
+                  className="icon-button mt-topbar-menu-trigger"
+                  aria-label="Open navigation"
+                  type="button"
+                >
+                  <Menu size={20} aria-hidden="true" /><span>Menu</span>
+                </button>
+              </Dialog.Trigger>
+            </div>
           </div>
-        </Link>
-        <div className="workspace-switcher">
-          <span className="workspace-avatar" aria-hidden="true">
-            {workspace.name[0]?.toUpperCase()}
-          </span>
-          <div className="workspace-copy">
+        </header>
+
+        {/* Page content */}
+        <main className="mt-page-content page-container" id="main-content" tabIndex={-1}>
+          {logoutError ? (
+            <p className="form-error" role="alert">
+              {logoutError}
+            </p>
+          ) : null}
+          <Outlet
+            key={workspace.id}
+            context={{ user, workspace } satisfies AppShellContext}
+          />
+        </main>
+      </div>
+
+      {/* Mobile navigation drawer */}
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay navigation-overlay" />
+        <Dialog.Content
+          className="navigation-drawer concept-workspace"
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest("a[href]")) {
+              navigationChangedContext.current = true;
+              setNavigationOpen(false);
+            }
+          }}
+          onCloseAutoFocus={(event) => {
+            if (navigationChangedContext.current) {
+              event.preventDefault();
+              navigationChangedContext.current = false;
+              window.requestAnimationFrame(() => {
+                document.getElementById("main-content")?.focus({ preventScroll: true });
+              });
+            }
+          }}
+        >
+          <Dialog.Title className="visually-hidden">Workspace navigation</Dialog.Title>
+          <Dialog.Description className="visually-hidden">Switch workspace or navigate MarketTwin.</Dialog.Description>
+          <Dialog.Close className="icon-button navigation-close" aria-label="Close navigation">
+            <X size={20} aria-hidden="true" />
+          </Dialog.Close>
+
+          {/* Drawer brand */}
+          <div className="drawer-brand">
+            <BrandMark />
+            <div>
+              <strong>MarketTwin</strong>
+              <span>Testing workspace</span>
+            </div>
+          </div>
+
+          {/* Drawer workspace */}
+          <div className="drawer-workspace">
             {workspaceState.data.length > 1 ? (
               <>
-                <label className="visually-hidden" htmlFor={mobile ? "mobile-workspace-select" : "workspace-select"}>
-                  Workspace
-                </label>
+                <label className="visually-hidden" htmlFor="mobile-workspace-select">Workspace</label>
                 <select
-                  id={mobile ? "mobile-workspace-select" : "workspace-select"}
+                  id="mobile-workspace-select"
                   value={workspace.id}
-                  onChange={(event) => {
-                    const nextWorkspace = event.target.value;
-                    void queryClient.cancelQueries().then(() => {
-                      queryClient.removeQueries();
-                      setWorkspaceId(nextWorkspace);
-                      navigationChangedContext.current = mobile;
-                      setNavigationOpen(false);
-                      navigate("/overview");
-                    });
-                  }}
+                  onChange={(e) => switchWorkspace(e.target.value)}
                 >
                   {workspaceState.data.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -193,143 +305,79 @@ export function AppShell({
             )}
             <span>{roleLabel(workspace.role)}</span>
           </div>
-        </div>
-        <nav className="sidebar-nav" aria-label="Primary navigation">
-          <NavLink to="/overview" aria-label="Overview" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="home" /><span>Overview</span></NavLink>
-          <NavLink
-            to="/applications"
-            aria-label="Applications"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="apps" />
-            <span>Applications</span>
-          </NavLink>
-          <NavLink
-            to="/runs"
-            aria-label="Tests"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="runs" />
-            <span>Tests</span>
-          </NavLink>
-          <NavLink
-            to="/knowledge/review"
-            aria-label="Knowledge"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="knowledge" />
-            <span>Knowledge</span>
-          </NavLink>
-        </nav>
-        <nav
-          className="sidebar-nav sidebar-nav-secondary"
-          aria-label="Workspace navigation"
-        >
-          <NavLink to="/ingestion" aria-label="Ingestion" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="ingestion" /><span>Add knowledge</span></NavLink>
-          <NavLink to="/agents" aria-label="Agents" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon name="user" /><span>Agent settings</span></NavLink>
-          <Link to="/how-it-works" className="nav-link"><Icon name="knowledge" /><span>How it works</span></Link>
-          <NavLink
-            to="/settings/profile"
-            aria-label="Settings"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <Icon name="settings" />
-            <span>Settings</span>
-          </NavLink>
-        </nav>
-        <div className="sidebar-footer">
-          <span className="user-avatar" aria-hidden="true">
-            {(user.display_name || user.email)[0]?.toUpperCase()}
-          </span>
-          <div className="user-copy">
-            <strong>{user.display_name || "Your account"}</strong>
-            <span>{user.email}</span>
-          </div>
-          <button
-            className="icon-button"
-            type="button"
-            onClick={signOut}
-            aria-label="Sign out"
-          >
-            <Icon name="logout" />
-          </button>
-        </div>
 
-  </>);
-  return (
-    <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
-    <div className="enterprise-shell">
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <aside className="sidebar desktop-sidebar">{navigation(false)}</aside>
-      <div className="content-shell">
-        <header className="topbar">
-          <Dialog.Trigger asChild>
-            <button className="icon-button navigation-trigger" aria-label="Open navigation" type="button"><Menu size={20} aria-hidden="true" /></button>
-          </Dialog.Trigger>
-          <nav className="breadcrumb" aria-label="Breadcrumb">
-            <Link to="/overview">Workspace</Link>
-            {crumbs.map((crumb, index) => (
-              <span key={`${crumb.href}-${index}`}>
-                <ChevronRight size={13} aria-hidden="true" />
-                {index === crumbs.length - 1 ? (
-                  <span aria-current="page">{crumb.label}</span>
-                ) : (
-                  <Link to={crumb.href}>{crumb.label}</Link>
-                )}
-              </span>
-            ))}
-          </nav>
-          <CommandMenu />
-          <div className="mobile-account-actions">
-            <Link className="icon-button" to="/settings/profile" aria-label="Settings">
-              <Icon name="settings" />
+          {/* Drawer primary nav (same links, but with icons for context) */}
+          <nav className="drawer-nav" aria-label="Primary navigation">
+            <NavLink to="/dashboard" aria-label="Dashboard" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              <Icon name="home" /><span>Dashboard</span>
+            </NavLink>
+            <Link
+              to="/applications"
+              aria-label="Your apps"
+              aria-current={applicationsRoute ? "page" : undefined}
+              className={`nav-link${applicationsRoute ? " active" : ""}`}
+            >
+              <Icon name="apps" /><span>Your apps</span>
             </Link>
-            <button className="icon-button" type="button" onClick={signOut} aria-label="Sign out">
+            <Link
+              to="/runs"
+              aria-label="Tests"
+              aria-current={applicationTests || location.pathname.startsWith("/runs") ? "page" : undefined}
+              className={`nav-link${applicationTests || location.pathname.startsWith("/runs") ? " active" : ""}`}
+            >
+              <Icon name="runs" /><span>Tests</span>
+            </Link>
+            <Link
+              to="/knowledge/review"
+              aria-label="Knowledge"
+              aria-current={knowledgeRoute ? "page" : undefined}
+              className={`nav-link${knowledgeRoute ? " active" : ""}`}
+            >
+              <Icon name="knowledge" /><span>Knowledge</span>
+            </Link>
+            <NavLink
+              to="/agents"
+              aria-label="Testers"
+              className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+            >
+              <Icon name="user" /><span>Testers</span>
+            </NavLink>
+            <Link
+              to="/ingestion"
+              aria-label="Add knowledge"
+              className="nav-link"
+            >
+              <Icon name="ingestion" /><span>Add knowledge</span>
+            </Link>
+            <NavLink
+              to="/settings"
+              aria-label="Settings"
+              className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+            >
+              <Icon name="settings" /><span>Settings</span>
+            </NavLink>
+          </nav>
+
+          {/* Drawer footer: account and sign out */}
+          <div className="drawer-footer">
+            <span className="user-avatar" aria-hidden="true">
+              {(user.display_name || user.email)[0]?.toUpperCase()}
+            </span>
+            <div className="user-copy">
+              <strong>{user.display_name || "Your account"}</strong>
+              <span>{user.email}</span>
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={signOut}
+              aria-label="Sign out"
+            >
               <Icon name="logout" />
             </button>
           </div>
-        </header>
-        <main className="page-container" id="main-content" tabIndex={-1}>
-          {logoutError ? (
-            <p className="form-error" role="alert">
-              {logoutError}
-            </p>
-          ) : null}
-          <Outlet
-            key={workspace.id}
-            context={{ user, workspace } satisfies AppShellContext}
-          />
-        </main>
-      </div>
-    </div>
-    <Dialog.Portal>
-      <Dialog.Overlay className="dialog-overlay navigation-overlay" />
-      <Dialog.Content className="navigation-drawer"
-        onClick={(event) => {
-          if ((event.target as HTMLElement).closest("a[href]")) {
-            navigationChangedContext.current = true;
-            setNavigationOpen(false);
-          }
-        }}
-        onCloseAutoFocus={(event) => {
-          if (navigationChangedContext.current) {
-            event.preventDefault();
-            navigationChangedContext.current = false;
-            // Wait until the modal focus scope has detached before focusing the page.
-            window.requestAnimationFrame(() => {
-              document.getElementById("main-content")?.focus({ preventScroll: true });
-            });
-          }
-        }}
-      >
-        <Dialog.Title className="visually-hidden">Workspace navigation</Dialog.Title>
-        <Dialog.Description className="visually-hidden">Switch workspace or navigate MarketTwin.</Dialog.Description>
-        <Dialog.Close className="icon-button navigation-close" aria-label="Close navigation"><X size={20} aria-hidden="true" /></Dialog.Close>
-        {navigation(true)}
-      </Dialog.Content>
-    </Dialog.Portal>
+        </Dialog.Content>
+      </Dialog.Portal>
     </Dialog.Root>
   );
 }

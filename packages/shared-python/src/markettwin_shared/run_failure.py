@@ -23,7 +23,9 @@ MESSAGES = {
         'Browser discovery could not navigate within the '
         'authorized target policy.'
     ),
-    "interrupted": "The worker was interrupted. The run was stopped to avoid replaying actions.",
+    "interrupted": (
+        "This run was interrupted (the runner restarted) and was not resumed. Start a new run."
+    ),
 }
 
 

@@ -6,9 +6,9 @@ import { Input } from "../ui/input";
 
 const destinations = [
   {
-    title: "Workspace overview",
+    title: "Dashboard",
     description: "Applications and test activity",
-    href: "/overview",
+    href: "/dashboard",
   },
   {
     title: "Ingestion",
@@ -21,7 +21,7 @@ const destinations = [
     href: "/knowledge/review",
   },
   {
-    title: "Applications",
+    title: "Your apps",
     description: "Choose a product or start a test",
     href: "/applications",
   },
@@ -31,7 +31,7 @@ const destinations = [
     href: "/runs",
   },
   {
-    title: "Agents",
+    title: "Testers",
     description: "Inspect agent prompts and prepare a rerun",
     href: "/agents",
   },

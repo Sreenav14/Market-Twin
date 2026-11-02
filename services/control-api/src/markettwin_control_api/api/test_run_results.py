@@ -24,6 +24,7 @@ from sqlalchemy import select
 from markettwin_control_api.api.auth import (
     get_database_runtime,
 )
+from markettwin_control_api.api.contract_report_validation import validate_contract_report
 from markettwin_control_api.api.dependencies import (
     get_authenticated_user_id,
 )
@@ -433,6 +434,14 @@ async def get_test_run_results(
         results_repository = TestRunResultsRepository(database_session)
 
         results = await results_repository.get_completed_results(test_run_id=test_run_id)
+        if (results is not None and test_run.configuration_snapshot.get("execution_mode")
+                == "discovery_contract_v1"):
+            await validate_contract_report(
+                run_id=test_run_id, snapshot=test_run.configuration_snapshot,
+                payload=results.report.report_payload,
+                finding_ids={finding.finding_id for finding in results.findings},
+                session=database_session,
+            )
 
     if results is None:
         raise HTTPException(

@@ -62,7 +62,8 @@ def test_case_bridge_keys_and_assertion_criteria_are_distinct() -> None:
     assert len(set(journey.mission.success_criteria)) == len(case.expected)
 
 
-def test_missing_case_results_remain_not_run_and_blocks_do_not_become_failures() -> None:
+@pytest.mark.parametrize("blocker", ["policy_blocked", "authentication_challenge_blocked"])
+def test_missing_case_results_remain_not_run_and_blocks_do_not_become_failures(blocker) -> None:
     scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
     plan = select_feature_cases(
         request=DeepFeaturePlanningRequest(
@@ -77,7 +78,7 @@ def test_missing_case_results_remain_not_run_and_blocks_do_not_become_failures()
         verdict="unverified",
         action_step_ids=(1,),
         elapsed_ms=10,
-        blocker="policy_blocked",
+        blocker=blocker,
     )
     coverage = coverage_summary(plan, (result,))
     assert coverage["planned"] == len(plan.cases)

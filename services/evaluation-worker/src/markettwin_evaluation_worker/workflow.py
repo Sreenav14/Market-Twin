@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
+from markettwin_database.model_budget import model_budget
 from markettwin_database.models import TestRun
 from markettwin_shared.feature_plan import FeatureScope
 from markettwin_shared.observability import use_observability_correlation
@@ -23,6 +24,7 @@ from markettwin_evaluation_worker.persistence import (
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
 )
+from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCache
 from markettwin_evaluation_worker.report_generator import (
     generate_deterministic_report,
 )
@@ -59,7 +61,7 @@ async def evaluate_and_generate_report(
 ) -> EvaluationWorkflowResult:
     """Trace deterministic evaluation, visual checks, and final report generation."""
     initialize_litellm_observability()
-    with use_observability_correlation(test_run_id=test_run_id):
+    with model_budget(session, test_run_id), use_observability_correlation(test_run_id=test_run_id):
         with trace.get_tracer(__name__).start_as_current_span("evaluation.run") as span:
             span.set_attribute("openinference.span.kind", "CHAIN")
             span.set_attribute("markettwin.test_run_id", str(test_run_id))
@@ -84,17 +86,41 @@ async def _evaluate_and_generate_report(
 
     try:
         run = await session.get(TestRun, test_run_id)
-        if (
-            run is not None
-            and run.configuration_snapshot.get("execution_mode") == "deep_feature_v1"
-        ):
+        mode = run.configuration_snapshot.get("execution_mode") if run else None
+        if run is not None and mode == "discovery_contract_v1":
+            from markettwin_shared.discovery_contract import DiscoveryMap, TestContract
+
+            from markettwin_evaluation_worker.contract_evaluator import evaluate_contract_run
+
+            await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)
+            finding_ids, report_id = await evaluate_contract_run(
+                test_run_id=test_run_id, session=session,
+                contract=TestContract.model_validate(run.configuration_snapshot["frozen_contract"]),
+                discovery=DiscoveryMap.model_validate(run.configuration_snapshot["discovery_map"]),
+            )
+            await session.commit()
+            return EvaluationWorkflowResult(
+                test_run_id=test_run_id, finding_ids=finding_ids, report_id=report_id,
+            )
+        if run is not None and mode in {"deep_feature_v1", "discovery_contract_v1"}:
+            from markettwin_shared.discovery_contract import TestContract
+
             from markettwin_evaluation_worker.deep_evaluator import evaluate_deep_run
 
             await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)
             frozen_scope = run.configuration_snapshot.get("feature_scope")
             scope = FeatureScope.model_validate(frozen_scope) if frozen_scope is not None else None
+            frozen_contract_data = run.configuration_snapshot.get("frozen_contract")
+            frozen_contract = (
+                TestContract.model_validate(frozen_contract_data)
+                if frozen_contract_data is not None
+                else None
+            )
             finding_ids, report_id = await evaluate_deep_run(
-                test_run_id=test_run_id, session=session, trusted_scope=scope,
+                test_run_id=test_run_id,
+                session=session,
+                trusted_scope=scope,
+                frozen_contract=frozen_contract,
             )
             await session.commit()
             return EvaluationWorkflowResult(
@@ -133,6 +159,7 @@ async def _evaluate_and_generate_report(
             agent_snapshot_id=visual_snapshot_id,
             repository=repository,
             storage=storage,
+            cache=VisualResultCache(session),
         )
 
         visual_finding_ids = await persist_visual_findings(

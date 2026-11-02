@@ -1,6 +1,8 @@
 """Cooperative operator pause at a completed, replay-safe browser boundary."""
 
 import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
@@ -43,6 +45,28 @@ if TYPE_CHECKING:
     )
 
 ACTIVE_PAUSE_STATES = ("requested", "paused", "resume_requested")
+COOPERATIVE_PAUSE_ALLOWANCE_SECONDS = 300
+
+
+@asynccontextmanager
+async def cooperative_pause_case_deadline(
+    case_timeout: asyncio.Timeout, *, allowance_seconds: float,
+) -> AsyncGenerator[None, None]:
+    """Exclude a confirmed, bounded cooperative pause from the case action budget."""
+    deadline = case_timeout.when()
+    if deadline is None or allowance_seconds <= 0:
+        raise ValueError("A live case deadline and positive wait allowance are required.")
+    if case_timeout.expired():
+        raise TimeoutError
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    case_timeout.reschedule(started + allowance_seconds)
+    try:
+        yield
+    finally:
+        elapsed = min(loop.time() - started, allowance_seconds)
+        if not case_timeout.expired():
+            case_timeout.reschedule(deadline + elapsed)
 
 
 async def finalize_browser_pauses(session: AsyncSession, handle: BrowserSessionHandle) -> None:
@@ -161,6 +185,8 @@ async def cooperative_pause_checkpoint(
     handle: BrowserSessionHandle,
     session: AsyncSession,
     policy: AuthVerificationPolicy | None = None,
+    case_timeout: asyncio.Timeout | None = None,
+    pause_allowance_seconds: float = COOPERATIVE_PAUSE_ALLOWANCE_SECONDS,
 ) -> None:
     pause = await session.scalar(
         select(ExecutionPauseRequest)
@@ -175,6 +201,30 @@ async def cooperative_pause_checkpoint(
     )
     if pause is None:
         return
+    if case_timeout is None:
+        await _continue_cooperative_pause(
+            pause=pause, request=request, controller=controller, handle=handle,
+            session=session, policy=policy,
+        )
+        return
+    async with cooperative_pause_case_deadline(
+        case_timeout, allowance_seconds=pause_allowance_seconds,
+    ):
+        await _continue_cooperative_pause(
+            pause=pause, request=request, controller=controller, handle=handle,
+            session=session, policy=policy,
+        )
+
+
+async def _continue_cooperative_pause(
+    *,
+    pause: ExecutionPauseRequest,
+    request: "PersonaJourneyExecutionRequest",
+    controller: BrowserController,
+    handle: BrowserSessionHandle,
+    session: AsyncSession,
+    policy: AuthVerificationPolicy | None,
+) -> None:
     pause_id = pause.id
     lifecycle = HumanActionLifecycleRepository(session)
     try:
@@ -391,11 +441,17 @@ async def cooperative_pause_checkpoint(
             await asyncio.sleep(0.1)
     except BaseException:
         await session.rollback()
-        pause = await session.get(ExecutionPauseRequest, pause_id, populate_existing=True)
-        if pause is not None and pause.status in ACTIVE_PAUSE_STATES:
-            pause.status = "expired" if pause.expires_at <= datetime.now(UTC) else "cancelled"
-            pause.completed_at = datetime.now(UTC)
-            if pause.human_request_id is not None:
-                await lifecycle.abandon(request_id=pause.human_request_id)
+        refreshed_pause = await session.get(
+            ExecutionPauseRequest, pause_id, populate_existing=True
+        )
+        if refreshed_pause is not None and refreshed_pause.status in ACTIVE_PAUSE_STATES:
+            refreshed_pause.status = (
+                "expired"
+                if refreshed_pause.expires_at <= datetime.now(UTC)
+                else "cancelled"
+            )
+            refreshed_pause.completed_at = datetime.now(UTC)
+            if refreshed_pause.human_request_id is not None:
+                await lifecycle.abandon(request_id=refreshed_pause.human_request_id)
             await session.commit()
         raise

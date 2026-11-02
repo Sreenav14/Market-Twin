@@ -8,14 +8,17 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol, cast
 
 from aiokafka import AIOKafkaConsumer  # pyright: ignore[reportMissingTypeStubs]
-from aiokafka.structs import ConsumerRecord  # pyright: ignore[reportMissingTypeStubs]
+from aiokafka.structs import (  # pyright: ignore[reportMissingTypeStubs]
+    ConsumerRecord,
+    TopicPartition,
+)
 
 
 class _ByteConsumer(Protocol):
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
     async def getone(self) -> ConsumerRecord[bytes, bytes]: ...
-    async def commit(self) -> None: ...
+    async def commit(self, offsets: dict[TopicPartition, int] | None = None) -> None: ...
 
 
 KafkaSecurityProtocol = Literal[
@@ -281,3 +284,14 @@ class KafkaConsumer:
             )
 
         await consumer.commit()
+
+    async def commit_messages(self, messages: tuple[KafkaMessage, ...]) -> None:
+        """Acknowledge only terminal prefixes, never consumer prefetch positions."""
+        if self._consumer is None:
+            raise RuntimeError("Kafka consumer has not been started.")
+        offsets: dict[TopicPartition, int] = {}
+        for message in messages:
+            partition = TopicPartition(message.topic, message.partition)
+            offsets[partition] = max(offsets.get(partition, 0), message.offset + 1)
+        if offsets:
+            await self._consumer.commit(offsets)

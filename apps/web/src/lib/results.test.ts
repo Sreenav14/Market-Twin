@@ -29,6 +29,36 @@ const productFinding: Finding = {
 };
 
 describe("evidence-aware report verdict", () => {
+  it("reads feature-case coverage without requiring legacy journey fields", () => {
+    const result = verdictReport(undefined, undefined);
+    result.report.payload = { mode: "deep_feature_v1", coverage: {
+      planned: 2, executed: 2, passed: 1, failed_assertions: 0, blocked: 0, inconclusive: 1, not_run: 0,
+    } };
+    const verdict = reportVerdict(result);
+    expect(verdict.unit).toBe("cases");
+    expect(verdict.completionRate).toBe(100);
+    expect(verdict.label).toBe("Review test coverage");
+    expect(verdict.description).toContain("2 of 2 cases recorded as executed");
+    expect(verdict.description).toContain("inconclusive or unverified work is not a pass");
+  });
+
+  it.each([0, 1])("does not call unaccounted or failed assertions clean: %s", failedAssertions => {
+    const result = verdictReport(undefined, undefined);
+    result.report.payload = { mode: "deep_feature_v1", coverage: {
+      planned: 1, executed: 1, passed: 0, failed_assertions: failedAssertions, blocked: 0, inconclusive: 0, not_run: 0,
+    } };
+    expect(reportVerdict(result).tone).toBe("caution");
+  });
+
+  it("requires consistent recorded case counts before describing completion", () => {
+    const result = verdictReport(undefined, undefined);
+    result.report.payload = { mode: "deep_feature_v1", coverage: {
+      planned: 1, executed: 2, passed: 2, failed_assertions: 0, blocked: 0, inconclusive: 0, not_run: 0,
+    } };
+    expect(reportVerdict(result).completionRate).toBeNull();
+    expect(reportVerdict(result).label).toBe("Insufficient evidence");
+  });
+
   it.each([
     [undefined, undefined], [0, {}], [2, {}], [2, { completed: 3 }],
     [2, { completed: 2, failed: 1 }], [1.5, { completed: 1.5 }],

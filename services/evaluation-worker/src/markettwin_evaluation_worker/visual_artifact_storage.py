@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
+from boto3.s3.transfer import TransferConfig
 from boto3.session import Session
 from botocore.config import Config
 
@@ -23,6 +24,7 @@ class S3DownloadClient(Protocol):
         Bucket: str,
         Key: str,
         Filename: str,
+        Config: TransferConfig,
     ) -> None: ...
 
 
@@ -65,6 +67,9 @@ class VisualArtifactStorage:
             endpoint_url=endpoint_url,
             config=Config(
                 signature_version="s3v4",
+                connect_timeout=5,
+                read_timeout=15,
+                retries={"mode": "standard", "total_max_attempts": 2},
             ),
         )
 
@@ -124,12 +129,25 @@ class VisualArtifactStorage:
             / f"{artifact.artifact_id}{suffix}"
         )
 
-        await asyncio.to_thread(
+        download_task = asyncio.create_task(asyncio.to_thread(
             self._client.download_file,
             artifact.bucket,
             artifact.object_key,
             str(local_path),
-        )
+            Config=TransferConfig(num_download_attempts=1, use_threads=False),
+        ))
+        try:
+            await asyncio.shield(download_task)
+        except asyncio.CancelledError:
+            # A cancelled to_thread keeps writing. Drain before TemporaryDirectory
+            # removes its files, rather than leaving a thread writing into cleanup.
+            cleanup = asyncio.gather(download_task, return_exceptions=True)
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    pass
+            raise
 
         if not await asyncio.to_thread(
             local_path.is_file

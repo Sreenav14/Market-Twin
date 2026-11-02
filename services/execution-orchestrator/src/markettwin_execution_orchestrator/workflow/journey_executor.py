@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack
+from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, replace
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
+from google.adk.agents.run_config import RunConfig
 from google.adk.runners import InMemoryRunner
 from google.genai import types
+from markettwin_database.model_budget import ModelBudgetExceeded, model_budget, model_role
+from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.observability import (
     use_observability_correlation,
@@ -52,6 +56,7 @@ from markettwin_execution_orchestrator.persistence import (
     S3ArtifactStorage,
     SessionArtifactRecorder,
 )
+from markettwin_execution_orchestrator.workflow.partial_result import salvage_partial_result
 from markettwin_execution_orchestrator.workflow.persona_result import (
     JourneyExecutionStatus,
     JourneyOutcome,
@@ -86,6 +91,8 @@ class PersonaJourneyExecutionRequest:
     max_duration_seconds: int = 180
     prompt_override: dict[str, str] | None = None
     agent_number: int = 2
+    viewport_preset: Literal["mobile320", "desktop1280"] = "desktop1280"
+    fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
 
 
 def _build_journey_prompt(
@@ -277,10 +284,26 @@ async def execute_persona_journey(
         )
         artifact_storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
 
+        @asynccontextmanager
+        async def approval_wait() -> AsyncGenerator[None, None]:
+            from markettwin_execution_orchestrator.workflow.case_execution import (
+                MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                pause_case_deadline,
+            )
+
+            if persona_timer is None:
+                yield
+            else:
+                async with pause_case_deadline(
+                    persona_timer, allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                ):
+                    yield
+
         step_recorder = ExecutionStepRecorder(
             session=session,
             execution_id=request.execution_id,
             storage=artifact_storage,
+            approval_wait=approval_wait,
         )
 
         runtime = runtime_factory.create_persona_runtime(
@@ -371,6 +394,7 @@ async def execute_persona_journey(
         )
 
         final_response_parts: list[str] = []
+        reported: PersonaAgentReport | None = None
 
         with use_observability_correlation(
             test_run_id=request.test_run_id,
@@ -380,32 +404,48 @@ async def execute_persona_journey(
             persona_id=request.persona_id,
             mission_id=request.mission_id,
             agent_role="persona",
-        ):
+        ), model_budget(session, request.test_run_id), model_role("persona"):
             async with asyncio.timeout(
                 request.max_duration_seconds
             ) as persona_timer:
-                async for event in runner.run_async(
-                    user_id=user_id,
-                    session_id=session_id,
-                    new_message=message,
-                ):
-                    await browser_controller.cooperative_checkpoint(browser_session)
-                    if (
-                        event.is_final_response()
-                        and event.author == runtime.agent.name
-                        and event.content
-                        and event.content.parts
+                for parse_attempt in range(2):
+                    final_response_parts.clear()
+                    async for event in runner.run_async(
+                        user_id=user_id,
+                        session_id=session_id,
+                        new_message=message,
+                        run_config=RunConfig(max_llm_calls=(
+                            32 * max(1, len(root_agent.sub_agents)) if parse_attempt == 0 else 1
+                        )),
                     ):
-                        final_response_parts.extend(
-                            part.text
-                            for part in event.content.parts
-                            if part.text
-                        )
-
-        if not final_response_parts:
-            raise RuntimeError("Persona Agent returned no final Journey response.")
-
-        reported = _parse_persona_report("\n".join(final_response_parts))
+                        await browser_controller.cooperative_checkpoint(browser_session)
+                        if (
+                            event.is_final_response()
+                            and event.author == runtime.agent.name
+                            and event.content
+                            and event.content.parts
+                        ):
+                            final_response_parts.extend(
+                                part.text for part in event.content.parts if part.text
+                            )
+                    try:
+                        reported = _parse_persona_report("\n".join(final_response_parts))
+                        break
+                    except ValidationError as exc:
+                        if parse_attempt == 1:
+                            raise
+                        # A formatting repair must not repeat browser mutations.
+                        runtime.agent.tools = []
+                        runtime.agent.disallow_transfer_to_parent = True
+                        runtime.agent.disallow_transfer_to_peers = True
+                        runner.agent = runtime.agent
+                        error = exc.errors(include_input=False, include_url=False)[0]
+                        message = types.Content(role="user", parts=[types.Part(text=(
+                            f"Your previous output failed validation: {error['type']}. "
+                            "Return corrected JSON only using the recorded history. "
+                            "Do not perform more browser actions."
+                        ))])
+        assert reported is not None
         validation = await validate_execution_report(
             report=reported, success_criteria=request.journey.mission.success_criteria,
             execution_id=request.execution_id, session=session,
@@ -433,6 +473,11 @@ async def execute_persona_journey(
             final_url=report.final_url,
         )
 
+    except ModelBudgetExceeded:
+        # A run-wide limit cannot recover in another journey. Close this browser
+        # and let the run stop before starting another authentication preflight.
+        raise
+
     except SQLAlchemyError:
         await session.rollback()
         raise
@@ -451,19 +496,15 @@ async def execute_persona_journey(
         )
 
     except TimeoutError:
-        return PersonaJourneyResult(
-            journey=request.journey,
+        return await salvage_partial_result(
+            session=session, execution_id=request.execution_id, journey=request.journey,
             status=JourneyExecutionStatus.TIMED_OUT,
-            summary=("Persona Journey exceeded the configured execution time."),
-            blockers=("Journey execution timed out.",),
         )
 
-    except ValidationError as exc:
-        return PersonaJourneyResult(
-            journey=request.journey,
+    except ValidationError:
+        return await salvage_partial_result(
+            session=session, execution_id=request.execution_id, journey=request.journey,
             status=JourneyExecutionStatus.FAILED,
-            summary="Persona Agent returned an invalid structured result.",
-            blockers=(str(exc),),
         )
 
     except Exception as exc:

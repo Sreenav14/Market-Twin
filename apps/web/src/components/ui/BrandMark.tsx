@@ -5,15 +5,13 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       viewBox="0 0 32 32"
       aria-hidden="true"
     >
-      <rect width="32" height="32" rx="9" fill="currentColor" />
       <path
-        d="M8.5 20.5 12.8 11l3.6 6.4 2.5-4.7 4.6 7.8"
+        d="M13 5H5v22h8M19 5h8v22h-8"
         fill="none"
-        stroke="var(--on-primary)"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
+        stroke="currentColor"
+        strokeWidth="3"
       />
+      <path d="M12 12h8v8h-8z" fill="currentColor" />
     </svg>
   );
 }

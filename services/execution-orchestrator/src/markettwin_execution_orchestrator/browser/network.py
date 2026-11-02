@@ -9,7 +9,10 @@ from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
     ResolvedAddress,
 )
-from markettwin_execution_orchestrator.browser.errors import HostResolutionError
+from markettwin_execution_orchestrator.browser.errors import (
+    HostResolutionError,
+    UnsafeDestinationAddressError,
+)
 
 HostLookup = Callable[[str], Awaitable[tuple[ResolvedAddress, ...]]]
 
@@ -75,7 +78,7 @@ async def resolve_and_validate_host(
         None,
     )
     if blocked is not None:
-        raise HostResolutionError(
+        raise UnsafeDestinationAddressError(
             f'Target hostname "{hostname}" resolved to blocked address "{blocked.address}".'
         )
     return addresses

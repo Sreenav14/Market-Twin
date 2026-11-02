@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import logging
 import re
 import time
 from datetime import UTC, datetime, timedelta
@@ -115,6 +116,7 @@ class HITLWorkerService:
         self._resume_events: dict[UUID, asyncio.Event] = {}
         self._server: Any = None
         self._server_task: asyncio.Task[None] | None = None
+        self._prune_task: asyncio.Task[None] | None = None
         self._authority = DatabaseViewerAuthority(session_factory, registry)
         self._gateway = ViewerGateway(
             registry,
@@ -314,11 +316,26 @@ class HITLWorkerService:
                     await self._server_task
                     raise RuntimeError("The HITL worker service stopped during startup.")
                 await asyncio.sleep(0.02)
+        self._prune_task = asyncio.create_task(self._prune_viewer_leases())
+
+    async def _prune_viewer_leases(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            try:
+                await self._gateway.prune_expired()
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    "HITL lease cleanup failed (%s)", type(error).__name__,
+                )
 
     async def stop(self) -> None:
         global _active_service
         server = getattr(self, "_server", None)
         task = getattr(self, "_server_task", None)
+        if self._prune_task is not None:
+            self._prune_task.cancel()
+            await asyncio.gather(self._prune_task, return_exceptions=True)
+            self._prune_task = None
         if server is not None:
             server.should_exit = True
         if task is not None:

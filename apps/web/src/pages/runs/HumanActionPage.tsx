@@ -89,7 +89,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       setActiveLease(lease);
       setActiveRequestId(requestId);
     },
-    onSuccess: (_result, requestId) => {
+    onSuccess: () => {
       releasingRef.current = false;
       queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
     },

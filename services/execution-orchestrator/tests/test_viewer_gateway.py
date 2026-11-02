@@ -79,6 +79,58 @@ class RecordingOwner:
         self.detached_event.set()
 
 
+async def test_expiry_prunes_only_disconnected_expired_leases() -> None:
+    owner, actor_id = RecordingOwner(), uuid4()
+    gateway = ViewerGateway(
+        owner, SyntheticAuthority(actor_id), allowed_origins=frozenset({"https://fixture.invalid"}),
+    )
+    expired = OwnerLease(
+        BrowserSessionHandle(uuid4(), uuid4(), uuid4()), actor_id, uuid4(), 1,
+        datetime.now(UTC) - timedelta(seconds=1),
+    )
+    fresh = replace(expired, lease_id=uuid4(), handle=BrowserSessionHandle(
+        uuid4(), uuid4(), uuid4(),
+    ), expires_at=datetime.now(UTC) + timedelta(seconds=30))
+    connected = replace(expired, lease_id=uuid4(), handle=BrowserSessionHandle(
+        uuid4(), uuid4(), uuid4(),
+    ))
+    gateway._leases.update({lease.lease_id: lease for lease in (expired, fresh, connected)})
+    gateway._attached.update(gateway._leases)
+    gateway._connected.add(connected.handle.session_id)
+    await gateway.prune_expired()
+    assert set(gateway._leases) == {fresh.lease_id, connected.lease_id}
+    assert owner.detached == 1
+    gateway._connected.clear()
+    await gateway.prune_expired()
+    assert set(gateway._leases) == {fresh.lease_id}
+    assert owner.detached == 2
+
+
+async def test_combined_authority_checks_current_revocation_without_login_cache() -> None:
+    class CombinedAuthority(SyntheticAuthority):
+        async def permitted_session(self, cookie: str, lease: OwnerLease) -> bool:
+            return cookie == "synthetic-session" and self.session_active and self.target_active
+
+        async def actor(self, session_cookie: str) -> UUID | None:
+            raise AssertionError("The combined check must not add a second session query.")
+
+    actor_id = uuid4()
+    authority = CombinedAuthority(actor_id)
+    gateway = ViewerGateway(
+        RecordingOwner(), authority, allowed_origins=frozenset({"https://fixture.invalid"}),
+    )
+    lease = OwnerLease(
+        BrowserSessionHandle(uuid4(), uuid4(), uuid4()), actor_id, uuid4(), 1,
+        datetime.now(UTC) + timedelta(seconds=30),
+    )
+    assert await gateway._permitted("synthetic-session", lease)
+    authority.session_active = False
+    assert not await gateway._permitted("synthetic-session", lease)
+    authority.session_active = True
+    authority.target_active = False
+    assert not await gateway._permitted("synthetic-session", lease)
+
+
 @pytest.fixture
 async def gateway_server(
     tmp_path: Path,
@@ -300,6 +352,79 @@ async def test_signed_request_revocation_fences_even_before_viewer_connects(
     assert lease.handle.session_id not in gateway._connected  # pyright: ignore[reportPrivateUsage]
 
 
+async def test_diagnostics_are_fixed_labels_and_clear_on_expiry(gateway_server, monkeypatch):
+    url, tls, gateway, _, owner, lease = gateway_server
+    snapshot = ({
+        "reason": "dns_resolution_failed", "destination": "known_provider", "count": 2,
+        "url": "https://private.invalid/login?token=never-forward",
+    }, {
+        "reason": "raw-sensitive-error", "destination": "unknown_third_party", "count": 1,
+    })
+
+    async def diagnostics(_lease):
+        return snapshot
+
+    monkeypatch.setattr(owner, "diagnostics", diagnostics, raising=False)
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    async with connect(
+        url, ssl=tls, origin="https://fixture.invalid",
+        additional_headers={"Cookie": "markettwin_session=synthetic-session"},
+    ) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        assert await websocket.recv() == b"synthetic-frame"
+        message = await asyncio.wait_for(websocket.recv(), 2)
+        assert json.loads(message) == {"network_diagnostics": [{
+            "reason": "dns_resolution_failed", "destination": "known_provider", "count": 2,
+        }]}
+        snapshot = ()
+        while isinstance(message := await asyncio.wait_for(websocket.recv(), 2), bytes):
+            pass
+        assert json.loads(message) == {"network_diagnostics": []}
+
+
+async def test_diagnostics_recheck_authority_after_collection(gateway_server, monkeypatch):
+    url, tls, gateway, authority, owner, lease = gateway_server
+
+    async def diagnostics(_lease):
+        authority.target_active = False
+        return ({"reason": "target_origin_denied", "destination": "unknown_third_party",
+                 "count": 1},)
+
+    monkeypatch.setattr(owner, "diagnostics", diagnostics, raising=False)
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    async with connect(
+        url, ssl=tls, origin="https://fixture.invalid",
+        additional_headers={"Cookie": "markettwin_session=synthetic-session"},
+    ) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        assert await websocket.recv() == b"synthetic-frame"
+        with pytest.raises(ConnectionClosed):
+            await asyncio.wait_for(websocket.recv(), 2)
+
+
+async def test_disconnect_detaches_the_renewed_connection_lease(gateway_server, monkeypatch):
+    url, tls, gateway, _, owner, lease = gateway_server
+    detached = []
+    original_detach = owner.detach
+
+    async def detach(current):
+        detached.append(current)
+        await original_detach(current)
+
+    monkeypatch.setattr(owner, "detach", detach)
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    renewed = replace(lease, expires_at=lease.expires_at + timedelta(seconds=10))
+    async with connect(
+        url, ssl=tls, origin="https://fixture.invalid",
+        additional_headers={"Cookie": "markettwin_session=synthetic-session"},
+    ) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        assert await websocket.recv() == b"synthetic-frame"
+        await gateway.renew(lease.actor_id, renewed)
+    await asyncio.wait_for(owner.detached_event.wait(), 2)
+    assert detached == [renewed]
+
+
 async def test_tls_gateway_operates_the_original_browser_context(
     gateway_server: tuple[
         str, ssl.SSLContext, ViewerGateway, SyntheticAuthority, RecordingOwner, OwnerLease
@@ -386,6 +511,27 @@ async def test_tls_gateway_operates_the_original_browser_context(
                 await expect(
                     session.page.get_by_text("Signed in as user", exact=True)
                 ).to_be_visible()
+                # Exercise real down/move/up over TLS in the same owned page.
+                # The fixture only succeeds with a held drag, never a click.
+                await session.page.evaluate("""() => {
+                    const slider = document.createElement('div');
+                    slider.id = 'synthetic-drag';
+                    slider.style = 'position:fixed;left:20px;top:300px;width:300px;height:40px';
+                    slider.textContent = 'Not dragged';
+                    let start = null;
+                    slider.addEventListener('mousedown', e => { start = e.clientX; });
+                    slider.addEventListener('mousemove', e => {
+                        if (start !== null && e.buttons === 1 && e.clientX - start > 100)
+                            slider.textContent = 'Drag accepted';
+                    });
+                    slider.addEventListener('mouseup', () => { start = null; });
+                    document.body.append(slider);
+                }""")
+                await send(event="pointer_down", x=30, y=320)
+                await send(event="pointer_move", x=90, y=320)
+                await send(event="pointer_move", x=180, y=320)
+                await send(event="pointer_up", x=180, y=320)
+                await expect(session.page.locator("#synthetic-drag")).to_have_text("Drag accepted")
                 assert session.context is context
                 assert session.session_id == handle.session_id
             await asyncio.wait_for(detached.wait(), timeout=2)

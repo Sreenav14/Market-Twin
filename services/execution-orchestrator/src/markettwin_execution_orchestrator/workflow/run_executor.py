@@ -7,7 +7,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
+from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
+from markettwin_shared.deep_testing import CaseExecutionResult
+from markettwin_shared.discovery_contract import DiscoveryMap
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
@@ -73,7 +76,9 @@ class MarketTwinRunRequest:
         default_factory=dict[str, dict[str, str]]
     )
     replay_plan: dict[str, object] | None = None
-    execution_mode: Literal["legacy_persona", "deep_feature_v1"] = "legacy_persona"
+    execution_mode: Literal[
+        "legacy_persona", "deep_feature_v1", "discovery_contract_v1",
+    ] = "legacy_persona"
     feature_scope: dict[str, object] | None = None
     feature_budget: dict[str, object] | None = None
     feature_plan: dict[str, object] | None = None
@@ -83,6 +88,7 @@ class MarketTwinRunRequest:
     runtime_human_assistance: bool = False
     synthetic_fixture_approval_enabled: bool = False
     human_action_approvals_enabled: bool = False
+    fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
     created_by_user_id: UUID | None = None
 
 
@@ -90,7 +96,25 @@ async def execute_markettwin_run(
     request: MarketTwinRunRequest,
     *,
     session: AsyncSession,
-) -> MultiPersonaExecutionResult | DeepFeatureRunResult:
+) -> (
+    MultiPersonaExecutionResult | DeepFeatureRunResult | DiscoveryMap
+    | tuple[CaseExecutionResult, ...]
+):
+    """Bind durable provider limits for every execution entry point."""
+    from markettwin_database.model_budget import model_budget
+
+    with model_budget(session, request.run_id):
+        return await _execute_markettwin_run(request, session=session)
+
+
+async def _execute_markettwin_run(
+    request: MarketTwinRunRequest,
+    *,
+    session: AsyncSession,
+) -> (
+    MultiPersonaExecutionResult | DeepFeatureRunResult | DiscoveryMap
+    | tuple[CaseExecutionResult, ...]
+):
     """Plan and execute one complete MarketTwin test run."""
 
     initialize_adk_observability()
@@ -112,6 +136,16 @@ async def execute_markettwin_run(
         request.network_policy,
     )
 
+    if request.execution_mode == "discovery_contract_v1":
+        from markettwin_database.models import TestRun
+
+        from markettwin_execution_orchestrator.workflow.contract_run import execute_contract_run
+        from markettwin_execution_orchestrator.workflow.discovery import execute_discovery_run
+
+        run = await session.get(TestRun, request.run_id)
+        if run is not None and run.configuration_snapshot.get("discovery_stage") == "executing":
+            return await execute_contract_run(request=request, session=session)
+        return await execute_discovery_run(request=request, session=session)
     if request.execution_mode == "deep_feature_v1":
         from markettwin_execution_orchestrator.workflow.deep_run import execute_deep_feature_run
 

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 export function AuthCallbackPage() {
   useEffect(() => {
     document.title = "Authentication · MarketTwin";
@@ -14,6 +15,7 @@ export function AuthCallbackPage() {
             architecture, but the current local V1 uses the local identity
             provider. This route does not simulate a production login.
           </p>
+          <Link className="primary-button" to="/login">Return to sign in</Link>
         </section>
       </main>
     </div>

@@ -188,3 +188,35 @@ class TestRunRepository:
             return None
 
         return _to_record(test_run)
+
+
+    async def update_configuration_snapshot(
+        self,
+        *,
+        test_run_id: UUID,
+        configuration_snapshot: dict[str, object],
+    ) -> None:
+        statement = (
+            update(TestRun)
+            .where(TestRun.id == test_run_id)
+            .values(configuration_snapshot=configuration_snapshot)
+        )
+        await self._session.execute(statement)
+
+    async def queue_if_awaiting_human_or_draft(
+        self,
+        *,
+        test_run_id: UUID,
+    ) -> TestRunRecord | None:
+        statement = (
+            update(TestRun)
+            .where(
+                TestRun.id == test_run_id,
+                TestRun.status.in_(["draft", "awaiting_human"]),
+            )
+            .values(status="queued")
+            .returning(TestRun)
+        )
+        result = await self._session.execute(statement)
+        test_run = result.scalar_one_or_none()
+        return None if test_run is None else _to_record(test_run)

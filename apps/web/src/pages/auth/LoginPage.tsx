@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowRight, Route, ScanLine, ShieldCheck } from "lucide-react";
+import { ArrowRight, Moon, Route, ScanLine, ShieldCheck, Sun } from "lucide-react";
 import { BrandMark } from "../../components/ui/BrandMark";
 import { Spinner } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ApiError, CurrentUser, api } from "../../lib/api";
 import { Link } from "react-router-dom";
+import { useTheme } from "../../lib/theme";
 
 export function LoginPage({
   onAuthenticated,
@@ -18,6 +19,7 @@ export function LoginPage({
   const submitting = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     document.title = "Sign in · MarketTwin";
@@ -107,9 +109,20 @@ export function LoginPage({
 
       {/* Access Authentication Pane */}
       <section className="signin-access" aria-labelledby="signin-form-title">
-        <div className="signin-mode" aria-label="Workspace mode">
-          <span className="signin-mode-dot" aria-hidden="true" />
-          Local workspace authentication
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "16px" }}>
+          <div className="signin-mode" aria-label="Workspace mode">
+            <span className="signin-mode-dot" aria-hidden="true" />
+            Local workspace authentication
+          </div>
+          <button
+            className="icon-button theme-toggle-btn"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+            title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          </button>
         </div>
 
         <div className="signin-form-wrap">

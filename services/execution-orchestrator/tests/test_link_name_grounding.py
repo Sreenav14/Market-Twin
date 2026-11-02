@@ -2,10 +2,16 @@
 
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+from markettwin_execution_orchestrator.browser.actions import semantic_locator
 from markettwin_execution_orchestrator.browser.assertions import evaluate_assertion
-from markettwin_execution_orchestrator.browser.observations import build_observation
+from markettwin_execution_orchestrator.browser.observations import (
+    RawVisibleElement,
+    _ground_link_names,
+    build_observation,
+)
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 from markettwin_shared.feature_plan import ExpectedAssertion, SemanticTarget
 from playwright.async_api import async_playwright
@@ -61,4 +67,45 @@ async def test_native_names_match_exact_locators_and_leave_negative_assertions_u
             assert observation.accessibility_snapshot_path is None
             assert "SYNTHETIC_CANARY" not in str(observation.to_dict())
             assert not list(tmp_path.iterdir())
+        await browser.close()
+
+
+async def test_unreadable_link_is_retained_with_explicit_unavailable_name() -> None:
+    locator = Mock()
+    locator.nth.return_value.aria_snapshot = AsyncMock(side_effect=TimeoutError)
+    session = cast(JourneyBrowserSession, SimpleNamespace(
+        page=Mock(locator=Mock(return_value=locator)), timeout_ms=100,
+    ))
+    element: RawVisibleElement = {
+        "role": "link", "name": "Approximate", "tag": "a", "enabled": True,
+        "level": None, "link_index": 0,
+        "bounding_box": {"x": 0, "y": 0, "width": 10, "height": 10},
+    }
+    elements, unavailable = await _ground_link_names(session, [element])
+    assert unavailable
+    assert len(elements) == 1
+    assert elements[0]["name_source"] == "unavailable"
+
+
+async def test_labelledby_precedes_aria_label_and_observed_button_clicks(tmp_path) -> None:
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page()
+        await page.set_content(
+            '<span id="first">Save</span><span id="second">changes</span>'
+            '<button aria-label="Wrong" aria-labelledby="first second" '
+            'onclick="document.title=\'saved\'">Ignored</button>'
+        )
+        session = cast(JourneyBrowserSession, SimpleNamespace(
+            page=page, timeout_ms=1000, authenticated_session=False,
+            capture_enabled=True, control_mode="agent", action_number=1,
+            artifact_directory=tmp_path, context=SimpleNamespace(pages=[page]),
+            event_buffer=SimpleNamespace(console_errors=[], page_errors=[], failed_requests=[]),
+        ))
+        observation = await build_observation(session)
+        button = next(item for item in observation.visible_elements if item.role == "button")
+        assert button.name_source == "playwright"
+        assert button.name == "Save changes"
+        await semantic_locator(page, role=button.role, name=button.name).click()
+        assert await page.title() == "saved"
         await browser.close()

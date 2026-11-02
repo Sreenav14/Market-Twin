@@ -1,5 +1,6 @@
 """Bounded semantic, read-only assertions on a controller-owned Playwright page."""
 
+import asyncio
 import re
 import time
 from dataclasses import dataclass
@@ -31,12 +32,14 @@ async def repeat_read_only_assertion(
     page: Page,
     assertion: ExpectedAssertion,
     timeout_ms: int = 1500,
+    *, minimum_interval_ms: int = 0,
 ) -> tuple[AssertionObservation, AssertionObservation]:
     """Read the same oracle twice without repeating the action that produced it."""
-    return (
-        await evaluate_assertion(page, assertion, timeout_ms),
-        await evaluate_assertion(page, assertion, timeout_ms),
-    )
+    first = await evaluate_assertion(page, assertion, timeout_ms)
+    if minimum_interval_ms:
+        await asyncio.sleep(minimum_interval_ms / 1000)
+    second = await evaluate_assertion(page, assertion, timeout_ms)
+    return first, second
 
 
 async def evaluate_assertion(

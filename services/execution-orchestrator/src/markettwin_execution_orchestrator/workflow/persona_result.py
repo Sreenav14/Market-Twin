@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 
+from markettwin_shared.deep_testing import AssertionResult
 from pydantic import BaseModel, ConfigDict, Field
 
 from markettwin_execution_orchestrator.agents.schemas.journey import (
@@ -51,6 +52,10 @@ class PersonaJourneyResult(BaseModel):
     report_validation_issues: tuple[str, ...] = ()
     status: JourneyExecutionStatus
     outcome: JourneyOutcome | None = None
+    partial: bool = False
+    steps_completed: int = Field(default=0, ge=0)
+    last_completed_step_id: int | None = None
+    assertion_results: tuple[AssertionResult, ...] = ()
 
     summary: str | None = Field(
         default=None,

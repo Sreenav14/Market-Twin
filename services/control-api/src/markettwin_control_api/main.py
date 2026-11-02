@@ -1,6 +1,7 @@
 """MarketTwin Control API application."""
 
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Final, Literal
@@ -22,9 +23,11 @@ from markettwin_control_api.api.ingestion import router as ingestion_router
 from markettwin_control_api.api.lifecycle import router as lifecycle_router
 from markettwin_control_api.api.live_browser import router as live_browser_router
 from markettwin_control_api.api.mutation_origin import require_mutation_origin
+from markettwin_control_api.api.run_readiness import router as run_readiness_router
 from markettwin_control_api.api.runtime_snapshots import router as runtime_snapshots_router
 from markettwin_control_api.api.target_authorizations import router as target_authorizations_router
 from markettwin_control_api.api.targets import router as targets_router
+from markettwin_control_api.api.test_contracts import router as test_contracts_router
 from markettwin_control_api.api.test_run import router as test_run_router
 from markettwin_control_api.api.test_run_results import router as test_run_results_router
 from markettwin_control_api.api.workspaces import router as workspaces_router
@@ -36,6 +39,7 @@ from markettwin_control_api.services import (
     run_human_action_reaper,
     run_outbox_relay,
 )
+from markettwin_control_api.services.run_readiness import WorkerStatus, worker_statuses
 
 APP_NAME: Final[str] = "MarketTwin Control API"
 APP_VERSION: Final[str] = "0.1.0"
@@ -67,6 +71,11 @@ def create_app() -> FastAPI:
         application: FastAPI,
     ) -> AsyncGenerator[None, None]:
         """Own long-lived application resources."""
+
+        if settings.app_env in {"local", "development"} and not settings.outbox_relay_enabled:
+            logging.getLogger(__name__).error(
+                "Outbox relay is DISABLED — test runs will be created but never executed."
+            )
 
         database = DatabaseRuntime(settings)
         application.state.database = database
@@ -179,7 +188,19 @@ def create_app() -> FastAPI:
         summary="Check Kafka connectivity",
     )
 
+    async def workers_health(request: Request) -> list[WorkerStatus]:
+        if settings.app_env not in {"local", "test"}:
+            await get_authenticated_user_id(request=request)
+        async with request.app.state.database.session_factory() as session:
+            return await worker_statuses(session)
+
+    application.add_api_route(
+        "/api/v1/health/workers", workers_health, methods=["GET"],
+        response_model=list[WorkerStatus], tags=["System"],
+    )
+
     application.include_router(auth_router)
+    application.include_router(run_readiness_router)
     application.include_router(lifecycle_router)
     application.include_router(workspaces_router)
     application.include_router(applications_router)
@@ -187,6 +208,7 @@ def create_app() -> FastAPI:
     application.include_router(targets_router)
     application.include_router(target_authorizations_router)
     application.include_router(test_run_router)
+    application.include_router(test_contracts_router)
     application.include_router(test_run_results_router)
     application.include_router(deep_cases_router)
     application.include_router(human_actions_router)

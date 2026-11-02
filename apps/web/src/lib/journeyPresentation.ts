@@ -47,6 +47,9 @@ export function journeyBlocker(journey: JourneyExecution, step?: JourneyDetail["
     && "reason_code" in diagnostic && typeof diagnostic.reason_code === "string"
     ? diagnostic.reason_code : null;
   const detail = reason ?? step?.observation_summary ?? journey.error_message ?? "";
+  if (journey.result?.blocker === "authentication_challenge_blocked"
+    || detail.includes("authentication_challenge_blocked") || detail.includes("AuthenticationChallengeBlocked"))
+    return "Login or identity was not verified. Complete sign-in and any challenge or MFA before starting a new attempt. This does not establish an application defect. Other independent authorized work can continue.";
   if (reason === "origin_not_authorized") {
     const origin = diagnostic && typeof diagnostic === "object" && "requested_origin" in diagnostic
       && typeof diagnostic.requested_origin === "string" ? diagnostic.requested_origin : "the destination";

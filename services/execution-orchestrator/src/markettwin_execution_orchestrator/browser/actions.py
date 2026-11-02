@@ -1,6 +1,7 @@
 """Deterministic locator helpers for the safe MarketTwin browser surface."""
 
 import asyncio
+import re
 import time
 from typing import Any, cast
 
@@ -55,6 +56,34 @@ def semantic_locator(
         return page.get_by_label(label, exact=True)
     assert text is not None
     return page.get_by_text(text, exact=True)
+
+
+async def resolve_action_locator(
+    root: Page | Locator, *, role: str | None = None, name: str | None = None,
+    label: str | None = None, text: str | None = None,
+) -> tuple[Locator, str]:
+    """Try supplied semantic alternatives, stopping immediately on ambiguity."""
+    candidates: list[tuple[Locator, str]] = []
+    if role is not None:
+        if not name or not name.strip():
+            raise BrowserActionError("Role locators require an accessible name.")
+        candidates.append((root.get_by_role(cast(Any, role), name=name, exact=True), "role_exact"))
+    if label is not None:
+        candidates.append((root.get_by_label(label, exact=True), "label_exact"))
+    if text is not None:
+        candidates.append((root.get_by_text(text, exact=True), "text_exact"))
+    if role is not None and name:
+        normalized = re.compile(r"^\s*" + r"\s+".join(map(re.escape, name.split())) + r"\s*$", re.I)
+        candidates.append((root.get_by_role(cast(Any, role), name=normalized), "role_normalized"))
+    if not candidates:
+        raise BrowserActionError("Provide a role and name, label, or text.")
+    for locator, strategy in candidates:
+        count = await locator.count()
+        if count > 1:
+            await require_unique(locator)
+        if count == 1:
+            return locator, strategy
+    raise BrowserActionError("Target was not found.", reason_code="absent_target")
 
 
 async def assertion_locator(

@@ -244,6 +244,7 @@ export interface TargetAuthorization {
 }
 
 export interface TestRun {
+  created_at?: string;
   test_number?: number | null;
   id: string;
   workspace_id: string;
@@ -251,9 +252,37 @@ export interface TestRun {
   target_id: string;
   created_by_user_id: string;
   status: TestRunStatus;
+  status_reason?: string | null;
   target_snapshot: Record<string, unknown>;
   configuration_snapshot: Record<string, unknown>;
   human_action_approvals_enabled?: boolean;
+}
+export interface ContractCheck {
+  assertion_id: string;
+  oracle: "visible_text" | "visible" | "enabled" | "url_path_v1" | "title" | "count" | "checked";
+  target_role: string | null;
+  target_name: string | null;
+  expected_value: string | boolean | number | null;
+  plain_language: string;
+  origin: "user_approved" | null;
+  source_step_ordinal: number;
+  excluded: boolean;
+}
+export interface ContractJourney {
+  journey_key: string;
+  title: string;
+  feature_key: string;
+  steps: { action: string; target?: { role?: string | null; name?: string | null; label?: string | null; text?: string | null } | null; url?: string | null; test_value_key?: string | null }[];
+  assertions: ContractCheck[];
+  safe_test_data_keys: string[];
+  excluded: boolean;
+}
+export interface TestContract {
+  contract_id: string;
+  test_run_id: string;
+  version: number;
+  status: "draft" | "approved" | "frozen" | "superseded";
+  journeys: ContractJourney[];
 }
 export interface ArtifactAccess {
   artifact_id: string;
@@ -261,6 +290,10 @@ export interface ArtifactAccess {
   content_type: string;
   url: string;
   expires_in_seconds: number;
+}
+export interface RunPreflight {
+  ready: boolean;
+  checks: { name: string; ready: boolean; reason: string | null }[];
 }
 export interface Finding {
   id: string;
@@ -366,6 +399,7 @@ async function readResponse<T>(response: Response): Promise<T> {
     try {
       const body = (await response.json()) as { detail?: unknown };
       if (typeof body.detail === "string") message = body.detail;
+      else if (body.detail && typeof body.detail === "object" && "reason" in body.detail && typeof body.detail.reason === "string") message = body.detail.reason;
       else if (Array.isArray(body.detail))
         message = "Check the form fields and try again.";
     } catch {
@@ -527,6 +561,15 @@ export const api = {
     request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
   getRun: (runId: string, signal?: AbortSignal) =>
     request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
+  getRunPreflight: (runId: string) => request<RunPreflight>(`/api/v1/test-runs/${runId}/preflight`),
+  getTestContract: (workspaceId: string, runId: string) =>
+    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract`),
+  updateContractJourney: (workspaceId: string, runId: string, journeyKey: string, update: { excluded?: boolean; title?: string; assertions?: ContractCheck[] }) =>
+    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract/journeys/${encodeURIComponent(journeyKey)}`, { method: "PUT", body: JSON.stringify(update) }),
+  approveTestContract: (workspaceId: string, runId: string) =>
+    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract/approve`, { method: "POST", body: "{}" }),
+  startTestContract: (workspaceId: string, runId: string) =>
+    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract/start`, { method: "POST", body: "{}" }),
   getRunResults: (runId: string, signal?: AbortSignal) =>
     request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
   getRunJourneys: (runId: string, signal?: AbortSignal) =>
@@ -578,6 +621,6 @@ export const api = {
   createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "legacy_persona", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = [], authMode?: "required" | "optional", runtimeHumanAssistance = true) =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",
-        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, runtime_human_assistance: runtimeHumanAssistance, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(executionMode === "deep_feature_v1" ? { execution_mode: executionMode } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
+        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, execution_mode: executionMode, runtime_human_assistance: runtimeHumanAssistance, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
     }),
 };

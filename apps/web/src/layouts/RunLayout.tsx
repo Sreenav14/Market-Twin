@@ -16,7 +16,7 @@ import {
   LoadingPanel,
   Spinner,
 } from "../components/ui/StateViews";
-import { TestStatusBadge } from "../components/ui/StatusBadge";
+import { StatusBadge, TestStatusBadge } from "../components/ui/StatusBadge";
 import { DeleteAction } from "../components/markettwin/DeleteAction";
 import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { canManageLifecycle } from "../lib/permissions";
@@ -26,6 +26,7 @@ import { testTitle, testReference, textValue } from "../lib/format";
 import { canDeleteTest, terminalTestStatuses } from "../lib/results";
 import { AppShellContext } from "./AppShell";
 import { RunFlowPanel } from "../components/markettwin/RunFlowPanel";
+import { RunPreflightPanel } from "../components/markettwin/RunPreflightPanel";
 import { HumanAssistanceHost } from "../pages/runs/HumanActionPage";
 
 export type ResultsState =
@@ -54,6 +55,8 @@ export function RunLayout() {
         ? 5_000
         : false,
   });
+  const preflight = useQuery({ queryKey: ["run-preflight", appContext.user.id, runId],
+    queryFn: () => api.getRunPreflight(runId), enabled: runQuery.data?.status === "draft", retry: false });
   async function startRun() {
     if (starting || runQuery.data?.status !== "draft") return;
 
@@ -63,7 +66,7 @@ export function RunLayout() {
     try {
       await api.startRun(runId);
       await runQuery.refetch();
-      navigate(`/runs/${runId}/activity`);
+      navigate(`/runs/${runId}/watch`);
     } catch (error) {
       setStartError(
         error instanceof Error
@@ -107,7 +110,9 @@ export function RunLayout() {
       />
     );
   const run = runQuery.data;
-  const executionMode = run.configuration_snapshot.execution_mode === "deep_feature_v1"
+  const executionMode = run.configuration_snapshot.execution_mode === "discovery_contract_v1"
+    ? "Explore, approve and test"
+    : run.configuration_snapshot.execution_mode === "deep_feature_v1"
     ? "Feature cases · deterministic execution"
     : "Persona journeys";
   const results: ResultsState =
@@ -124,9 +129,9 @@ export function RunLayout() {
   return (
     <>
       <div className="study-utility">
-        <Link className="back-link" to="/runs">
+        <Link className="back-link" to={`/applications/${run.application_id}/runs`}>
           <ArrowLeft size={15} aria-hidden="true" />
-          All tests
+          Application tests
         </Link>
         <span className="monospace">{testReference(run)}</span>
       </div>
@@ -136,7 +141,7 @@ export function RunLayout() {
         description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")} · ${executionMode}`}
         action={
           <div className="header-actions">
-            <TestStatusBadge status={run.status} />
+            {run.configuration_snapshot.execution_mode === "discovery_contract_v1" ? <StatusBadge status={results.status === "ready" ? "Completed" : ({ discovering: "Exploring", awaiting_approval: "Awaiting test approval", executing: "Testing", evaluating: "Writing report" } as Record<string, string>)[String(run.configuration_snapshot.discovery_stage)] || run.status} /> : <TestStatusBadge status={run.status} />}
             {canManageLifecycle(appContext.workspace.role) &&
             run.status === "draft" ? (
               <>
@@ -144,7 +149,7 @@ export function RunLayout() {
                 <Button
                   className="start-test-button"
                   onClick={() => void startRun()}
-                  disabled={starting}
+                  disabled={starting || !preflight.data?.ready}
                 >
                   {starting ? (
                     <>
@@ -166,7 +171,7 @@ export function RunLayout() {
                 id={run.id}
                 name={testTitle(run)}
                 disabled={!canDeleteTest(run.status)}
-                onDeleted={() => navigate("/runs")}
+                onDeleted={() => navigate(`/applications/${run.application_id}/runs`)}
               />
             ) : null}
             <Button
@@ -186,26 +191,29 @@ export function RunLayout() {
           {startError}
         </p>
       ) : null}
-      {run.status === "awaiting_human" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") ? (
+      {run.status === "draft" ? <RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /> : null}
+      {run.configuration_snapshot.discovery_stage === "awaiting_approval" && !location.pathname.endsWith("/contract") ? <section className="panel"><h2>Approve the tests</h2><p>Exploration is complete. Review the journeys and checks before testing begins.</p><Link to={`/runs/${run.id}/contract`}>Review the tests</Link></section> : null}
+      {run.status === "awaiting_human" && run.configuration_snapshot.discovery_stage !== "awaiting_approval" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") && !location.pathname.endsWith("/watch") ? (
         <section className="run-action-required" aria-labelledby="run-action-required-title">
           <div>
             <p className="section-label">Action required</p>
             <h2 id="run-action-required-title">A human action is holding this test</h2>
             <p>The agent is paused until an authorized operator completes or skips the affected work.</p>
           </div>
-          <Link className="primary-button" aria-label="Open Human Assistance for this test" to={`/runs/${run.id}/activity`}>Open Live Execution</Link>
+          <Link className="primary-button" aria-label="Open Human Assistance for this test" to={`/runs/${run.id}/watch`}>Watch live</Link>
         </section>
       ) : null}
       <div className="run-workspace">
       <div className="run-workspace-content">
       <nav className="tab-strip" aria-label="Test sections">
-        {["overview", "activity", "journeys", "findings", "evidence", "report"].map((tab) => (
+        {run.configuration_snapshot.execution_mode === "discovery_contract_v1" ? <NavLink className="tab-link" to={`/runs/${run.id}/contract`}>Approve the tests</NavLink> : null}
+        {["overview", "watch", "journeys", "findings", "evidence", "results"].map((tab) => (
           <NavLink
             key={tab}
             to={`/runs/${run.id}/${tab}`}
             className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}
           >
-            {tab === "overview" ? "Summary" : tab === "activity" ? "Live Execution" : tab[0].toUpperCase() + tab.slice(1)}
+            {tab === "overview" ? "Summary" : tab === "watch" ? "Watch live" : tab === "results" ? "Test results" : tab[0].toUpperCase() + tab.slice(1)}
             {tab === "findings" && results.status === "ready" ? (
               <span className="tab-count">{results.data.findings.length}</span>
             ) : null}
@@ -229,7 +237,10 @@ export function RunLayout() {
       </div>
       {!location.pathname.endsWith("/human-action") &&
       !location.pathname.endsWith("/activity") &&
+      !location.pathname.endsWith("/watch") &&
       !location.pathname.endsWith("/report") &&
+      !location.pathname.endsWith("/results") &&
+      !location.pathname.endsWith("/contract") &&
       !location.pathname.endsWith("/evidence") ? (
         <RunFlowPanel
           runId={run.id}

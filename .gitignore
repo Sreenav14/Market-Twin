@@ -2,12 +2,32 @@
 .env
 .env.*
 !.env.example
+.envrc
 *.pem
 *.key
 *.p12
 *.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+*.ppk
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 secrets/
 credentials/
+**/credentials.json
+**/service-account*.json
+**/*service_account*.json
+**/oauth_creds.json
+**/google_accounts.json
+**/*-credentials.json
+**/auth.json
+**/cookies.txt
+*.secret
+*.secrets
 
 # Node.js and npm
 node_modules/

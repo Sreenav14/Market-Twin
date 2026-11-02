@@ -1,13 +1,9 @@
-import { useState } from "react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import {
-  FileText,
   ArrowUpRight,
   ShieldAlert,
   AlertTriangle,
   CheckCircle2,
-  ExternalLink,
-  ChevronRight,
 } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
@@ -15,6 +11,7 @@ import { CopyButton } from "../../components/markettwin/CopyButton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { RunAssessmentView } from "../../components/markettwin/RunAssessmentView";
 import { FeatureCases } from "../../components/markettwin/FeatureCases";
+import { ReportAnalytics, ReportNavigation, reportView } from "../../components/markettwin/ReportIntelligence";
 import {
   formatDate,
   findingClassification,
@@ -24,6 +21,7 @@ import {
   sortFindings,
 } from "../../lib/results";
 import type { Finding } from "../../lib/api";
+import { ContractReport } from "./ContractReport";
 
 function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string }) {
   const classification = findingClassification(finding);
@@ -47,10 +45,12 @@ function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string
       <div className="ledger-finding-actions">
         {finding.evidence.step_ids.length > 0 && finding.journey_ids[0] ? (
           <Link
-            to={`/runs/${runId}/journeys/${finding.journey_ids[0]}?step=${finding.evidence.step_ids[0]}`}
+            to={finding.journey_ids.length === 1
+              ? `/runs/${runId}/journeys/${finding.journey_ids[0]}?step=${finding.evidence.step_ids[0]}`
+              : `/runs/${runId}/findings/${finding.id}`}
             className="ledger-evidence-link"
           >
-            Inspect step {finding.evidence.step_ids[0]} evidence →
+            {finding.journey_ids.length === 1 ? `Inspect step ${finding.evidence.step_ids[0]} evidence →` : "Review linked evidence →"}
           </Link>
         ) : (
           <span className="ledger-fineprint">
@@ -67,6 +67,8 @@ function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string
 
 export function RunReportPage() {
   const { run, results, user } = useOutletContext<RunContext>();
+  const [parameters] = useSearchParams();
+  const selectedView = reportView(parameters.get("reportView"));
   const data = results.status === "ready" ? results.data : null;
   const metrics = data ? reportMetrics(data) : null;
   const featureRun =
@@ -75,6 +77,9 @@ export function RunReportPage() {
 
   if (!data || !metrics) {
     return <ResultsBoundary>{null}</ResultsBoundary>;
+  }
+  if (data.report.payload.mode === "discovery_contract_v1") {
+    return <ResultsBoundary><ContractReport runId={run.id} payload={data.report.payload} /></ResultsBoundary>;
   }
 
   // Findings Partitioning
@@ -97,12 +102,13 @@ export function RunReportPage() {
     diagnosticClusters.set(key, existing);
   }
 
-  const verdict = reportVerdict(data);
+  const verdict = reportVerdict(data, featureRun);
   const { completed, total: journeyTotal, completionRate } = verdict;
 
   return (
     <ResultsBoundary>
-      <div className="evidence-ledger">
+      <ReportNavigation view={selectedView} />
+      {selectedView !== "overview" ? <ReportAnalytics run={run} results={data} userId={user.id} view={selectedView} /> : <div className="evidence-ledger">
         <article className="ledger-paper">
           {/* Evidence-based result */}
           <div
@@ -150,6 +156,11 @@ export function RunReportPage() {
             </nav>
           </div>
 
+          {featureRun ? (
+            <section id="report-feature-cases" className="report-feature-results">
+              <FeatureCases id="report-feature-cases-table" runId={run.id} userId={user.id} />
+            </section>
+          ) : null}
           {/* Two-Column Body */}
           <div className="ledger-columns">
             <div className="ledger-main">
@@ -172,6 +183,33 @@ export function RunReportPage() {
                 )}
               </section>
 
+          {/* Feature Cases (if deep_feature_v1) */}
+          {!featureRun ? (
+            <section id="report-outcomes" className="ledger-lower">
+              <span className="ledger-kicker">04 / Recorded Coverage</span>
+              <h3>Journey Outcomes</h3>
+              <p>
+                Execution status and evaluated product outcomes are separate measures.
+                An unfinished journey is neither a pass nor a confirmed product bug.
+              </p>
+              {metrics.outcomes.length > 0 ? (
+                <dl className="ledger-outcomes">
+                  {metrics.outcomes.map(([outcome, count]) => (
+                    <div key={outcome} className="ledger-outcome-card">
+                      <dt>{outcome === "none" ? "Not reported" : outcome.replaceAll("_", " ")}</dt>
+                      <dd>{count}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="ledger-fineprint">Outcome counts are not available.</p>
+              )}
+            </section>
+          ) : null}
+
+
+              <details className="report-secondary-sections" open={observations.length > 0 || diagnostics.length > 0 ? true : undefined}>
+                <summary>Observations and execution limitations <span>{observations.length} to verify · {diagnostics.length} execution issues</span></summary>
               {/* Section 02: Observations to Verify */}
               <section id="report-observations" className="ledger-section">
                 <span className="ledger-kicker">02 / Further Investigation</span>
@@ -227,24 +265,25 @@ export function RunReportPage() {
                   </p>
                 )}
               </section>
+              </details>
             </div>
 
             {/* Sticky Aside Rail */}
             <aside className="ledger-aside" aria-label="Coverage and next action">
               <span className="ledger-kicker">Execution Coverage</span>
-              <h3>Completion Rate</h3>
+              <h3>{featureRun ? "Case execution" : "Execution completion"}</h3>
               <p>
                 {journeyTotal === 0
-                  ? "No journeys recorded."
+                  ? `No ${verdict.unit} recorded.`
                   : completionRate === null
                   ? "Completion data unavailable."
-                  : `${completed} of ${journeyTotal} journeys completed normally.`}
+                  : `${completed} of ${journeyTotal} ${featureRun ? "cases recorded as executed" : "journeys completed normally"}.`}
               </p>
               {completionRate !== null ? (
                 <>
                   <div className="ledger-rate-display">
                     <strong className="ledger-rate">{completionRate}%</strong>
-                    <span className="ledger-fineprint">finished</span>
+                    <span className="ledger-fineprint">{featureRun ? "executed" : "finished"}</span>
                   </div>
                   <div
                     className="ledger-progress"
@@ -252,7 +291,7 @@ export function RunReportPage() {
                     aria-valuenow={completionRate}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label={`${completed} of ${journeyTotal} journeys finished`}
+                    aria-label={`${completed} of ${journeyTotal} ${verdict.unit} ${featureRun ? "executed" : "finished"}`}
                   >
                     <span style={{ width: `${completionRate}%` }} />
                   </div>
@@ -262,7 +301,7 @@ export function RunReportPage() {
                 </>
               ) : null}
 
-              <h4>Recommended Next Action</h4>
+              <h4>Next action</h4>
               {diagnostics.length > 0 ? (
                 <p>
                   Review execution logs or target origin authorization to eliminate timeouts
@@ -284,34 +323,10 @@ export function RunReportPage() {
             </aside>
           </div>
 
-          {/* Feature Cases (if deep_feature_v1) */}
-          {featureRun ? (
-            <section id="report-feature-cases" className="ledger-lower">
-              <span className="ledger-kicker">Feature Verification</span>
-              <FeatureCases id="report-feature-cases-table" runId={run.id} userId={user.id} />
-            </section>
-          ) : (
-            <section id="report-outcomes" className="ledger-lower">
-              <span className="ledger-kicker">04 / Recorded Coverage</span>
-              <h3>Journey Outcomes</h3>
-              <p>
-                Execution status and evaluated product outcomes are separate measures.
-                An unfinished journey is neither a pass nor a confirmed product bug.
-              </p>
-              {metrics.outcomes.length > 0 ? (
-                <dl className="ledger-outcomes">
-                  {metrics.outcomes.map(([outcome, count]) => (
-                    <div key={outcome} className="ledger-outcome-card">
-                      <dt>{outcome === "none" ? "Not reported" : outcome.replaceAll("_", " ")}</dt>
-                      <dd>{count}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="ledger-fineprint">Outcome counts are not available.</p>
-              )}
-            </section>
-          )}
+          <details className="report-outcome-details">
+            <summary>Recorded task outcomes and coverage</summary>
+            <ReportAnalytics run={run} results={data} userId={user.id} view="overview" />
+          </details>
 
           {/* Assessment Section */}
           <section id="report-assessment" className="ledger-lower">
@@ -361,7 +376,7 @@ export function RunReportPage() {
             </dl>
           </details>
         </article>
-      </div>
+      </div>}
     </ResultsBoundary>
   );
 }

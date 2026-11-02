@@ -23,7 +23,9 @@ from markettwin_shared.auth_verification import AuthVerificationPolicy
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("recovery,verified", [(False, True), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "recovery,verified", [(False, True), (False, False), (True, True), (True, False)],
+)
 async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
     monkeypatch: pytest.MonkeyPatch,
     recovery: bool,
@@ -83,7 +85,9 @@ async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
     monkeypatch.setattr(owner_service, "wait_for_human_action_resume", wait)
 
     controller = MagicMock()
-    controller.verify_authenticated_role = AsyncMock(side_effect=[None, principal])
+    controller.verify_authenticated_role = AsyncMock(
+        side_effect=[None, principal if verified else None],
+    )
     controller.capture_verified_auth_session = AsyncMock(return_value=principal)
     controller.end_human_control = AsyncMock()
     db_session = MagicMock()
@@ -115,7 +119,10 @@ async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
         **options,
     )
     if not verified:
-        with pytest.raises(case_execution.AuthenticationVerificationBlocked):
+        with pytest.raises(
+            case_execution.AuthenticationVerificationBlocked if recovery
+            else case_execution.AuthenticationChallengeBlocked,
+        ):
             await handoff
         lifecycle.finish_verification.assert_awaited_once_with(
             request_id=request_id, expected_generation=3, verified=False,

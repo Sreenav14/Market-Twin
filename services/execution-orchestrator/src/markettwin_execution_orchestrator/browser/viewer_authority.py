@@ -107,7 +107,15 @@ class DatabaseViewerAuthority:
         except Exception:
             return None
 
-    async def permitted(self, actor_id: UUID, lease: OwnerLease) -> bool:
+    async def permitted_session(self, session_cookie: str, lease: OwnerLease) -> bool:
+        """Check current login and entitlement in one database round trip."""
+        if not session_cookie:
+            return False
+        return await self.permitted(lease.actor_id, lease, session_cookie=session_cookie)
+
+    async def permitted(
+        self, actor_id: UUID, lease: OwnerLease, *, session_cookie: str | None = None,
+    ) -> bool:
         now = datetime.now(UTC)
         async with self._session_factory() as session:
             statement = (
@@ -166,6 +174,21 @@ class DatabaseViewerAuthority:
                 )
                 .limit(1)
             )
+            if session_cookie is not None:
+                statement = statement.where(text("""
+                    EXISTS (
+                        SELECT 1 FROM auth.user_sessions AS viewer_session
+                        WHERE viewer_session.user_id = :viewer_actor_id
+                          AND viewer_session.session_token_hash = :viewer_token_hash
+                          AND viewer_session.revoked_at IS NULL
+                          AND viewer_session.idle_expires_at > :viewer_now
+                          AND viewer_session.absolute_expires_at > :viewer_now
+                    )
+                """).bindparams(
+                    viewer_actor_id=actor_id,
+                    viewer_token_hash=hashlib.sha256(session_cookie.encode("utf-8")).hexdigest(),
+                    viewer_now=now,
+                ))
             return (await session.scalar(statement)) is not None
 
     async def observer_permitted(

@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from markettwin_shared.action_approval import SensitiveActionRule
 from playwright.async_api import Browser, BrowserContext, Page
 
 from markettwin_execution_orchestrator.browser.contracts import (
@@ -15,6 +16,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionState,
     NetworkPolicy,
 )
+from markettwin_execution_orchestrator.browser.network_diagnostics import HumanNetworkDiagnostics
 
 
 @dataclass(slots=True)
@@ -40,7 +42,11 @@ class JourneyBrowserSession:
     capture_enabled: bool = True
     auth_only_origins: tuple[str, ...] = ()
     authenticated_session: bool = False
+    fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
     event_buffer: BrowserEventBuffer = field(default_factory=BrowserEventBuffer)
+    human_network_diagnostics: HumanNetworkDiagnostics = field(
+        default_factory=HumanNetworkDiagnostics,
+    )
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def next_action_number(self) -> int:

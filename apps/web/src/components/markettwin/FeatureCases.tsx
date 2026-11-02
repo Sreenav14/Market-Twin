@@ -64,14 +64,23 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
   if (query.isPending) return <LoadingPanel label="Loading feature cases" />;
   if (query.isError) return <ErrorPanel message={query.error.message} />;
   const { cases, coverage, evaluation_pending: pending, available } = query.data;
-  const selected = cases.find((item) => item.case_id === selectedCaseId) ?? cases[0];
+  const selected = cases.find((item) => item.case_id === selectedCaseId)
+    ?? cases.find((item) => item.verdict === "not_satisfied") ?? cases[0];
   return <section id={id} aria-label="Feature case coverage">
     <h2>Feature cases</h2>
     <p>Coverage applies to the planned feature. Inferred expectations do not establish a product defect.</p>
     <AuthenticatedCoverage runId={runId} userId={userId} />
     {query.data.failure ? <ErrorPanel message={`Feature planning stopped before cases were saved. ${query.data.failure.message}`} /> : !available ? <p>The feature plan has not been saved yet.</p> : null}
     {pending ? <p>Evaluation is pending. Completed verdicts appear after evidence verification.</p> : null}
-    {coverage ? <p>{coverage.planned} planned · {coverage.passed} passed · {coverage.failed_assertions} failed assertions · {coverage.blocked} blocked · {coverage.inconclusive} inconclusive · {coverage.not_run} not run</p> : null}
+    {coverage ? <dl className="feature-coverage-summary" aria-label="Recorded case counts">
+      {([
+        ["planned", "Planned"], ["passed", "Passed"], ["failed_assertions", "Failed assertions"],
+        ["blocked", "Blocked"], ["inconclusive", "Inconclusive"], ["not_run", "Not run"],
+      ] as const).map(([key, label]) => <div key={key} data-outcome={key}>
+        <dt>{label}</dt><dd>{Number.isInteger(coverage[key]) && coverage[key] >= 0
+          ? coverage[key].toLocaleString() : "Not recorded"}</dd>
+      </div>)}
+    </dl> : null}
     {cases.length ? <div className="feature-case-workbench">
       <ul className="feature-case-list" aria-label="Feature cases">
         {cases.map((item) => <li key={item.case_id}><button type="button" className="feature-case-choice" aria-pressed={(selected?.case_id ?? "") === item.case_id} onClick={() => setSelectedCaseId(item.case_id)}>
@@ -84,9 +93,9 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
       <h3>{selected.title}</h3>
       {pending && selected.recorded_verdict && selected.reason !== "human_assistance_skipped" ? <p>Recorded result awaiting verification: {selected.recorded_verdict.replaceAll("_", " ")}. This is not a confirmed defect yet.</p> : null}
       {selected.verdict === "not_satisfied" ? <p>Next: open the supporting step and compare the screenshot with the expected value.</p> : null}
-      {selected.reason ? <p>{selected.reason === "human_assistance_skipped" ? "Not tested—human assistance skipped." : selected.reason.replaceAll("_", " ")}</p> : null}
+      {selected.reason ? <p>{selected.reason === "human_assistance_skipped" ? "Not tested—human assistance skipped." : selected.reason === "authentication_challenge_blocked" ? "Login or identity was not verified. Complete sign-in and any challenge or MFA before starting a new attempt. This does not establish an application defect." : selected.reason.replaceAll("_", " ")}</p> : null}
       {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}`}>Open recorded steps</Link> : null}
-      {selected.assertions.map((assertion) => <section className="feature-assertion" key={assertion.assertion_id}>
+      {selected.assertions.map((assertion) => <section className="feature-assertion" data-assertion={assertion.observed_value === null ? "unavailable" : assertion.status} key={assertion.assertion_id}>
         <h4>{assertion.assertion_id.replaceAll("_", " ")} · {assertion.status.replaceAll("_", " ")}</h4>
         <dl><div><dt>Expected</dt><dd>{String(assertion.expected_value)}</dd></div><div><dt>Observed</dt><dd>{assertion.observed_value === null ? "Unavailable" : String(assertion.observed_value)}</dd></div><div><dt>Source</dt><dd>{assertion.origin.replaceAll("_", " ")}</dd></div><div><dt>Supporting step</dt><dd>{assertion.step_id}</dd></div></dl>
         {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}?step=${assertion.step_id}`}>Open supporting step</Link> : null}

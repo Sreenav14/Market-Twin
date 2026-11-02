@@ -5,6 +5,7 @@ import {
   useNavigate,
   useOutletContext,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import { ArrowRight, Check, ShieldCheck } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -44,19 +45,22 @@ function isLoopbackHost(host: string) {
 }
 export function NewRunPage() {
   const { applicationId = "" } = useParams();
+  const [params] = useSearchParams();
+  const requestedTarget = params.get("target") ?? "";
   const navigate = useNavigate();
   const { workspace, user } = useOutletContext<AppShellContext>();
   const [targetId, setTargetId] = useState("");
   const [brief, setBrief] = useState("");
   const [name, setName] = useState("");
   const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
-  const [executionMode, setExecutionMode] = useState("legacy_persona");
+  const [executionMode, setExecutionMode] = useState(params.get("mode") === "discovery_contract_v1" ? "discovery_contract_v1" : "legacy_persona");
   const [humanActionApprovals, setHumanActionApprovals] = useState(false);
   const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
   const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
   const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   const submitting = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const canWrite = canWriteWorkspace(workspace.role);
@@ -102,7 +106,8 @@ export function NewRunPage() {
     state.data?.targets
       .filter((item) => item.authorized)
       .map((item) => item.target) || [];
-  const target = targets.find((item) => item.id === targetId) || targets[0];
+  const selectedTarget = targetId || requestedTarget;
+  const target = selectedTarget ? targets.find((item) => item.id === selectedTarget) : targets[0];
   const approvalsEligible = Boolean(
     target && ["local", "development", "test", "staging"].includes(target.environment),
   );
@@ -147,10 +152,14 @@ export function NewRunPage() {
         syntheticFixtureApproval && fixtureApprovalEligible && executionMode === "deep_feature_v1",
         humanActionApprovals ? JSON.parse(sensitiveActionRules) as unknown[] : [],
         undefined,
-        true,
+        executionMode !== "discovery_contract_v1",
       );
       setBrief("");
-      navigate(`/runs/${run.id}/overview`);
+      if (executionMode === "discovery_contract_v1") {
+        setCreatedRunId(run.id);
+        await api.startRun(run.id);
+        navigate(`/runs/${run.id}/contract`);
+      } else navigate(`/runs/${run.id}/overview`);
     } catch (error) {
       setError(
         error instanceof Error
@@ -165,8 +174,8 @@ export function NewRunPage() {
   const header = (
     <PageHeader
       eyebrow="New test"
-      title="Create a test"
-      description="Choose a target and describe the task to test."
+      title={executionMode === "discovery_contract_v1" ? "Here's my app" : "Create a test"}
+      description={executionMode === "discovery_contract_v1" ? "Choose your app and tell the testers who it is for." : "Choose a target and describe the task to test."}
     />
   );
   if (!canWrite)
@@ -275,27 +284,30 @@ export function NewRunPage() {
             <p className="form-help" id="test-name-help">A short label for lists and activity. A unique incremental ID is assigned automatically. Your testing goal stays separate below.</p>
           </div>
           <div className="composer-target">
-            <label htmlFor="test-target">Application target</label>
+            <label htmlFor="test-target">{executionMode === "discovery_contract_v1" ? "App" : "Application target"}</label>
             <select
               id="test-target"
               name="target"
               value={target?.id || ""}
               onChange={(event) => setTargetId(event.target.value)}
             >
+              {!target ? <option value="" disabled>Choose an authorized target</option> : null}
               {targets.map((item) => (
                 <option value={item.id} key={item.id}>
                   {item.name} · {item.environment}
                 </option>
               ))}
             </select>
+            {executionMode === "discovery_contract_v1" ? <><label htmlFor="app-url">App URL</label><input id="app-url" readOnly value={target?.base_url || ""} /><p className="form-help">Choose an authorized app above to explore its address.</p></> : null}
+            {!target ? <p role="alert" className="form-error">The requested target is unavailable or not authorized. Choose an authorized target to continue.</p> : null}
             <span className="authorized-label">
               <ShieldCheck size={15} aria-hidden="true" />
-              Authorized
+              {target ? "Authorized" : "Target required"}
             </span>
           </div>
           <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
-              Your testing goal
+              {executionMode === "discovery_contract_v1" ? "What is this app and who is it for?" : "Your testing goal"}
             </label>
             <textarea
               ref={textarea}
@@ -344,6 +356,7 @@ export function NewRunPage() {
             <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
               <option value="legacy_persona">Persona journeys</option>
               <option value="deep_feature_v1">Feature cases — experimental</option>
+              <option value="discovery_contract_v1">Explore, approve and test</option>
             </select>
             {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unverified.</p> : null}
             <label htmlFor="testing-depth">Testing depth</label>
@@ -354,8 +367,10 @@ export function NewRunPage() {
             </select>
             <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? <>Feature cases run up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} cases. Broader coverage takes longer.</> : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
           </div>
+          <details className="composer-disclosure">
+            <summary>Knowledge for this test <span>Optional</span></summary>
           <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
-            <h2 id="test-knowledge-heading">Knowledge for this test <span className="muted">Optional</span></h2>
+            <h2 id="test-knowledge-heading" className="visually-hidden">Knowledge for this test <span className="muted">Optional</span></h2>
             <p className="form-help">Select approved knowledge attached to this application before agents are created. You can select up to 10 sets.</p>
             {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
               <p className="form-error" role="alert">Could not load knowledge. <Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button></p>
@@ -370,9 +385,12 @@ export function NewRunPage() {
               </fieldset>
             ) : <p className="muted">No approved knowledge attached yet. <Link className="text-link" to="/knowledge/review" target="_blank" rel="noreferrer">Review knowledge</Link> and attach a set to this application, or continue without knowledge.</p>}
           </section>
+          </details>
           </section>
+          <details className="composer-disclosure security-disclosure">
+            <summary>Security and authorization</summary>
           <section className="run-create-zone" aria-labelledby="run-security-heading">
-            <h2 id="run-security-heading">Security and authorization</h2>
+            <h2 id="run-security-heading" className="visually-hidden">Security and authorization</h2>
           <p className="form-help">Only controls permitted by the selected target and test mode are available here. Credentials never belong in the test brief or policy fields.</p>
           <p className="form-help">Agents start without login setup. If a login or protected interaction blocks execution, the agent pauses and asks for help. You can take control within approved origins or skip that case or journey.</p>
           {approvalsEligible && executionMode === "deep_feature_v1" ? (
@@ -401,14 +419,16 @@ export function NewRunPage() {
             </section>
           ) : null}
           </section>
+          </details>
           {error ? (
             <p id="brief-error" className="composer-error" role="alert">
               {error}
             </p>
           ) : null}
           <div className="composer-footer">
-            <p>Creates a draft. Start it when you're ready.</p>
-            <Button type="submit" disabled={busy}>
+            <p>{executionMode === "discovery_contract_v1" ? "Testers explore first. You approve the tests before they run." : "Creates a draft. Start it when you're ready."}</p>
+            {createdRunId && error ? <Link to={`/runs/${createdRunId}/overview`}>Your test was created. Check readiness and start it here.</Link> : null}
+            <Button type="submit" disabled={busy || !target || Boolean(createdRunId)}>
               {busy ? (
                 <>
                   <Spinner />
@@ -416,7 +436,7 @@ export function NewRunPage() {
                 </>
               ) : (
                 <>
-                  Create test <ArrowRight size={16} aria-hidden="true" />
+                  {executionMode === "discovery_contract_v1" ? "Send agents to explore" : "Create test"} <ArrowRight size={16} aria-hidden="true" />
                 </>
               )}
             </Button>

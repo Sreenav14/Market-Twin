@@ -14,7 +14,8 @@ export function RunEvidencePage() {
     queryKey: ["run-journeys", user.id, run.id],
     queryFn: ({ signal }) => api.getRunJourneys(run.id, signal),
   });
-  const selectedJourneyId = journeyId || journeys.data?.[0]?.id || "";
+  const selectedJourneyId = journeys.data?.find((journey) => journey.id === journeyId)?.id
+    || journeys.data?.[0]?.id || "";
   const evidence = useQuery({
     queryKey: ["evidence-index", user.id, run.id, selectedJourneyId],
     enabled: Boolean(selectedJourneyId),

@@ -33,6 +33,8 @@ async def test_visual_verifier_emits_a_model_span(
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     instrumentor = LiteLLMInstrumentor()
+    if instrumentor.is_instrumented_by_opentelemetry:
+        instrumentor.uninstrument()
     instrumentor.instrument(tracer_provider=provider, config=TraceConfig(hide_inputs=True))
     try:
         result = await verify_visual_criterion(criterion="Source criterion", viewport_path=viewport)

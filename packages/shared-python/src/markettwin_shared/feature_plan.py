@@ -2,6 +2,7 @@
 
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
 
@@ -115,12 +116,15 @@ class CaseAction(FrozenContract):
 
 
 class ExpectedAssertion(FrozenContract):
+    after_step_ordinal: int | None = Field(default=None, ge=0, le=24)
     assertion_id: Identifier
     oracle: Oracle
     target: SemanticTarget | None = None
     expected_value: StrictStr | StrictBool | StrictInt
     requirement_refs: tuple[Identifier, ...] = Field(default=(), max_length=8)
-    origin: Literal["approved_requirement", "fixture_truth", "inferred"] = "inferred"
+    origin: Literal[
+        "approved_requirement", "fixture_truth", "inferred", "user_approved",
+    ] = "inferred"
 
     @model_validator(mode="after")
     def observable_oracle(self) -> Self:
@@ -136,7 +140,7 @@ class ExpectedAssertion(FrozenContract):
             raise ValueError("Text expectations must be bounded strings.")
         if self.oracle == "url_path_v1":
             require_public_url_path(str(self.expected_value))
-        if self.origin != "inferred" and not self.requirement_refs:
+        if self.origin not in {"inferred", "user_approved"} and not self.requirement_refs:
             raise ValueError("Grounded assertions require source references.")
         return self
 
@@ -222,6 +226,9 @@ class TestCaseSpec(FrozenContract):
 
     @model_validator(mode="after")
     def unique_assertions(self) -> Self:
+        if any(a.after_step_ordinal is not None and a.after_step_ordinal > len(self.steps)
+               for a in self.expected):
+            raise ValueError("Assertion checkpoint exceeds the case steps.")
         ids = [item.assertion_id for item in self.expected]
         if len(set(ids)) != len(ids):
             raise ValueError("Assertion IDs must be unique within each case.")
@@ -248,6 +255,9 @@ class FeatureCaseCandidates(FrozenContract):
 
 
 class DeepFeaturePlan(FrozenContract):
+    contract_id: UUID | None = None
+    contract_version: int | None = Field(default=None, ge=1)
+    contract_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     schema_version: Literal[1] = 1
     mode: Literal["deep_feature_v1"] = "deep_feature_v1"
     scope: FeatureScope

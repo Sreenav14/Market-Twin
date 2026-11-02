@@ -93,19 +93,30 @@ export function reportMetrics(results: RunResults) {
       results.findings.flatMap((f) => f.evidence.artifact_ids),
     ).size,
     deterministic:
-      results.report.payload.generator === "deterministic_evaluation_v1",
+      results.report.payload.generator === "deterministic_evaluation_v1" ||
+      results.report.payload.mode === "deep_feature_v1",
   };
 }
 
-export function reportVerdict(results: RunResults) {
+export function reportVerdict(results: RunResults, feature = results.report.payload.mode === "deep_feature_v1") {
   const metrics = reportMetrics(results);
   const statusCounts = new Map(metrics.statuses);
-  const total = metrics.journeyTotal;
-  const completed = metrics.statuses.length ? statusCounts.get("completed") ?? 0 : null;
+  const cases = asRecord(results.report.payload.coverage);
+  const unit = feature ? "cases" : "journeys";
+  const total = feature ? countValue(cases.planned) : metrics.journeyTotal;
+  const completed = feature ? countValue(cases.executed)
+    : metrics.statuses.length ? statusCounts.get("completed") ?? 0 : null;
+  const caseCountsValid = ["planned", "executed", "passed", "failed_assertions", "blocked", "inconclusive", "not_run"]
+    .every(key => typeof cases[key] === "number" && Number.isInteger(cases[key]) && (cases[key] as number) >= 0)
+    && Number(cases.executed) <= Number(cases.planned)
+    && Number(cases.passed) <= Number(cases.executed)
+    && ["passed", "blocked", "inconclusive", "not_run"].reduce((sum, key) => sum + Number(cases[key]), 0) <= Number(cases.planned);
   const coverageKnown = total !== null && Number.isInteger(total) && total > 0
-    && completed !== null && metrics.statuses.every(([, count]) => Number.isInteger(count))
-    && metrics.statuses.reduce((sum, [, count]) => sum + count, 0) <= total;
-  const coverageComplete = coverageKnown && completed === total;
+    && completed !== null && (feature ? caseCountsValid
+      : metrics.statuses.every(([, count]) => Number.isInteger(count))
+        && metrics.statuses.reduce((sum, [, count]) => sum + count, 0) <= total);
+  const coverageComplete = coverageKnown && completed === total
+    && (!feature || ["blocked", "inconclusive", "not_run"].every(key => cases[key] === 0));
   const completionRate = coverageKnown ? Math.round((completed / total) * 100) : null;
   const verified = results.findings.filter(isConfirmedFinding);
   const diagnostics = results.findings.filter(
@@ -114,7 +125,7 @@ export function reportVerdict(results: RunResults) {
   const observations = results.findings.filter(
     (finding) => !isConfirmedFinding(finding) && !diagnostics.includes(finding),
   );
-  const coverage = { total, completed, completionRate };
+  const coverage = { total, completed, completionRate, unit };
 
   if (verified.length) {
     const visual = verified.some((finding) => finding.verification_status === "verified_visual");
@@ -136,12 +147,13 @@ export function reportVerdict(results: RunResults) {
       description: "No verified product issues were recorded. Missing or inconsistent completion data, or an empty test scope, prevents a conclusion about the tested product.",
     };
   }
-  if (!coverageComplete || diagnostics.length) {
+  if (!coverageComplete || diagnostics.length || (feature && (cases.passed !== total || Number(cases.failed_assertions) > 0))) {
     return {
       ...coverage, tone: "caution" as const, label: "Review test coverage",
       title: "No verified issues · Test coverage needs review",
-      description: `${completed} of ${total} journeys completed. ${diagnostics.length
+      description: `${completed} of ${total} ${feature ? "cases recorded as executed" : "journeys completed"}. ${diagnostics.length
         ? "Execution issues were recorded; inspect them before drawing conclusions."
+        : feature ? "Review case verdicts and their assertions; blocked, inconclusive or unverified work is not a pass."
         : "Unfinished work limits the conclusions available from this test."}`,
     };
   }
@@ -149,13 +161,13 @@ export function reportVerdict(results: RunResults) {
     return {
       ...coverage, tone: "caution" as const, label: "Needs review",
       title: "No verified issues · Observations need review",
-      description: `All ${total} journeys completed, with ${observations.length} unverified ${observations.length === 1 ? "observation" : "observations"} to inspect. Completion alone does not establish that the product works correctly.`,
+      description: `All ${total} ${unit} ${feature ? "were executed" : "completed"}, with ${observations.length} unverified ${observations.length === 1 ? "observation" : "observations"} to inspect. Completion alone does not establish that the product works correctly.`,
     };
   }
   return {
     ...coverage, tone: "clean" as const, label: "Recorded scope completed",
     title: "No verified product issues recorded",
-    description: `All ${total} journeys completed without recorded product findings or execution issues. This result applies only to the recorded scope and is not a product quality guarantee.`,
+    description: `All ${total} ${unit} ${feature ? "were evaluated" : "completed"} without recorded product findings or execution issues. This result applies only to the recorded scope and is not a product quality guarantee.`,
   };
 }
 

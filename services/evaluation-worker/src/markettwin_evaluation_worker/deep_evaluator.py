@@ -1,7 +1,7 @@
 """Verify deep-case events against their frozen oracles and recorded execution."""
 
-import json
 from collections import Counter
+from collections.abc import Mapping
 from typing import cast
 from uuid import UUID
 
@@ -12,8 +12,16 @@ from markettwin_database.models import (
     PersonaJourney,
     RunEvent,
 )
+from markettwin_shared.case_evidence import ArtifactEvidence, StepEvidence
+from markettwin_shared.case_evidence import valid_case_evidence as validate_evidence
 from markettwin_shared.deep_testing import CaseExecutionResult
-from markettwin_shared.feature_plan import DeepFeaturePlan, FeatureScope, TestCaseSpec
+from markettwin_shared.discovery_contract import ContractAssertion, TestContract
+from markettwin_shared.feature_plan import (
+    DeepFeaturePlan,
+    ExpectedAssertion,
+    FeatureScope,
+    TestCaseSpec,
+)
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,91 +34,60 @@ from markettwin_evaluation_worker.persistence.report_repository import ReportRep
 
 
 def valid_case_evidence(
-    case: TestCaseSpec,
-    result: CaseExecutionResult,
-    steps: dict[int, ExecutionStep],
-    artifacts: dict[UUID, Artifact],
+    case: TestCaseSpec, result: CaseExecutionResult, steps: dict[int, ExecutionStep],
+    artifacts: dict[UUID, Artifact], frozen_contract: TestContract | None = None,
+    expected_contract_hash: str | None = None,
 ) -> bool:
-    """Ownership, causal order and observed-state checks precede any defect claim."""
-    if result.case_id != case.case_id or result.execution_status != "completed":
+    # SQLAlchemy instance attributes have these values; its class descriptors
+    # expose Mapped types to structural protocol checks.
+    return validate_evidence(
+        case, result, cast(Mapping[int, StepEvidence], steps),
+        cast(Mapping[UUID, ArtifactEvidence], artifacts), frozen_contract, expected_contract_hash,
+    )
+
+
+def _contract_matches_assertion(ca: ContractAssertion, assertion: ExpectedAssertion) -> bool:
+    if ca.oracle != assertion.oracle:
         return False
-    if len(result.action_step_ids) != len(case.steps) + 1:
+    role = assertion.target.role if assertion.target else None
+    name = assertion.target.name if assertion.target else None
+    if (ca.target_role, ca.target_name) != (role, name):
         return False
-    expected_actions = ("navigate", *(action.action_id or action.action for action in case.steps))
-    for step_id, action in zip(result.action_step_ids, expected_actions, strict=True):
-        step = steps.get(step_id)
-        if (
-            step is None
-            or step.execution_id != result.execution_id
-            or step.status != "completed"
-            or step.action_type != action
-        ):
-            return False
-    expected = {item.assertion_id: item for item in case.expected}
-    if {item.assertion_id for item in result.assertion_results} != set(expected):
+    if (type(ca.expected_value) is not type(assertion.expected_value)
+            or ca.expected_value != assertion.expected_value):
         return False
-    for observed in result.assertion_results:
-        oracle = expected[observed.assertion_id]
-        if (
-            observed.oracle,
-            observed.expected_value,
-            observed.origin,
-            observed.requirement_refs,
-        ) != (
-            oracle.oracle,
-            oracle.expected_value,
-            oracle.origin,
-            oracle.requirement_refs,
-        ):
-            return False
-        step = steps.get(observed.step_id)
-        if (
-            step is None
-            or step.execution_id != result.execution_id
-            or step.action_type != "assertion"
-            or step.status != "completed"
-        ):
-            return False
-        if any(
-            steps[step_id].step_number >= step.step_number for step_id in result.action_step_ids
-        ):
-            return False
-        try:
-            if json.loads(step.observation_summary or "null") != observed.model_dump(mode="json"):
-                return False
-        except (TypeError, ValueError):
-            return False
-        for artifact_id in observed.artifact_ids:
-            artifact = artifacts.get(artifact_id)
-            if (
-                artifact is None
-                or artifact.execution_id != result.execution_id
-                or artifact.step_id != step.id
-                or artifact.artifact_type != "screenshot"
-            ):
-                # The recorder also saves ARIA evidence; require at least one exact image below.
-                if (
-                    artifact is None
-                    or artifact.execution_id != result.execution_id
-                    or artifact.step_id != step.id
-                    or artifact.metadata_json.get("kind") != "accessibility_snapshot"
-                ):
-                    return False
-        if observed.status != "unverified" and not any(
-            artifacts[item].artifact_type == "screenshot" for item in observed.artifact_ids
-        ):
-            return False
     return True
 
-
 def grounded_failure(
-    case: TestCaseSpec, plan: DeepFeaturePlan, trusted_scope: FeatureScope | None
+    case: TestCaseSpec,
+    plan: DeepFeaturePlan,
+    trusted_scope: FeatureScope | None,
+    frozen_contract: TestContract | None = None,
 ) -> bool:
     grounded = [item for item in case.expected if item.origin != "inferred"]
-    if trusted_scope is None or plan.scope != trusted_scope or case.preconditions or not grounded:
+    if not grounded or case.preconditions:
+        return False
+
+    user_approved = [item for item in grounded if item.origin == "user_approved"]
+    if user_approved:
+        if frozen_contract is None or frozen_contract.status != "frozen":
+            return False
+        contract_assertions: list[ContractAssertion] = [
+            a for journey in frozen_contract.journeys if not journey.excluded
+            for a in journey.assertions if a.origin == "user_approved" and not a.excluded
+        ]
+        for assertion in user_approved:
+            if not any(_contract_matches_assertion(ca, assertion) for ca in contract_assertions):
+                return False
+        if len(user_approved) == len(grounded):
+            return True
+
+    if trusted_scope is None or plan.scope != trusted_scope:
         return False
     requirements = {item.requirement_id: item for item in trusted_scope.requirements}
     for assertion in grounded:
+        if assertion.origin == "user_approved":
+            continue
         refs = [requirements.get(reference) for reference in assertion.requirement_refs]
         source = "fixture" if assertion.origin == "fixture_truth" else "approved_knowledge"
         if not refs or any(item is None or item.source != source for item in refs):
@@ -136,6 +113,7 @@ async def evaluate_deep_run(
     test_run_id: UUID,
     session: AsyncSession,
     trusted_scope: FeatureScope | None,
+    frozen_contract: TestContract | None = None,
 ) -> tuple[tuple[UUID, ...], UUID]:
     events = tuple(
         (
@@ -155,6 +133,15 @@ async def evaluate_deep_run(
     if len(plans) != 1:
         raise ValueError("Deep runs require exactly one frozen feature plan.")
     plan = DeepFeaturePlan.model_validate(plans[0].payload)
+    contract_valid = frozen_contract is None or (
+        frozen_contract.test_run_id == test_run_id
+        and frozen_contract.status == "frozen"
+        and frozen_contract.approved_by_user_id is not None
+        and frozen_contract.approved_at is not None
+        and plan.contract_id == frozen_contract.contract_id
+        and plan.contract_version == frozen_contract.version
+        and plan.contract_hash == frozen_contract.content_hash()
+    )
     results = {
         event.payload.get("case_id"): event
         for event in events
@@ -230,7 +217,9 @@ async def evaluate_deep_run(
                 and execution.journey_id == event.journey_id
                 and journeys[event.journey_id].ordinal == case_ordinal
             )
-            valid = bool(owned and valid_case_evidence(case, result, steps, artifacts))
+            valid = bool(owned and contract_valid and valid_case_evidence(
+                case, result, steps, artifacts, frozen_contract, plan.contract_hash,
+            ))
             verdict = result.verdict if valid else "unverified"
             if owned and result.execution_status == "skipped":
                 verdict = "not_run"
@@ -238,6 +227,8 @@ async def evaluate_deep_run(
                 counts["human_assistance_skipped"] += 1
             if owned and result.execution_status == "policy_blocked":
                 verdict = "blocked"
+                if result.blocker == "authentication_challenge_blocked":
+                    entry["reason"] = result.blocker
             entry.update(
                 verdict=verdict,
                 execution_id=str(result.execution_id) if owned else None,
@@ -247,7 +238,7 @@ async def evaluate_deep_run(
                 if valid
                 else [],
             )
-            if valid and grounded_failure(case, plan, trusted_scope):
+            if valid and grounded_failure(case, plan, trusted_scope, frozen_contract):
                 for assertion in result.assertion_results:
                     if assertion.status != "not_satisfied" or assertion.origin == "inferred":
                         continue

@@ -127,7 +127,7 @@ function Grounding({ item }: { item: ApplicationKnowledgeDraft | GeneratedSkillD
                   textDecoration: "none",
                 }}
               >
-                <span style={{ fontFamily: "monospace", color: "var(--text-3)", fontSize: "11px" }}>#{ordinal}</span>
+                <span aria-hidden="true" style={{ fontFamily: "monospace", color: "var(--text-3)", fontSize: "11px" }}>#{ordinal}</span>
                 <span>Evidence {ordinal}</span>
               </a>
             ))

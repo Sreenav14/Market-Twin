@@ -5,6 +5,7 @@ from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from markettwin_database.models.testing import TestRun
+from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 
 from markettwin_execution_orchestrator.browser import AllowedOrigin
@@ -24,7 +25,7 @@ def build_run_request(
     target_snapshot = test_run.target_snapshot
     configuration_snapshot = test_run.configuration_snapshot
     execution_mode = configuration_snapshot.get("execution_mode", "legacy_persona")
-    if execution_mode not in {"legacy_persona", "deep_feature_v1"}:
+    if execution_mode not in {"legacy_persona", "deep_feature_v1", "discovery_contract_v1"}:
         raise ValueError("Unsupported execution mode.")
     testing_depth = cast(TestingDepth, configuration_snapshot.get("testing_depth", "high"))
     mission_limit(testing_depth)
@@ -136,11 +137,18 @@ def build_run_request(
             cast(list[dict[str, object]], configuration_snapshot.get("knowledge", []))
         ),
         testing_depth=testing_depth,
+        fixture_action_rules=tuple(
+            SensitiveActionRule.model_validate(rule)
+            for rule in cast(list[object], configuration_snapshot.get("sensitive_action_rules", []))
+        ) if fixture_approval_enabled and getattr(test_run, "human_action_approvals_enabled", False)
+        else (),
         agent_prompt_overrides=cast(
             dict[str, dict[str, str]], configuration_snapshot.get("agent_prompt_overrides", {})
         ),
         replay_plan=cast(dict[str, object] | None, configuration_snapshot.get("replay_plan")),
-        execution_mode=cast(Literal["legacy_persona", "deep_feature_v1"], execution_mode),
+        execution_mode=cast(
+            Literal["legacy_persona", "deep_feature_v1", "discovery_contract_v1"], execution_mode,
+        ),
         feature_scope=cast(dict[str, object] | None, configuration_snapshot.get("feature_scope")),
         feature_budget=cast(dict[str, object] | None, configuration_snapshot.get("feature_budget")),
         feature_plan=cast(dict[str, object] | None, configuration_snapshot.get("feature_plan")),

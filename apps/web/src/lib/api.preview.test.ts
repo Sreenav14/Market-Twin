@@ -55,6 +55,22 @@ it("starts ordinary runs with runtime assistance and no upfront identity policy"
   expect(payload).not.toHaveProperty("auth_mode");
 });
 
+it.each(["legacy_persona", "deep_feature_v1", "discovery_contract_v1"])(
+  "preserves the selected %s execution mode in the HTTP request",
+  async (mode) => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "run" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.createRun("app", "target", "Test the fixture", [], "medium", "", mode);
+
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/applications/app/test-runs");
+    expect(JSON.parse(init.body as string).execution_mode).toBe(mode);
+  },
+);
+
 it("sends a distinct authenticated skip request without browser secrets", async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "request", status: "skipped" }), { status: 200 }));
   vi.stubGlobal("fetch", fetchMock);

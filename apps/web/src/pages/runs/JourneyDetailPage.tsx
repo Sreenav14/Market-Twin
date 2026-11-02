@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, ExternalLink } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
 import { JourneyDetail, request } from "../../lib/api";
 import { findingClassification } from "../../lib/results";

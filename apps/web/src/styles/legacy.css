@@ -214,7 +214,6 @@ a:focus-visible {
   padding: 0 30px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  backdrop-filter: blur(14px);
 }
 .breadcrumb {
   color: var(--text-3);

@@ -232,6 +232,12 @@ async def execute_one_planned_journey(
             ],
             "reported_unsatisfied_criteria": list(result.reported_unsatisfied_criteria),
             "summary": result.summary,
+            "partial": result.partial,
+            "steps_completed": result.steps_completed,
+            "last_completed_step_id": result.last_completed_step_id,
+            "assertion_results": [
+                item.model_dump(mode="json") for item in result.assertion_results
+            ],
             "actions": list(result.actions),
             "observations": list(result.observations),
             "friction_points": list(result.friction_points),

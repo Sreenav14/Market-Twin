@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Literal, cast
+from unittest.mock import AsyncMock, Mock
 from uuid import UUID, uuid4
 
 import pytest
@@ -20,7 +21,15 @@ from markettwin_control_api.persistence.repositories import (
     TestRunRecord,
     WorkspaceAccess,
 )
+from markettwin_control_api.services import run_readiness
 from markettwin_shared.auth_verification import AuthVerificationPolicy
+from markettwin_shared.discovery_contract import (
+    ContractAssertion,
+    DiscoveryMap,
+    FrozenJourneyContract,
+    TestContract,
+)
+from markettwin_shared.feature_plan import CaseAction, SemanticTarget
 from pydantic import ValidationError
 
 
@@ -113,8 +122,11 @@ class FakeAuthorizationRepository:
 
 
 class FakeTestRunRepository:
-    def __init__(self, test_run: TestRunRecord) -> None:
+    def __init__(
+        self, test_run: TestRunRecord, source_runs: tuple[TestRunRecord, ...] = (),
+    ) -> None:
         self._test_run = test_run
+        self._source_runs = source_runs
         self.create_arguments: dict[str, object] | None = None
 
     async def create(
@@ -147,10 +159,17 @@ class FakeTestRunRepository:
     test_run_id: UUID,
     user_id: UUID,
     ) -> TestRunRecord | None:
-        if self._test_run.test_run_id != test_run_id:
-            return None
+        if self._test_run.test_run_id == test_run_id:
+            return self._test_run
+        return next((run for run in self._source_runs if run.test_run_id == test_run_id), None)
 
-        return self._test_run
+    async def update_configuration_snapshot(
+        self, *, test_run_id: UUID, configuration_snapshot: dict[str, object],
+    ) -> None:
+        if self._test_run.test_run_id == test_run_id:
+            self._test_run = replace(
+                self._test_run, configuration_snapshot=configuration_snapshot,
+            )
 
 
     async def queue_if_draft(
@@ -464,6 +483,7 @@ async def test_create_test_run_snapshots_active_authorization(
 
     assert response.status == "draft"
     assert response.configuration_snapshot == expected_configuration
+    assert response.created_at == now
     assert test_run_repository.create_arguments is not None
     assert (
         test_run_repository.create_arguments[
@@ -471,6 +491,145 @@ async def test_create_test_run_snapshots_active_authorization(
         ]
         == expected_configuration
     )
+
+
+@pytest.mark.asyncio
+async def test_create_test_run_reuses_only_integrity_valid_frozen_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, workspace, target = make_records()
+    authorization = TargetAuthorizationRecord(
+        authorization_id=uuid4(), target_id=target.target_id,
+        created_by_user_id=user_id, authorized_by_user_id=user_id,
+        status="authorized", authorization_basis="Owned local application.",
+        created_at=datetime.now(UTC), authorized_at=datetime.now(UTC),
+        revoked_at=None, expires_at=None,
+    )
+    source_run_id, destination_run_id, contract_id = uuid4(), uuid4(), uuid4()
+    source_contract = TestContract(
+        contract_id=contract_id,
+        test_run_id=source_run_id,
+        version=3,
+        status="frozen",
+        approved_by_user_id=user_id,
+        approved_at=datetime.now(UTC),
+        journeys=(FrozenJourneyContract(
+            journey_key="checkout",
+            title="Checkout",
+            feature_key="purchase",
+            steps=(CaseAction(
+                action="click",
+                target=SemanticTarget(role="button", name="Pay"),
+            ),),
+            assertions=(ContractAssertion(
+                assertion_id="pay_visible",
+                oracle="visible",
+                target_role="button",
+                target_name="Pay",
+                expected_value=True,
+                plain_language="Pay button is visible.",
+                origin="user_approved",
+                source_step_ordinal=1,
+            ),),
+        ),),
+    )
+    discovery_map = DiscoveryMap(target_origin="http://localhost:3000")
+    now = datetime.now(UTC)
+    source_run = TestRunRecord(
+        test_run_id=source_run_id,
+        workspace_id=workspace.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="completed",
+        target_snapshot=test_run_api.build_target_snapshot(target),
+        configuration_snapshot={
+            "execution_mode": "discovery_contract_v1",
+            "discovery_map": discovery_map.model_dump(mode="json"),
+            "frozen_contract": source_contract.model_dump(mode="json"),
+            "frozen_contract_hash": source_contract.content_hash(),
+        },
+        created_at=now, updated_at=now, started_at=now, completed_at=now,
+    )
+    destination_run = replace(
+        source_run,
+        test_run_id=destination_run_id,
+        status="draft",
+        configuration_snapshot={},
+        started_at=None,
+        completed_at=None,
+    )
+    repository = FakeTestRunRepository(destination_run, (source_run,))
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=authorization,
+        test_run_repository=repository,
+    )
+
+    response = await test_run_api.create_test_run(
+        application.application_id,
+        test_run_api.CreateTestRunRequest(
+            target_id=target.target_id,
+            execution_mode="discovery_contract_v1",
+            frozen_contract_source_run_id=source_run_id,
+            study_brief="Replay the previously approved fixture contract.",
+        ),
+        make_request(),
+    )
+
+    replay = TestContract.model_validate(response.configuration_snapshot["test_contract"])
+    assert replay.test_run_id == destination_run_id
+    assert replay.contract_id == source_contract.contract_id
+    assert replay.version == source_contract.version
+    assert replay.status == "approved"
+    assert replay.approved_by_user_id == source_contract.approved_by_user_id
+    assert replay.approved_at == source_contract.approved_at
+    assert replay.journeys == source_contract.journeys
+    assert replay.content_hash() == source_contract.content_hash()
+    assert response.configuration_snapshot["frozen_contract_source_run_id"] == str(source_run_id)
+    assert response.configuration_snapshot["frozen_contract_source_hash"] == (
+        source_contract.content_hash()
+    )
+    assert response.configuration_snapshot["discovery_map"] == discovery_map.model_dump(mode="json")
+    assert response.configuration_snapshot["discovery_map_source_run_id"] == str(source_run_id)
+
+    bad_hash_snapshot = dict(source_run.configuration_snapshot)
+    bad_hash_snapshot["frozen_contract_hash"] = "0" * 64
+    repository._source_runs = (replace(
+        source_run, configuration_snapshot=bad_hash_snapshot,
+    ),)
+    with pytest.raises(HTTPException, match="integrity or approval") as exc_info:
+        await test_run_api.create_test_run(
+            application.application_id,
+            test_run_api.CreateTestRunRequest(
+                target_id=target.target_id,
+                execution_mode="discovery_contract_v1",
+                frozen_contract_source_run_id=source_run_id,
+                study_brief="Replay the previously approved fixture contract.",
+            ),
+            make_request(),
+        )
+    assert exc_info.value.status_code == 409
+
+    repository._source_runs = (replace(
+        source_run, created_by_user_id=uuid4(),
+    ),)
+    with pytest.raises(HTTPException, match="source run not found") as exc_info:
+        await test_run_api.create_test_run(
+            application.application_id,
+            test_run_api.CreateTestRunRequest(
+                target_id=target.target_id,
+                execution_mode="discovery_contract_v1",
+                frozen_contract_source_run_id=source_run_id,
+                study_brief="Replay the previously approved fixture contract.",
+            ),
+            make_request(),
+        )
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -881,12 +1040,68 @@ class FakeOutboxRepository:
         )
 
         return object()
-    
+
+
 @pytest.mark.asyncio
-async def test_start_test_run_dispatches_only_once(
+async def test_generic_start_rejects_frozen_contract_replay_without_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    user_id, application, workspace, target = make_records()
+    now = datetime.now(UTC)
+    persisted_run = TestRunRecord(
+        test_run_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="draft",
+        target_snapshot=test_run_api.build_target_snapshot(target),
+        configuration_snapshot={
+            "execution_mode": "discovery_contract_v1",
+            "frozen_contract_source_run_id": str(uuid4()),
+            "frozen_contract_source_hash": "a" * 64,
+            "test_contract": {"status": "approved"},
+        },
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+    run_repository = FakeTestRunRepository(persisted_run)
+    outbox = FakeOutboxRepository()
+    ready = AsyncMock()
+    monkeypatch.setattr(test_run_api, "require_run_ready", ready)
+    patch_common_dependencies(
+        monkeypatch,
+        user_id=user_id,
+        application=application,
+        workspace=workspace,
+        target=target,
+        authorization=None,
+        outbox_repository=outbox,
+        test_run_repository=run_repository,
+    )
+
+    with pytest.raises(HTTPException, match="contract start endpoint") as exc_info:
+        await test_run_api.start_test_run(persisted_run.test_run_id, make_request())
+
+    assert exc_info.value.status_code == 409
+    assert outbox.messages == []
+    ready.assert_not_awaited()
+    
+@pytest.mark.asyncio
+@pytest.mark.parametrize("worker_available", [True, False])
+async def test_start_test_run_dispatches_only_once(
+    monkeypatch: pytest.MonkeyPatch,
+    worker_available: bool,
+) -> None:
     """Starting the same TestRun twice must create one dispatch only."""
+    from unittest.mock import AsyncMock
+
+    ready = AsyncMock(side_effect=None if worker_available else HTTPException(
+        503, "The test runner is not running. Start the execution worker and try again.",
+    ))
+    monkeypatch.setattr(test_run_api, "require_run_ready", ready)
 
     user_id, application, workspace, target = make_records()
     now = datetime.now(UTC)
@@ -937,10 +1152,18 @@ async def test_start_test_run_dispatches_only_once(
         outbox_repository=outbox_repository,
     )
 
+    if not worker_available:
+        with pytest.raises(HTTPException) as error:
+            await test_run_api.start_test_run(persisted_run.test_run_id, make_request())
+        assert error.value.status_code == 503
+        assert outbox_repository.messages == []
+        return
+
     first_response = await test_run_api.start_test_run(
         persisted_run.test_run_id,
         make_request(),
     )
+    ready.assert_awaited_once()
 
     assert first_response.status == "queued"
 
@@ -973,6 +1196,64 @@ async def test_start_test_run_dispatches_only_once(
     assert len(
         outbox_repository.messages
     ) == 1
+
+
+@pytest.mark.asyncio
+async def test_queued_run_read_model_updates_reason_when_runner_heartbeat_arrives(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id, application, _, target = make_records()
+    run_id = uuid4()
+    created_at = datetime.now(UTC) - timedelta(seconds=61)
+    persisted_run = TestRunRecord(
+        test_run_id=run_id,
+        workspace_id=application.workspace_id,
+        application_id=application.application_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        status="queued",
+        target_snapshot={},
+        configuration_snapshot={"study_brief": "Observe the local application."},
+        created_at=created_at,
+        updated_at=created_at,
+        started_at=None,
+        completed_at=None,
+    )
+    session = Mock(
+        scalar=AsyncMock(return_value=None),
+        begin=Mock(return_value=AsyncContext(None)),
+    )
+    database = SimpleNamespace(session_factory=lambda: AsyncContext(session))
+    workers = AsyncMock(side_effect=[
+        [
+            run_readiness.WorkerStatus(service="execution", ready=False),
+            run_readiness.WorkerStatus(service="evaluation", ready=True),
+        ],
+        [
+            run_readiness.WorkerStatus(service="execution", ready=True),
+            run_readiness.WorkerStatus(service="evaluation", ready=True),
+        ],
+    ])
+    monkeypatch.setattr(
+        test_run_api,
+        "get_authenticated_user_id",
+        AsyncMock(return_value=user_id),
+    )
+    monkeypatch.setattr(test_run_api, "get_database_runtime", lambda _: database)
+    monkeypatch.setattr(
+        test_run_api,
+        "TestRunRepository",
+        lambda _: FakeTestRunRepository(persisted_run),
+    )
+    monkeypatch.setattr(run_readiness, "worker_statuses", workers)
+
+    waiting = await test_run_api.get_test_run(run_id, make_request())
+    busy = await test_run_api.get_test_run(run_id, make_request())
+
+    assert waiting.status == busy.status == "queued"
+    assert waiting.status_reason == "Waiting for the test runner"
+    assert busy.status_reason == "Runner is busy with another test"
+    assert workers.await_count == 2
     
 @pytest.mark.asyncio
 async def test_start_test_run_rejects_revoked_authorization(

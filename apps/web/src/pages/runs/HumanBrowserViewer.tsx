@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 interface HumanBrowserViewerProps {
   url: string;
@@ -11,6 +11,23 @@ const permittedKeys = new Set([
   "Tab", "Shift+Tab", "Enter", "Backspace", "Delete", "Escape", "ArrowUp", "ArrowDown",
   "ArrowLeft", "ArrowRight", "Home", "End",
 ]);
+
+function browserCoordinates(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  const bounds = canvas.getBoundingClientRect();
+  const scale = Math.min(bounds.width / canvas.width, bounds.height / canvas.height);
+  if (!Number.isFinite(scale) || scale <= 0) return null;
+  const left = bounds.left + (bounds.width - canvas.width * scale) / 2;
+  const top = bounds.top + (bounds.height - canvas.height * scale) / 2;
+  const x = Math.floor((clientX - left) / scale);
+  const y = Math.floor((clientY - top) / scale);
+  return x >= 0 && y >= 0 && x < canvas.width && y < canvas.height ? { x, y } : null;
+}
+
+const diagnosticReasons = new Set([
+  "target_origin_denied", "captcha_resource_denied", "unsafe_destination_ip",
+  "dns_resolution_failed", "upstream_connection_failed", "browser_transport_failed",
+]);
+const diagnosticDestinations = new Set(["authorized_target", "known_provider", "unknown_third_party"]);
 
 function safeViewerUrl(value: string): string {
   const target = new URL(value);
@@ -35,9 +52,27 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
   const mountedRef = useRef(true);
   const readyRef = useRef(false);
   const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const acceptedSequenceRef = useRef(0);
+  const pointerRef = useRef<{ id: number; x: number; y: number; lastMove: number; canvas: HTMLCanvasElement } | null>(null);
   const [status, setStatus] = useState("Viewer not connected. Connect to begin browser control.");
+  const [delivery, setDelivery] = useState("");
+  const [networkNotice, setNetworkNotice] = useState("");
 
   const canvasWrapRef = useRef<HTMLDivElement>(null);
+
+  const clearPointer = () => {
+    const pointer = pointerRef.current;
+    pointerRef.current = null;
+    const canvas = pointer?.canvas;
+    if (pointer && canvas?.hasPointerCapture?.(pointer.id)) canvas.releasePointerCapture(pointer.id);
+  };
+  const clearInputState = () => {
+    clearPointer();
+    if (ackTimerRef.current) clearTimeout(ackTimerRef.current);
+    ackTimerRef.current = null;
+    acceptedSequenceRef.current = 0;
+  };
 
   useEffect(() => {
     mountedRef.current = true;
@@ -47,6 +82,7 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       socketRef.current = null;
       connectingRef.current = false;
       readyRef.current = false;
+      clearInputState();
       if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
       socket?.close(1000, "operator left viewer");
     };
@@ -63,8 +99,7 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       if (!delta) return;
       e.preventDefault();
       e.stopPropagation();
-      sequenceRef.current += 1;
-      socketRef.current.send(JSON.stringify({ sequence: sequenceRef.current, event: "scroll", delta }));
+      send({ event: "scroll", delta });
     };
     wrap.addEventListener("wheel", onWheel, { passive: false });
     return () => wrap.removeEventListener("wheel", onWheel);
@@ -91,6 +126,9 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
     attemptedRef.current = true;
     sequenceRef.current = 0;
     readyRef.current = false;
+    clearInputState();
+    setDelivery("");
+    setNetworkNotice("");
     let socket: WebSocket;
     try {
       socket = new WebSocket(viewerUrl);
@@ -106,6 +144,9 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       if (socketRef.current !== socket) return;
       failure = message;
       readyRef.current = false;
+      clearInputState();
+      setDelivery("");
+      setNetworkNotice("");
       if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
       setStatus(message);
       socket.close(1000, "viewer unavailable");
@@ -114,31 +155,73 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       fail("No live browser frame arrived. Reconnect, or choose Skip if assistance is unavailable.");
     }, 15_000);
     socket.onopen = () => {
+      if (socketRef.current !== socket) return;
       socket.send(JSON.stringify({ ticket: grant.viewer_ticket }));
       setStatus("Authenticating viewer; waiting for the first live browser frame…");
     };
+    let newestFrame = 0;
     socket.onmessage = (event: MessageEvent<Blob | string>) => {
-      if (typeof event.data === "string") return;
+      if (socketRef.current !== socket || failure) return;
+      if (typeof event.data === "string") {
+        if (event.data.length > 4096) return;
+        try {
+          const reply: unknown = JSON.parse(event.data);
+          if (!reply || typeof reply !== "object" || Array.isArray(reply)) return;
+          if ("accepted_sequence" in reply && Number.isSafeInteger(reply.accepted_sequence)
+              && typeof reply.accepted_sequence === "number"
+              && reply.accepted_sequence > acceptedSequenceRef.current
+              && reply.accepted_sequence <= sequenceRef.current) {
+            acceptedSequenceRef.current = reply.accepted_sequence;
+            if (reply.accepted_sequence === sequenceRef.current) {
+              if (ackTimerRef.current) clearTimeout(ackTimerRef.current);
+              ackTimerRef.current = null;
+              if (readyRef.current) setDelivery("Connection active");
+            }
+          }
+          if ("network_diagnostics" in reply && Array.isArray(reply.network_diagnostics)
+              && reply.network_diagnostics.length <= 18) {
+            const reasons = new Set<string>();
+            for (const item of reply.network_diagnostics) {
+              if (item && typeof item === "object" && diagnosticReasons.has(item.reason)
+                  && diagnosticDestinations.has(item.destination)
+                  && Number.isSafeInteger(item.count) && item.count > 0 && item.count <= 100_000) {
+                reasons.add(item.reason);
+              }
+            }
+            setNetworkNotice([
+              [...reasons].some((reason) => ["target_origin_denied", "captcha_resource_denied", "unsafe_destination_ip"].includes(reason))
+                ? "Some browser resources were blocked by network policy." : "",
+              reasons.has("dns_resolution_failed") ? "Some browser resources could not be resolved." : "",
+              reasons.has("upstream_connection_failed") || reasons.has("browser_transport_failed")
+                ? "Some browser resources could not connect." : "",
+            ].filter(Boolean).join(" "));
+          }
+        } catch { /* Ignore unrecognized control messages without exposing their payload. */ }
+        return;
+      }
+      const frame = ++newestFrame;
       void createImageBitmap(event.data).then((image) => {
-        const canvas = canvasRef.current;
-        if (canvas && socketRef.current === socket && !failure) {
+        try {
+          const canvas = canvasRef.current;
+          if (!canvas || socketRef.current !== socket || failure || frame !== newestFrame) return;
           canvas.width = image.width;
           canvas.height = image.height;
           canvasWrapRef.current?.style.setProperty("--viewer-aspect-ratio", `${image.width} / ${image.height}`);
           const context = canvas.getContext("2d");
           if (!context) {
-            image.close();
             fail("The live browser frame could not be displayed. Reconnect to try again.");
             return;
           }
           context.drawImage(image, 0, 0);
+          if (!readyRef.current) setDelivery("Connection active");
           readyRef.current = true;
           connectingRef.current = false;
           if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
           setStatus("Connected. Browser frames and input are not saved.");
-        }
-        image.close();
-      }).catch(() => fail("The live browser frame could not be displayed. Reconnect to try again."));
+        } finally { image.close(); }
+      }).catch(() => {
+        if (frame === newestFrame) fail("The live browser frame could not be displayed. Reconnect to try again.");
+      });
     };
     socket.onerror = () => fail("The protected browser connection failed. Reconnect to try again.");
     socket.onclose = () => {
@@ -146,6 +229,9 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       socketRef.current = null;
       connectingRef.current = false;
       readyRef.current = false;
+      clearInputState();
+      setDelivery("");
+      setNetworkNotice("");
       if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
       const canvas = canvasRef.current;
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
@@ -159,11 +245,41 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
   }, [autoConnect]);
 
   const send = (payload: Record<string, unknown>) => {
+    if (pointerRef.current && !["pointer_move", "pointer_up", "pointer_cancel"].includes(String(payload.event))) return false;
     const socket = socketRef.current;
     if (readyRef.current && socket?.readyState === WebSocket.OPEN) {
       sequenceRef.current += 1;
-      socket.send(JSON.stringify({ sequence: sequenceRef.current, ...payload }));
+      try {
+        socket.send(JSON.stringify({ sequence: sequenceRef.current, ...payload }));
+      } catch {
+        readyRef.current = false;
+        clearInputState();
+        setDelivery("");
+        setNetworkNotice("");
+        setStatus("The protected browser connection failed. Reconnect to try again.");
+        socket.close(1000, "viewer unavailable");
+        return false;
+      }
+      if (!ackTimerRef.current) {
+        ackTimerRef.current = setTimeout(() => {
+          ackTimerRef.current = null;
+          if (socketRef.current === socket && readyRef.current
+              && acceptedSequenceRef.current < sequenceRef.current) setDelivery("Input delayed");
+        }, 2000);
+      }
+      return true;
     }
+    return false;
+  };
+
+  const finishPointer = (event: ReactPointerEvent<HTMLCanvasElement>, cancelled: boolean) => {
+    const pointer = pointerRef.current;
+    if (!pointer || event.pointerId !== pointer.id) return;
+    const coordinates = browserCoordinates(event.currentTarget, event.clientX, event.clientY);
+    send({ event: cancelled || !coordinates ? "pointer_cancel" : "pointer_up",
+      ...(coordinates ?? { x: pointer.x, y: pointer.y }) });
+    clearPointer();
+    event.preventDefault();
   };
 
   const sendText = (value: string) => {
@@ -176,12 +292,14 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       {/* ── Top toolbar: status line + connect/reconnect button ── */}
       <div className="hbv-toolbar">
         <p role="status" className="hbv-status">{status}</p>
+        {delivery ? <span aria-label="Input delivery">{delivery}</span> : null}
         {!socketRef.current
           ? <button type="button" className="secondary-button hbv-connect-btn" onClick={() => void connect()}>
               {attemptedRef.current ? "Reconnect to protected browser" : "Connect to protected browser"}
             </button>
           : null}
       </div>
+      {networkNotice ? <p role="note" aria-label="Connection diagnostics">{networkNotice}</p> : null}
 
       {/* ── Full-width canvas; CSS gives it a tall aspect-ratio box so the browser frame is large ── */}
       <div className="hbv-viewport">
@@ -191,17 +309,29 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
           aria-label="Live protected browser"
           aria-describedby="viewer-keyboard-help"
           onPointerDown={(event) => {
-            if (!readyRef.current) return;
-            const bounds = event.currentTarget.getBoundingClientRect();
-            const scaleX = event.currentTarget.width / bounds.width;
-            const scaleY = event.currentTarget.height / bounds.height;
-            send({
-              event: "click",
-              x: Math.max(0, Math.floor((event.clientX - bounds.left) * scaleX)),
-              y: Math.max(0, Math.floor((event.clientY - bounds.top) * scaleY)),
-            });
+            if (!readyRef.current || pointerRef.current || event.isPrimary === false || event.button !== 0) return;
+            const coordinates = browserCoordinates(event.currentTarget, event.clientX, event.clientY);
+            if (!coordinates || !send({ event: "pointer_down", ...coordinates })) return;
+            pointerRef.current = { id: event.pointerId, ...coordinates, lastMove: -Infinity, canvas: event.currentTarget };
+            event.currentTarget.setPointerCapture?.(event.pointerId);
             event.currentTarget.focus();
+            event.preventDefault();
           }}
+          onPointerMove={(event) => {
+            const pointer = pointerRef.current;
+            if (!pointer || event.pointerId !== pointer.id) return;
+            const coordinates = browserCoordinates(event.currentTarget, event.clientX, event.clientY);
+            if (!coordinates) return;
+            pointer.x = coordinates.x;
+            pointer.y = coordinates.y;
+            if (Date.now() - pointer.lastMove < 1000 / 15) return;
+            pointer.lastMove = Date.now();
+            send({ event: "pointer_move", ...coordinates });
+            event.preventDefault();
+          }}
+          onPointerUp={(event) => finishPointer(event, false)}
+          onPointerCancel={(event) => finishPointer(event, true)}
+          onLostPointerCapture={(event) => finishPointer(event, true)}
           onKeyDown={(event) => {
             if (event.key === "Escape" && event.shiftKey) {
               event.preventDefault();

@@ -58,7 +58,8 @@ test("the simple agent map updates from the saved plan and keeps large plans com
   await expect(flow.getByText("Supervisor collection", { exact: true })).toBeVisible();
   await expect(flow.getByText("Evaluation", { exact: true })).toBeVisible();
   await expect(flow.getByText("Report", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Customer 4 · Discover relevant account guidance", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Discover relevant account guidance", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Customer 4", exact: true })).toBeVisible();
   await flow.locator(".run-flow-journeys > summary").click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
   const audit = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();

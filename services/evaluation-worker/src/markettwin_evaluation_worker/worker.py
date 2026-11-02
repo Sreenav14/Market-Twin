@@ -6,8 +6,9 @@ import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from markettwin_database import create_database_engine
+from markettwin_database import create_database_engine, create_session_factory
 from markettwin_database.models import Report, TestRun
+from markettwin_database.worker_heartbeat import run_worker_heartbeat
 from opentelemetry import trace
 from sqlalchemy import or_, select, text, update
 from sqlalchemy.engine import URL
@@ -86,7 +87,30 @@ async def process_run(engine: AsyncEngine, test_run_id: UUID) -> EvaluationWorkf
 
 
 async def run_worker(engine: AsyncEngine) -> None:
+    heartbeat = asyncio.create_task(run_worker_heartbeat(
+        create_session_factory(engine), "evaluation", lambda: {"connected": True},
+    ))
+    try:
+        await _run_worker(engine)
+    finally:
+        heartbeat.cancel()
+        await asyncio.gather(heartbeat, return_exceptions=True)
+
+
+async def _run_worker(engine: AsyncEngine) -> None:
     """Discover unfinished evaluation durably; retry failures without replaying executions."""
+    concurrency = int(os.getenv("MARKETTWIN_EVALUATION_CONCURRENCY", "2"))
+    if not 1 <= concurrency <= 4:
+        raise ValueError("Evaluation concurrency must be between 1 and 4.")
+    capacity = asyncio.Semaphore(concurrency)
+
+    async def process_pending(test_run_id: UUID) -> None:
+        async with capacity:
+            try:
+                await process_run(engine, test_run_id)
+            except Exception:
+                logger.exception("Evaluation failed for TestRun %s; will retry", test_run_id)
+
     while True:
         try:
             async with AsyncSession(engine) as session:
@@ -100,11 +124,9 @@ async def run_worker(engine: AsyncEngine) -> None:
                         Report.status == "completed",
                     ).exists(),
                 ).order_by(TestRun.completed_at).limit(20))).all()
-            for test_run_id in pending:
-                try:
-                    await process_run(engine, test_run_id)
-                except Exception:
-                    logger.exception("Evaluation failed for TestRun %s; will retry", test_run_id)
+            async with asyncio.TaskGroup() as group:
+                for test_run_id in pending:
+                    group.create_task(process_pending(test_run_id))
         except Exception:
             logger.exception("Could not discover completed tests for evaluation")
         await asyncio.sleep(5)

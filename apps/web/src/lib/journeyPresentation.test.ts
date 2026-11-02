@@ -46,6 +46,14 @@ describe("journey presentation evidence", () => {
     expect(text).toContain("new exact-origin scope revision");
     expect(text).toContain("Logging in does not authorize");
   });
+  it("explains unverified authentication without inventing a product defect", () => {
+    const journey = { execution_status: "policy_blocked", result: {
+      blocker: "authentication_challenge_blocked",
+    } } as unknown as JourneyExecution;
+    expect(journeyBlocker(journey)).toContain("Login or identity was not verified");
+    expect(journeyBlocker(journey)).toContain("Other independent authorized work can continue");
+    expect(journeyBlocker(journey)).toContain("does not establish an application defect");
+  });
 });
 
 

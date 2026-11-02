@@ -76,7 +76,7 @@ test("ingest, review, and select approved knowledge before test creation", async
   } else {
     await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Knowledge", exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("navigation", { name: "Workspace navigation", includeHidden: true }).getByRole("link", { name: "Ingestion", exact: true, includeHidden: true })).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: "Primary navigation", includeHidden: true }).getByRole("link", { name: "Knowledge", exact: true, includeHidden: true })).toHaveAttribute("aria-current", "page");
   await inspect("ingestion");
   await page.getByLabel("Source file", { exact: true }).setInputFiles({ name: "requirements.txt", mimeType: "text/plain", buffer: Buffer.from("Account creation requires an email address.") });
   await page.getByLabel("Source purpose").selectOption("product_knowledge");
@@ -118,6 +118,7 @@ test("ingest, review, and select approved knowledge before test creation", async
   await expect(page.locator(".row-primary strong").filter({ hasText: "Product requirements" })).toBeVisible();
   await inspect("sources-list");
   await page.goto("/applications/app/runs/new");
+  await page.locator(".composer-disclosure > summary").filter({ hasText: "Knowledge for this test" }).click();
   await expect(page.getByRole("checkbox", { name: /Product requirements/ })).not.toBeChecked();
   await expect(page.getByText("Unreviewed source", { exact: true })).toHaveCount(0);
   await page.getByRole("checkbox", { name: /Product requirements/ }).check();

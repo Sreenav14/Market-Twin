@@ -223,6 +223,7 @@ class SensitiveActionApproval:
                     raise SensitiveActionApprovalBlocked(
                         "The sensitive action approval window expired."
                     )
+                await self._session.commit()
                 await asyncio.sleep(0.25)
 
             if _origin(await revalidate_origin()) != origin:

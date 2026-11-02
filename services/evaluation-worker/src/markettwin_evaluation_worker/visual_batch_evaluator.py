@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Literal, cast
 from uuid import UUID
@@ -9,6 +10,7 @@ from uuid import UUID
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
 )
+from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCache
 from markettwin_evaluation_worker.visual_artifact_storage import (
     VisualArtifactStorage,
 )
@@ -154,6 +156,7 @@ async def evaluate_visual_criteria_for_run(
     agent_snapshot_id: UUID,
     repository: EvaluationRepository,
     storage: VisualArtifactStorage,
+    cache: VisualResultCache | None = None,
 ) -> VisualBatchEvaluationResult:
     """Run vision only where the Journey explicitly requested it."""
 
@@ -166,6 +169,7 @@ async def evaluate_visual_criteria_for_run(
     evaluations: list[
         JourneyVisualEvaluation
     ] = []
+    deadline = asyncio.get_running_loop().time() + 180
 
     for journey in journey_results:
         for reference in _criterion_evidence(
@@ -197,18 +201,28 @@ async def evaluate_visual_criteria_for_run(
             if not explicit_visual_evidence:
                 continue
 
-            evaluation = (
-                await evaluate_visual_criterion_from_evidence(
-                    test_run_id=test_run_id,
-                    journey_id=journey.journey_id,
-                    execution_id=journey.execution_id,
-                    agent_snapshot_id=agent_snapshot_id,
-                    criterion=reference.criterion,
-                    evidence=explicit_visual_evidence,
-                    storage=storage,
-                    execution_context=evidence,
+            try:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError
+                async with asyncio.timeout(min(120, remaining)):
+                    evaluation = await evaluate_visual_criterion_from_evidence(
+                        test_run_id=test_run_id,
+                        journey_id=journey.journey_id,
+                        execution_id=journey.execution_id,
+                        agent_snapshot_id=agent_snapshot_id,
+                        criterion=reference.criterion,
+                        evidence=explicit_visual_evidence,
+                        storage=storage,
+                        execution_context=evidence,
+                        cache=cache,
+                    )
+            except TimeoutError:
+                evaluation = VisualCriterionEvaluation(
+                    criterion=reference.criterion, status="unverified",
+                    rationale="Visual evaluation reached its bounded evidence/model time budget.",
+                    observed_details=(), evidence_step_id=None, artifact_ids=(),
                 )
-            )
 
             evaluations.append(
                 JourneyVisualEvaluation(

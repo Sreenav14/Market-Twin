@@ -75,6 +75,9 @@ class BrowserOwnerRegistry:
     async def frame(self, lease: OwnerLease) -> bytes:
         return await self._owner(lease.handle).frame(lease)
 
+    async def diagnostics(self, lease: OwnerLease) -> tuple[dict[str, str | int], ...]:
+        return await self._owner(lease.handle).diagnostics(lease)
+
     async def observe(self, handle: BrowserSessionHandle, *, generation: int) -> bytes:
         return await self._owner(handle).observe(handle, generation=generation)
 

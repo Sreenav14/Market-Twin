@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import Literal, NotRequired, TypedDict, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from playwright.async_api import Locator
@@ -21,6 +21,10 @@ from markettwin_execution_orchestrator.browser.session import JourneyBrowserSess
 MAX_VISIBLE_ELEMENTS = 80
 MAX_VISIBLE_ELEMENT_NAME_CHARS = 160
 MAX_FORM_FIELDS = 40
+OBSERVED_SELECTORS = (
+    'a[href],button,input,select,textarea,[role],[contenteditable="true"],'
+    'h1,h2,h3,h4,h5,h6,img[alt],summary'
+)
 
 
 async def inspect_form_fields(root: Locator) -> tuple[tuple[FormFieldState, ...], bool]:
@@ -67,6 +71,8 @@ class RawVisibleElement(TypedDict):
     level: int | None
     bounding_box: RawElementBox
     link_index: NotRequired[int | None]
+    element_index: NotRequired[int]
+    name_source: NotRequired[Literal["playwright", "approximate", "unavailable"]]
 
 
 async def _ground_link_names(
@@ -75,39 +81,50 @@ async def _ground_link_names(
     """Use Playwright's exact accessible names, not an innerText approximation.
 
     CSS generated content can contribute to a link's accessible name; aria-hidden
-    children cannot. Read only each already-visible link, discard the raw snapshot
+    children cannot. Read only each already-visible element, discard the raw snapshot
     (which can include its URL), and never inspect the protected page as a whole.
     """
     links = session.page.locator('a[href], [role="link"]')
+    controls = session.page.locator(OBSERVED_SELECTORS)
     grounded: list[RawVisibleElement] = []
     omitted = False
     deadline = asyncio.get_running_loop().time() + 2
     for element in elements:
-        index = element.get("link_index")
-        if element["role"] != "link" or index is None:
-            grounded.append(element)
+        index = element.get("element_index")
+        locator = controls.nth(index) if index is not None else None
+        if locator is None and element["role"] == "link":
+            link_index = element.get("link_index")
+            if link_index is not None:
+                locator = links.nth(link_index)
+        if locator is None:
+            grounded.append({**element, "name_source": "approximate"})
             continue
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             omitted = True
+            grounded.append({**element, "name_source": "unavailable"})
             continue
         try:
             async with asyncio.timeout(remaining):
-                snapshot = await links.nth(index).aria_snapshot(
+                snapshot = await locator.aria_snapshot(
                     timeout=min(session.timeout_ms, 500),
                 )
             first_line = snapshot.splitlines()[0] if snapshot else ""
             # Playwright quotes an accessible name as a JSON string inside its
             # YAML role key. The key itself can be single-quoted by the renderer.
-            match = re.match(r"""^- (?:')?link ("(?:[^"\\]|\\.)*")""", first_line)
+            match = re.match(
+                r"""^- (?:')?""" + re.escape(element["role"]) + r""" ("(?:[^"\\]|\\.)*")""",
+                first_line,
+            )
             name = json.loads(match.group(1)) if match else None
         except Exception:
             # Missing/stale/unreadable nodes must not become invented locators.
             name = None
         if not isinstance(name, str) or not name or len(name) > MAX_VISIBLE_ELEMENT_NAME_CHARS:
             omitted = True
+            grounded.append({**element, "name_source": "unavailable"})
             continue
-        grounded.append({**element, "name": name})
+        grounded.append({**element, "name": name, "name_source": "playwright"})
     return grounded, omitted
 
 
@@ -323,7 +340,7 @@ async def build_observation(
                 return Array.from(
                     document.querySelectorAll(selectors)
                 )
-                    .map(element => {{
+                    .map((element, elementIndex) => {{
                         if (authenticated && (
                             element.closest('pre, code, [data-sensitive], [data-secret]') ||
                             !['button', 'link', 'heading', 'textbox', 'searchbox', 'combobox',
@@ -368,6 +385,7 @@ async def build_observation(
                             ) !== "true";
 
                         return {{
+                            element_index: elementIndex,
                             role: semanticRole(element),
                             name: accessibleName(element),
                             link_index: semanticRole(element) === "link"
@@ -406,6 +424,7 @@ async def build_observation(
         VisibleElement(
             role=element["role"],
             name=element["name"],
+            name_source=element.get("name_source", "approximate"),
             tag=element["tag"],
             enabled=element["enabled"],
             level=element["level"],

@@ -65,6 +65,10 @@ async function mockRun(page: Page, overrides: Partial<MockState> = {}) {
         { id: 8, step_number: 2, action_type: "click", action_summary: "Click a semantic page element.", observation_summary: "Action did not complete.", status: "failed", started_at: null, completed_at: null },
       ], artifacts: [{ id: artifactId, step_id: 7, artifact_type: "screenshot", kind: "viewport", content_type: "image/svg+xml", size_bytes: 200, created_at: "2026-10-04T10:00:12Z" }], findings: [], next_after_step: null, artifacts_truncated: false,
     };
+    else if (path === `/api/v1/test-runs/${runId}/journeys/account`) data = {
+      journey: { ...journeys[1], persona_perspective: "Returning customer", mission_objective: "Open account settings", step_count: 0, artifact_count: 0, success_criteria: [] },
+      steps: [], artifacts: [], findings: [], next_after_step: null, artifacts_truncated: false,
+    };
     else if (path === `/api/v1/test-runs/${runId}/collection`) data = { collection: { journey_count: 3 }, collected_at: "2026-10-04T10:00:20Z" };
     else if (path === `/api/v1/test-runs/${runId}/evaluation-agents`) data = [];
     else if (path === `/api/v1/test-runs/${runId}/flow`) data = {
@@ -118,20 +122,20 @@ test("journey outputs remain available while evaluation is pending", async ({ pa
   test.setTimeout(90_000);
   const state = await mockRun(page, { pending: true });
   await page.goto(`/runs/${runId}/journeys`);
-  await expect(page.getByRole("heading", { name: "Journey results" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Journeys by testing goal" })).toBeVisible();
   await expect(page.getByText(/Supervisor collected 3 journey outputs/)).toBeVisible();
-  const completed = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "First-time shopper · Place an order" }) });
+  const completed = page.locator("#journey-checkout");
   await expect(completed.getByText("completed", { exact: true })).toBeVisible();
   await expect(completed.getByText("failed", { exact: true })).toBeVisible();
   await expect(completed.getByText("The browser journey finished, but checkout showed an error.")).toBeVisible();
   await completed.locator("summary").click();
   await expect(completed.getByText("Submitted checkout once", { exact: true })).toBeVisible();
   await expect(completed.getByText("Payment validation prevented confirmation", { exact: true })).toBeVisible();
-  const failed = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Returning customer · Open account settings" }) });
+  const failed = page.locator("#journey-account");
   await expect(failed.getByText("failed", { exact: true })).toBeVisible();
   await expect(failed.getByText("not recorded", { exact: true })).toBeVisible();
   await expect(failed.getByText("Browser session closed before the action completed.")).toBeVisible();
-  const notStarted = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Support seeker · Find returns guidance" }) });
+  const notStarted = page.locator("#journey-help");
   await expect(notStarted.getByText("not started", { exact: true })).toBeVisible();
   await expect(notStarted.getByText("not recorded", { exact: true })).toBeVisible();
   await checkLayout(page, testInfo, "journey-results");
@@ -161,9 +165,9 @@ test("evaluation explains each visual check and opens its exact recorded evidenc
   }
   const unsatisfied = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Order confirmation is visible", exact: true }) });
   await expect(unsatisfied.getByText("Persona reported: satisfied", { exact: true })).toBeVisible();
-  await expect(unsatisfied.getByText("Evidence steps: 7, 8", { exact: true })).toBeVisible();
+  await expect(unsatisfied.getByText("Steps: 7, 8", { exact: true })).toBeVisible();
   await expect(unsatisfied.getByText("No order number is visible", { exact: true })).toBeVisible();
-  const evidence = unsatisfied.getByRole("link", { name: "Evidence cafe1234", exact: true });
+  const evidence = unsatisfied.getByRole("link", { name: "cafe1234", exact: true });
   await expect(evidence).toHaveAttribute("href", `/runs/${runId}/evidence/${artifactId}`);
   await checkLayout(page, testInfo, "evaluation-records");
   await evidence.click();
@@ -183,7 +187,7 @@ test("evaluation explains each visual check and opens its exact recorded evidenc
 });
 
 for (const [name, payload, copy] of [
-  ["historical report", {}, "Detailed checks were not recorded for this report version. Its saved findings and report remain available."],
+  ["historical report", {}, "Detailed visual checks were not recorded for this report version. Saved findings and recorded steps remain available."],
   ["evaluation without visual checks", { evaluation_records: [] }, "No visual criteria were selected for verification in this evaluation. This does not indicate that every criterion passed."],
 ] as const) {
   test(`${name} does not imply that all visual checks passed`, async ({ page }, testInfo) => {
@@ -195,7 +199,8 @@ for (const [name, payload, copy] of [
     await expect(page.getByRole("article")).toHaveCount(0);
     await checkLayout(page, testInfo);
     await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "What this test found" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Test result" })).toBeVisible();
+    await page.getByText("Read full generated narrative summary").click();
     await expect(page.getByText("Checkout needs correction; account access could not be verified.", { exact: true })).toBeVisible();
     expect(state.starts).toBe(0);
   });
@@ -248,16 +253,16 @@ test("saved model assessment explains its scope and links each individual conclu
   await expect(individual.getByText("inconclusive", { exact: true })).toBeVisible();
   await expect(individual.getByText("Account navigation could not be evaluated because the browser session closed.", { exact: true })).toBeVisible();
   const source = individual.getByRole("link", { name: "Inspect recorded journey", exact: true });
-  await expect(source).toHaveAttribute("href", `/runs/${runId}/journeys#journey-account`);
+  await expect(source).toHaveAttribute("href", `/runs/${runId}/journeys/account`);
   await checkLayout(page, testInfo, "model-assessment");
   await source.click();
-  await expect(page).toHaveURL(new RegExp(`/runs/${runId}/journeys#journey-account$`));
-  await expect(page.locator("#journey-account").getByRole("heading", { name: "Returning customer · Open account settings", exact: true })).toBeVisible();
-  await expect(page.locator("#journey-account").getByText("Browser session closed before the action completed.", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/runs/${runId}/journeys/account$`));
+  await expect(page.getByRole("heading", { name: "Open account settings", exact: true })).toBeVisible();
+  await expect(page.getByText("Browser session closed before the action completed.", { exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report", exact: true }).click();
   await expect(assessment.getByText("partial", { exact: true })).toBeVisible();
   await expect(assessment.getByText("Only assigned flows were assessed; untested application areas have no verdict.", { exact: true })).toBeVisible();
-  await expect(assessment.getByRole("link", { name: "Supporting journey account", exact: true })).toHaveAttribute("href", `/runs/${runId}/journeys#journey-account`);
+  await expect(assessment.getByRole("link", { name: "Supporting journey account", exact: true })).toHaveAttribute("href", `/runs/${runId}/journeys/account`);
   await checkLayout(page, testInfo);
   expect(state.starts).toBe(0);
 });

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Spinner } from "../../components/ui/StateViews";
 import { api } from "../../lib/api";
@@ -8,6 +8,8 @@ import { AppShellContext } from "../../layouts/AppShell";
 
 export function NewApplicationPage() {
   const navigate = useNavigate();
+  const [parameters] = useSearchParams();
+  const intakeUrl = parameters.get("url");
   const { workspace } = useOutletContext<AppShellContext>();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -59,7 +61,9 @@ export function NewApplicationPage() {
         name.trim(),
         description.trim(),
       );
-      if (mounted.current) navigate(`/applications/${application.id}`);
+      if (mounted.current) navigate(intakeUrl
+        ? `/applications/${application.id}/targets/new?url=${encodeURIComponent(intakeUrl)}`
+        : `/applications/${application.id}`);
     } catch (submitError) {
       if (mounted.current) setError(
         submitError instanceof Error

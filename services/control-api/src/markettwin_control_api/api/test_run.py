@@ -1,5 +1,7 @@
 """Test Run HTTP endpoints."""
 
+from dataclasses import replace
+from datetime import datetime
 from ipaddress import ip_address
 from typing import Literal
 from urllib.parse import urlsplit
@@ -16,9 +18,11 @@ from markettwin_database.repositories import (
 )
 from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
+from markettwin_shared.discovery_contract import DiscoveryMap, TestContract
 from pydantic import (
     BaseModel,
     Field,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -32,6 +36,7 @@ from markettwin_control_api.api.dependencies import (
 from markettwin_control_api.api.permissions import (
     WORKSPACE_WRITE_ROLES,
 )
+from markettwin_control_api.config import get_settings
 from markettwin_control_api.knowledge.repository import IngestionRepository
 from markettwin_control_api.persistence.repositories import (
     ApplicationRepository,
@@ -46,6 +51,7 @@ from markettwin_control_api.services import (
     RunDispatchService,
     RunNotQueueableError,
 )
+from markettwin_control_api.services.run_readiness import require_run_ready, stalled_run_reason
 
 router = APIRouter(
     tags=["Test Runs"],
@@ -58,7 +64,10 @@ class CreateTestRunRequest(BaseModel):
     target_id: UUID
     name: str | None = Field(default=None, min_length=1, max_length=80)
     testing_depth: Literal["low", "medium", "high"] = "medium"
-    execution_mode: Literal["legacy_persona", "deep_feature_v1"] = "legacy_persona"
+    execution_mode: Literal[
+        "legacy_persona", "deep_feature_v1", "discovery_contract_v1",
+    ] = "legacy_persona"
+    frozen_contract_source_run_id: UUID | None = None
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
     auth_verification: AuthVerificationPolicy | None = None
     auth_mode: Literal["required", "optional"] | None = None
@@ -121,6 +130,7 @@ class TestRunResponse(BaseModel):
     """Test run returned by the Control API."""
 
     id: UUID
+    created_at: datetime
     test_number: int | None
     workspace_id: UUID
     application_id: UUID
@@ -131,6 +141,7 @@ class TestRunResponse(BaseModel):
     configuration_snapshot: dict[str, object]
     synthetic_fixture_approval_enabled: bool = False
     human_action_approvals_enabled: bool = False
+    status_reason: str | None = None
 
 
 def build_target_snapshot(
@@ -161,17 +172,20 @@ def build_target_snapshot(
 
 def test_run_response(
     test_run: TestRunRecord,
+    status_reason: str | None = None,
 ) -> TestRunResponse:
     """Convert repository data into an HTTP response."""
 
     return TestRunResponse(
         id=test_run.test_run_id,
+        created_at=test_run.created_at,
         test_number=test_run.test_number,
         workspace_id=test_run.workspace_id,
         application_id=test_run.application_id,
         target_id=test_run.target_id,
         created_by_user_id=test_run.created_by_user_id,
         status=test_run.status,
+        status_reason=status_reason,
         target_snapshot=test_run.target_snapshot,
         configuration_snapshot=(
             test_run.configuration_snapshot
@@ -314,7 +328,7 @@ async def create_test_run(
             if payload.synthetic_fixture_approval:
                 loopback_origins = _all_origins_loopback(target)
                 if (
-                    payload.execution_mode != "deep_feature_v1"
+                    payload.execution_mode not in {"deep_feature_v1", "discovery_contract_v1"}
                     or target.environment not in {"local", "test"}
                     or not loopback_origins
                 ):
@@ -327,7 +341,9 @@ async def create_test_run(
                     )
 
             if payload.human_action_approvals and (
-                payload.execution_mode != "deep_feature_v1"
+                payload.execution_mode not in {"deep_feature_v1", "discovery_contract_v1"}
+                or (payload.execution_mode == "discovery_contract_v1"
+                    and not payload.synthetic_fixture_approval)
                 or target.environment not in {"local", "development", "test", "staging"}
             ):
                 raise HTTPException(
@@ -348,7 +364,7 @@ async def create_test_run(
             }
             if payload.name is not None:
                 configuration_snapshot["test_name"] = payload.name
-            if payload.execution_mode == "deep_feature_v1":
+            if payload.execution_mode in {"deep_feature_v1", "discovery_contract_v1"}:
                 configuration_snapshot["execution_mode"] = payload.execution_mode
             if payload.auth_verification is not None:
                 configuration_snapshot["auth_mode"] = payload.auth_mode or "required"
@@ -395,6 +411,80 @@ async def create_test_run(
                 database_session
             )
 
+            source_contract: TestContract | None = None
+            source_hash: str | None = None
+            if payload.frozen_contract_source_run_id is not None:
+                if payload.execution_mode != "discovery_contract_v1":
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Frozen contract replay requires discovery_contract_v1 mode.",
+                    )
+                source_run = await repository.get_for_user(
+                    test_run_id=payload.frozen_contract_source_run_id,
+                    user_id=user_id,
+                )
+                if (
+                    source_run is None
+                    or source_run.created_by_user_id != user_id
+                    or source_run.workspace_id != workspace.workspace_id
+                    or source_run.application_id != application_id
+                    or source_run.target_id != target.target_id
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Frozen contract source run not found for this target.",
+                    )
+                source_snapshot = source_run.configuration_snapshot
+                try:
+                    source_contract = TestContract.model_validate(
+                        source_snapshot.get("frozen_contract")
+                    )
+                except ValidationError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Frozen contract source is invalid.",
+                    ) from exc
+                source_hash = source_contract.content_hash()
+                try:
+                    source_discovery = DiscoveryMap.model_validate(
+                        source_snapshot.get("discovery_map")
+                    )
+                except ValidationError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Frozen contract source has no valid discovery map.",
+                    ) from exc
+                if (
+                    source_run.status != "completed"
+                    or source_snapshot.get("execution_mode") != "discovery_contract_v1"
+                    or source_run.target_snapshot != target_snapshot
+                    or source_contract.status != "frozen"
+                    or source_contract.test_run_id != source_run.test_run_id
+                    or source_contract.approved_by_user_id != user_id
+                    or source_contract.approved_at is None
+                    or source_snapshot.get("frozen_contract_hash") != source_hash
+                    or any(
+                        not journey.excluded and not assertion.excluded
+                        and assertion.origin != "user_approved"
+                        for journey in source_contract.journeys
+                        for assertion in journey.assertions
+                    )
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Frozen contract source failed integrity or approval checks.",
+                    )
+                configuration_snapshot["frozen_contract_source_run_id"] = str(
+                    source_run.test_run_id
+                )
+                configuration_snapshot["frozen_contract_source_hash"] = source_hash
+                configuration_snapshot["discovery_map"] = source_discovery.model_dump(
+                    mode="json"
+                )
+                configuration_snapshot["discovery_map_source_run_id"] = str(
+                    source_run.test_run_id
+                )
+
             test_run = await repository.create(
                 workspace_id=application.workspace_id,
                 application_id=application_id,
@@ -409,6 +499,21 @@ async def create_test_run(
                     payload.human_action_approvals or payload.synthetic_fixture_approval
                 ),
             )
+            if source_contract is not None and source_hash is not None:
+                replay_contract = source_contract.model_copy(
+                    update={"test_run_id": test_run.test_run_id, "status": "approved"}
+                )
+                configuration_snapshot["test_contract"] = replay_contract.model_dump(
+                    mode="json"
+                )
+                await repository.update_configuration_snapshot(
+                    test_run_id=test_run.test_run_id,
+                    configuration_snapshot=configuration_snapshot,
+                )
+                test_run = replace(
+                    test_run,
+                    configuration_snapshot=configuration_snapshot,
+                )
 
     return test_run_response(test_run)
 
@@ -499,11 +604,12 @@ async def list_test_runs(
             test_runs = await repository.list_for_application(
                 application_id=application_id
             )
+            responses = [test_run_response(run, await stalled_run_reason(
+                database_session, run_id=run.test_run_id, status=run.status,
+                created_at=run.created_at,
+            )) for run in test_runs]
 
-    return [
-        test_run_response(test_run)
-        for test_run in test_runs
-    ]
+    return responses
 
 
 @router.get(
@@ -532,6 +638,10 @@ async def get_test_run(
                 test_run_id=test_run_id,
                 user_id=user_id,
             )
+            reason = await stalled_run_reason(
+                database_session, run_id=test_run.test_run_id, status=test_run.status,
+                created_at=test_run.created_at,
+            ) if test_run is not None else None
 
     if test_run is None:
         raise HTTPException(
@@ -539,7 +649,7 @@ async def get_test_run(
             detail="Test run not found.",
         )
 
-    return test_run_response(test_run)
+    return test_run_response(test_run, reason)
 
 
 @router.post(
@@ -580,6 +690,15 @@ async def start_test_run(
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Test run has already been started.",
+                )
+
+            if test_run.configuration_snapshot.get("frozen_contract_source_run_id"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Replay-created contract runs must be started through the "
+                        "contract start endpoint."
+                    ),
                 )
 
             workspace_repository = WorkspaceRepository(
@@ -645,6 +764,7 @@ async def start_test_run(
                     ),
                 )
 
+            await require_run_ready(database_session, get_settings())
             dispatch_service = RunDispatchService(
                 test_run_repository=test_run_repository,
                 outbox_repository=OutboxRepository(

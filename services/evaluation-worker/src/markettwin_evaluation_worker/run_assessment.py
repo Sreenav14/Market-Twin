@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 import litellm
+from markettwin_database.model_budget import model_call, model_role
 from markettwin_database.models import RunMission, RunPersona, TestRun
 from markettwin_shared.model_parameters import completion_parameters
 from markettwin_shared.runtime_snapshot import AgentRuntimeSnapshotPayload
@@ -189,6 +190,7 @@ async def assess_completed_run(
             "model": model,
             **parameters,
             "timeout": 60,
+            "num_retries": 0,
             "messages": [
                 {"role": "system", "content": ASSESSMENT_INSTRUCTION},
                 {"role": "user", "content": prompt},
@@ -202,8 +204,15 @@ async def assess_completed_run(
             api_base = api_base or os.getenv("OLLAMA_API_BASE") or "http://localhost:11434"
         if api_base:
             request["api_base"] = api_base
-        async with asyncio.timeout(65):
-            response = cast(Any, await litellm.acompletion(**request))  # pyright: ignore[reportUnknownMemberType]
+        input_tokens = litellm.token_counter(  # pyright: ignore[reportUnknownMemberType]
+            model=model, messages=request["messages"],
+        )
+        with model_role("evaluator"):
+            async with model_call(
+                model=model, input_tokens=input_tokens, output_tokens=max_tokens,
+            ) as call, asyncio.timeout(65):
+                response = cast(Any, await litellm.acompletion(**request))  # pyright: ignore[reportUnknownMemberType]
+                call.record(response)
         choice = response.choices[0]
         if choice.finish_reason == "length":
             raise ValueError("Assessment reached its configured output limit.")

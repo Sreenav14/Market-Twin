@@ -156,7 +156,7 @@ export function RunEvaluationPage() {
                     : "unverified";
 
                 return (
-                  <div
+                  <article
                     key={index}
                     style={{
                       display: "grid",
@@ -169,9 +169,9 @@ export function RunEvaluationPage() {
                   >
                     {/* 1. Criterion */}
                     <div>
-                      <strong style={{ display: "block", fontSize: 14, fontWeight: 600, color: "var(--text)", lineHeight: 1.4 }}>
+                      <h4 style={{ display: "block", margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text)", lineHeight: 1.4 }}>
                         {typeof record.criterion === "string" ? record.criterion : "Visual check"}
-                      </strong>
+                      </h4>
                       <span style={{ display: "block", fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
                         Persona reported: {typeof record.reported_status === "string" ? record.reported_status : "not recorded"}
                       </span>
@@ -235,7 +235,7 @@ export function RunEvaluationPage() {
                         <span style={{ fontSize: 12, color: "var(--text-3)" }}>No artifact linked</span>
                       )}
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>

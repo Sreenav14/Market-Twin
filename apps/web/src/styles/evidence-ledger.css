@@ -230,7 +230,7 @@
 }
 
 .evidence-ledger .ledger-section h3 {
-  font: 600 24px/1.25 var(--font-sans);
+  font: 600 24px/1.25 var(--font-heading);
   letter-spacing: -0.035em;
   margin: 8px 0 12px;
   color: var(--li);
@@ -278,7 +278,7 @@
 }
 
 .evidence-ledger .ledger-finding-card h4 {
-  font: 600 17px/1.35 var(--font-sans);
+  font: 600 17px/1.35 var(--font-heading);
   letter-spacing: -0.02em;
   margin: 0 0 10px;
 }
@@ -405,13 +405,13 @@
 }
 
 .evidence-ledger .ledger-aside h3 {
-  font: 600 18px/1.25 var(--font-sans);
+  font: 600 18px/1.25 var(--font-heading);
   margin: 8px 0 6px;
   color: var(--li);
 }
 
 .evidence-ledger .ledger-aside h4 {
-  font: 600 14px var(--font-sans);
+  font: 600 14px var(--font-heading);
   margin: 20px 0 8px;
   padding-top: 16px;
   border-top: 1px solid var(--lr);
@@ -487,7 +487,7 @@
 }
 
 .evidence-ledger .ledger-lower h3 {
-  font: 600 22px/1.25 var(--font-sans);
+  font: 600 22px/1.25 var(--font-heading);
   letter-spacing: -0.03em;
   margin: 6px 0 10px;
 }

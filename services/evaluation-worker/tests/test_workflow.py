@@ -13,6 +13,7 @@ from markettwin_evaluation_worker.deterministic_evaluator import (
 from markettwin_evaluation_worker.persistence.evaluation_repository import (
     EvaluationRepository,
 )
+from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCache
 from markettwin_evaluation_worker.report_generator import (
     GeneratedReportResult,
 )
@@ -57,6 +58,7 @@ async def test_workflow_runs_visual_evaluation_before_report(
         agent_snapshot_id: UUID,
         repository: EvaluationRepository,
         storage: VisualArtifactStorage,
+        cache: VisualResultCache | None = None,
     ) -> VisualBatchEvaluationResult:
         assert agent_snapshot_id == visual_snapshot_id
         events.append("visual")
