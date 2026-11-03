@@ -66,7 +66,7 @@ class CreateTestRunRequest(BaseModel):
     testing_depth: Literal["low", "medium", "high"] = "medium"
     execution_mode: Literal[
         "legacy_persona", "deep_feature_v1", "discovery_contract_v1",
-    ] = "legacy_persona"
+    ] = "discovery_contract_v1"
     frozen_contract_source_run_id: UUID | None = None
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
     auth_verification: AuthVerificationPolicy | None = None

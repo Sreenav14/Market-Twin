@@ -34,12 +34,12 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
   const isFeaturePlan = flow.data?.nodes.some((node) => node.kind === "meta" && node.label === "Feature plan") ?? false;
 
   return (
-    <aside className="run-flow" aria-label={isFeaturePlan ? "Feature execution" : "Agent flow"}>
+    <aside className="run-flow" aria-label={isFeaturePlan ? "Feature execution" : "Test execution"}>
       <details open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-        <summary><span>{isFeaturePlan ? "Feature execution" : "Agent flow"}</span>{flow.data ? <span className="run-flow-count">{journeyCount} {isFeaturePlan ? "cases" : journeyCount === 1 ? "journey" : "journeys"}</span> : null}</summary>
+        <summary><span>{isFeaturePlan ? "Feature execution" : "Test execution"}</span>{flow.data ? <span className="run-flow-count">{journeyCount} {isFeaturePlan ? "cases" : journeyCount === 1 ? "journey" : "journeys"}</span> : null}</summary>
         <div className="run-flow-body">
-          {flow.isPending ? <p className="muted" role="status">Loading agent flow…</p> : flow.isError ? (
-            <div><p className="error-text" role="alert">Could not load agent flow: {flow.error.message}</p><button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button></div>
+          {flow.isPending ? <p className="muted" role="status">Loading test execution…</p> : flow.isError ? (
+            <div><p className="error-text" role="alert">Could not load test execution: {flow.error.message}</p><button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button></div>
           ) : flow.data ? (
             <>
               {isFeaturePlan ? <p className="run-flow-caption">Discovery prepares the authorized page before planning. Each planned feature case runs once; discovery is not counted as a case. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
@@ -51,13 +51,13 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
                   if (node.id !== journeyNodes[0].id) return null;
                   return <li key="journey-agents" className={connected ? "run-flow-node connected" : "run-flow-node"}>
                     <details className="run-flow-journeys" open={journeysExpanded} onToggle={(event) => setJourneysExpanded(event.currentTarget.open)}>
-                      <summary>{isFeaturePlan ? "Feature cases" : "Sequential Agent"} <span className="muted">· {journeyCount} {isFeaturePlan ? "cases" : "subagents"}</span></summary>
+                      <summary>{isFeaturePlan ? "Feature cases" : "Tester journeys"} <span className="muted">· {journeyCount} {isFeaturePlan ? "cases" : "testers"}</span></summary>
                       <ol className="run-flow-nodes">{journeyNodes.map((journey, journeyIndex) => <FlowStep key={journey.id} node={journey} connected={Boolean(journeyIndex && flow.data.edges.some((edge) => edge.source === journeyNodes[journeyIndex - 1].id && edge.target === journey.id))} />)}</ol>
                     </details>
                   </li>;
                 })}
               </ol>
-              {!flow.data.nodes.length ? <p className="muted">No agent flow has been recorded yet.</p> : null}
+              {!flow.data.nodes.length ? <p className="muted">No test execution has been recorded yet.</p> : null}
             </>
           ) : null}
         </div>

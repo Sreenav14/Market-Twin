@@ -28,8 +28,7 @@ export function WorkspaceSettingsPage() {
         </div>
       </dl>
       <p className="panel-note">
-        Workspace editing and deletion are not exposed until tenant lifecycle
-        and retention semantics are explicitly defined.
+        Workspace details are read-only here.
       </p>
     </section>
   );

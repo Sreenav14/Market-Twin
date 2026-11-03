@@ -74,7 +74,7 @@ export function ApplicationRunsPage() {
 
   return (
     <>
-      <Link className="back-link" to="/runs">All applications</Link>
+      <Link className="back-link" to="/runs">All tests</Link>
       <PageHeader
         eyebrow={appState.data.name}
         title="Tests"
@@ -85,7 +85,7 @@ export function ApplicationRunsPage() {
               className="primary-button"
               to={`/applications/${applicationId}/runs/new`}
             >
-              <Icon name="plus" size={16} /> New test
+              <Icon name="plus" size={16} /> Start a test
             </Link>
           ) : undefined
         }
@@ -105,7 +105,7 @@ export function ApplicationRunsPage() {
                 className="primary-button"
                 to={`/applications/${applicationId}/runs/new`}
               >
-                New test
+                Start a test
               </Link>
             ) : undefined
           }
@@ -117,7 +117,7 @@ export function ApplicationRunsPage() {
           <div className="search-field"><input type="search" aria-label="Find a test"
             placeholder="Find a test…" value={search} onChange={(event) => filter("q", event.target.value)} /></div>
           <select className="text-input filter-control" aria-label="Filter tests by status" value={status} onChange={(event) => filter("status", event.target.value)}>
-            <option value="all">All statuses</option><option value="awaiting_human">Needs assistance</option>
+            <option value="all">All statuses</option><option value="awaiting_human">Needs your help</option>
             <option value="in_progress">In progress</option><option value="completed">Completed</option>
             <option value="stopped">Failed / stopped</option><option value="draft">Drafts</option>
           </select>
@@ -132,7 +132,7 @@ export function ApplicationRunsPage() {
         <div className="data-list">
           {filteredRuns.map((run) => (
             <div className="deletable-row" key={run.id}>
-              <Link className="data-row" to={`/runs/${run.id}/${run.status === "awaiting_human" ? "human-action" : ["running", "planning", "queued"].includes(run.status) ? "activity" : "overview"}`}>
+              <Link className="data-row" to={`/runs/${run.id}/${run.status === "awaiting_human" ? "human-action" : ["running", "planning", "queued"].includes(run.status) ? "watch" : run.status === "draft" ? "overview" : "results"}`}>
                 <span className="row-icon">
                   <Icon name="runs" size={16} />
                 </span>

@@ -1,0 +1,177 @@
+/* Existing execution, evidence and permission-aware views share the concept shell. */
+.concept-workspace {
+  --ledger-paper: var(--paper);
+  --ledger-surface: var(--card);
+  --ledger-ink: var(--ink);
+  --ledger-muted: var(--ink-2);
+  --ledger-rule: var(--line);
+  --ledger-accent: var(--ink);
+  --ledger-accent-soft: var(--notchecked-tint);
+  --ledger-caution: var(--couldnot);
+  --ledger-caution-soft: var(--couldnot-tint);
+  --ledger-failed: var(--broken);
+  --ledger-technical: var(--ink-faint);
+  --ledger-focus: var(--ink);
+  --concept-goals-columns: minmax(140px, 1.2fr) minmax(180px, 2fr) 130px 130px auto;
+  --concept-check-columns: minmax(0, 1.8fr) 130px minmax(0, 2fr) minmax(160px, 1.2fr);
+}
+.concept-workspace :is(.run-record, .journey-header-card, .journey-selected-evidence,
+  .evidence-artifact, .live-work-selector, .live-activity, .agent-prompt-editor,
+  .agent-prompt-list, .contract-report, .contract-approval-footer) {
+  min-width: 0;
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+.concept-workspace :is(.run-record, .journey-header-card, .journey-selected-evidence,
+  .evidence-artifact, .agent-prompt-editor, .agent-prompt-list) {
+  background: var(--card);
+  border-radius: 10px;
+}
+.concept-workspace :is(.run-record, .journey-selected-evidence) :is(.panel, .journey-context-box, .journey-assertion-card) {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  padding-inline: 0;
+}
+.concept-workspace :is(.journey-meta-chip, .run-record-badges > span, .run-flow-count) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding-inline: 0;
+  color: var(--ink-2);
+}
+.concept-workspace :is(.section-label, .journey-step-tag, .ledger-kicker,
+  .ledger-fineprint, .run-flow-tools, .definition-list dt) {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: .08em;
+  color: var(--ink-faint);
+}
+.concept-workspace :is(.journey-header-card, .journey-selected-evidence, .run-record, .contract-report) :is(h2, h3) {
+  color: var(--ink);
+  font-family: "Inter", system-ui, sans-serif;
+  line-height: 1.4;
+}
+.concept-workspace :is(.journey-step, .agent-prompt-choice, .report-step-flow button,
+  .report-finding-index button, .live-activity-list button) {
+  border-radius: 0;
+  color: var(--ink);
+  box-shadow: none;
+}
+.concept-workspace :is(.journey-step.selected, .agent-prompt-choice.is-selected,
+  .report-step-flow button[aria-pressed="true"], .live-activity-list button[aria-pressed="true"]) {
+  background: var(--notchecked-tint);
+  border-color: var(--ink);
+  box-shadow: none;
+}
+.concept-workspace .evidence-ledger .ledger-paper {
+  background: var(--paper);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.concept-workspace .evidence-ledger .ledger-finding-card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 24px 0;
+}
+.concept-workspace .evidence-ledger .ledger-verdict-banner {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 24px 0 32px;
+}
+.concept-workspace .evidence-ledger .verdict-title {
+  font: 500 40px/1.15 "Newsreader", Georgia, serif;
+  letter-spacing: -.01em;
+}
+.concept-workspace .evidence-ledger .ledger-outcome-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.concept-workspace .evidence-ledger .ledger-aside {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.concept-workspace .contract-report > .panel {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 24px 0 32px;
+  margin: 0;
+}
+.concept-workspace .contract-report > .contract-coverage {
+  color: var(--ink-2);
+  padding-top: 0;
+}
+.concept-workspace .contract-report h2 { margin: 0 0 24px; font-size: 22px; }
+.concept-workspace .contract-report h3 { margin: 20px 0 12px; font-size: 18px; }
+.concept-workspace .contract-report ul { padding-left: 20px; }
+.concept-workspace .contract-report li + li { margin-top: 16px; }
+.concept-workspace .contract-report blockquote {
+  border-left: 1px solid var(--line);
+  margin: 12px 0 24px;
+  padding-left: 20px;
+}
+.concept-workspace .contract-report blockquote p {
+  color: var(--ink);
+  font: italic 500 22px/32px "Newsreader", Georgia, serif;
+}
+.concept-workspace .contract-report cite {
+  font: 400 12px/18px "IBM Plex Mono", monospace;
+  color: var(--ink-2);
+}
+.concept-workspace :is(.live-work-selector, .live-activity) {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 20px 0;
+}
+.concept-workspace .live-activity { border-left: 1px solid var(--line); padding-left: 24px; }
+.concept-workspace :is(.hbv-toolbar, .hbv-scroll-controls) { background: var(--notchecked-tint); }
+.concept-workspace .hbv-canvas-wrap { background: var(--ink); }
+.concept-workspace .hbv-text-input { background: var(--card); border-radius: 0; }
+.concept-workspace :is(.evidence-artifact-list, .finding-list) { padding: 0; list-style: none; }
+.concept-workspace :is(.text-input, textarea, pre, select, img, canvas) { max-width: 100%; }
+.concept-workspace :is(.definition-list dd, .agent-yaml-input, .journey-context-box p) { overflow-wrap: anywhere; }
+.concept-workspace .composer-app-url { grid-column: 1 / -1; min-width: 0; }
+.concept-workspace .composer-app-url .text-input { display: block; width: 100%; min-width: 0; }
+@media (max-width: 1100px) {
+  .concept-workspace { --concept-goals-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .concept-workspace { --concept-check-columns: minmax(0, 1fr); }
+  .concept-workspace :is(.journey-evidence-grid, .live-workbench, .live-work-selector,
+    .agent-prompts-layout, .study-summary, .ledger-columns) { grid-template-columns: minmax(0, 1fr); }
+  .concept-workspace .evidence-ledger .ledger-aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 24px 0;
+  }
+  .concept-workspace .live-activity { border-left: 0; padding-left: 0; }
+  .concept-workspace .journey-selected-evidence { position: static; }
+}
+@media (max-width: 639px) {
+  .concept-workspace { --concept-goals-columns: minmax(0, 1fr); }
+  .concept-workspace :is(.section-heading, .live-execution-heading, .journey-step-header) { flex-wrap: wrap; }
+  .concept-workspace :is(.journey-header-card, .journey-selected-evidence, .run-record) { padding: 16px; }
+  .concept-workspace .lifecycle-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .concept-workspace .evidence-ledger .verdict-title { font-size: 36px; }
+}

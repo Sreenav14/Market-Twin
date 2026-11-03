@@ -133,7 +133,7 @@ export function RunJourneysPage() {
                 </span>
               </div>
               <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 16 }}>
-                Inspects the authorized target origin to map accessible pages and interactive controls prior to generating deterministic test cases.
+                Inspects the authorized target origin to map accessible pages and interactive controls before preparing test cases.
               </p>
 
               <div className="run-records">

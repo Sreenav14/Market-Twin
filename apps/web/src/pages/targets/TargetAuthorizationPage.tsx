@@ -167,7 +167,7 @@ export function TargetAuthorizationPage() {
             {active && authorization ? (
               <div>
                 <p style={{ color: "var(--text-2)", margin: "0 0 16px", lineHeight: "1.6" }}>
-                  MarketTwin browser agents are authorized to execute tests against the approved destinations below.
+                  MarketTwin browser testers are authorized to execute tests against the approved destinations below.
                 </p>
                 <dl className="definition-list">
                   <div>
@@ -230,7 +230,7 @@ export function TargetAuthorizationPage() {
               </div>
             ) : (
               <div className="panel-note" style={{ margin: "8px 0 0" }}>
-                No active authorization is on record for this target environment. Browser testing agents are strictly blocked from dispatching requests to this environment.
+                No active authorization is on record for this target environment. Browser testers are strictly blocked from dispatching requests to this environment.
               </div>
             )}
           </section>
@@ -245,7 +245,7 @@ export function TargetAuthorizationPage() {
             </div>
 
             <p style={{ color: "var(--text-2)", margin: "0 0 14px", fontSize: "14px", lineHeight: "1.6" }}>
-              Browser agents will be strictly confined to these exact destinations.
+              Browser testers will be strictly confined to these exact destinations.
             </p>
 
             <div className="origin-list">
@@ -362,7 +362,7 @@ export function TargetAuthorizationPage() {
               </div>
 
               <p style={{ color: "var(--text-2)", fontSize: "13px", lineHeight: "1.6", margin: "0 0 14px" }}>
-                Revoking authorization immediately prohibits any new test runs against this target and halts execution. Historical test reports and evidence remain permanently auditable.
+                Revoking authorization immediately prohibits any new tests against this target and halts execution. Historical test reports and evidence remain permanently auditable.
               </p>
 
               <label className="confirmation-row" style={{ marginBottom: "14px" }}>
@@ -372,7 +372,7 @@ export function TargetAuthorizationPage() {
                   onChange={(e) => setConfirmRevoke(e.target.checked)}
                 />
                 <span>
-                  I understand that revoking authorization will immediately block test runs on this target.
+                  I understand that revoking authorization will immediately block tests on this target.
                 </span>
               </label>
 
@@ -413,7 +413,7 @@ export function TargetAuthorizationPage() {
             <strong>Audit compliance:</strong> Every authorization grant and revocation records the attesting administrator ID, timestamp, and business justification.
           </p>
           <p style={{ marginTop: "12px" }}>
-            <strong>Scope immutability:</strong> Modifying allowed origins requires creating a new scope revision so that past test runs remain permanently linked to their exact original security boundary.
+            <strong>Scope immutability:</strong> Modifying allowed origins requires creating a new scope revision so that past tests remain permanently linked to their exact original security boundary.
           </p>
         </aside>
       </div>

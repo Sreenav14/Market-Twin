@@ -103,7 +103,7 @@ it("keeps lease secrets out of React Query cache across claim and release", asyn
   expect(cachedAfterClaim).not.toContain("lease-token-secret");
   expect(cachedAfterClaim).not.toContain("viewer-ticket-secret");
 
-  await user.click(screen.getByRole("button", { name: "Done—resume agent" }));
+  await user.click(screen.getByRole("button", { name: "Hand back" }));
   await waitFor(() => expect(api.releaseHumanAction).toHaveBeenCalledOnce());
   const cachedAfterRelease = JSON.stringify(queryClient.getMutationCache().getAll().map((mutation) => ({
     variables: mutation.state.variables, data: mutation.state.data,
@@ -167,7 +167,7 @@ it.each([false, true])("skips only the blocked work while controlling=%s and cle
   expect(skip).toHaveBeenCalledWith(action.id);
   if (controlling) {
     expect(screen.getByRole("heading", { name: "Controlling browser" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done—resume agent" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Hand back" })).toBeDisabled();
   }
   confirmSkip?.();
   expect(await screen.findByRole("heading", { name: "Not tested—human assistance skipped" })).toBeInTheDocument();

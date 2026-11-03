@@ -26,16 +26,16 @@ export function HumanAssistanceHost({ context, children }: { context: RunContext
   const [control, setControl] = useState<ActiveControl>(null);
   const fallback = useRef<HTMLDivElement>(null);
   const location = useLocation();
-  const inline = location.pathname.endsWith("/activity");
+  const inline = ["/activity", "/watch"].some((suffix) => location.pathname.endsWith(suffix));
   const showing = inline || location.pathname.endsWith("/human-action");
   useLayoutEffect(() => {
     if (!showing && !container.parentElement) fallback.current?.append(container);
   }, [showing, container]);
   return <HumanAssistanceContainer.Provider value={container}>
     {control && !showing ? <section className="run-action-required" role="status">
-      <div><h2>You still control the test browser</h2><p>The agent is paused. Return to the browser or finish the handoff.</p></div>
-      <Link className="secondary-button" to={`/runs/${context.run.id}/activity`}>Return to browser control</Link>
-      <button type="button" className="primary-button" onClick={control.done}>Done—resume agent</button>
+      <div><h2>You still control the test browser</h2><p>The tester is paused. Return to the browser or finish the handoff.</p></div>
+      <Link className="secondary-button" to={`/runs/${context.run.id}/watch`}>Return to browser control</Link>
+      <button type="button" className="primary-button" onClick={control.done}>Hand back</button>
     </section> : null}
     {children}
     <div ref={fallback} hidden={showing || !control} className="human-assistance-fallback" />
@@ -204,7 +204,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
     <section className="results-boundary" aria-labelledby="human-action-heading">
       <p className="section-label">Human assistance</p>
       <h2 id="human-action-heading">Continue in the test browser</h2>
-      <p>MarketTwin pauses the agent while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>
+      <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>
       {!canManageHumanActions ? <p className="human-action-denied" role="status">Human browser control and action approvals require an owner or administrator role. {run.status === "awaiting_human" ? "This test is paused until an authorized operator acts." : "Ask an authorized operator to review protected requests."}</p> : null}
       {canManageHumanActions ? <>
       <h2>Login and protected interaction</h2>
@@ -216,7 +216,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
         <div className="empty-state">
           <Clock3 aria-hidden="true" />
           <h2>{ended ? "No human assistance was requested" : run.status === "awaiting_human" ? "Waiting for an available assistance request" : "No human assistance is needed right now"}</h2>
-          <p>{ended ? "This test ended without a human handoff. There is no active takeover to connect to; review the recorded steps and evidence." : run.status === "awaiting_human" ? "The test reports a human wait, but no authorized request is available yet. Refresh the test if this state persists." : "Agents continue normally. A request and live browser controls appear here only when execution encounters a protected interaction."}</p>
+          <p>{ended ? "This test ended without a human handoff. There is no active takeover to connect to; review the recorded steps and evidence." : run.status === "awaiting_human" ? "The test reports a human wait, but no authorized request is available yet. Refresh the test if this state persists." : "Testers continue normally. A request and live browser controls appear here only when execution encounters a protected interaction."}</p>
           {ended ? <Link className="text-link" to={`/runs/${run.id}/journeys`}>Review execution and recorded evidence</Link> : null}
         </div>
       ) : null}
@@ -226,7 +226,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
           <UserRound aria-hidden="true" />
           <div>
             <h2>Awaiting human: {action.request_type.replaceAll("_", " ")}</h2>
-            <p>The agent is paused. Taking control opens the same supervised browser context.</p>
+            <p>The tester is paused. Taking control opens the same supervised browser context.</p>
             <RequestContext action={action} runId={run.id} />
             {action.instructions ? <p>{action.instructions}</p> : null}
             {action.browser_state && action.browser_state !== "open" ? <p role="alert">This browser is no longer available for interaction. Review the request status or skip this work.</p> : null}
@@ -248,12 +248,12 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
             <div className="hbv-active-header__info">
               <h2>Controlling browser</h2>
               {activeAction ? <RequestContext action={activeAction} runId={run.id} /> : null}
-              <p>{activeAction?.instructions ?? "Complete the requested interaction within approved origins, then choose Done to return control to the agent."}</p>
+              <p>{activeAction?.instructions ?? "Complete the requested interaction within approved origins, then choose Done to return control to the tester."}</p>
               <p className="muted">Lease expires {new Date(activeLease.expires_at).toLocaleTimeString()}.</p>
             </div>
             <div className="button-row hbv-active-header__actions">
               <button className="primary-button" type="button" disabled={release.isPending || skip.isPending} onClick={() => release.mutate(activeRequestId)}>
-                {release.isError ? "Retry Done—resume agent" : "Done—resume agent"}
+                {release.isError ? "Retry Hand back" : "Hand back"}
               </button>
               <button className="secondary-button" type="button" disabled={skip.isPending || release.isPending} onClick={() => skip.mutate(activeRequestId)}>Skip this case/journey</button>
             </div>
@@ -272,9 +272,9 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
           )}
         </div>
       ) : null}
-      {release.isError ? <p role="alert">Resume delivery failed. Retry Done to notify the worker. Agent control remains blocked until the handoff is verified.</p> : null}
+      {release.isError ? <p role="alert">Resume delivery failed. Retry Done to notify the worker. Tester control remains blocked until the handoff is verified.</p> : null}
 
-      {skip.isError ? <p role="alert">Skip could not be confirmed. Retry Skip; the agent remains paused until browser control is safely revoked.</p> : null}
+      {skip.isError ? <p role="alert">Skip could not be confirmed. Retry Skip; the tester remains paused until browser control is safely revoked.</p> : null}
 
       {leased.map((action) => (
         <article className="study-summary" key={action.id}>
@@ -332,7 +332,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       </section>
       </> : null}
 
-      <p className="muted">Enter login details only in the protected browser, using a dedicated test account. MarketTwin forwards your input to the browser; the agent is paused. Credential entry is not intentionally retained, and scoped session state may be held temporarily for this test. Never paste credentials into notes or chat.</p>
+      <p className="muted">Enter login details only in the protected browser, using a dedicated test account. MarketTwin forwards your input to the browser; the tester is paused. Credential entry is not intentionally retained, and scoped session state may be held temporarily for this test. Never paste credentials into notes or chat.</p>
     </section>
   );
 }

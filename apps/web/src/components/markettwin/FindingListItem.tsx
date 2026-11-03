@@ -3,6 +3,7 @@ import { ArrowUpRight, Paperclip, Route } from "lucide-react";
 import type { Finding } from "../../lib/api";
 import { findingClassification } from "../../lib/results";
 import { SeverityBadge } from "../ui/StatusBadge";
+import { statusLabel } from "../../lib/format";
 
 export function FindingListItem({
   finding,
@@ -21,7 +22,7 @@ export function FindingListItem({
         </div>
         <div className="finding-copy">
           <span className="category-label">
-            {findingClassification(finding)} ·{" "}
+            {statusLabel(findingClassification(finding))} ·{" "}
             {finding.category.replaceAll("_", " ")}
           </span>
           <h3>{finding.title}</h3>

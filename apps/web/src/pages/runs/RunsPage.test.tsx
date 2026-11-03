@@ -49,7 +49,7 @@ it("opens applications first, then loads only the selected application's tests",
   expect(screen.getByText(/Checkout/)).toBeInTheDocument();
   await userEvent.type(screen.getByRole("searchbox", { name: "Find a test" }), "missing");
   expect(screen.getByRole("heading", { name: "No matching tests" })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("link", { name: "All applications" }));
+  await userEvent.click(screen.getByRole("link", { name: "All tests" }));
   await screen.findByText("Other");
 });
 

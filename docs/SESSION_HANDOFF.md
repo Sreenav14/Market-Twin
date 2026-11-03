@@ -1,5 +1,57 @@
 # MarketTwin implementation handoff
 
+Current follow-up: user asked ALL old UI surfaces be unified with concept format and
+architecture. /root/unify_test_pages owns runs/components/markettwin, now largely
+finished (94 focused pass); /root/unify_app_settings management (24 pass + browserQA
+green); /root/unify_public_auth auth/public/system (26 pass, publicbrowserlastlabel
+contrast retest). Root owns shared statusLabel/StatusBadge, concept-workspaceCSS,
+styles imports, unusedOverviewPage compatibility re-export, final integration.
+Frontend full serialized suite session70427 is active. All typechecks currentlypass.
+Browser management25 widths + testdetail6 layouts +11 WCAG audits +keyboard passed;
+root visually inspected create360/apps1440 and corrected control order, square styles,
+workspace font tokens. UrlIntakeForm label ink-2 fixes rose-background AA contrast.
+No backend/API/auth semantics changes or benchmark rerun. Before final: full suite,
+build/typecheck, public accessibility result, final docs and source whitespacecheck.
+
+## Final checkpoint — 2026-11-02 21:32 local (supersedes older checkpoints)
+
+Completed locally: Phases 0–7 plus requested live UI integration. All ten acceptance
+gates passed using counted Runs1,4,5,6,7,8 under source contract
+`04e84d9b-1a27-4f1e-b8ae-fca678a1d3cd`, v1, hash
+`3fe82169502657202ceb372c6744163f035bac03267e31fc96f980b5e9bcf373`.
+Source discovery ran once; five later replays performed zero discovery. Raw
+outcome/assertion/replay tables, excluded Runs2/3 and startup failures are in
+V1_BENCHMARK_RESULTS. Final score artifact is retry2.score.json under .local.
+
+Final full Python:1245 passed,23 skipped,0 failed,10m17s; log
+`.local/fix-spec-python-final-phase7-20261102.log`. Full web:199 passed across39
+files; typecheck/build/Ruff/production-focused Pyright pass. New requests default
+discovery, explicit old modes/historical fallback preserved, exact legacy banner
+guarded. No viewer-policy relaxation; previously failing test passed in final suite.
+UI uses real protected dashboard/watch/results, explicit /examples demos, retained
+URL through setup; detail/auth layouts are preserved. Cleanup timeouts left three
+working persona outcomes inconclusive; thresholds passed honestly. No matched old
+engine baseline, so no comparative superiority claim. No commits or deployment.
+
+21:24 local: Phase7 source stable. Four new-request defaults discovery; explicit
+legacy/deep retained, persisted missing-mode fallback remains legacy. Exact legacy
+banner guards tested. Focused Python65/web23 pass, production Pyright/Ruff and final
+web typecheck/build pass. Full web session6540 still running; final full Python
+log `.local/fix-spec-python-final-phase7-20261102.log` at39%, no failures yet.
+No viewer production/test relaxation; isolated prior failure passed15.54s. Root
+needs final suite results, final docs/plan sync, final table of all run gates and
+honest no-matched-old-engine-baseline verdict, plus local/no-commit confirmation.
+
+21:18 local continuation: root independently ran scorer on complete retry2 campaign,
+status PASSED and every gate true. Run 8 user report sent: working,0/4,nav no,false0,
+91.7% terminal,8.3% inconclusive,7m18s. Root authorized new_ui_wiring Phase7 defaults,
+legacy banner/tests now; historical missing snapshot mode must remain legacy.
+Full postfix Python log:1236passed23skipped1failed viewer_gateway TLS realcontext
+test line539 expected control_mode human, got none after detach. scorer_finish
+resumed to diagnose/fix without weakening human-control policy. reliability_audit
+resumed to complete raw tables/all-gates table/excluded diagnostics/comparison limit.
+No matched old-engine baseline, so no beats-old-engines claim. No commits.
+
 13:04 update: Run 7 working #2 reported 0 confirmations, 24/24 terminal, no
 inconclusive/interventions, integrity/provenance pass, 344.48 seconds; exact-format
 report sent to user. Run 8 working #3 `bb032b1b-092e-4bc7-b1d2-cf32bcdaaf3a`

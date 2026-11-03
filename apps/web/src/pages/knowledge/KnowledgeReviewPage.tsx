@@ -256,7 +256,7 @@ export function KnowledgeReviewPage() {
                     <span className="status-badge status-success">Available for tests</span>
                   </div>
                   <p className="knowledge-approved-status" style={{ margin: 0, fontSize: "13px", color: "var(--text-2)" }}>
-                    This knowledge set has been approved and is available for inclusion in test runs across your workspace.
+                    This knowledge set has been approved and is available for inclusion in tests across your workspace.
                   </p>
                 </div>
                 <KnowledgeApplications

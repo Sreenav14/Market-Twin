@@ -33,6 +33,23 @@ from markettwin_shared.feature_plan import CaseAction, SemanticTarget
 from pydantic import ValidationError
 
 
+def test_new_runs_default_to_discovery_contract() -> None:
+    request = test_run_api.CreateTestRunRequest(
+        target_id=uuid4(), study_brief="Check the storefront.",
+    )
+    assert request.execution_mode == "discovery_contract_v1"
+
+
+@pytest.mark.parametrize("mode", ["legacy_persona", "deep_feature_v1", "discovery_contract_v1"])
+def test_new_runs_preserve_explicit_execution_modes(
+    mode: Literal["legacy_persona", "deep_feature_v1", "discovery_contract_v1"],
+) -> None:
+    request = test_run_api.CreateTestRunRequest(
+        target_id=uuid4(), study_brief="Check the storefront.", execution_mode=mode,
+    )
+    assert request.execution_mode == mode
+
+
 @pytest.mark.parametrize("mode", ["required", "optional"])
 def test_authentication_mode_requires_explicit_identity_policy(mode: str) -> None:
     with pytest.raises(ValidationError, match="approved identity verification policy"):
@@ -835,6 +852,7 @@ async def test_legacy_opt_out_still_requires_protected_identity_policy(monkeypat
             application.application_id,
             test_run_api.CreateTestRunRequest(
                 target_id=target.target_id, study_brief="Check protected fixture.",
+                execution_mode="legacy_persona",
                 runtime_human_assistance=False,
             ), make_request(),
         )

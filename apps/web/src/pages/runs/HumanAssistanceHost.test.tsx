@@ -28,11 +28,11 @@ it("keeps one lease owner and the same viewer through live, legacy and other run
   const release = vi.spyOn(api, "releaseHumanAction").mockResolvedValue({ generation: 2 });
   const context = { run: { id: "run", status: "awaiting_human" }, user: { id: "owner" }, workspace: { id: "workspace", role: "owner" } } as RunContext;
   function Layout() { return <HumanAssistanceHost context={context}>
-    <nav><Link to="/runs/run/activity">Live route</Link><Link to="/runs/run/human-action">Legacy route</Link><Link to="/runs/run/overview">Summary route</Link></nav>
+    <nav><Link to="/runs/run/watch">Live route</Link><Link to="/runs/run/human-action">Legacy route</Link><Link to="/runs/run/overview">Summary route</Link></nav>
     <Outlet context={context} />
   </HumanAssistanceHost>; }
-  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/runs/run/activity"]}><Routes>
-    <Route path="/runs/run" element={<Layout />}><Route path="activity" element={<HumanActionPage />} /><Route path="human-action" element={<HumanActionPage />} /><Route path="overview" element={<h2>Summary</h2>} /></Route>
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/runs/run/watch"]}><Routes>
+    <Route path="/runs/run" element={<Layout />}><Route path="watch" element={<HumanActionPage />} /><Route path="activity" element={<HumanActionPage />} /><Route path="human-action" element={<HumanActionPage />} /><Route path="overview" element={<h2>Summary</h2>} /></Route>
   </Routes></MemoryRouter></QueryClientProvider>);
   await user.click(await screen.findByRole("button", { name: /Take browser control/ }));
   const original = await screen.findByTestId("protected-viewer");
@@ -46,7 +46,7 @@ it("keeps one lease owner and the same viewer through live, legacy and other run
   expect(counts.mounted).toBe(1);
   expect(counts.removed).toBe(0);
   expect(claim).toHaveBeenCalledOnce();
-  await user.click(screen.getByRole("button", { name: "Done—resume agent" }));
+  await user.click(screen.getByRole("button", { name: "Hand back" }));
   expect(release).toHaveBeenCalledOnce();
   expect(JSON.stringify(client.getMutationCache().getAll().map((item) => item.state))).not.toContain("secret-token");
 });

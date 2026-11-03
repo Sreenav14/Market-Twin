@@ -46,7 +46,7 @@ it("keeps a recorded result unverified while evaluation is pending", async () =>
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter><FeatureCases runId="run-1" userId="user-1" /></MemoryRouter>
   </QueryClientProvider>);
-  expect(await screen.findByText(/Recorded result awaiting verification: not satisfied/)).toBeInTheDocument();
+  expect(await screen.findByText(/Recorded result awaiting verification: Check did not pass/)).toBeInTheDocument();
   expect(screen.getByText(/not a confirmed defect/)).toBeInTheDocument();
 });
 
@@ -64,7 +64,7 @@ it("drills from the case list into assertion provenance without changing verdict
   expect(await screen.findByRole("heading", { name: "Invalid email" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Save profile/ }));
   expect(screen.getByRole("heading", { name: "Save profile" })).toBeInTheDocument();
-  expect(screen.getByText("inconclusive", { exact: true })).toBeInTheDocument();
+  expect(screen.getByText("Could not check", { exact: true })).toBeInTheDocument();
   expect(screen.getByText("inferred", { exact: true })).toBeInTheDocument();
 });
 

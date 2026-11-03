@@ -11,7 +11,7 @@ export function SettingsLayout() {
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description="Account, workspace, membership, and security settings are separated so permissions and backend support remain explicit."
+        description="Your account, workspace, members, and security."
       />
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings sections">

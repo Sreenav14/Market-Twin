@@ -50,17 +50,19 @@ export function ResultsBoundary({ children }: { children: ReactNode }) {
             ? "Browser execution is complete. Evaluation is still pending, so product findings are not ready. This page checks automatically. If it continues waiting, ask your workspace operator to check the evaluation worker; its status is also shown in the test flow."
             : stopped
               ? "Review the test status and target configuration before starting another test."
+              : run.configuration_snapshot.discovery_stage === "awaiting_approval"
+                ? "Exploration is complete. Approve the tests before the approved journeys are checked."
               : run.status === "awaiting_human"
-                ? "This test is paused for an authorized human action. Open Human Assistance to review the request; results remain unverified."
+                ? "This test is paused for an authorized human action. Open Watch live to review the request; results are not confirmed yet."
               : run.status === "draft"
                 ? featureRun
                   ? "Start this draft to plan and execute feature cases. Evaluation follows recorded browser execution."
-                  : "Start this draft to create agents and execute its journeys. Evaluation follows execution."
+                  : "Start this draft to prepare testers and execute its journeys. Evaluation follows execution."
                 : run.status === "queued"
                   ? "This test is waiting for an execution worker. Evaluation starts after its journeys finish."
                   : featureRun
                     ? "Feature-case planning or browser execution is in progress. Evaluation follows execution; findings and the final report are not ready yet."
-                    : "Agents are still planning or executing journeys. Evaluation follows execution; findings and the final report are not ready yet."}
+                    : "Testers are still preparing or checking journeys. Evaluation follows execution; findings and the final report are not ready yet."}
         </p>
         <Button variant="secondary" onClick={refresh}>
           Check again

@@ -6,6 +6,7 @@ import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { RunAssessmentView } from "../../components/markettwin/RunAssessmentView";
+import { statusLabel } from "../../lib/format";
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -80,10 +81,10 @@ export function RunEvaluationPage() {
                 <p style={{ margin: 0, fontSize: 14, color: "var(--text-2)", lineHeight: 1.5 }}>
                   {typeof assessment?.reason === "string"
                     ? assessment.reason
-                    : "An overall model assessment was not recorded for this test run. The evaluation model was not configured or did not complete."}
+                    : "An overall model assessment was not recorded for this test. The evaluation model was not configured or did not complete."}
                 </p>
                 <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-3)" }}>
-                  All visual evidence criteria, deterministic assertions, and recorded steps below remain fully verified and inspectable.
+                  Recorded checks and steps remain available below. Inspect each result and its evidence before drawing conclusions.
                 </p>
               </div>
             </div>
@@ -122,7 +123,7 @@ export function RunEvaluationPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(0, 1.8fr) 130px minmax(0, 2fr) minmax(160px, 1.2fr)",
+                  gridTemplateColumns: "var(--concept-check-columns)",
                   gap: 16,
                   padding: "12px 20px",
                   background: "var(--surface-muted)",
@@ -160,7 +161,7 @@ export function RunEvaluationPage() {
                     key={index}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "minmax(0, 1.8fr) 130px minmax(0, 2fr) minmax(160px, 1.2fr)",
+                      gridTemplateColumns: "var(--concept-check-columns)",
                       gap: 16,
                       alignItems: "start",
                       padding: "16px 20px",
@@ -173,7 +174,7 @@ export function RunEvaluationPage() {
                         {typeof record.criterion === "string" ? record.criterion : "Visual check"}
                       </h4>
                       <span style={{ display: "block", fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-                        Persona reported: {typeof record.reported_status === "string" ? record.reported_status : "not recorded"}
+                        Tester reported: {typeof record.reported_status === "string" ? statusLabel(record.reported_status) : "not recorded"}
                       </span>
                     </div>
 
@@ -265,7 +266,7 @@ export function RunEvaluationPage() {
             }}
           >
             <Cpu size={16} style={{ color: "var(--text-3)" }} aria-hidden="true" />
-            <span>Advanced runtime metadata & evaluation agents</span>
+            <span>Advanced model details and evaluation</span>
             {agents.data?.length ? (
               <span
                 style={{
@@ -283,7 +284,7 @@ export function RunEvaluationPage() {
 
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
             <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 16 }}>
-              Evaluation is performed by bounded evaluation agents assessing recorded outputs against criteria schemas and visual artifacts.
+              Evaluation checks saved outputs and visual evidence against the planned checks.
             </p>
 
             {agents.data?.length ? (
@@ -318,7 +319,7 @@ export function RunEvaluationPage() {
                     {agent.effective_instruction ? (
                       <details style={{ marginTop: 10 }}>
                         <summary style={{ fontSize: 12, color: "var(--text-3)", cursor: "pointer" }}>
-                          Effective agent instructions
+                          Effective model instructions
                         </summary>
                         <pre
                           style={{
@@ -341,10 +342,10 @@ export function RunEvaluationPage() {
               </div>
             ) : agents.isError ? (
               <p className="error-text" role="alert">
-                Could not load evaluation agents: {agents.error.message}
+                Could not load evaluation details: {agents.error.message}
               </p>
             ) : (
-              <p style={{ fontSize: 13, color: "var(--text-3)" }}>No evaluation agents recorded.</p>
+              <p style={{ fontSize: 13, color: "var(--text-3)" }}>No evaluation model details recorded.</p>
             )}
           </div>
         </details>

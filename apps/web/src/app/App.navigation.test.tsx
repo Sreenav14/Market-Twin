@@ -91,7 +91,7 @@ it("carries a landing URL through sign-in and app creation into target authoriza
   await events.click(screen.getByRole("button", { name: "Continue to workspace" }));
   const name = await screen.findByRole("textbox", { name: /^Name/ });
   await events.type(name, app.name);
-  await events.click(screen.getByRole("button", { name: "Create application" }));
+  await events.click(screen.getByRole("button", { name: "Add an app" }));
   await waitFor(() => expect(window.location.pathname).toBe("/applications/app/targets/new"));
   expect(await screen.findByRole("textbox", { name: /Base URL/i })).toHaveValue(url);
   expect(createTarget).not.toHaveBeenCalled();

@@ -1,8 +1,9 @@
 # V1 product contract
 
-**Status (2026-11-02): implementation description; acceptance is pending.** The
-`discovery_contract_v1` mode is opt-in. New runs still default to
-`legacy_persona`; do not treat this document as a Phase 7 release declaration.
+**Status (2026-11-02): six-run benchmark gates passed; Phases 0–7 implemented
+and final regression validation passed locally.** New runs default to
+`discovery_contract_v1`. Legacy and deep modes remain explicitly selectable, and
+historical runs without a saved mode retain their legacy interpretation.
 See [current status](CURRENT_STATE.md) and [session handoff](SESSION_HANDOFF.md)
 for the active acceptance results.
 
@@ -67,12 +68,33 @@ remain separate from approval of the test contract.
 ## Current mode and acceptance status
 
 `legacy_persona`, `deep_feature_v1`, and `discovery_contract_v1` remain separate
-execution modes. The current server and new-run UI defaults are still
-`legacy_persona`; Phase 7 may change that default only after every benchmark gate
-in section 8.2 of the [fix specification](../MARKETTWIN_FIX_SPEC_FOR_CODEX.md) passes.
-The final six-run acceptance and full regression-suite gate are pending as of this
-document's date. Benchmark measurements belong in the separate
-`V1_BENCHMARK_RESULTS.md`; none are asserted here.
+execution modes. New server requests and the new-run UI now default to
+`discovery_contract_v1`, following the passing six-run benchmark required by
+section 8.2 of the [fix specification](../MARKETTWIN_FIX_SPEC_FOR_CODEX.md).
+Explicit legacy/deep requests remain supported. Phase 7 focused checks passed
+65 Python and 23 frontend tests. A preceding full Python run had one viewer-control
+failure under concurrent benchmark load; that test passed in isolation without
+relaxing its safety assertions. Final full regression passed: 1,245 Python tests,
+23 skips, zero failures; 199 frontend tests passed. Typecheck, build, Ruff, and
+focused production Pyright checks passed. No deployment or commit is implied.
+Detailed run metrics and the scorer gate table are in
+[`V1_BENCHMARK_RESULTS.md`](V1_BENCHMARK_RESULTS.md).
+
+### Measured benchmark scope and limits
+
+The passing campaign reused one owner-approved frozen contract
+(`04e84d9b-1a27-4f1e-b8ae-fca678a1d3cd`, version 1,
+`3fe82169502657202ceb372c6744163f035bac03267e31fc96f980b5e9bcf373`) and its
+discovery map across three broken-fixture and three good-fixture replays. All four
+seeded defects, including navigation, were confirmed in each broken run. The good
+runs produced no confirmed findings. Across all runs, 138 of 144 original
+journey/persona outcomes were terminal; six were inconclusive. Three good-fixture
+personas across Runs 6 and 8 were inconclusive because cleanup timed out after
+their actions and assertions completed. Cleanup timeouts remain a measured runtime
+limit; they are not treated as product defects. The benchmark covers only this
+fixture, approved contract, target, personas, and execution budget. No matched
+legacy or deep-engine comparison exists, so these results do not establish
+superiority over those modes.
 
 ## Implementation references
 

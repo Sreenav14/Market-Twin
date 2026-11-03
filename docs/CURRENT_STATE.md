@@ -1,5 +1,67 @@
 # Current MarketTwin state
 
+## UI unification follow-up — 2026-11-02 (current task)
+
+User requested remaining old pages be unified and wired to the new architecture.
+Implemented frontend-only concept presentation for test/evidence/takeover pages,
+applications/targets/knowledge/settings, public/auth/recovery pages and shared
+headers/forms/statuses. Old overview implementation now delegates to the one live
+dashboard. API fields, auth/session semantics, evidence and human-control policy
+remain unchanged; legacy/deep history remains available in the unified presentation.
+Discovery approval/current-stage links and /watch handoff persistence corrected;
+aggregate model ratings moved away from primary feedback; new reports retain named
+tester comments, with no numeric feelings score. Read-only knowledge links honor roles.
+
+Focused checks passed: test/detail94, management24, public/auth26; typecheck passes.
+Browser QA passed 25 management viewport cases, six test-detail layouts, 11 WCAG AA
+audits and keyboard/focus checks; public four-page/five-width sweeps passed geometry,
+with landing label contrast corrected and targeted accessibility rerun in progress.
+Final full frontend suite is running in session70427. No Python/backend benchmark
+rerun is needed for these frontend-only changes. Nothing committed.
+
+## Final checkpoint — 2026-11-02 21:32 local (supersedes historical checkpoints below)
+
+Phases 0–7 and the requested live UI wiring are implemented locally, uncommitted.
+All ten scorer gates passed for one good-fixture discovery/frozen contract reused
+by counted Runs 1,4,5,6,7,8 (three broken, three working). Broken runs each confirmed
+4/4 defects including navigation; working runs confirmed zero defects. The same
+contract ID/version/hash and original discovery evidence were retained throughout.
+All raw tables, startup failures and excluded Runs 2/3 are recorded in
+`docs/V1_BENCHMARK_RESULTS.md`; excluded diagnostics were not counted as successes.
+
+Final validation: Python **1,245 passed, 23 skipped, zero failed** in 10m17s
+(`.local/fix-spec-python-final-phase7-20261102.log`); frontend **199/199 passed**;
+typecheck/build/Ruff and focused production Pyright passed. The prior intermittent
+TLS viewer test passed in this final full run without weakening safety behavior.
+New API/runtime/client/UI requests default to discovery_contract_v1; explicit
+legacy/deep selections and historical legacy fallback remain. Legacy report notice
+is mode-specific. Live concept routes use real authenticated data; samples are
+explicit /examples/* routes. Existing detail/auth layouts remain, so complete
+all-pages visual-spec acceptance is not claimed. Three working-fixture outcomes
+were inconclusive from cleanup timeouts; all benchmark thresholds still passed.
+No matched old-engine baseline exists, so superiority over old engines is unproven.
+No commit, push, deployment, or shared-service restart was performed.
+
+21:24 local: Phase 7 defaults/banner implemented after all benchmark gates passed.
+New API/runtime/web requests default to discovery_contract_v1; explicit legacy/deep
+modes remain; historical missing-mode snapshots still map to legacy. Exact legacy
+notice is limited to legacy reports. Focused Python65/frontend23 passed; production
+Pyright, Ruff, frontend typecheck/build pass. Discovery depth copy now matches real
+3/6/8 approved-journey caps. Final full Python `.local/fix-spec-python-final-phase7-20261102.log`
+is at 39% with no failures; serialized full frontend suite is also still running.
+Prior TLS viewer test passed isolated; no safety policy or assertion was relaxed.
+
+Final benchmark independently scored PASS (2026-11-02): every aggregate gate is
+true in `.local/contract-benchmark-single-contract-20261102-retry2.json`. Runs
+1/4/5 broken each detected 4/4 including navigation; working Runs 6/7/8 confirmed
+zero defects. Completion: 87.5%,100%,100%,95.8%,100%,91.7%; inconclusive:
+12.5%,0%,0%,4.2%,0%,8.3%. All six have valid provenance/integrity and zero manual
+interventions. Run 8 elapsed 7m18s. Shared source contract/hash is unchanged.
+Final full Python validation: 1,236 passed, 23 skipped, one TLS viewer-control
+test failed (expected human mode after detach, observed none). scorer_finish owns
+root-cause fix. Phase7 defaults/banner/tests now authorized and being implemented
+by new_ui_wiring. No claim of all-phases completion until those checks finish.
+
 13:04 local: Run 7 working #2 reported 0 confirmations, 24/24 terminal, zero
 inconclusive/interventions, integrity/provenance pass; 5m44s. Final Run 8 working #3
 `bb032b1b-092e-4bc7-b1d2-cf32bcdaaf3a` is executing. Five counted reports now

@@ -135,9 +135,6 @@ function Grounding({ item }: { item: ApplicationKnowledgeDraft | GeneratedSkillD
             <span className="muted" style={{ fontSize: "12px" }}>None cited</span>
           )}
         </div>
-        <span className="knowledge-confidence muted" style={{ fontSize: "12px" }}>
-          Model confidence: <strong style={{ color: "var(--text)" }}>{item.grounding_confidence}</strong>
-        </span>
       </div>
       {item.warnings.length ? (
         <p className="knowledge-warning" style={{ marginTop: "6px", fontSize: "12px" }}>
@@ -153,7 +150,7 @@ function KnowledgeItems({ items }: { items: ApplicationKnowledgeDraft[] }) {
   return items.map((item, index) => (
     <article className="knowledge-item" key={`${item.name}-${index}`}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-        <span className="status-badge status-neutral" style={{ fontSize: "11px", padding: "1px 7px" }}>
+        <span className="knowledge-meta" style={{ fontSize: "11px", padding: "1px 7px" }}>
           Generated summary
         </span>
       </div>
@@ -170,7 +167,7 @@ function ArtifactItems({ items }: { items: ProcedureArtifactDraft[] }) {
     <article className="knowledge-item" key={`${item.name}-${index}`}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
         <p className="eyebrow" style={{ margin: 0 }}>{item.kind}</p>
-        <span className="status-badge status-neutral" style={{ fontSize: "11px", padding: "1px 7px" }}>
+        <span className="knowledge-meta" style={{ fontSize: "11px", padding: "1px 7px" }}>
           Generated summary
         </span>
       </div>
@@ -193,7 +190,7 @@ function SkillItems({ items }: { items: GeneratedSkillDraft[] }) {
   return items.map((item, index) => (
     <article className="knowledge-item" key={`${item.name}-${index}`}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-        <span className="status-badge status-neutral" style={{ fontSize: "11px", padding: "1px 7px" }}>
+        <span className="knowledge-meta" style={{ fontSize: "11px", padding: "1px 7px" }}>
           Generated summary
         </span>
       </div>
@@ -258,7 +255,7 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 id="knowledge-heading">Application knowledge</h2>
-          <span className="status-badge status-neutral" style={{ fontSize: "11px" }}>
+          <span className="knowledge-meta" style={{ fontSize: "11px" }}>
             {preview.application_knowledge.length} {preview.application_knowledge.length === 1 ? "item" : "items"}
           </span>
         </div>
@@ -274,7 +271,7 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 id="artifacts-heading">Artifacts</h2>
-          <span className="status-badge status-neutral" style={{ fontSize: "11px" }}>
+          <span className="knowledge-meta" style={{ fontSize: "11px" }}>
             {preview.artifacts.length} {preview.artifacts.length === 1 ? "item" : "items"}
           </span>
         </div>
@@ -290,12 +287,12 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 id="skills-heading">Skills</h2>
-          <span className="status-badge status-neutral" style={{ fontSize: "11px" }}>
+          <span className="knowledge-meta" style={{ fontSize: "11px" }}>
             {preview.skills.length} {preview.skills.length === 1 ? "skill" : "skills"}
           </span>
         </div>
         {preview.skills.length ? (
-          <p className="knowledge-section-help">Capabilities agents can test, with conditions and expected outcomes.</p>
+          <p className="knowledge-section-help">Capabilities testers can test, with conditions and expected outcomes.</p>
         ) : null}
         <SkillItems items={preview.skills} />
       </section>
@@ -303,7 +300,7 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
       <section className="section-block" aria-labelledby="evidence-heading">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 id="evidence-heading">Evidence</h2>
-          <span className="status-badge status-info" style={{ fontSize: "11px" }}>
+          <span className="knowledge-meta" style={{ fontSize: "11px" }}>
             {preview.evidence.length} {preview.evidence.length === 1 ? "source region" : "source regions"}
           </span>
         </div>
@@ -331,7 +328,7 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
                     fontSize: "12px",
                   }}
                 >
-                  <span className="status-badge status-info" style={{ fontSize: "11px", padding: "1px 6px" }}>
+                  <span className="knowledge-meta" style={{ fontSize: "11px", padding: "1px 6px" }}>
                     Source evidence
                   </span>
                   <span className="monospace" style={{ color: "var(--text-3)", fontSize: "11px" }}>

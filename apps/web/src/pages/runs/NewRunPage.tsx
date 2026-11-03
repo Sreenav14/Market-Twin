@@ -53,7 +53,8 @@ export function NewRunPage() {
   const [brief, setBrief] = useState("");
   const [name, setName] = useState("");
   const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
-  const [executionMode, setExecutionMode] = useState(params.get("mode") === "discovery_contract_v1" ? "discovery_contract_v1" : "legacy_persona");
+  const requestedMode = params.get("mode");
+  const [executionMode, setExecutionMode] = useState(requestedMode === "legacy_persona" || requestedMode === "deep_feature_v1" ? requestedMode : "discovery_contract_v1");
   const [humanActionApprovals, setHumanActionApprovals] = useState(false);
   const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
   const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
@@ -298,13 +299,19 @@ export function NewRunPage() {
                 </option>
               ))}
             </select>
-            {executionMode === "discovery_contract_v1" ? <><label htmlFor="app-url">App URL</label><input id="app-url" readOnly value={target?.base_url || ""} /><p className="form-help">Choose an authorized app above to explore its address.</p></> : null}
             {!target ? <p role="alert" className="form-error">The requested target is unavailable or not authorized. Choose an authorized target to continue.</p> : null}
             <span className="authorized-label">
               <ShieldCheck size={15} aria-hidden="true" />
               {target ? "Authorized" : "Target required"}
             </span>
           </div>
+          {executionMode === "discovery_contract_v1" ? <div className="composer-knowledge form-grid">
+            <div className="composer-app-url">
+              <label htmlFor="app-url">App URL</label>
+              <input id="app-url" className="text-input" readOnly value={target?.base_url || ""} aria-describedby="app-url-help" />
+              <p id="app-url-help" className="form-help">Choose an authorized app above to explore its address.</p>
+            </div>
+          </div> : null}
           <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
               {executionMode === "discovery_contract_v1" ? "What is this app and who is it for?" : "Your testing goal"}
@@ -354,24 +361,24 @@ export function NewRunPage() {
           <div className="composer-knowledge form-grid">
             <label htmlFor="execution-mode">Testing mode</label>
             <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
-              <option value="legacy_persona">Persona journeys</option>
+              <option value="legacy_persona">Older exploratory journeys</option>
               <option value="deep_feature_v1">Feature cases — experimental</option>
               <option value="discovery_contract_v1">Explore, approve and test</option>
             </select>
-            {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unverified.</p> : null}
+            {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unconfirmed.</p> : null}
             <label htmlFor="testing-depth">Testing depth</label>
             <select id="testing-depth" value={testingDepth} disabled={busy} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
               <option value="low">Low — focused coverage</option>
               <option value="medium">Medium — balanced coverage</option>
               <option value="high">High — broader coverage</option>
             </select>
-            <p id="testing-depth-help" className="form-help">{executionMode === "deep_feature_v1" ? <>Feature cases run up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} cases. Broader coverage takes longer.</> : <>Three personas test up to {testingDepth === "low" ? "1 mission (3 journeys)" : testingDepth === "medium" ? "2 missions (6 journeys)" : "4 missions (12 journeys)"}. Broader coverage takes longer.</>}</p>
+            <p id="testing-depth-help" className="form-help">{executionMode === "discovery_contract_v1" ? <>Up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} approved journeys, each tested from three tester perspectives. Testers explore first; you approve the checks before testing begins. Broader coverage takes longer.</> : executionMode === "deep_feature_v1" ? <>Feature cases run up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} cases. Broader coverage takes longer.</> : <>Three testers check up to {testingDepth === "low" ? "1 goal (3 journeys)" : testingDepth === "medium" ? "2 goals (6 journeys)" : "4 goals (12 journeys)"}. Broader coverage takes longer.</>}</p>
           </div>
           <details className="composer-disclosure">
             <summary>Knowledge for this test <span>Optional</span></summary>
           <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
             <h2 id="test-knowledge-heading" className="visually-hidden">Knowledge for this test <span className="muted">Optional</span></h2>
-            <p className="form-help">Select approved knowledge attached to this application before agents are created. You can select up to 10 sets.</p>
+            <p className="form-help">Select approved knowledge attached to this application before testers are created. You can select up to 10 sets.</p>
             {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
               <p className="form-error" role="alert">Could not load knowledge. <Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button></p>
             ) : knowledgeState.data.filter((entry) => entry.status === "approved").length ? (
@@ -392,7 +399,7 @@ export function NewRunPage() {
           <section className="run-create-zone" aria-labelledby="run-security-heading">
             <h2 id="run-security-heading" className="visually-hidden">Security and authorization</h2>
           <p className="form-help">Only controls permitted by the selected target and test mode are available here. Credentials never belong in the test brief or policy fields.</p>
-          <p className="form-help">Agents start without login setup. If a login or protected interaction blocks execution, the agent pauses and asks for help. You can take control within approved origins or skip that case or journey.</p>
+          <p className="form-help">Testers start without login setup. If a login or protected interaction blocks execution, the tester pauses and asks for help. You can take control within approved origins or skip that case or journey.</p>
           {approvalsEligible && executionMode === "deep_feature_v1" ? (
             <section className="composer-knowledge" aria-labelledby="action-approval-heading">
               <h2 id="action-approval-heading">Sensitive action approval</h2>
@@ -436,7 +443,7 @@ export function NewRunPage() {
                 </>
               ) : (
                 <>
-                  {executionMode === "discovery_contract_v1" ? "Send agents to explore" : "Create test"} <ArrowRight size={16} aria-hidden="true" />
+                  {executionMode === "discovery_contract_v1" ? "Explore the app" : "Create test"} <ArrowRight size={16} aria-hidden="true" />
                 </>
               )}
             </Button>

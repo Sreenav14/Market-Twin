@@ -1,454 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  CheckCircle2,
-  Route,
-  ScanLine,
-  ShieldCheck,
-  FileCheck2,
-  ChevronDown,
-  Moon,
-  Sun,
-} from "lucide-react";
-import { BrandMark } from "../../components/ui/BrandMark";
-import { useTheme } from "../../lib/theme";
-
-function PublicLayout({ title, children }: { title: string; children: ReactNode }) {
-  const { isDark, toggleTheme } = useTheme();
-
-  useEffect(() => {
-    document.title = `${title} · MarketTwin`;
-    if (!window.location.hash) window.scrollTo({ top: 0 });
-  }, [title]);
-
-  return (
-    <div className="mt-public evidence-ledger-theme">
-      <a className="mt-skip" href="#public-content">
-        Skip to content
-      </a>
-      <header className="mt-nav">
-        <Link className="mt-brand" to="/" aria-label="MarketTwin home">
-          <BrandMark />
-          <span>
-            MarketTwin
-            <span className="mt-brand-note">Product testing, with evidence.</span>
-          </span>
-        </Link>
-        <nav aria-label="Product navigation" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <NavLink to="/how-it-works">How it works</NavLink>
-          <button
-            className="icon-button theme-toggle-btn"
-            type="button"
-            onClick={toggleTheme}
-            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
-            title={isDark ? "Switch to light theme" : "Switch to dark theme"}
-          >
-            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-          </button>
-          <Link className="mt-button mt-button-small" to="/login">
-            Open workspace <ArrowUpRight size={16} aria-hidden="true" />
-          </Link>
-        </nav>
-      </header>
-      <main id="public-content" tabIndex={-1}>
-        {children}
-      </main>
-      <footer className="mt-footer">
-        <div className="mt-footer-brand">
-          <Link className="mt-brand" to="/" aria-label="MarketTwin home">
-            <BrandMark compact />
-            <span>MarketTwin</span>
-          </Link>
-          <p className="mt-footer-tagline">
-            Authorized browser testing, observable execution, and verifiable evidence.
-          </p>
-        </div>
-        <nav aria-label="Footer navigation">
-          <Link to="/">Home</Link>
-          <Link to="/how-it-works">How it works</Link>
-          <Link to="/login">Open workspace</Link>
-        </nav>
-        <div className="mt-footer-legal">
-          <p>
-            MarketTwin executes against authorized targets only. Simulated persona observations
-            are illustrative and do not replace human research.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-interface EvidenceStep {
-  stepNumber: string;
-  action: string;
-  targetUrl: string;
-  observation: string;
-  evidenceKind: string;
-  evidenceId: string;
-  statusText: string;
-  criterion: string;
-}
-
-const illustrativeSteps: EvidenceStep[] = [
-  {
-    stepNumber: "01",
-    action: "Open profile",
-    targetUrl: "https://target.example.invalid/profile",
-    observation: "Profile opened.",
-    evidenceKind: "Recorded browser step",
-    evidenceId: "step-11",
-    statusText: "Recorded",
-    criterion: "Profile page is available",
-  },
-  {
-    stepNumber: "02",
-    action: "Choose email updates",
-    targetUrl: "https://target.example.invalid/profile",
-    observation: "Control selected.",
-    evidenceKind: "Recorded browser step",
-    evidenceId: "step-12",
-    statusText: "Recorded",
-    criterion: "Email updates can be selected",
-  },
-  {
-    stepNumber: "03",
-    action: "Verify saved state",
-    targetUrl: "https://target.example.invalid/profile",
-    observation: "Email updates enabled.",
-    evidenceKind: "Recorded assertion",
-    evidenceId: "step-13",
-    statusText: "Passed assertion",
-    criterion: "Email updates enabled",
-  },
-];
-
-function HeroEvidenceSequence() {
-  const [selected, setSelected] = useState(0);
-  const step = illustrativeSteps[selected];
-
-  return (
-    <div className="mt-instrument" aria-labelledby="hero-evidence-title">
-      <div className="mt-instrument-bar">
-        <span id="hero-evidence-title">
-          <span className="mt-light" aria-hidden="true" />
-          Inspect a recorded step
-        </span>
-        <span className="mt-badge-demo" aria-label="Illustrative demonstration label">
-          Illustrative observation sequence
-        </span>
-      </div>
-
-      <div className="mt-instrument-context">
-        <div className="mt-question-callout">
-          <span className="mt-kicker">Testing Question</span>
-          <p className="mt-question-text">
-            “Can a test user update a profile using the documented form?”
-          </p>
-        </div>
-        <div className="mt-target-tag">
-          <span className="mt-kicker">Authorized target:</span>
-          <code>https://target.example.invalid</code>
-        </div>
-      </div>
-
-      <div className="mt-demo-grid">
-        <ol className="mt-step-selector" aria-label="Illustrative test steps">
-          {illustrativeSteps.map((item, index) => {
-            const isSelected = index === selected;
-            return (
-              <li key={item.stepNumber}>
-                <button
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => setSelected(index)}
-                  className={isSelected ? "active" : ""}
-                >
-                  <span className="mt-step-number">{item.stepNumber}</span>
-                  <span className="mt-step-action-name">{item.action}</span>
-                  <ArrowRight size={14} aria-hidden="true" />
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-
-        <div className="mt-demo-evidence" aria-live="polite">
-          <h3>{step.action}</h3>
-          <dl className="mt-demo-comparison">
-            <div><dt>Expected</dt><dd>{step.criterion}</dd></div>
-            <div><dt>Observed</dt><dd>{step.observation}</dd></div>
-          </dl>
-
-          <div className="mt-evidence-card">
-            <div className="mt-evidence-card-header">
-              <span className="mt-kicker">Observation</span>
-              <span className="mt-status-tag verified">
-                <CheckCircle2 size={12} aria-hidden="true" /> {step.statusText}
-              </span>
-            </div>
-            <p className="mt-observation-text">{step.observation}</p>
-
-            <div className="mt-evidence-receipt">
-              <div className="mt-receipt-row">
-                <span className="mt-receipt-label">Evidence:</span>
-                <span className="mt-receipt-value">{step.evidenceKind}</span>
-              </div>
-              <div className="mt-receipt-row">
-                <span className="mt-receipt-label">Criterion:</span>
-                <span className="mt-receipt-value">{step.criterion}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <p className="mt-example-note">
-        Illustrative example. Your workspace shows the steps and artifacts recorded for your test; unavailable evidence stays explicit.
-      </p>
-    </div>
-  );
-}
+import { Link, Navigate } from "react-router-dom";
+import { ArrowRight, Route, FileCheck2, ChevronDown } from "lucide-react";
+import { PublicLayout } from "./PublicLayout";
 
 export function HomePage() {
-  return (
-    <PublicLayout title="Understand what your users encounter">
-      {/* Hero Section */}
-      <section className="mt-hero" aria-labelledby="hero-heading">
-        <div className="mt-hero-copy">
-          <p className="mt-kicker">
-            <span className="mt-light" aria-hidden="true" />
-            Authorized browser testing · Evidence-backed verification
-          </p>
-          <h1 id="hero-heading">
-            Test real journeys.<br />
-            <em>Read the evidence.</em>
-          </h1>
-          <p className="mt-lead">
-            Run browser tests against authorized targets. Inspect recorded actions, assertions, and available artifacts to understand what the evidence supports.
-          </p>
-
-          <div className="mt-actions">
-            <Link className="mt-button" to="/login">
-              Open workspace <ArrowRight size={18} aria-hidden="true" />
-            </Link>
-            <Link className="mt-text-link" to="/how-it-works">
-              See how it works <ArrowUpRight size={17} aria-hidden="true" />
-            </Link>
-          </div>
-
-          <p className="mt-hero-footnote">
-            <ShieldCheck size={16} aria-hidden="true" />
-            Tests run strictly against targets and network origins you authorize.
-          </p>
-        </div>
-
-        <HeroEvidenceSequence />
-      </section>
-
-      {/* Principles Strip */}
-      <section className="mt-principle-strip" aria-label="Core testing principles">
-        <span>
-          <Route size={18} aria-hidden="true" /> Authorized Target Scope
-        </span>
-        <span>
-          <ScanLine size={18} aria-hidden="true" /> Observable Browser Execution
-        </span>
-        <span>
-          <ShieldCheck size={18} aria-hidden="true" /> Evidence-First Triage
-        </span>
-      </section>
-
-      {/* 4-Step Visual Workflow */}
-      <section className="mt-section" aria-labelledby="workflow-heading">
-        <div className="mt-section-heading">
-          <p className="mt-kicker">Structured Testing Pipeline</p>
-          <h2 id="workflow-heading">
-            A clear path from question<br />
-            to evidence review.
-          </h2>
-          <p>
-            Move from a testing goal to recorded steps, then review what those steps establish and what remains uncertain.
-          </p>
-        </div>
-
-        <div className="mt-workflow">
-          <article className="mt-workflow-step">
-            <span className="mt-kicker">01 / Input</span>
-            <h3>Define outcome</h3>
-            <p>
-              Select an authorized application target, specify what users must accomplish, and optionally
-              attach approved product specifications to guide the test plan.
-            </p>
-          </article>
-          <article className="mt-workflow-step">
-            <span className="mt-kicker">02 / Execution</span>
-            <h3>Observe action</h3>
-            <p>
-              Follow browser execution and recorded activity. When the agent requests assistance, use the available controls within the approved target scope.
-            </p>
-          </article>
-          <article className="mt-workflow-step">
-            <span className="mt-kicker">03 / Verification</span>
-            <h3>Check evidence</h3>
-            <p>
-              Inspect recorded steps, assertions, and the artifacts available for that step. Missing evidence remains visible.
-            </p>
-          </article>
-          <article className="mt-workflow-step">
-            <span className="mt-kicker">04 / Decision</span>
-            <h3>Decide next action</h3>
-            <p>
-              Review results categorized into verified findings, unverified observations, and test runner limitations.
-              Open the evidence supporting each conclusion.
-            </p>
-          </article>
-        </div>
-
-        <p className="mt-workflow-caveat">
-          * Simulated persona journeys surface patterns for review; they do not replace human user research or constitute
-          proof without corroborating browser evidence.
-        </p>
-      </section>
-
-      {/* Sample Report Anatomy / Evidence Categories */}
-      <section className="mt-evidence-section" aria-labelledby="anatomy-heading">
-        <div className="mt-evidence-intro">
-          <p className="mt-kicker">Evidence Classification</p>
-          <h2 id="anatomy-heading">
-            A claim is a starting point.<br />
-            <em>Evidence is the proof.</em>
-          </h2>
-          <p>
-            Agreement between simulated personas can surface an interesting pattern, but only recorded browser
-            evidence determines whether that pattern represents an actual product defect.
-          </p>
-          <Link className="mt-text-link" to="/how-it-works#results">
-            Understand the result categories <ArrowRight size={17} aria-hidden="true" />
-          </Link>
-          <p className="mt-sample-disclaimer">
-            Illustrative result categories. Your report reflects the evidence recorded for your test.
-          </p>
-        </div>
-
-        <div className="mt-result-stack">
-          <article className="mt-result-card verified">
-            <span className="mt-result-marker mt-confirmed" aria-hidden="true" />
-            <div>
-              <div className="mt-result-card-header">
-                <h3>Verified Issues</h3>
-                <span className="mt-badge-status-v">Direct Proof</span>
-              </div>
-              <p>
-                Browser evidence directly confirms expected behavior failed or a regression occurred.
-                Each finding includes exact step citations, screenshots, and DOM states for immediate reproduction.
-              </p>
-              <div className="mt-sample-citation">
-                <code>Sample: “Annual toggle failed to update checkout total” · Screenshot #art-04, HTTP 422</code>
-              </div>
-            </div>
-          </article>
-
-          <article className="mt-result-card unverified">
-            <span className="mt-result-marker mt-unverified" aria-hidden="true" />
-            <div>
-              <div className="mt-result-card-header">
-                <h3>Needs Verification</h3>
-                <span className="mt-badge-status-u">Inconclusive</span>
-              </div>
-              <p>
-                An agent reports friction, confusion, or a potential issue, but the supporting evidence is
-                partial, missing, or ambiguous. Kept visible for triage without creating false alarms.
-              </p>
-              <div className="mt-sample-citation">
-                <code>Sample: “Persona noted ambiguous tier disclaimer” · Interaction completed, no error logged</code>
-              </div>
-            </div>
-          </article>
-
-          <article className="mt-result-card execution">
-            <span className="mt-result-marker mt-execution" aria-hidden="true" />
-            <div>
-              <div className="mt-result-card-header">
-                <h3>Execution Issues</h3>
-                <span className="mt-badge-status-e">Runner Limitation</span>
-              </div>
-              <p>
-                Browser timeouts, target network policy stops, or tool errors prevented the step from completing.
-                Separated from product bugs so infrastructure boundaries are never confused with software defects.
-              </p>
-              <div className="mt-sample-citation">
-                <code>Sample: “Navigation outside approved origin halted by policy” · Step 04 stopped</code>
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      {/* Who is it for? Strip */}
-      <section className="mt-section mt-audience-section" aria-labelledby="audience-heading">
-        <div className="mt-section-heading">
-          <p className="mt-kicker">Who Is It For?</p>
-          <h2 id="audience-heading">Designed for precision across product teams.</h2>
-          <p>MarketTwin provides distinct value to every stakeholder in the software delivery lifecycle.</p>
-        </div>
-
-        <div className="mt-audience-grid">
-          <article>
-            <span className="mt-kicker">QA & Test Leads</span>
-            <h3>Reproducible Proof</h3>
-            <p>
-              Replace vague bug reports with deterministic step sequences, time-stamped screenshots, and
-              verifiable criteria coverage.
-            </p>
-          </article>
-          <article>
-            <span className="mt-kicker">Developers</span>
-            <h3>Zero-Guess Diagnostics</h3>
-            <p>
-              Pinpoint the exact step ID, failed selector, network payload, and console log without having to
-              reproduce edge cases manually.
-            </p>
-          </article>
-          <article>
-            <span className="mt-kicker">Product Leaders</span>
-            <h3>Clear Outcome Clarity</h3>
-            <p>
-              Know whether critical user journeys succeed or fail against defined criteria, free from inflated
-              severity claims or subjective noise.
-            </p>
-          </article>
-          <article>
-            <span className="mt-kicker">Security & Ops</span>
-            <h3>Strict Policy Guardrails</h3>
-            <p>
-              Enforce authorized hostnames, prevent unapproved network egress, and inspect immutable audit
-              receipts for every test run.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      {/* Closing Call to Action */}
-      <section className="mt-closing" aria-labelledby="closing-heading">
-        <p className="mt-kicker">Make your next review concrete</p>
-        <h2 id="closing-heading">
-          From “something feels wrong”<br />
-          to the step worth inspecting.
-        </h2>
-        <div className="mt-actions-center">
-          <Link className="mt-button" to="/login">
-            Open workspace <ArrowRight size={18} aria-hidden="true" />
-          </Link>
-          <Link className="mt-text-link" to="/how-it-works">
-            Read technical overview
-          </Link>
-        </div>
-      </section>
-    </PublicLayout>
-  );
+  return <Navigate to="/" replace />;
 }
 
 export function HowPage() {
@@ -456,22 +11,22 @@ export function HowPage() {
     <PublicLayout title="How it works">
       {/* Header Section */}
       <section className="mt-how-hero" aria-labelledby="how-hero-heading">
-        <p className="mt-kicker">Technical Architecture & Flow</p>
+        <p className="mt-kicker">How it works</p>
         <h1 id="how-hero-heading">
           A product question.<br />
           An authorized scope.<br />
           <em>An evidence trail.</em>
         </h1>
         <p className="mt-lead">
-          MarketTwin bridges high-level testing intent and sandboxed browser execution. Learn how
-          targets are scoped, tests are executed, and results are categorized.
+          Choose what to check, authorize the target, and review the recorded browser steps.
+          Results show what the evidence supports and what still needs checking.
         </p>
         <nav className="mt-anchor-nav" aria-label="Section jump links">
           <a href="#setup">01 / Scope & Setup</a>
-          <a href="#trace">02 / Trace Pipeline</a>
-          <a href="#execution">03 / Execution Modes</a>
-          <a href="#results">04 / Result Triage</a>
-          <a href="#inconclusive">05 / Inconclusive Factors</a>
+          <a href="#trace">02 / Recorded steps</a>
+          <a href="#execution">03 / Ways to test</a>
+          <a href="#results">04 / Test results</a>
+          <a href="#inconclusive">05 / Missing checks</a>
           <a href="#limits">06 / Boundaries & Limits</a>
         </nav>
       </section>
@@ -479,7 +34,7 @@ export function HowPage() {
       {/* Section 01: Setup & Scope */}
       <section className="mt-how-section" id="setup">
         <div className="mt-how-header">
-          <p className="mt-kicker">01 / Scope & Authorization</p>
+          <p className="mt-kicker">01 / Setup</p>
           <h2>Give the test a clear, authorized purpose.</h2>
         </div>
         <div className="mt-how-body">
@@ -493,11 +48,10 @@ export function HowPage() {
           </article>
 
           <article>
-            <h3>Enforce strict network egress policy</h3>
+            <h3>Choose allowed network destinations</h3>
             <p>
-              Each target configuration includes an allowed origins list. MarketTwin monitors all outbound browser
-              network requests. If a journey attempts to navigate to or fetch resources from an unapproved external domain,
-              the request is policy-blocked to prevent unintended data leakage or third-party test pollution.
+              Each target has a list of allowed network destinations. Browser requests outside that list
+              are blocked. Include the destinations your app needs before starting the test.
             </p>
           </article>
 
@@ -505,8 +59,8 @@ export function HowPage() {
             <h3>Optional approved product knowledge</h3>
             <p>
               Teams may attach reviewed product specifications, OpenAPI schemas, or user documentation to an application.
-              This knowledge grounds the test planner in expected behavior. However, source documentation is treated as
-              context, not as proof that live browser code functions properly.
+              This helps plan checks for expected behavior. Documentation provides context;
+              browser evidence is still needed to check the app.
             </p>
           </article>
         </div>
@@ -515,7 +69,7 @@ export function HowPage() {
       {/* Section 02: Trace Pipeline Flow */}
       <section className="mt-how-section" id="trace">
         <div className="mt-how-header">
-          <p className="mt-kicker">02 / The Evidence Trace</p>
+          <p className="mt-kicker">02 / Recorded steps</p>
           <h2>From question to conclusion in five stages.</h2>
         </div>
         <div className="mt-how-body">
@@ -556,47 +110,42 @@ export function HowPage() {
       {/* Section 03: Current Execution Modes */}
       <section className="mt-how-section" id="execution">
         <div className="mt-how-header">
-          <p className="mt-kicker">03 / Dual Execution Modes</p>
-          <h2>Persona journeys vs. deterministic feature cases.</h2>
+          <p className="mt-kicker">03 / Ways to test</p>
+          <h2>Explore journeys or check specific features.</h2>
         </div>
         <div className="mt-how-body">
           <div className="mt-modes-grid">
             <article className="mt-mode-card">
               <div className="mt-mode-card-header">
                 <Route size={20} aria-hidden="true" />
-                <h3>Simulated Persona Mode</h3>
+                <h3>Simulated testers</h3>
               </div>
               <p>
-                The test planner provisions up to 3 distinct simulated personas (such as a first-time user,
-                an exploratory tester, or an experienced customer). Missions are allocated based on depth:
+                Simulated testers explore your app from different perspectives, such as a first-time visitor
+                or an experienced customer. The selected test depth sets how much they attempt.
               </p>
-              <ul className="mt-mode-specs">
-                <li><strong>Low Depth:</strong> 1 mission per persona (up to 3 journeys)</li>
-                <li><strong>Medium Depth:</strong> 2 missions per persona (up to 6 journeys)</li>
-                <li><strong>High Depth:</strong> Up to 4 missions per persona (up to 12 journeys)</li>
-              </ul>
               <p className="mt-mode-note">
-                <strong>Important caveat:</strong> Synthetic personas explore autonomously. Agreement among simulated
-                personas is a prompt for investigation, not independent proof of a defect.
+                <strong>Keep in mind:</strong> Simulated testers are software. Agreement between them
+                is a reason to investigate, not independent proof of a defect.
               </p>
             </article>
 
             <article className="mt-mode-card">
               <div className="mt-mode-card-header">
                 <FileCheck2 size={20} aria-hidden="true" />
-                <h3>Deep Feature Mode (deep_feature_v1)</h3>
+                <h3>Feature checks</h3>
               </div>
               <p>
-                Deterministic execution of planned verification checks against explicit functional assertions.
-                This mode does not utilize synthetic personas.
+                Feature checks follow planned actions and compare observed behavior with the expected result.
+                Review the proposed checks before approving browser activity.
               </p>
               <ul className="mt-mode-specs">
-                <li>Structured step-by-step actions executed systematically</li>
-                <li>Direct assertion evaluation against DOM states and HTTP codes</li>
-                <li>Ideal for regression runs, critical happy paths, and CI/CD validation</li>
+                <li>Planned browser actions, step by step</li>
+                <li>Checks against page content and available network responses</li>
+                <li>Results linked to the checks and available evidence</li>
               </ul>
               <p className="mt-mode-note">
-                Produces consistent, reproducible evidence packages specifically tailored for engineering triage.
+                Review the recorded steps and available evidence before deciding what to fix.
               </p>
             </article>
           </div>
@@ -606,7 +155,7 @@ export function HowPage() {
       {/* Section 04: Result Triage */}
       <section className="mt-how-section" id="results">
         <div className="mt-how-header">
-          <p className="mt-kicker">04 / Result Triage</p>
+          <p className="mt-kicker">04 / Test results</p>
           <h2>Know what each category proves.</h2>
         </div>
         <div className="mt-how-body">
@@ -614,11 +163,11 @@ export function HowPage() {
             <article className="mt-how-result">
               <span className="mt-result-marker mt-confirmed" aria-hidden="true" />
               <div>
-                <h3>Verified Issues</h3>
+                <h3>Confirmed issues</h3>
                 <p>
-                  Direct browser evidence proves the reported issue. Inspect the cited journey, step number,
-                  and screenshot before choosing a fix. Confirmed issue totals in the Evidence Ledger include
-                  only this verified category.
+                  Inspect the cited steps and available evidence before choosing a fix. An issue is labelled
+                  Broken only when a repeat check also failed. A reported issue without that repeat evidence
+                  still needs checking.
                 </p>
               </div>
             </article>
@@ -626,11 +175,11 @@ export function HowPage() {
             <article className="mt-how-result">
               <span className="mt-result-marker mt-unverified" aria-hidden="true" />
               <div>
-                <h3>Needs Verification</h3>
+                <h3>Needs checking</h3>
                 <p>
-                  Agent reports, repeated claims, or unexpected stops where supporting screenshots or DOM logs
-                  are ambiguous or inconclusive. Repetition across synthetic personas does not elevate severity;
-                  all uncorroborated items remain labeled as needing verification.
+                  Tester reports and unexpected stops may have partial or missing evidence. Repetition across
+                  simulated testers does not confirm a defect. Review the supporting steps to decide what
+                  needs another check.
                 </p>
               </div>
             </article>
@@ -638,19 +187,19 @@ export function HowPage() {
             <article className="mt-how-result">
               <span className="mt-result-marker mt-execution" aria-hidden="true" />
               <div>
-                <h3>Execution Issues</h3>
+                <h3>Could not check</h3>
                 <p>
-                  A failed browser command, network timeout, or policy block prevented the test from completing
-                  its journey. These diagnostics describe a runner limitation and are strictly isolated from product defects.
+                  A failed browser action, timeout, or network policy block may prevent a check.
+                  These limits do not establish whether the app works or is broken.
                 </p>
               </div>
             </article>
           </div>
 
           <div className="mt-how-summary-note">
-            <h4>Reading the Evidence Ledger Report</h4>
+            <h4>Reading Test results</h4>
             <p>
-              Start by reviewing the target scope and completed journeys, then investigate high-severity verified findings.
+              Start by reviewing the target scope and completed journeys, then investigate reported issues.
               Open the cited artifact links to view the actual screenshot. An empty findings list does not guarantee a
               defect-free product.
             </p>
@@ -661,16 +210,16 @@ export function HowPage() {
       {/* Section 05: Inconclusive Test Reasons */}
       <section className="mt-how-section" id="inconclusive">
         <div className="mt-how-header">
-          <p className="mt-kicker">05 / Diagnostic Guide</p>
-          <h2>Common reasons a test is inconclusive.</h2>
+          <p className="mt-kicker">05 / Missing checks</p>
+          <h2>Why some checks cannot finish.</h2>
         </div>
         <div className="mt-how-body">
           <p className="mt-how-body-lead">
-            When a journey produces an inconclusive result, it typically stems from one of the following factors
-            rather than an inherent product failure:
+            When a check cannot finish, review its recorded reason. A blocked or incomplete check
+            does not by itself establish a product failure:
           </p>
 
-          <div className="mt-disclosures" role="region" aria-label="Inconclusive test reasons">
+          <div className="mt-disclosures" role="region" aria-label="Reasons checks cannot finish">
             <details>
               <summary>
                 <span>Destination origin outside network policy</span>
@@ -691,7 +240,7 @@ export function HowPage() {
               <p>
                 The journey reached a login screen, SSO identity provider, CAPTCHA, or multi-factor prompt.
                 Without pre-configured test credentials or Human-in-the-Loop intervention, the runner pauses or terminates
-                the journey as inconclusive.
+                the journey without a completed check.
               </p>
             </details>
 
@@ -714,18 +263,18 @@ export function HowPage() {
               </summary>
               <p>
                 If a screenshot capture fails due to rapid page unmounting, MarketTwin marks the step as
-                “Evidence unavailable.” Adjacent screenshots are never substituted to maintain cryptographic audit integrity.
+                “Evidence unavailable.” Adjacent screenshots are never substituted for the missing evidence.
               </p>
             </details>
 
             <details>
               <summary>
-                <span>Synthetic persona mission divergence</span>
+                <span>Tester did not finish the task</span>
                 <ChevronDown size={18} aria-hidden="true" className="mt-disclosure-arrow" />
               </summary>
               <p>
-                In exploratory persona mode, an agent may explore irrelevant links or exhaust its maximum step budget
-                before fulfilling the primary mission criteria. These journeys are cataloged as unverified observations.
+                A simulated tester may follow other links or reach its step limit before finishing the task.
+                Review the recorded actions; unfinished work still needs checking.
               </p>
             </details>
 
@@ -736,7 +285,7 @@ export function HowPage() {
               </summary>
               <p>
                 Browser execution and automated evaluation are separate processes. If evaluation is queued or the evaluator
-                worker experiences latency, the test run remains in an evaluation-pending state until verified.
+                worker experiences latency, the test may remain waiting for its results.
               </p>
             </details>
           </div>
@@ -751,11 +300,11 @@ export function HowPage() {
         </div>
         <div className="mt-how-body">
           <article>
-            <h3>Human-in-the-Loop (HITL) Assistance</h3>
+            <h3>Help a tester</h3>
             <p>
-              When a supported run encounters CAPTCHA, payment authorization, or sensitive identity verification,
+              When a supported test encounters CAPTCHA, payment authorization, or sensitive identity verification,
               it pauses and requests human intervention. A designated operator can lease the live browser session,
-              complete the manual action, and return control seamlessly to the automated runner.
+              complete the requested action, and hand control back. Follow the available controls and check the result.
             </p>
           </article>
 
@@ -771,8 +320,8 @@ export function HowPage() {
           <article>
             <h3>Authorized Workspace Access</h3>
             <p>
-              MarketTwin operates with local workspace authentication. Only email addresses authorized by the workspace
-              administrator can initiate test runs, inspect sensitive artifacts, or modify network policies.
+              MarketTwin operates with local workspace authentication. Use an approved email address to sign in. Your workspace role controls which actions
+              you can take, including starting tests and changing network policies.
             </p>
           </article>
         </div>
@@ -783,7 +332,7 @@ export function HowPage() {
         <h2 id="how-closing-heading">Ready to inspect a browser journey?</h2>
         <div className="mt-actions-center">
           <Link className="mt-button" to="/login">
-            Open workspace <ArrowRight size={18} aria-hidden="true" />
+            Sign in <ArrowRight size={18} aria-hidden="true" />
           </Link>
           <Link className="mt-text-link" to="/">
             Back to home

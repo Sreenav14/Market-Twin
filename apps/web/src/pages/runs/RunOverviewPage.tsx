@@ -5,25 +5,30 @@ import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { FindingListItem } from "../../components/markettwin/FindingListItem";
 import { CopyButton } from "../../components/markettwin/CopyButton";
 import { reportMetrics, sortFindings, findingClassification, isConfirmedFinding } from "../../lib/results";
-import { textValue, testBrief } from "../../lib/format";
+import { textValue, testBrief, statusLabel } from "../../lib/format";
 import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
 
 export function RunOverviewPage() {
   const { run, results } = useOutletContext<RunContext>();
   const ready = results.status === "ready";
   const awaitingApproval = run.configuration_snapshot.discovery_stage === "awaiting_approval";
-  const stages = ["Created", "Planning", "Execution", "Evaluation"];
-  const pausedForHuman = run.status === "awaiting_human";
+  const discoveryMode = run.configuration_snapshot.execution_mode === "discovery_contract_v1";
+  const stages = discoveryMode
+    ? ["Explore the app", "Approve the tests", "Check the journeys", "Test results"]
+    : ["Created", "Planning", "Execution", "Evaluation"];
+  const pausedForHuman = run.status === "awaiting_human" && !awaitingApproval;
   const stage = ready
     ? 4
     : run.status === "completed"
       ? 3
+      : awaitingApproval
+        ? 1
       : pausedForHuman
         ? -1
       : run.status === "running"
-        ? 2
+        ? discoveryMode && run.configuration_snapshot.discovery_stage !== "executing" ? 0 : 2
         : ["planning", "queued"].includes(run.status)
-          ? 1
+          ? discoveryMode ? 0 : 1
           : 0;
   const stopped = [
     "failed",
@@ -44,16 +49,16 @@ export function RunOverviewPage() {
                 ? "Human assistance required"
                 : run.status === "completed"
                 ? ready
-                  ? "Verified test results ready"
+                  ? "Test results ready"
                   : "Execution completed · Evaluation in progress"
                 : "Watch this test execute"}
             </h2>
             <p>
               {awaitingApproval ? "Exploration is complete. Review the journeys and checks before testing begins." : pausedForHuman
-                ? "Open the requesting journey and protected browser. The agent waits while you assist."
+                ? "Open the requesting journey and protected browser. The tester waits while you assist."
                 : run.status === "completed"
                 ? ready
-                  ? "Review verified defect findings, observations, and supporting visual evidence."
+                  ? "Review confirmed issues, observations, and supporting visual evidence."
                   : "Evaluation is currently compiling recorded journeys and step assertions."
                 : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}
             </p>
@@ -62,21 +67,21 @@ export function RunOverviewPage() {
             className="primary-button"
             to={
               awaitingApproval ? `/runs/${run.id}/contract` : pausedForHuman
-                ? `/runs/${run.id}/activity`
+                ? `/runs/${run.id}/watch`
                 : run.status === "completed"
                 ? ready
-                  ? `/runs/${run.id}/report`
+                  ? `/runs/${run.id}/results`
                   : `/runs/${run.id}/journeys`
-                : `/runs/${run.id}/activity`
+                : `/runs/${run.id}/watch`
             }
           >
             {awaitingApproval ? "Approve the tests" : pausedForHuman
-              ? "Open Live Execution"
+              ? "Watch live"
               : run.status === "completed"
               ? ready
-                ? "Review Verified Report"
+                ? "See test results"
                 : "Inspect Journeys"
-              : "Open Live Execution"}
+              : "Watch live"}
           </Link>
         </section>
       ) : null}
@@ -134,9 +139,9 @@ export function RunOverviewPage() {
                 </p>
                 <Link
                   className="text-link inline-link"
-                  to={`/runs/${run.id}/report`}
+                  to={`/runs/${run.id}/results`}
                 >
-                  Read the full report{" "}
+                  See test results{" "}
                   <ArrowUpRight size={16} aria-hidden="true" />
                 </Link>
               </div>
@@ -159,7 +164,7 @@ export function RunOverviewPage() {
               </dl>
             </div>
             {emptySummary?.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
-            <div className="outcome-counts" role="group" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : outcome.replaceAll("_", " ")}: {count}</span>)}</div>
+            <div className="outcome-counts" role="group" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : statusLabel(outcome)}: {count}</span>)}</div>
             {results.data.findings.length > 0 ? (
               <section className="section-block">
                 <div className="section-heading">
@@ -190,7 +195,7 @@ export function RunOverviewPage() {
               <FileText size={16} aria-hidden="true" />
               <span>
                 {metrics.deterministic
-                  ? "Deterministic evaluation"
+                  ? "Recorded checks"
                   : "Evaluation report"}{" "}
                 · Report version {results.data.report.version}. References
                 identify the evidence linked to each finding.
@@ -203,7 +208,7 @@ export function RunOverviewPage() {
         <summary>Test configuration</summary>
         <dl className="definition-list">
           <div><dt>Testing goal</dt><dd>{testBrief(run.configuration_snapshot)}</dd></div>
-          <div><dt>Testing depth</dt><dd>{typeof run.configuration_snapshot.testing_depth === "string" && run.configuration_snapshot.testing_depth.length > 0 ? run.configuration_snapshot.testing_depth[0].toUpperCase() + run.configuration_snapshot.testing_depth.slice(1) : "Legacy coverage (up to 4 missions)"}</dd></div>
+          <div><dt>Testing depth</dt><dd>{typeof run.configuration_snapshot.testing_depth === "string" && run.configuration_snapshot.testing_depth.length > 0 ? run.configuration_snapshot.testing_depth[0].toUpperCase() + run.configuration_snapshot.testing_depth.slice(1) : "Older exploratory coverage (up to 4 goals)"}</dd></div>
           <div>
             <dt>Target</dt>
             <dd>{textValue(run.target_snapshot.name, "Target")}</dd>

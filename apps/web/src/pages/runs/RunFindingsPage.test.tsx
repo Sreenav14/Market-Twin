@@ -25,7 +25,7 @@ it.each(["findings", "summary"] as const)("shows failed assertion coverage rathe
   expect(screen.getByText(/Assertions failed, but/)).toBeInTheDocument();
   expect(screen.getByText("Failed assertions").nextElementSibling).toHaveTextContent("2");
   expect(screen.getByText("Planner-inferred assertions").nextElementSibling).toHaveTextContent("2");
-  if (page === "findings") expect(screen.getByRole("link", { name: "Review case outcomes and assertions" })).toHaveAttribute("href", "/runs/run/report#report-feature-cases");
+  if (page === "findings") expect(screen.getByRole("link", { name: "Review case outcomes and assertions" })).toHaveAttribute("href", "/runs/run/results#report-feature-cases");
 });
 
 it("renders a verified deterministic assertion finding in Confirmed issues", () => {

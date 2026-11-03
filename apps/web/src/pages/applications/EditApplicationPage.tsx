@@ -5,7 +5,7 @@ export function EditApplicationPage() {
     <>
       <PageHeader
         eyebrow="Application lifecycle"
-        title="Edit application"
+        title="Edit app"
         description="Application editing is reserved in the frontend architecture but is not yet supported by the current Control API."
       />
       <FutureStagePage

@@ -1,12 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowRight, Moon, Route, ScanLine, ShieldCheck, Sun } from "lucide-react";
-import { BrandMark } from "../../components/ui/BrandMark";
+import { ArrowRight, Route, ScanLine, ShieldCheck } from "lucide-react";
 import { Spinner } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ApiError, CurrentUser, api } from "../../lib/api";
 import { Link } from "react-router-dom";
-import { useTheme } from "../../lib/theme";
+import { PublicLayout } from "../public/PublicLayout";
 
 export function LoginPage({
   onAuthenticated,
@@ -19,7 +18,6 @@ export function LoginPage({
   const submitting = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
-  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     document.title = "Sign in · MarketTwin";
@@ -53,13 +51,10 @@ export function LoginPage({
   }
 
   return (
-    <main className="signin-page evidence-ledger-theme">
+    <PublicLayout title="Sign in">
+    <div className="signin-page">
       {/* Informative Story Pane */}
       <section className="signin-story" aria-labelledby="signin-title">
-        <Link className="signin-brand" to="/" aria-label="MarketTwin home">
-          <BrandMark />
-          <span>MarketTwin</span>
-        </Link>
         <div className="signin-story-content">
           <p className="signin-kicker">Evidence-Backed Product Testing</p>
           <h1 id="signin-title">
@@ -67,8 +62,8 @@ export function LoginPage({
             <span>Review the evidence.</span>
           </h1>
           <p className="signin-description">
-            Run sandboxed browser tests with simulated personas and deterministic feature checks.
-            Inspect every step alongside verifiable screenshots, network payloads, and execution logs.
+            Test your app with simulated testers and planned feature checks.
+            Review recorded browser actions and the evidence available for each check.
           </p>
 
           <ol className="signin-workflow" aria-label="Core testing capabilities">
@@ -77,8 +72,8 @@ export function LoginPage({
                 <ShieldCheck size={20} aria-hidden="true" />
               </span>
               <div>
-                <strong>Authorized Target Scope</strong>
-                <p>Browsers test strictly against permitted hostnames and approved network policies.</p>
+                <strong>Authorized targets</strong>
+                <p>Choose the target and network destinations your tests may access.</p>
               </div>
             </li>
             <li>
@@ -86,8 +81,8 @@ export function LoginPage({
                 <Route size={20} aria-hidden="true" />
               </span>
               <div>
-                <strong>Observable Execution</strong>
-                <p>Follow live step replays with captured DOM mutations, console output, and network timing.</p>
+                <strong>Watch live</strong>
+                <p>Follow browser activity and review the steps recorded for your test.</p>
               </div>
             </li>
             <li>
@@ -95,8 +90,8 @@ export function LoginPage({
                 <ScanLine size={20} aria-hidden="true" />
               </span>
               <div>
-                <strong>Evidence-First Triage</strong>
-                <p>Verified defects are clearly isolated from inconclusive observations and runner limits.</p>
+                <strong>Review the evidence</strong>
+                <p>See which issues have supporting evidence and which checks could not finish.</p>
               </div>
             </li>
           </ol>
@@ -109,28 +104,14 @@ export function LoginPage({
 
       {/* Access Authentication Pane */}
       <section className="signin-access" aria-labelledby="signin-form-title">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "16px" }}>
-          <div className="signin-mode" aria-label="Workspace mode">
-            <span className="signin-mode-dot" aria-hidden="true" />
-            Local workspace authentication
-          </div>
-          <button
-            className="icon-button theme-toggle-btn"
-            type="button"
-            onClick={toggleTheme}
-            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
-            title={isDark ? "Switch to light theme" : "Switch to dark theme"}
-          >
-            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-          </button>
-        </div>
+        <p className="signin-mode">Local workspace authentication</p>
 
         <div className="signin-form-wrap">
           <p className="signin-kicker">Workspace Sign In</p>
           <h2 id="signin-form-title">Sign in to MarketTwin</h2>
           <p className="signin-form-description">
-            Enter your approved workspace email address to access test runs, live browser observation,
-            and the Evidence Ledger.
+            Enter your approved workspace email address to access tests, live browser activity,
+            and Test results.
           </p>
 
           <form onSubmit={submit} className="signin-form" aria-busy={busy}>
@@ -205,6 +186,7 @@ export function LoginPage({
           <Link to="/">Return to home</Link>
         </footer>
       </section>
-    </main>
+    </div>
+    </PublicLayout>
   );
 }

@@ -63,6 +63,35 @@
 .concept-workspace .topnav-link { height: 56px; }
 .concept-workspace .topnav-link:hover, .concept-workspace .topnav-link.active { background: var(--notchecked-tint); }
 .concept-workspace .mt-page-content { max-width: 1200px; }
+.concept-workspace .page-header { align-items: flex-start; gap: 24px; margin-bottom: 32px; }
+.concept-workspace .page-header h1 { font-family: var(--font-ui); font-weight: 650; font-size: 28px; line-height: 36px; letter-spacing: 0; }
+.concept-workspace .page-description { color: var(--ink-2); max-width: 68ch; line-height: 1.6; }
+.concept-workspace :is(.panel, .empty-state, .state-panel, .error-panel, .run-create-zone) { background: var(--card); border: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.concept-workspace :is(.panel, .empty-state) h2 { color: var(--ink); font-family: var(--font-ui); font-size: 22px; line-height: 30px; font-weight: 650; }
+.concept-workspace .panel :is(.panel, .state-panel) { border: 0; background: transparent; }
+.concept-workspace :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { color: var(--ink); background: var(--card); border-color: var(--line); border-radius: 0; box-shadow: none; font-family: var(--font-ui); }
+.concept-workspace :where(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.concept-workspace :where(.primary-button, .secondary-button, .danger-button) { border-radius: 0; min-height: 44px; box-shadow: none; font-family: var(--font-ui); }
+.concept-workspace :is(.text-input, .text-select, .text-area, .primary-button, .secondary-button, .danger-button), .concept-workspace .study-composer :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: 0; box-shadow: none; }
+.concept-workspace .status-badge { min-height: 24px; padding: 4px 12px; gap: 6px; font-size: 13px; line-height: 18px; border: 0; border-radius: 999px; }
+.concept-workspace .status-badge .status-dot { display: inline; width: auto; height: auto; background: none; border-radius: 0; font-size: 12px; line-height: 1; }
+.concept-workspace .status-success { color: var(--works); background: var(--works-tint); }
+.concept-workspace .status-danger { color: var(--broken); background: var(--broken-tint); }
+.concept-workspace .status-warning { color: var(--couldnot); background: var(--couldnot-tint); }
+.concept-workspace :where(.status-info, .status-neutral) { color: var(--notchecked); background: var(--notchecked-tint); }
+.concept-workspace :where(.data-table, table) { color: var(--ink); }
+.concept-workspace :where(th, td) { border-color: var(--line); overflow-wrap: anywhere; }
+.concept-workspace :where(th) { color: var(--ink-2); background: transparent; }
+.concept-workspace :is(.data-row, .deletable-row, .data-list) { border-radius: 0; box-shadow: none; border-color: var(--line); }
+.concept-workspace :where(pre, code) { overflow-wrap: anywhere; }
+.concept-workspace :where(.page-header-copy, .page-action, .panel, .form-grid > *, .settings-content) { min-width: 0; }
+@media (max-width: 639px) {
+  .concept-workspace .page-header { flex-direction: column; gap: 16px; }
+  .concept-workspace .page-header h1 { font-size: 24px; line-height: 32px; }
+  .concept-workspace .page-action { width: 100%; }
+  .concept-workspace .page-action > :where(a, button) { max-width: 100%; }
+  .concept-workspace :where(.form-grid, .settings-layout) { grid-template-columns: minmax(0, 1fr); }
+}
 .concept-live-dashboard { color: var(--ink); padding-bottom: 32px; }
 .concept-live-dashboard section { margin: 32px 0; }
 .concept-live-dashboard h2 { margin: 0 0 16px; }

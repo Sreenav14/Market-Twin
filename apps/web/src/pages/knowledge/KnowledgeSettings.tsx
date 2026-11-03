@@ -65,18 +65,18 @@ export function KnowledgeApplications({ entry, onSaved }: Props) {
     finally { setBusy(false); }
   }
   return <section className="panel section-block">
-    <h2>Applications</h2>
+    <h2>Your apps</h2>
     <p className="muted">Attach this approved knowledge to the applications that should use it. Select it when creating a test.</p>
     {applications.isPending ? <p role="status">Loading applications…</p> : applications.isError ? <p role="alert" className="form-error">Could not load applications. <Button variant="ghost" size="sm" onClick={() => void applications.refetch()}>Try again</Button></p> : applications.data.length ? <>
       <fieldset className="knowledge-choices" disabled={busy || !canWrite}>
         <legend className="visually-hidden">Attach knowledge to applications</legend>
         {applications.data.map((application) => <div className="knowledge-choice" key={application.id}>
           <label><input type="checkbox" checked={selected.includes(application.id)} onChange={(event) => setSelected((previous) => event.target.checked ? [...previous, application.id] : previous.filter((id) => id !== application.id))} /><span>{application.name}</span></label>
-          {entry.application_ids?.includes(application.id) ? <Link className="text-link" to={`/applications/${application.id}/runs/new`}>Create test<span className="visually-hidden"> for {application.name}</span></Link> : null}
+          {canWrite && application.status === "active" && entry.application_ids?.includes(application.id) ? <Link className="text-link" to={`/applications/${application.id}/runs/new`}>Start a test<span className="visually-hidden"> for {application.name}</span></Link> : null}
         </div>)}
       </fieldset>
       {error ? <p role="alert" className="form-error">{error}</p> : null}
       {canWrite ? <div className="form-actions"><Button variant="secondary" disabled={busy || !changed} onClick={() => void save()}>{busy ? "Saving…" : "Save applications"}</Button></div> : null}
-    </> : <p>No applications yet. <Link className="text-link" to="/applications/new">Add an application</Link> to attach this knowledge.</p>}
+    </> : <p>No apps yet.{canWrite ? <> <Link className="text-link" to="/applications/new">Add an app</Link> to attach this knowledge.</> : null}</p>}
   </section>;
 }

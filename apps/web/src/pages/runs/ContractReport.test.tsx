@@ -15,8 +15,19 @@ it("keeps unconfirmed observations outside broken and shows verdict inputs", () 
   expect(within(broken).queryByText(/Search did not finish/)).not.toBeInTheDocument();
   expect(screen.getByText(/Search did not finish — did not happen again on re-check/)).toBeInTheDocument();
   expect(screen.getByText("Coverage: tested 2 of 3 discovered features.")).toBeInTheDocument();
-  expect(screen.getByText(/Tested 2 of 4 approved journeys · 0 confirmed problems · Tester scores: Expert 4.2/)).toBeInTheDocument();
+  expect(screen.getByText("Tested 2 of 4 approved journeys · 0 confirmed problems.")).toBeInTheDocument();
+  expect(screen.queryByText(/Tester scores:/)).not.toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Is it market-ready?" })).toBeInTheDocument();
+});
+it("attributes saved experience comments to the tester without displaying numeric feelings scores", () => {
+  render(<MemoryRouter><ContractReport runId="run" payload={{
+    experience: { personas: [{ persona_name: "Expert", status: "completed", facts: {},
+      scores: { ease: { score: 4, justification: "I found the search controls easy to follow." } },
+    }] },
+  }} /></MemoryRouter>);
+  expect(screen.getByText("I found the search controls easy to follow.").closest("blockquote"))
+    .toHaveTextContent("— Expert, simulated tester");
+  expect(screen.queryByText(/4\/5/)).not.toBeInTheDocument();
 });
 it("does not invent tested features when the API does not supply their count", () => {
   render(<MemoryRouter><ContractReport runId="run" payload={{ coverage: { executed: 5, discovered_features: 6 } }} /></MemoryRouter>);

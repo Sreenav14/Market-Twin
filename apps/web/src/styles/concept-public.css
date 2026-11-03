@@ -1,0 +1,153 @@
+.concept-public,
+.concept-system {
+  --font-ui: "Inter", system-ui, sans-serif;
+  --page: var(--paper);
+  --surface: var(--card);
+  --surface-muted: var(--paper);
+  --text: var(--ink);
+  --text-2: var(--ink-2);
+  --text-3: var(--ink-faint);
+  --border: var(--line);
+  --primary: var(--flame-deep);
+  --primary-hover: var(--flame-deep-hover);
+  --on-primary: var(--card);
+  --danger: var(--broken);
+  --danger-bg: var(--broken-tint);
+  --danger-border: var(--broken);
+  --public-line: var(--line);
+  --public-ink: var(--ink);
+  --public-muted: var(--ink-2);
+  --public-surface: var(--card);
+  --public-accent: var(--flame-deep);
+  --public-accent-soft: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 16px/26px "Inter", system-ui, sans-serif;
+}
+
+.concept-public { min-height: 100svh; }
+.concept-public a { color: inherit; }
+.concept-public-header {
+  min-height: 64px;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.concept-public-brand { font-size: 18px; font-weight: 650; text-decoration: none; }
+.concept-public-header nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 24px; }
+.concept-public-header nav a,
+.concept-public .mt-anchor-nav a,
+.concept-public .mt-kicker,
+.concept-public .signin-kicker,
+.concept-public .signin-mode,
+.concept-public .signin-story-footer,
+.concept-public .signin-label,
+.concept-public .signin-submit-btn,
+.concept-public-primary,
+.concept-system .primary-button,
+.concept-system .secondary-button {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.concept-public-header nav a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
+.concept-public a.concept-public-primary,
+.concept-public .mt-button,
+.concept-public .signin-submit-btn {
+  background: var(--flame-deep);
+  color: var(--card);
+  border: 1px solid var(--flame-deep);
+  border-radius: 0;
+  min-height: 44px;
+  padding: 12px 20px;
+  text-decoration: none;
+}
+.concept-public a.concept-public-primary:hover,
+.concept-public .mt-button:hover,
+.concept-public .signin-submit-btn:hover:not(:disabled) {
+  background: var(--flame-deep-hover);
+  color: var(--card);
+  transform: none;
+}
+.concept-public-skip { position: absolute; left: 16px; top: -100px; z-index: 100; padding: 12px; background: var(--card); }
+.concept-public-skip:focus { top: 8px; }
+.concept-public :focus-visible,
+.concept-system :focus-visible { outline: var(--focus-ring); outline-offset: 3px; box-shadow: none; }
+.concept-public .mt-how-hero,
+.concept-public .mt-how-section,
+.concept-public .mt-closing { width: min(1200px, calc(100% - 48px)); margin-inline: auto; }
+.concept-public .mt-how-hero { padding-block: 64px; }
+.concept-public .mt-how-hero h1 { font: 500 56px/64px "Newsreader", Georgia, serif; letter-spacing: -.01em; margin: 16px 0 24px; }
+.concept-public .mt-how-hero h1 em { color: var(--ink); }
+.concept-public .mt-kicker { color: var(--flame-deep); }
+.concept-public .mt-lead { font-size: 16px; line-height: 26px; color: var(--ink-2); }
+.concept-public .mt-how-header h2,
+.concept-public .mt-closing h2 { font: 500 32px/40px "Newsreader", Georgia, serif; letter-spacing: -.005em; color: var(--ink); }
+.concept-public .mt-how-body article h3 { font: 600 18px/26px "Inter", system-ui, sans-serif; letter-spacing: 0; }
+.concept-public .mt-how-body p { color: var(--ink-2); font-size: 16px; line-height: 26px; }
+.concept-public .mt-anchor-nav a { border-radius: 0; background: transparent; padding: 12px 0; border: 0; }
+.concept-public .mt-trace-pipeline { grid-template-columns: 1fr; background: transparent; border: 0; border-radius: 0; padding: 0; gap: 24px; }
+.concept-public .mt-trace-badge { color: var(--ink-faint); background: transparent; padding: 0; border-radius: 0; font: 500 11px/16px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; }
+.concept-public .mt-trace-step p { font-size: 14px; line-height: 22px; }
+.concept-public .mt-trace-step h4 { font-size: 16px; line-height: 26px; }
+.concept-public .mt-modes-grid { grid-template-columns: 1fr; }
+.concept-public .mt-mode-card,
+.concept-public .mt-how-result { border: 0; border-radius: 0; padding: 0 0 24px; border-bottom: 1px solid var(--line); background: transparent; }
+.concept-public .mt-mode-card-header svg { color: var(--ink); }
+.concept-public .mt-mode-note { border: 0; border-radius: 0; background: transparent; padding: 0; }
+.concept-public .mt-how-summary-note { background: transparent; border: 0; border-radius: 0; padding: 0; }
+.concept-public .mt-how-summary-note h4 { color: var(--ink); }
+.concept-public .mt-result-marker { display: none; }
+.concept-public .mt-closing { background: transparent; border-top: 1px solid var(--line); padding-block: 64px; }
+.concept-public .signin-page { min-height: auto; max-width: 1200px; margin: 0 auto; }
+.concept-public .signin-story,
+.concept-public .signin-access { padding: 64px 32px; background: transparent; }
+.concept-public .signin-story-content { padding: 0; }
+.concept-public .signin-story h1 { font: 500 40px/46px "Newsreader", Georgia, serif; letter-spacing: -.01em; }
+.concept-public .signin-story h1 span { color: var(--ink); font-family: inherit; }
+.concept-public .signin-story .signin-kicker { color: var(--flame-deep); font-family: "IBM Plex Mono", monospace; }
+.concept-public .signin-step-icon { background: transparent; color: var(--ink); border: 0; border-radius: 0; }
+.concept-public .signin-workflow li::before { display: none; }
+.concept-public .signin-form-wrap { padding-block: 32px; }
+.concept-public .signin-form-wrap h2 { font: 600 22px/30px "Inter", system-ui, sans-serif; letter-spacing: 0; }
+.concept-public .signin-form-wrap .signin-kicker { font-family: "IBM Plex Mono", monospace; }
+.concept-public .signin-form-description,
+.concept-public .signin-description { font-size: 16px; line-height: 26px; }
+.concept-public .signin-input { border-radius: 0; }
+.concept-public .signin-input:focus { outline: var(--focus-ring); outline-offset: 3px; box-shadow: none; border-color: var(--ink); }
+.concept-public .signin-submit-btn { font-size: 13px; }
+.concept-public .signin-story-footer { margin-top: 32px; }
+.concept-public .signin-mode { margin: 0; align-self: flex-start; }
+.concept-system { display: flex; align-items: center; justify-content: center; min-height: 65vh; padding: 40px 24px; }
+.concept-system-content { max-width: 560px; width: 100%; }
+.concept-system-icon { display: block; margin-bottom: 24px; color: var(--ink-2); }
+.concept-system h1 { font: 650 28px/36px "Inter", system-ui, sans-serif; margin: 0 0 16px; letter-spacing: 0; }
+.concept-system p { color: var(--ink-2); margin: 0 0 24px; }
+.concept-system-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.concept-system .primary-button,
+.concept-system .secondary-button { border-radius: 0; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+.concept-system .primary-button { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.concept-system .secondary-button { background: transparent; border-color: var(--line); color: var(--ink); }
+.concept-public .concept-system h1 { font: 500 40px/46px "Newsreader", Georgia, serif; }
+
+@media (max-width: 900px) {
+  .concept-public .mt-how-section { grid-template-columns: 1fr; gap: 32px; }
+  .concept-public .mt-how-hero h1 { font-size: 40px; line-height: 46px; }
+  .concept-public .signin-page { grid-template-columns: 1fr; }
+  .concept-public .signin-story { border-right: 0; border-bottom: 1px solid var(--line); padding: 40px 24px; }
+  .concept-public .signin-access { padding: 40px 24px; }
+}
+@media (max-width: 639px) {
+  .concept-public-header { align-items: flex-start; flex-direction: column; }
+  .concept-public-header nav { gap: 8px 16px; width: 100%; }
+  .concept-public .mt-how-hero,
+  .concept-public .mt-how-section,
+  .concept-public .mt-closing { width: calc(100% - 32px); }
+  .concept-system { padding: 32px 16px; }
+  .concept-system h1 { font-size: 24px; line-height: 32px; }
+}

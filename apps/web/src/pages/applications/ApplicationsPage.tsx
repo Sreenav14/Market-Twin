@@ -55,12 +55,12 @@ export function ApplicationsPage() {
   return (
     <>
       <PageHeader
-        title="Applications"
+        title="Your apps"
         description="Manage your applications and their testing environments."
         action={
           canWrite ? (
             <Link className="primary-button" to="/applications/new">
-              <Icon name="plus" size={16} /> Add application
+              <Icon name="plus" size={16} /> Add an app
             </Link>
           ) : undefined
         }
@@ -98,7 +98,7 @@ export function ApplicationsPage() {
           action={
             canWrite ? (
               <Link className="primary-button" to="/applications/new">
-                <Icon name="plus" size={16} /> Create application
+                <Icon name="plus" size={16} /> Add an app
               </Link>
             ) : undefined
           }
@@ -142,7 +142,7 @@ export function ApplicationsPage() {
               </button>
             </div>
           ) : (
-            <div className="data-list" role="list">
+            <div className="data-list applications-list" role="list">
               {filteredApps.map((application) => {
                 const targetCount = targetCountMap[application.id];
                 return (

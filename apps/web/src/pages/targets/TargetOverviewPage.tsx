@@ -89,7 +89,7 @@ export function TargetOverviewPage() {
               className="primary-button"
               to={`/applications/${target.application_id}/runs/new?target=${encodeURIComponent(target.id)}`}
             >
-              <Icon name="plus" size={16} /> New test
+              <Icon name="plus" size={16} /> Start a test
             </Link>
           ) : !authorized && canAuthorize ? (
             <Link
@@ -207,7 +207,7 @@ export function TargetOverviewPage() {
                 to={`/applications/${target.application_id}/runs/new?target=${encodeURIComponent(target.id)}`}
                 className="primary-button"
               >
-                <Icon name="plus" size={16} /> New test against target
+                <Icon name="plus" size={16} /> Start a test against target
               </Link>
             ) : !authorized && canAuthorize ? (
               <Link
@@ -269,7 +269,7 @@ export function TargetOverviewPage() {
           </div>
 
           <p className="panel-note" style={{ marginTop: "14px" }}>
-            Subdomains are not implicitly trusted. Test agents will fail with a policy block if navigation leaves these exact origins.
+            Subdomains are not implicitly trusted. Testers will fail with a policy block if navigation leaves these exact origins.
           </p>
         </section>
       </div>

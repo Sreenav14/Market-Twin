@@ -117,7 +117,7 @@ export function TargetNetworkPolicyPage() {
           </div>
 
           <p style={{ color: "var(--text-2)", fontSize: "14px", lineHeight: "1.6", margin: "0 0 14px" }}>
-            Test agents executing against this target are permitted to communicate with only these exact origins:
+            Testers executing against this target are permitted to communicate with only these exact origins:
           </p>
 
           <div className="origin-list">

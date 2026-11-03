@@ -8,7 +8,7 @@ import { RunReportPage } from "./RunReportPage";
 beforeEach(() => { vi.spyOn(api, "getRunJourneys").mockResolvedValue([]); });
 afterEach(() => { vi.restoreAllMocks(); });
 
-function renderReport(payload: Record<string, unknown>, findings: Finding[] = []) {
+function renderReport(payload: Record<string, unknown>, findings: Finding[] = [], mode?: string) {
   const data: RunResults = {
     test_run_id: "run", findings,
     report: {
@@ -19,11 +19,23 @@ function renderReport(payload: Record<string, unknown>, findings: Finding[] = []
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/report"]}>
     <Routes><Route element={<Outlet context={{
-      run: { id: "run", status: "completed", configuration_snapshot: {} },
+      run: { id: "run", status: "completed", configuration_snapshot: mode ? { execution_mode: mode } : {} },
       user: { id: "user" }, results: { status: "ready", data },
     }} />}><Route path="/report" element={<RunReportPage />} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
 }
+
+const legacyNotice = "This report was produced by the older exploratory mode. Its findings are unverified observations.";
+
+it.each([undefined, "legacy_persona"])("labels %s historical exploratory reports with the exact legacy notice", (mode) => {
+  renderReport({}, [], mode);
+  expect(screen.getByRole("note")).toHaveTextContent(legacyNotice);
+});
+
+it.each(["deep_feature_v1", "discovery_contract_v1"])("does not label a %s report as legacy", (mode) => {
+  renderReport({ mode }, [], mode);
+  expect(screen.queryByText(legacyNotice)).not.toBeInTheDocument();
+});
 
 it("shows an evidence limit for unknown scope and keeps method details available", () => {
   renderReport({});

@@ -50,6 +50,7 @@ it("starts ordinary runs with runtime assistance and no upfront identity policy"
   await api.createRun("app", "target", "Test the protected page");
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   const payload = JSON.parse(init.body as string);
+  expect(payload.execution_mode).toBe("discovery_contract_v1");
   expect(payload.runtime_human_assistance).toBe(true);
   expect(payload).not.toHaveProperty("auth_verification");
   expect(payload).not.toHaveProperty("auth_mode");

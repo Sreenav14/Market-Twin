@@ -33,7 +33,7 @@ it.each(["legacy_persona", "deep_feature_v1"])("shows actual goals, failed outco
   expect(screen.getByText("3 steps · 2 artifacts")).toBeInTheDocument();
   if (mode === "deep_feature_v1") expect(screen.getByRole("heading", { name: "Feature case 1" })).toBeInTheDocument();
   else expect(screen.getByRole("heading", { name: "New visitor · simulated tester" })).toBeInTheDocument();
-  const advanced = screen.getByText("Advanced agent configuration and recorded diagnostics");
+  const advanced = screen.getByText("Advanced model settings and recorded diagnostics");
   expect(advanced.closest("details")).not.toHaveAttribute("open");
   await user.click(advanced);
   expect(await screen.findByLabelText("Prompt YAML")).toHaveValue("instruction: Recorded instructions");

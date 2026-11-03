@@ -1,5 +1,6 @@
 """Deep-mode collection accounts for unstarted and uncertain cases honestly."""
 
+from typing import Literal
 from uuid import uuid4
 
 import pytest
@@ -11,6 +12,7 @@ from markettwin_execution_orchestrator.workflow.deep_run import (
     knowledge_requirements,
     skip_reason,
 )
+from markettwin_execution_orchestrator.workflow.run_executor import MarketTwinRunRequest
 from markettwin_execution_orchestrator.workflow.run_request import build_run_request
 from markettwin_execution_orchestrator.workflow.test_case_planner import (
     DeepFeaturePlanningRequest,
@@ -152,7 +154,7 @@ def test_case_budget_stops_before_starting_another_case() -> None:
     assert skip_reason(remaining_seconds=30, remaining_steps=required, case=case) is None
 
 
-def test_run_mode_is_opt_in_and_fixture_authority_not_loaded_from_configuration() -> None:
+def test_historical_mode_falls_back_to_legacy_and_fixture_authority_is_not_configurable() -> None:
     run = TestRun(
         id=uuid4(),
         target_snapshot={
@@ -176,6 +178,25 @@ def test_run_mode_is_opt_in_and_fixture_authority_not_loaded_from_configuration(
     run.configuration_snapshot = {**run.configuration_snapshot, "execution_mode": "unknown"}
     with pytest.raises(ValueError, match="Unsupported execution mode"):
         build_run_request(run)
+
+
+def test_new_runtime_requests_default_to_discovery_contract() -> None:
+    request = MarketTwinRunRequest(
+        run_id=uuid4(), study_brief="Test the form.", target_snapshot={},
+        start_url="https://example.test/", allowed_origins=(),
+    )
+    assert request.execution_mode == "discovery_contract_v1"
+
+
+@pytest.mark.parametrize("mode", ["legacy_persona", "deep_feature_v1", "discovery_contract_v1"])
+def test_runtime_requests_preserve_explicit_execution_modes(
+    mode: Literal["legacy_persona", "deep_feature_v1", "discovery_contract_v1"],
+) -> None:
+    request = MarketTwinRunRequest(
+        run_id=uuid4(), study_brief="Test the form.", target_snapshot={},
+        start_url="https://example.test/", allowed_origins=(), execution_mode=mode,
+    )
+    assert request.execution_mode == mode
 
 
 def test_fixture_authority_requires_dedicated_persisted_flag_and_loopback_target() -> None:

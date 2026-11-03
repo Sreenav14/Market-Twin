@@ -25,8 +25,7 @@ export function ProfileSettingsPage() {
         </div>
       </dl>
       <p className="panel-note">
-        Profile editing will appear only after the Control API exposes a
-        supported update contract.
+        Profile details are read-only here.
       </p>
     </section>
   );

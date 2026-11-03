@@ -18,7 +18,7 @@ export const sourceRoles = [
   ["test_input", "Test input"],
   ["ground_truth", "Expected results"],
   ["ui_reference", "UI reference"],
-  ["persona_evidence", "Audience and personas"],
+  ["persona_evidence", "Audience and testers"],
   ["environment_configuration", "Environment configuration"],
 ] as const;
 
@@ -62,7 +62,7 @@ export function IngestionPage() {
   }
 
   return (
-    <>
+    <div className="knowledge-ingestion">
       <PageHeader
         title="Ingestion"
         description="Upload a file or research a public link to generate draft knowledge and skills. Review and approve them before using them in a test."
@@ -88,15 +88,6 @@ export function IngestionPage() {
                 setError(null);
                 event.currentTarget.querySelector<HTMLButtonElement>(`#tab-${next}`)?.focus();
               }}
-              style={{
-                display: "flex",
-                gap: "8px",
-                margin: "8px 0 16px",
-                padding: "4px",
-                background: "var(--surface-muted)",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
             >
               <button
                 type="button"
@@ -106,25 +97,6 @@ export function IngestionPage() {
                 aria-controls="source-panel"
                 tabIndex={sourceType === "file" ? 0 : -1}
                 className={`segmented-control-item ${sourceType === "file" ? "active" : ""}`}
-                style={{
-                  flex: "1 1 0",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  minHeight: "40px",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border: "1px solid",
-                  borderColor: sourceType === "file" ? "var(--border-strong)" : "transparent",
-                  background: sourceType === "file" ? "var(--surface)" : "transparent",
-                  color: sourceType === "file" ? "var(--text)" : "var(--text-3)",
-                  boxShadow: sourceType === "file" ? "var(--shadow)" : "none",
-                  transition: "all 140ms ease",
-                }}
                 onClick={() => { setSourceType("file"); setError(null); }}
                 disabled={busy}
               >
@@ -139,25 +111,6 @@ export function IngestionPage() {
                 aria-controls="source-panel"
                 tabIndex={sourceType === "link" ? 0 : -1}
                 className={`segmented-control-item ${sourceType === "link" ? "active" : ""}`}
-                style={{
-                  flex: "1 1 0",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  minHeight: "40px",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border: "1px solid",
-                  borderColor: sourceType === "link" ? "var(--border-strong)" : "transparent",
-                  background: sourceType === "link" ? "var(--surface)" : "transparent",
-                  color: sourceType === "link" ? "var(--text)" : "var(--text-3)",
-                  boxShadow: sourceType === "link" ? "var(--shadow)" : "none",
-                  transition: "all 140ms ease",
-                }}
                 onClick={() => { setSourceType("link"); setError(null); }}
                 disabled={busy}
               >
@@ -186,13 +139,6 @@ export function IngestionPage() {
               <div
                 className="info-card"
                 id="link-help"
-                style={{
-                  marginTop: "8px",
-                  padding: "12px 14px",
-                  borderRadius: "8px",
-                  background: "var(--surface-muted)",
-                  border: "1px solid var(--border)",
-                }}
               >
                 <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text)" }}>
                   <Info size={15} aria-hidden="true" style={{ color: "var(--evidence)" }} />
@@ -228,13 +174,6 @@ export function IngestionPage() {
               <div
                 className="info-card"
                 id="source-help"
-                style={{
-                  marginTop: "8px",
-                  padding: "12px 14px",
-                  borderRadius: "8px",
-                  background: "var(--surface-muted)",
-                  border: "1px solid var(--border)",
-                }}
               >
                 <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text)" }}>
                   <Info size={15} aria-hidden="true" style={{ color: "var(--evidence)" }} />
@@ -324,6 +263,6 @@ export function IngestionPage() {
           <EmptyState title="No sources yet" copy="Ingest a source to generate knowledge for review. Approved knowledge can be reused in tests across your workspace." />
         )}
       </section>
-    </>
+    </div>
   );
 }

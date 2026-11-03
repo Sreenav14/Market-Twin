@@ -26,7 +26,7 @@ it.each(["application", "target"] as const)("keeps a pending %s save from overri
   </MemoryRouter>);
   const name = screen.getByLabelText(kind === "application" ? /^Name/ : /^Target name/);
   fireEvent.change(name, { target: { value: "Storefront" } });
-  fireEvent.click(screen.getByRole("button", { name: kind === "application" ? "Create application" : "Save target & review authorization" }));
+  fireEvent.click(screen.getByRole("button", { name: kind === "application" ? "Add an app" : "Save target & review authorization" }));
   expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   expect(name).toBeDisabled();
   expect(fetchMock).toHaveBeenCalledTimes(1);

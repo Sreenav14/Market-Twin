@@ -8,7 +8,7 @@ import {
   ErrorPanel,
   LoadingPanel,
 } from "../../components/ui/StateViews";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { StatusBadge, TestStatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, api } from "../../lib/api";
 import { testTitle, textValue } from "../../lib/format";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
@@ -99,7 +99,7 @@ export function ApplicationOverviewPage() {
           className="primary-button"
           to={`/applications/${application.id}/runs/new`}
         >
-          <Icon name="plus" size={16} /> New test
+          <Icon name="plus" size={16} /> Start a test
         </Link>
       );
     }
@@ -108,7 +108,7 @@ export function ApplicationOverviewPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Application"
+        eyebrow="App"
         title={application.name}
         description={
           application.description ||
@@ -220,7 +220,7 @@ export function ApplicationOverviewPage() {
             className="text-link"
             to={`/applications/${application.id}/runs`}
           >
-            View all
+            See all tests
           </Link>
         </div>
         {runsState.status === "loading" ? (
@@ -247,7 +247,7 @@ export function ApplicationOverviewPage() {
                   className="primary-button"
                   to={`/applications/${application.id}/runs/new`}
                 >
-                  <Icon name="plus" size={16} /> New test
+                  <Icon name="plus" size={16} /> Start a test
                 </Link>
               ) : targetsData.length > 0 && firstUnauthorized && canWrite ? (
                 <Link
@@ -265,7 +265,7 @@ export function ApplicationOverviewPage() {
               <div key={run.id} role="listitem">
                 <Link
                   className="data-row"
-                  to={`/runs/${run.id}/overview`}
+                  to={`/runs/${run.id}/${run.status === "awaiting_human" ? "human-action" : ["running", "planning", "queued"].includes(run.status) ? "watch" : run.status === "draft" ? "overview" : "results"}`}
                 >
                   <span className="row-icon">
                     <Icon name="runs" size={16} />
@@ -279,7 +279,7 @@ export function ApplicationOverviewPage() {
                       )}
                     </span>
                   </div>
-                  <StatusBadge status={run.status} />
+                  <TestStatusBadge status={run.status} />
                   <Icon name="arrow" size={16} />
                 </Link>
               </div>

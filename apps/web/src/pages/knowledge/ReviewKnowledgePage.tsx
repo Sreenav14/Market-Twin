@@ -138,12 +138,12 @@ export function ReviewKnowledgePage() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 <span className="muted" style={{ fontSize: "12px" }}>Active filters:</span>
                 {search ? (
-                  <span className="status-badge status-neutral" style={{ fontSize: "11px", gap: "4px" }}>
+                  <span className="knowledge-meta" style={{ fontSize: "11px", gap: "4px" }}>
                     "{search}"
                   </span>
                 ) : null}
                 {status !== "all" ? (
-                  <span className="status-badge status-neutral" style={{ fontSize: "11px" }}>
+                  <span className="knowledge-meta" style={{ fontSize: "11px" }}>
                     {statusLabel}
                   </span>
                 ) : null}
@@ -180,7 +180,7 @@ export function ReviewKnowledgePage() {
                           <Link to={`/knowledge/review/${entry.id}`}>{entry.name}</Link>
                         </strong>
                         <span
-                          className="status-badge status-neutral"
+                          className="knowledge-meta"
                           style={{ fontSize: "11px", padding: "1px 7px" }}
                         >
                           {isLink ? "Public Link" : "Document"}
@@ -224,7 +224,7 @@ export function ReviewKnowledgePage() {
                           {entry.application_ids?.map((appId) => (
                             <span
                               key={appId}
-                              className="status-badge status-info"
+                              className="knowledge-meta"
                               style={{ fontSize: "11px", padding: "1px 6px" }}
                             >
                               {appMap.get(appId) || "Application"}

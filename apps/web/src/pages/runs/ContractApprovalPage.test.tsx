@@ -27,7 +27,7 @@ function renderPage(contract = draft(), depth = "medium") {
   } as unknown as RunContext;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Context() { return <Outlet context={context} />; }
-  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/runs/run/contract"]}><Routes><Route element={<Context />}><Route path="/runs/:runId/contract" element={<ContractApprovalPage />} /><Route path="/runs/:runId/activity" element={<p>Tests running</p>} /></Route></Routes></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/runs/run/contract"]}><Routes><Route element={<Context />}><Route path="/runs/:runId/contract" element={<ContractApprovalPage />} /><Route path="/runs/:runId/watch" element={<p>Tests running</p>} /></Route></Routes></MemoryRouter></QueryClientProvider>);
 }
 it("approves before starting and displays the authorized app address", async () => {
   const order: string[] = [];

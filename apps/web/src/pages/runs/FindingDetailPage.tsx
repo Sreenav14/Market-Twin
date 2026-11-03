@@ -1,3 +1,4 @@
+import { statusLabel } from "../../lib/format";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ArrowLeft, Paperclip, Route, ScanSearch } from "lucide-react";
@@ -122,7 +123,7 @@ export function FindingDetailPage() {
               <div className="finding-title-meta">
                 <StatusBadge status={finding.severity} />
                 <span className="category-label">
-                  {findingClassification(finding)} ·{" "}
+                  {statusLabel(findingClassification(finding))} ·{" "}
                   {finding.category.replaceAll("_", " ")}
                 </span>
               </div>
@@ -148,7 +149,7 @@ export function FindingDetailPage() {
                 </h3>
                 <p className="muted">
                   These references link to the cited browser steps and artifacts.
-                  A reference alone does not establish that an agent's claim is correct.
+                  A reference alone does not establish that a tester's claim is correct.
                 </p>
                 {finding.evidence.step_ids.length +
                   finding.evidence.artifact_ids.length ===
@@ -189,7 +190,7 @@ export function FindingDetailPage() {
                   Affected journeys
                 </h3>
                 <p className="muted">
-                  Open a journey to review its persona, mission, and reported criteria.
+                  Open a journey to review its tester, goal, and reported checks.
                 </p>
                 <ul className="reference-list">
                   {finding.journey_ids.map((id) => (
@@ -212,7 +213,7 @@ export function FindingDetailPage() {
                   <dd>
                     {findingClassification(finding) === "Visually verified issue"
                       ? "Visual verification"
-                      : "Agent report / execution diagnostic"}
+                      : "Tester report / execution diagnostic"}
                   </dd>
                 </div>
                 <div>

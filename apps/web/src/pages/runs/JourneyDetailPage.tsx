@@ -1,3 +1,4 @@
+import { statusLabel } from "../../lib/format";
 import { useEffect } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
@@ -371,7 +372,7 @@ export function JourneyDetailPage() {
       {findings.length ? (
         findings.map((finding) => (
           <article className="panel" key={finding.id} style={{ marginTop: "12px" }}>
-            <p className="section-label">{findingClassification(finding)}</p>
+            <p className="section-label">{statusLabel(findingClassification(finding))}</p>
             <Link to={`/runs/${run.id}/findings/${finding.id}`}>
               {finding.title}
             </Link>

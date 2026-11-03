@@ -1,10 +1,8 @@
-import { FutureStagePage } from "../../components/ui/FutureStagePage";
 export function SecuritySettingsPage() {
   return (
-    <FutureStagePage
-      stage="Security"
-      title="Security"
-      description="Session management and production identity settings will appear only when their backend management APIs are exposed."
-    />
+    <section className="panel settings-panel">
+      <h2>Security</h2>
+      <p className="panel-note">Session and identity management are not available here yet.</p>
+    </section>
   );
 }

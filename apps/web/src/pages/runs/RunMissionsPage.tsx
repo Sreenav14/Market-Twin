@@ -29,15 +29,15 @@ export function RunMissionsPage() {
         <div>
           <h2 id="testing-goals-heading">Testing goals</h2>
           <p className="muted">
-            Compact coverage matrix of planned testing goals and criteria against attempted persona outcomes.
+            Compact coverage matrix of planned testing goals and criteria against recorded tester outcomes.
           </p>
         </div>
       </div>
 
       {isDeep ? (
         <EmptyState
-          title="Feature cases do not use persona goals"
-          copy="Each Feature Case is an explicit planned check listed under Journeys, with deterministic browser steps and assertions."
+          title="Feature cases use planned checks"
+          copy="Each Feature Case is an explicit planned check listed under Journeys, with recorded browser steps and checks."
           action={
             <Link className="secondary-button" to={`/runs/${run.id}/journeys`}>
               View Feature Cases
@@ -143,7 +143,7 @@ export function RunMissionsPage() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "minmax(140px, 1.2fr) minmax(180px, 2fr) 130px 130px auto",
+                        gridTemplateColumns: "var(--concept-goals-columns)",
                         gap: 12,
                         padding: "10px 16px",
                         background: "var(--surface-muted)",
@@ -166,7 +166,7 @@ export function RunMissionsPage() {
                         key={journey.id}
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "minmax(140px, 1.2fr) minmax(180px, 2fr) 130px 130px auto",
+                          gridTemplateColumns: "var(--concept-goals-columns)",
                           gap: 12,
                           alignItems: "center",
                           padding: "12px 16px",

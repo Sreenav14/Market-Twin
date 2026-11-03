@@ -1,5 +1,6 @@
 import type { JourneyExecution } from "./api";
 import { journeyIdentity } from "./journeyPresentation";
+import { statusLabel } from "./format";
 
 // Simulated testers and missions exist only for persona journeys. Browser
 // discovery records and deterministic Feature Cases are excluded.
@@ -28,7 +29,7 @@ export function groupJourneys(journeys: JourneyExecution[], keyOf: (journey: Jou
 export function countLabels(values: (string | null)[]): string {
   const counts = new Map<string, number>();
   for (const value of values) {
-    const label = value ? value.replaceAll("_", " ") : "not recorded";
+    const label = value ? statusLabel(value) : "not recorded";
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return [...counts].map(([label, count]) => `${count} ${label}`).join(" · ");

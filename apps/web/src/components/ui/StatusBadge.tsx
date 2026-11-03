@@ -3,6 +3,7 @@ import type {
   JourneyOutcome,
   TestRunStatus,
 } from "../../lib/api";
+import { statusLabel } from "../../lib/format";
 
 const success = new Set([
   "active",
@@ -29,6 +30,7 @@ const warning = new Set([
   "paused",
   "blocked",
   "inconclusive",
+  "unverified",
 ]);
 const info = new Set([
   "running",
@@ -51,10 +53,12 @@ export function StatusBadge({ status }: { status: string }) {
         : info.has(value)
           ? "info"
           : "neutral";
+  const symbol = tone === "success" ? "✓" : tone === "danger" ? "×"
+    : tone === "warning" ? "?" : tone === "info" ? "•" : "–";
   return (
     <span className={`status-badge status-${tone}`}>
-      <span className="status-dot" aria-hidden="true" />
-      {status.replaceAll("_", " ")}
+      <span className="status-dot" aria-hidden="true">{symbol}</span>
+      {statusLabel(status)}
     </span>
   );
 }

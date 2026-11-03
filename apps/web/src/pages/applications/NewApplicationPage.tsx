@@ -25,7 +25,7 @@ export function NewApplicationPage() {
   if (!canWriteWorkspace(workspace.role)) {
     return (
       <>
-        <PageHeader eyebrow="Applications" title="Create application" />
+        <PageHeader eyebrow="Your apps" title="Add an app" />
         <div className="error-panel" role="alert">
           <div>
             <strong>Read-only workspace</strong>
@@ -33,7 +33,7 @@ export function NewApplicationPage() {
           </div>
           <div>
             <Link className="secondary-button" to="/applications">
-              Back to applications
+              Back to your apps
             </Link>
           </div>
         </div>
@@ -78,8 +78,8 @@ export function NewApplicationPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Applications"
-        title="Create application"
+        eyebrow="Your apps"
+        title="Add an app"
         description="Next you will add a target environment and authorize testing."
       />
       <div className="two-column-layout">
@@ -152,7 +152,7 @@ export function NewApplicationPage() {
                   <Spinner /> Creating…
                 </>
               ) : (
-                "Create application"
+                "Add an app"
               )}
             </button>
           </div>
@@ -161,10 +161,10 @@ export function NewApplicationPage() {
         <aside className="info-card">
           <h2>Application boundary</h2>
           <p>
-            An application organizes the targets, test runs, and authorized execution scopes for a single product area.
+            An application organizes the targets, tests, and authorized execution scopes for a single product area.
           </p>
           <p style={{ marginTop: "12px" }}>
-            After creating this container, you will register target URLs (such as staging or QA environments) and explicitly authorize browser agents to test them.
+            After creating this container, you will register target URLs (such as staging or QA environments) and explicitly authorize browser testers to test them.
           </p>
         </aside>
       </div>

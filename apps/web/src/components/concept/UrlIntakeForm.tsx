@@ -66,7 +66,7 @@ export const UrlIntakeForm: React.FC<UrlIntakeFormProps> = ({
       <label
         htmlFor={inputId}
         className="font-meta-label block"
-        style={{ color: "var(--ink-faint)", marginBottom: "8px" }}
+        style={{ color: "var(--ink-2)", marginBottom: "8px" }}
       >
         YOUR APP'S ADDRESS
       </label>

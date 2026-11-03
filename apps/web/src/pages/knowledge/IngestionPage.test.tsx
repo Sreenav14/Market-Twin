@@ -220,9 +220,18 @@ describe("workspace ingestion", () => {
     expect(await screen.findByRole("heading", { name: "Shared product rules" })).toBeInTheDocument();
     expect(rename).toHaveBeenCalledWith("workspace", "entry", "Shared product rules");
     await user.click(await screen.findByRole("checkbox", { name: "Demo application" }));
-    expect(screen.queryByRole("link", { name: /Create test/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Start a test/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save applications" }));
     expect(attach).toHaveBeenCalledWith("workspace", "entry", ["app"]);
-    expect(await screen.findByRole("link", { name: /Create test/ })).toHaveAttribute("href", "/applications/app/runs/new");
+    expect(await screen.findByRole("link", { name: /Start a test/ })).toHaveAttribute("href", "/applications/app/runs/new");
+  });
+
+  it("keeps knowledge test creation unavailable to viewers", async () => {
+    renderPage("viewer", "/knowledge/review/entry", { ...entry, status: "approved", application_ids: ["app"] });
+    vi.mocked(api.listApplications).mockResolvedValue([{ id: "app", workspace_id: "workspace", created_by_user_id: "user", name: "Storefront", description: null, status: "active" }]);
+    expect(await screen.findByRole("checkbox", { name: "Storefront" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: /Start a test/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save applications" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Evidence 1" }).some((link) => link.getAttribute("href") === "#evidence-1")).toBe(true);
   });
 });

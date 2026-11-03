@@ -214,7 +214,7 @@ export function NewTargetPage() {
             <span>
               <strong>Protected experience (requires login)</strong>
               <small>
-                Enable this if test journeys must pass authentication screens. Agents will coordinate with human assistance or use configured credentials. Identity provider origins (e.g. OAuth/SSO) must still be authorized in network policy.
+                Enable this if test journeys must pass authentication screens. Testers will coordinate with human assistance or use configured credentials. Identity provider origins (e.g. OAuth/SSO) must still be authorized in network policy.
               </small>
             </span>
             <input

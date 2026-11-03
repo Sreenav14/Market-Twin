@@ -23,11 +23,12 @@ export function IngestionProgress({ entry }: { entry: IngestionSummary }) {
       || (entry.processing_stage ? ingestionStageLabel(entry)
         : queued ? "Source saved · Waiting to process" : "Processing source");
     return <div className="ingestion-progress">
-      <span role="status">{label}</span>
+      <span role="status"><span aria-hidden="true">◐ </span>{label}</span>
       <progress aria-label="Ingestion progress" aria-valuetext={label} />
     </div>;
   }
   return <span className={`status-badge ${entry.processing_status === "failed" ? "status-danger" : entry.status === "approved" ? "status-success" : "status-neutral"}`}>
+    <span aria-hidden="true">{entry.processing_status === "failed" ? "✕" : entry.status === "approved" ? "✓" : "!"}</span>
     {entry.processing_status === "failed" ? "Processing failed" : entry.status === "approved" ? "Approved" : "Needs review"}
   </span>;
 }

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { request } from "../../lib/api";
 import { ArtifactEvidence } from "../../pages/runs/FindingDetailPage";
 import { ErrorPanel, LoadingPanel } from "../ui/StateViews";
+import { statusLabel } from "../../lib/format";
 
 interface RecordedAssertion {
   assertion_id: string; expected_value: string | number | boolean;
@@ -41,11 +42,11 @@ function AuthenticatedCoverage({ runId, userId }: { runId: string; userId: strin
   const summary = query.data;
   return <details className="authenticated-coverage" aria-label="Authenticated coverage">
     <summary><strong>Authentication and human contribution</strong><span>{summary.human_requests?.completed ?? 0} completed handoffs · {summary.reused_auth_cases ?? 0} reused cases · {summary.action_approvals?.consumed ?? 0} consumed approvals</span></summary>
-    <p>{summary.executor_mode === "deterministic_case_steps" ? "Deterministic case execution" : "Agent journey execution"}.
-      Human login and approval decisions are recorded separately from agent test steps.</p>
+    <p>{summary.executor_mode === "deterministic_case_steps" ? "Planned feature checks" : "Tester journeys"}.
+      Human login and approval decisions are recorded separately from tester steps.</p>
     <p>{summary.human_requests?.completed ?? 0} completed human handoffs · {summary.reused_auth_cases ?? 0} cases with reused authentication · {summary.action_approvals?.consumed ?? 0} consumed action approvals.</p>
     {summary.role_coverage?.length ? summary.role_coverage.map((row) => <p key={row.role}>
-      Role {row.role}: {row.authenticated} authenticated · {row.executed} recorded cases · {row.passed} recorded passes · {row.blocked} blocked · {row.inconclusive} inconclusive · {row.not_run} not run.
+      Role {row.role}: {row.authenticated} authenticated · {row.executed} recorded cases · {row.passed} recorded passes · {row.blocked} blocked · {row.inconclusive} could not check · {row.not_run} not checked.
     </p>) : <p>No role has been verified for a protected feature case.</p>}
     {summary.inventory?.map((item) => <p key={item.feature_key}>
       Planned feature {item.feature_key}: {item.asserted_cases} cases with recorded assertions · {item.not_explored} cases not explored.
@@ -75,7 +76,7 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
     {coverage ? <dl className="feature-coverage-summary" aria-label="Recorded case counts">
       {([
         ["planned", "Planned"], ["passed", "Passed"], ["failed_assertions", "Failed assertions"],
-        ["blocked", "Blocked"], ["inconclusive", "Inconclusive"], ["not_run", "Not run"],
+        ["blocked", "Blocked"], ["inconclusive", "Could not check"], ["not_run", "Not checked"],
       ] as const).map(([key, label]) => <div key={key} data-outcome={key}>
         <dt>{label}</dt><dd>{Number.isInteger(coverage[key]) && coverage[key] >= 0
           ? coverage[key].toLocaleString() : "Not recorded"}</dd>
@@ -84,19 +85,19 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
     {cases.length ? <div className="feature-case-workbench">
       <ul className="feature-case-list" aria-label="Feature cases">
         {cases.map((item) => <li key={item.case_id}><button type="button" className="feature-case-choice" aria-pressed={(selected?.case_id ?? "") === item.case_id} onClick={() => setSelectedCaseId(item.case_id)}>
-          <strong>{item.title}</strong><span>{item.reason === "human_assistance_skipped" ? "Not tested" : pending ? "Awaiting evaluation" : item.verdict.replaceAll("_", " ")}</span><span className="muted">{item.kind.replaceAll("_", " ")}</span>
+          <strong>{item.title}</strong><span>{item.reason === "human_assistance_skipped" ? "Not tested" : pending ? "Awaiting evaluation" : statusLabel(item.verdict)}</span><span className="muted">{item.kind.replaceAll("_", " ")}</span>
           <span className="muted">Assertions: {item.assertions.length} · Sources: {[...new Set(item.assertions.map((assertion) => assertion.origin.replaceAll("_", " ")))].join(", ") || "not recorded"}</span>
         </button></li>)}
       </ul>
       {selected ? <article className="panel feature-case-detail" aria-live="polite">
-      <p className="section-label">{selected.kind.replaceAll("_", " ")} · {selected.reason === "human_assistance_skipped" ? "Not tested" : pending ? "Evaluation pending" : selected.verdict.replaceAll("_", " ")}</p>
+      <p className="section-label">{selected.kind.replaceAll("_", " ")} · {selected.reason === "human_assistance_skipped" ? "Not tested" : pending ? "Evaluation pending" : statusLabel(selected.verdict)}</p>
       <h3>{selected.title}</h3>
-      {pending && selected.recorded_verdict && selected.reason !== "human_assistance_skipped" ? <p>Recorded result awaiting verification: {selected.recorded_verdict.replaceAll("_", " ")}. This is not a confirmed defect yet.</p> : null}
+      {pending && selected.recorded_verdict && selected.reason !== "human_assistance_skipped" ? <p>Recorded result awaiting verification: {statusLabel(selected.recorded_verdict)}. This is not a confirmed defect yet.</p> : null}
       {selected.verdict === "not_satisfied" ? <p>Next: open the supporting step and compare the screenshot with the expected value.</p> : null}
       {selected.reason ? <p>{selected.reason === "human_assistance_skipped" ? "Not tested—human assistance skipped." : selected.reason === "authentication_challenge_blocked" ? "Login or identity was not verified. Complete sign-in and any challenge or MFA before starting a new attempt. This does not establish an application defect." : selected.reason.replaceAll("_", " ")}</p> : null}
       {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}`}>Open recorded steps</Link> : null}
       {selected.assertions.map((assertion) => <section className="feature-assertion" data-assertion={assertion.observed_value === null ? "unavailable" : assertion.status} key={assertion.assertion_id}>
-        <h4>{assertion.assertion_id.replaceAll("_", " ")} · {assertion.status.replaceAll("_", " ")}</h4>
+        <h4>{assertion.assertion_id.replaceAll("_", " ")} · {statusLabel(assertion.status)}</h4>
         <dl><div><dt>Expected</dt><dd>{String(assertion.expected_value)}</dd></div><div><dt>Observed</dt><dd>{assertion.observed_value === null ? "Unavailable" : String(assertion.observed_value)}</dd></div><div><dt>Source</dt><dd>{assertion.origin.replaceAll("_", " ")}</dd></div><div><dt>Supporting step</dt><dd>{assertion.step_id}</dd></div></dl>
         {selected.journey_id ? <Link to={`/runs/${runId}/journeys/${selected.journey_id}?step=${assertion.step_id}`}>Open supporting step</Link> : null}
         <div className="feature-assertion-evidence">{assertion.artifact_ids.map((artifactId) => <ArtifactEvidence key={artifactId} runId={runId} artifactId={artifactId} />)}</div>

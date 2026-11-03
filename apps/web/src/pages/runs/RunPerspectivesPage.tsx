@@ -37,7 +37,7 @@ export function RunPerspectivesPage() {
       {isDeep ? (
         <EmptyState
           title="Feature Cases do not use simulated testers"
-          copy="Feature Cases run planned deterministic checks with a browser executor rather than simulated personas. Open Journeys to inspect each case's steps and evidence."
+          copy="Feature cases use planned browser checks. Open Journeys to inspect each case's steps and evidence."
           action={
             <Link className="secondary-button" to={`/runs/${run.id}/journeys`}>
               View Feature Cases

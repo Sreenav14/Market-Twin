@@ -1,5 +1,12 @@
 # Fix specification execution plan
 
+Latest (2026-11-02): corrected single-contract six-run campaign passed every gate;
+Phase 7 default/banner implemented and focused checks passed. Live UI wiring is
+integrated; 199/199 frontend tests, typecheck/build, production Pyright and Ruff
+pass. Final post-Phase7 full Python suite passed: 1,245 passed, 23 skipped, zero
+failures. Phases 0–7 and requested live UI wiring are complete locally. Older
+checkpoints below are historical diagnostic attempts. No commits or deployment.
+
 Updated 2026-11-02 (case-timeout fix required). All work is local and uncommitted.
 
 The user explicitly authorized parallel agent work and asked for the fastest

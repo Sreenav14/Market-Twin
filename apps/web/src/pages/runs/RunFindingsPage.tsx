@@ -1,3 +1,4 @@
+import { statusLabel } from "../../lib/format";
 import { useDeferredValue } from "react";
 import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal } from "lucide-react";
@@ -144,12 +145,12 @@ export function RunFindingsPage() {
                   return items.length ? (
                     <section key={heading} aria-label={heading}>
                       <h3>{heading}</h3>
-                      {heading === "Needs Verification" ? <p className="muted">These observations require relevant browser evidence. Agreement between synthetic personas is not independent proof.</p> : null}
+                      {heading === "Needs Verification" ? <p className="muted">These observations require relevant browser evidence. Agreement between simulated testers is not independent proof.</p> : null}
                       <ul className="finding-list findings-list">
                         {items.map((finding) => <li className="finding-item" key={finding.id}>
                           <button type="button" className="finding-select" aria-pressed={selected?.id === finding.id} onClick={() => selectFinding(finding.id)}>
                             <StatusBadge status={finding.severity} />
-                            <span className="category-label">{findingClassification(finding)} · {finding.category.replaceAll("_", " ")}</span>
+                            <span className="category-label">{statusLabel(findingClassification(finding))} · {finding.category.replaceAll("_", " ")}</span>
                             <strong>{finding.title}</strong><span>{finding.summary}</span>
                             <small>{finding.evidence.step_ids.length} steps · {finding.evidence.artifact_ids.length} artifacts</small>
                           </button>
@@ -160,7 +161,7 @@ export function RunFindingsPage() {
                 })}
                 </div>
                 {selected ? <aside className="finding-inspector" aria-labelledby="finding-inspector-title" aria-live="polite">
-                  <div className="finding-title-meta"><StatusBadge status={selected.severity} /><span className="category-label">{findingClassification(selected)} · {selected.category.replaceAll("_", " ")}</span></div>
+                  <div className="finding-title-meta"><StatusBadge status={selected.severity} /><span className="category-label">{statusLabel(findingClassification(selected))} · {selected.category.replaceAll("_", " ")}</span></div>
                   <h3 id="finding-inspector-title">{selected.title}</h3><p>{selected.summary}</p>
                   <p><strong>Recommendation</strong><br />{selected.recommendation || "No recommendation was included."}</p>
                   <p className="muted">{selected.evidence.step_ids.length} cited steps · {selected.evidence.artifact_ids.length} artifacts · {selected.journey_ids.length} affected journeys</p>
@@ -185,7 +186,7 @@ export function RunFindingsPage() {
           </>
         ) : (
           emptySummary ? <>
-            <EmptyState title={emptySummary.title} copy={emptySummary.copy} action={<Link className="secondary-button" to={`/runs/${run.id}/report${emptySummary.featureCases ? "#report-feature-cases" : ""}`}>{emptySummary.featureCases ? "Review case outcomes and assertions" : "Review evaluation report"}</Link>} />
+            <EmptyState title={emptySummary.title} copy={emptySummary.copy} action={<Link className="secondary-button" to={`/runs/${run.id}/results${emptySummary.featureCases ? "#report-feature-cases" : ""}`}>{emptySummary.featureCases ? "Review case outcomes and assertions" : "Review evaluation report"}</Link>} />
             {emptySummary.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
           </> : null
         )}

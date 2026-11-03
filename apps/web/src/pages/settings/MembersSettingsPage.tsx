@@ -1,10 +1,8 @@
-import { FutureStagePage } from "../../components/ui/FutureStagePage";
 export function MembersSettingsPage() {
   return (
-    <FutureStagePage
-      stage="Workspace administration"
-      title="Members"
-      description="Workspace membership exists in the data model, but member-management endpoints are not implemented in the current Control API."
-    />
+    <section className="panel settings-panel">
+      <h2>Members</h2>
+      <p className="panel-note">Member management is not available here yet.</p>
+    </section>
   );
 }

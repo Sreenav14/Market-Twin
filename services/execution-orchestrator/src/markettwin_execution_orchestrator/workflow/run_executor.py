@@ -78,7 +78,7 @@ class MarketTwinRunRequest:
     replay_plan: dict[str, object] | None = None
     execution_mode: Literal[
         "legacy_persona", "deep_feature_v1", "discovery_contract_v1",
-    ] = "legacy_persona"
+    ] = "discovery_contract_v1"
     feature_scope: dict[str, object] | None = None
     feature_budget: dict[str, object] | None = None
     feature_plan: dict[str, object] | None = None

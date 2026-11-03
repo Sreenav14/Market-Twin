@@ -88,6 +88,7 @@ async def test_over_budget_plan_cannot_reach_browser_execution(
         target_snapshot={},
         start_url="https://example.invalid",
         testing_depth="low",
+        execution_mode="legacy_persona",
         allowed_origins=(AllowedOrigin(scheme="https", hostname="example.invalid"),),
     )
     with pytest.raises(ValueError, match="exceeds the selected testing depth"):

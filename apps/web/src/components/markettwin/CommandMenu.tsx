@@ -32,7 +32,7 @@ const destinations = [
   },
   {
     title: "Testers",
-    description: "Inspect agent prompts and prepare a rerun",
+    description: "Inspect tester instructions and prepare another test",
     href: "/agents",
   },
   {

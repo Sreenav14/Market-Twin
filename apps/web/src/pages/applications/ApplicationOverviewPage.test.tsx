@@ -31,22 +31,22 @@ it("waits for target readiness before suggesting configuration or authorization"
   open();
   await screen.findByRole("heading", { name: "Storefront" });
   expect(screen.getByText(/Loading targets/)).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: /Add target|Authorize target|New test/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Add target|Authorize target|Start a test/ })).not.toBeInTheDocument();
   expect(screen.queryByText("Targets (0)")).not.toBeInTheDocument();
   await act(async () => { resolve([target]); });
-  expect((await screen.findAllByRole("link", { name: /New test/ })).length).toBeGreaterThan(0);
+  expect((await screen.findAllByRole("link", { name: /Start a test/ })).length).toBeGreaterThan(0);
 });
 
 it("keeps an authorization outage distinct from missing authorization and recovers on retry", async () => {
   vi.spyOn(api, "getAuthorization").mockRejectedValueOnce(new ApiError("Unavailable", 503)).mockResolvedValue(authorization);
   open();
-  await screen.findByText("unavailable");
+  await screen.findByText("Not available");
   expect(screen.queryByText("not authorized")).not.toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: /Authorize target|New test/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Authorize target|Start a test/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Retry target readiness" }));
   await screen.findByText("authorized");
   expect(screen.queryByRole("button", { name: "Retry target readiness" })).not.toBeInTheDocument();
-  expect(screen.getAllByRole("link", { name: /New test/ }).length).toBeGreaterThan(0);
+  expect(screen.getAllByRole("link", { name: /Start a test/ }).length).toBeGreaterThan(0);
 });
 
 it("offers retry after a target-list outage instead of suggesting an empty configuration", async () => {
@@ -63,4 +63,20 @@ it("offers authorization when the API confirms that the grant is missing", async
   await screen.findByText("not authorized");
   expect(screen.getAllByRole("link", { name: /Authorize target/ }).length).toBeGreaterThan(0);
   expect(screen.queryByRole("button", { name: "Retry target readiness" })).not.toBeInTheDocument();
+});
+
+it.each([
+  ["completed", "results"],
+  ["running", "watch"],
+  ["awaiting_human", "human-action"],
+  ["draft", "overview"],
+] as const)("opens the %s test in its current view", async (status, destination) => {
+  vi.spyOn(api, "getAuthorization").mockResolvedValue(authorization);
+  vi.mocked(api.listRuns).mockResolvedValue([{
+    id: "test-1", workspace_id: "ws-1", application_id: "app-1", target_id: "target-1",
+    created_by_user_id: "user-1", status, configuration_snapshot: { test_name: "Checkout" },
+    target_snapshot: { name: "Staging" },
+  }]);
+  open();
+  expect(await screen.findByRole("link", { name: /Checkout/ })).toHaveAttribute("href", `/runs/test-1/${destination}`);
 });

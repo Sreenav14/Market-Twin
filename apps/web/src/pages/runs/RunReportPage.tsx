@@ -22,6 +22,7 @@ import {
 } from "../../lib/results";
 import type { Finding } from "../../lib/api";
 import { ContractReport } from "./ContractReport";
+import { statusLabel } from "../../lib/format";
 
 function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string }) {
   const classification = findingClassification(finding);
@@ -30,7 +31,7 @@ function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string
     <li className="ledger-finding-card">
       <div className="ledger-finding-meta">
         <StatusBadge status={finding.severity} />
-        <span>{classification} · {finding.category.replaceAll("_", " ")}</span>
+        <span>{statusLabel(classification)} · {finding.category.replaceAll("_", " ")}</span>
       </div>
       <h4>
         <Link to={`/runs/${runId}/findings/${finding.id}`}>
@@ -54,7 +55,7 @@ function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string
           </Link>
         ) : (
           <span className="ledger-fineprint">
-            {isConfirmed ? classification : "Unverified observation"}
+            {isConfirmed ? statusLabel(classification) : "Not confirmed"}
           </span>
         )}
         <span className="ledger-fineprint">
@@ -104,9 +105,11 @@ export function RunReportPage() {
 
   const verdict = reportVerdict(data, featureRun);
   const { completed, total: journeyTotal, completionRate } = verdict;
+  const executionMode = data.report.payload.mode ?? run.configuration_snapshot.execution_mode ?? "legacy_persona";
 
   return (
     <ResultsBoundary>
+      {executionMode === "legacy_persona" ? <p className="inline-note" role="note">This report was produced by the older exploratory mode. Its findings are unverified observations.</p> : null}
       <ReportNavigation view={selectedView} />
       {selectedView !== "overview" ? <ReportAnalytics run={run} results={data} userId={user.id} view={selectedView} /> : <div className="evidence-ledger">
         <article className="ledger-paper">
@@ -177,7 +180,7 @@ export function RunReportPage() {
                   <div className="ledger-finding-card">
                     <p>
                       No verified product issues recorded. Review the coverage and any
-                      unverified observations before drawing conclusions.
+                      unconfirmed observations before drawing conclusions.
                     </p>
                   </div>
                 )}
@@ -196,7 +199,7 @@ export function RunReportPage() {
                 <dl className="ledger-outcomes">
                   {metrics.outcomes.map(([outcome, count]) => (
                     <div key={outcome} className="ledger-outcome-card">
-                      <dt>{outcome === "none" ? "Not reported" : outcome.replaceAll("_", " ")}</dt>
+                      <dt>{outcome === "none" ? "Not reported" : statusLabel(outcome)}</dt>
                       <dd>{count}</dd>
                     </div>
                   ))}
@@ -225,7 +228,7 @@ export function RunReportPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="ledger-fineprint">No unverified observations were recorded.</p>
+                  <p className="ledger-fineprint">No unconfirmed observations were recorded.</p>
                 )}
               </section>
 
@@ -235,7 +238,7 @@ export function RunReportPage() {
                 <h3>Execution Reliability</h3>
                 <p>
                   Technical interruptions (timeouts, origin policy denials, tool errors)
-                  are limitations of the test run, <strong>not defects of the product</strong>.
+                  are limitations of the test, <strong>not defects of the product</strong>.
                   Similar issues are grouped below:
                 </p>
                 {diagnosticClusters.size > 0 ? (
@@ -282,7 +285,7 @@ export function RunReportPage() {
               {completionRate !== null ? (
                 <>
                   <div className="ledger-rate-display">
-                    <strong className="ledger-rate">{completionRate}%</strong>
+                    <strong className="ledger-rate">{completed} of {journeyTotal}</strong>
                     <span className="ledger-fineprint">{featureRun ? "executed" : "finished"}</span>
                   </div>
                   <div
@@ -348,10 +351,10 @@ export function RunReportPage() {
             <summary>Scope, method and report identifiers</summary>
             <p>
               {metrics.deterministic
-                ? "This report was generated from deterministic evaluation checks. "
+                ? "This report was generated from recorded checks. "
                 : "This report contains the evaluation recorded for this test. "}
-              Simulated testers are hypothesis-driven testing agents, not real customers.
-              Unverified outcomes cannot establish that a flow works or fails in production.
+              Simulated testers use hypothetical perspectives; they are not real customers.
+              Unconfirmed outcomes cannot establish that a flow works or fails in production.
               Verified assertions and exact cited evidence determine what can be concluded.
             </p>
             <dl className="ledger-identifiers">
@@ -367,9 +370,9 @@ export function RunReportPage() {
                 <dt>Mode</dt>
                 <dd className="monospace">
                   {typeof data.report.payload.mode === "string"
-                    ? data.report.payload.mode
+                    ? statusLabel(data.report.payload.mode)
                     : typeof run.configuration_snapshot.execution_mode === "string"
-                    ? run.configuration_snapshot.execution_mode
+                    ? statusLabel(run.configuration_snapshot.execution_mode)
                     : "standard"}
                 </dd>
               </div>

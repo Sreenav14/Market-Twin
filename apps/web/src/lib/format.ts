@@ -1,5 +1,24 @@
 import type { TestRun } from "./api";
 
+const statusLabels: Record<string, string> = {
+  inconclusive: "Could not check", policy_blocked: "Could not check",
+  unverified: "Needs checking", timed_out: "Time limit reached",
+  awaiting_human: "Needs your help", human_action_required: "Needs your help",
+  evaluation_pending: "Waiting for results", evaluating: "Checking results",
+  verified_deterministic: "Checked", verified_visual: "Checked",
+  did_not_reproduce: "Did not happen again", replay_unavailable: "Could not check again",
+  satisfied: "Check passed", not_satisfied: "Check did not pass",
+  unavailable: "Not available", legacy_persona: "Exploratory testing",
+  deep_feature_v1: "Feature checks", discovery_contract_v1: "Explore, approve and test",
+  "needs verification": "Needs checking",
+  "verified assertion issue": "Checked issue",
+  "visually verified issue": "Visual observation",
+};
+
+export function statusLabel(value: string): string {
+  return statusLabels[value.toLowerCase()] ?? value.replaceAll("_", " ");
+}
+
 export function textValue(value: unknown, fallback = "—"): string {
   if (typeof value === "string" && value.trim().length > 0) return value;
   if (typeof value === "number" || typeof value === "boolean")

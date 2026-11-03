@@ -80,6 +80,8 @@ and recovery. Preserve actual APIs, identity, permissions, target/evidence owner
 and browser controls. The handoff retains the 52 CURRENT Figma references and current
 route/screenshot coverage; archived prototype behavior is not authoritative.
 
-Latest backend static checks pass. Final runtime acceptance remains incomplete after
-Windows temporary-folder permission failures interrupted focused checks. Source
-changes are not deployed merely because they exist in this working tree.
+The single-frozen-contract six-run benchmark passed all gates. Final validation:
+1,245 Python tests passed (23 skipped), 199 frontend tests passed, and typecheck,
+build, Ruff and focused production Pyright passed. New runs default to discovery,
+with legacy/deep modes retained. Changes are local and uncommitted; measured limits
+and earlier failed attempts remain in the benchmark results and current-status docs.

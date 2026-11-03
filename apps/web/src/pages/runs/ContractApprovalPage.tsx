@@ -57,7 +57,7 @@ export function ContractApprovalPage() {
     try {
       if (contract.status === "draft") client.setQueryData(queryKey, await api.approveTestContract(workspace.id, run.id));
       await api.startTestContract(workspace.id, run.id);
-      refresh(); navigate(`/runs/${run.id}/activity`);
+      refresh(); navigate(`/runs/${run.id}/watch`);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "The tests could not start."); }
     finally { setBusy(false); }
   }
@@ -116,6 +116,6 @@ export function ContractApprovalPage() {
       <Button type="submit" disabled={busy || !wordingReviewed}>Save check</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setEditing(null)}>Cancel</Button>
     </form></section> : null}
     {completed > 0 && contract.status !== "frozen" ? <><RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /><footer className="panel contract-approval-footer"><Button disabled={busy || Boolean(editing) || !canWrite || !preflight.data?.ready || !["draft", "approved"].includes(contract.status)} onClick={() => void approve()}>{busy ? "Starting tests…" : "Approve and run tests"}</Button><p>You can exclude every check. In that case, nothing will be verified.</p></footer></> : null}
-    {contract.status === "frozen" ? <p>The approved tests are saved. <Link to={`/runs/${run.id}/activity`}>View test activity</Link></p> : null}
+    {contract.status === "frozen" ? <p>The approved tests are saved. <Link to={`/runs/${run.id}/watch`}>Watch live</Link></p> : null}
   </div>;
 }

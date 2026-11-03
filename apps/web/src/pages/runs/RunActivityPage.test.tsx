@@ -84,14 +84,14 @@ it("distinguishes accepted pause request from worker acknowledgement and fences 
   await user.click(screen.getByRole("button", { name: "Request pause" }));
   expect(request).toHaveBeenCalledWith("run", expect.objectContaining({ browser_session_id: "browser", generation: 1 }));
   await waitFor(() => expect(screen.getByRole("status", { name: "Manual pause status" })).toHaveTextContent("Pause requested; waiting"));
-  expect(screen.queryByRole("button", { name: "Resume agent" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Hand back" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Take browser control/ })).not.toBeInTheDocument();
   latest = { ...latest, browser: { ...latest.browser!, control_state: "human_pending" }, pause: { ...pause, status: "paused", human_request_id: "request", acknowledged_at: item.occurred_at } };
   actions.mockResolvedValue([{ id: "request", test_run_id: "run", execution_id: "execution", browser_session_id: "browser", request_type: "other", status: "pending", created_at: item.occurred_at, expires_at: pause.expires_at, control_generation: 1, lease_id: null, lease_expires_at: null }]);
   await client.invalidateQueries({ queryKey: ["live-execution"] });
   await client.invalidateQueries({ queryKey: ["human-actions"] });
-  expect(await screen.findByRole("button", { name: "Resume agent" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "Resume agent" }));
+  expect(await screen.findByRole("button", { name: "Hand back" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "Hand back" }));
   expect(resume).toHaveBeenCalledWith("run", "pause-1");
   await waitFor(() => expect(screen.getByRole("status", { name: "Manual pause status" })).toHaveTextContent("Resume requested"));
   expect(screen.getByRole("button", { name: /Take browser control/ })).toBeDisabled();

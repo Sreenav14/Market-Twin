@@ -8,6 +8,7 @@ import { countCategories, findingStepHref, outcomeCounts, outcomeLabels, recorde
 import { ArtifactEvidence } from '../../pages/runs/FindingDetailPage';
 import { EmptyState, ErrorPanel, LoadingPanel } from '../ui/StateViews';
 import { StatusBadge } from '../ui/StatusBadge';
+import { statusLabel } from '../../lib/format';
 
 export type ReportView = 'overview' | 'usefulness' | 'inspection';
 export function reportView(value: string | null): ReportView {
@@ -110,14 +111,14 @@ function FindingInspection({run,results,tasks}: {run:TestRun;results:RunResults;
       <button className="secondary-button" onClick={clear}>Reset finding filters</button></div>
     <p role="status" className="report-filter-result">{filtered.length} matching {filtered.length===1?'finding':'findings'} · {category==='all'?'All categories':category.replaceAll('_',' ')} · {severity==='all'?'All severities':severity}</p>
     <div className="report-inspection-workbench"><ul className="report-finding-index" aria-label="Filtered findings">{filtered.map(finding=><li key={finding.id}><button type="button" aria-pressed={selected?.id===finding.id}
-      onClick={()=>setParams(previous=>{const next=new URLSearchParams(previous);next.set('finding',finding.id);return next;},{replace:true})}><span>{finding.severity} · {finding.category.replaceAll('_',' ')}</span><strong>{finding.title}</strong><span>{findingClassification(finding)}</span></button></li>)}</ul>
+      onClick={()=>setParams(previous=>{const next=new URLSearchParams(previous);next.set('finding',finding.id);return next;},{replace:true})}><span>{finding.severity} · {finding.category.replaceAll('_',' ')}</span><strong>{finding.title}</strong><span>{statusLabel(findingClassification(finding))}</span></button></li>)}</ul>
       {selected?<FindingDetail key={selected.id} finding={selected} runId={run.id} tasks={tasks}/>:<p>No findings match these filters. Reset the filters to review all recorded findings.</p>}
     </div><details className="report-method-note"><summary>Page coverage, priority and evidence limits</summary><p>The report has no authoritative page-inspection inventory. Findings are filtered by their recorded category, severity and linked tasks. A visited page is not proof of a completed inspection.</p><p>Linked journey count measures recorded reach, not real user impact. Implementation effort and impact-versus-effort scores were not recorded. Screenshot regions are not inferred.</p></details>
   </section>;
 }
 
 function FindingDetail({finding,runId,tasks}: {finding:Finding;runId:string;tasks:JourneyExecution[]}) {
-  return <article className="report-finding-detail" aria-label="Selected finding" aria-live="polite"><p className="section-label">{findingClassification(finding)} · {finding.severity}</p><h3>{finding.title}</h3>
+  return <article className="report-finding-detail" aria-label="Selected finding" aria-live="polite"><p className="section-label">{statusLabel(findingClassification(finding))} · {finding.severity}</p><h3>{finding.title}</h3>
     <h4>What happened</h4><p>{finding.summary}</p><h4>Who is affected</h4>
     <ul>{finding.journey_ids.map(id=><li key={id}><Link to={`/runs/${runId}/journeys/${id}`}>{tasks.find(item=>item.id===id)?.mission_title??`Recorded journey ${id.slice(0,8)}`}</Link></li>)}</ul>
     {!finding.journey_ids.length?<p>No affected journey was linked.</p>:null}<p className="muted">Wider customer impact was not measured.</p>
@@ -154,17 +155,18 @@ export function ReportAnalytics({run,results,userId,view}: {run:TestRun;results:
       <details className="report-method-note"><summary>Coverage and historical comparison limits</summary><p>Recorded task outcomes are derived from saved journey records. The report may contain a different aggregate scope; missing or inconsistent completion data keeps the report verdict limited.</p><p>Inspected page counts, measured performance and validated historical comparisons are not available in the current report contract. No trend or page-coverage percentage is inferred.</p></details>
     </>:<>
       <header className="report-analysis-heading"><h2>Application usefulness</h2><p>Compare recorded tasks and inspect how each goal was evaluated. These are simulated testing perspectives, not human research.</p></header>
-      {feature?<p className="report-data-limit">This run uses deterministic feature cases. Case executors are not personas; no persona usefulness score is inferred.</p>:null}
+      {feature?<p className="report-data-limit">This test uses planned feature cases. No tester usefulness score is inferred.</p>:null}
       <div className="report-usefulness-layout"><CountBars title="Task outcomes" rows={counts} selected={outcome} onSelect={value=>go('usefulness','outcome',outcome===value?'all':value)} tone="outcome"/>
         <div><div className="report-filter-bar"><label>Outcome<select value={outcome} onChange={event=>go('usefulness','outcome',event.target.value)}><option value="all">All outcomes</option>{taskOutcomes.map(item=><option key={item} value={item}>{outcomeLabels[item]}</option>)}</select></label>
-          {!feature?<label>Recorded persona<select value={persona} onChange={event=>go('usefulness','persona',event.target.value)}><option value="all">All recorded personas</option>{[...new Set(tasks.map(item=>item.persona_name))].map(name=><option key={name}>{name}</option>)}</select></label>:null}
+          {!feature?<label>Recorded tester<select value={persona} onChange={event=>go('usefulness','persona',event.target.value)}><option value="all">All recorded testers</option>{[...new Set(tasks.map(item=>item.persona_name))].map(name=><option key={name}>{name}</option>)}</select></label>:null}
           <button className="secondary-button" onClick={()=>setParams(previous=>{const next=new URLSearchParams(previous);for(const key of ['outcome','persona','journey','reportStep'])next.delete(key);return next;},{replace:true})}>Reset task filters</button></div>
-        <p role="status">{filtered.length} of {tasks.length} recorded tasks</p><div className="report-table-scroll"><table className="report-task-table"><caption>{feature?'Case execution comparison':'Persona and task comparison'}</caption><thead><tr><th scope="col">{feature?'Recorded task':'Persona / task'}</th><th scope="col">Outcome</th><th scope="col">Steps</th><th scope="col">Explore</th></tr></thead><tbody>
+        <p role="status">{filtered.length} of {tasks.length} recorded tasks</p><div className="report-table-scroll"><table className="report-task-table"><caption>{feature?'Case execution comparison':'Tester and task comparison'}</caption><thead><tr><th scope="col">{feature?'Recorded task':'Tester / task'}</th><th scope="col">Outcome</th><th scope="col">Steps</th><th scope="col">Explore</th></tr></thead><tbody>
           {filtered.map(task=><tr key={task.id} data-selected={selected?.id===task.id}><th scope="row">{!feature?<span>{task.persona_name}</span>:null}<strong>{task.mission_title}</strong></th><td>{outcomeLabels[taskOutcome(task)]}</td><td>{Number.isFinite(task.step_count)?task.step_count.toLocaleString():'Unavailable'}</td><td><button className="text-link" aria-pressed={selected?.id===task.id} onClick={()=>go('usefulness','journey',task.id)}>Explore task</button></td></tr>)}
         </tbody></table></div>{!filtered.length?<EmptyState title="No matching recorded tasks" copy="Reset filters to inspect all available task records."/>:null}</div></div>
       {selected?<><section className="report-task-assessment"><h3>{selected.mission_title}</h3><p>{selected.mission_objective||'No task objective was recorded.'}</p>
         {journeyBlocker(selected)?<p className="report-data-limit">{journeyBlocker(selected)}</p>:null}
-        {selectedAssessment?<><p><strong>Qualitative goal assessment:</strong> {String(selectedAssessment.goal_outcome??'inconclusive').replaceAll('_',' ')} · Ease of use: {String(selectedAssessment.ease_of_use??'inconclusive')}</p>
+        {selectedAssessment?<><p><strong>Qualitative goal assessment:</strong> {statusLabel(String(selectedAssessment.goal_outcome??'inconclusive'))}</p>
+          <details className="report-method-note"><summary>Saved assessment details</summary><p>Model label for ease of use: {statusLabel(String(selectedAssessment.ease_of_use??'inconclusive'))}</p></details>
           <p>{typeof selectedAssessment.summary==='string'?selectedAssessment.summary:'No assessment summary was recorded.'}</p>
           {Array.isArray(selectedAssessment.recommendations)?<ul>{selectedAssessment.recommendations.filter((item):item is string=>typeof item==='string').map((item,index)=><li key={index}>{item}</li>)}</ul>:null}
           <p className="chart-help">Model assessment of saved evidence; not a measured usefulness score.</p></>:<p className="muted">A usable qualitative assessment was not recorded for this task. No usefulness or ease-of-use score is inferred.</p>}
