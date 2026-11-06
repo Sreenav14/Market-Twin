@@ -59,3 +59,35 @@
   .concept-live-row > div { width: 100%; min-width: 0; }
   .concept-live-empty { padding: 32px 0; }
 }
+
+/* Table headers take the system's semibold, not the UA's bold 700 —
+   700 is not one of the running weights (Hallmark P2-19). */
+.mt-task-table th { font-weight: 600; }
+
+/* Hallmark P0-4: the task-by-task table restacks per task under 40rem.
+   Task name becomes the row head; Tom / Maya / Priya become labelled lines
+   under it, so no tester's column can fall off a phone screen. */
+@media (max-width: 40rem) {
+  .mt-task-table thead { display: none; }
+  .mt-task-table tbody,
+  .mt-task-table tr,
+  .mt-task-table td { display: block; width: 100%; }
+  .mt-task-table td:not([colspan]) { padding: 6px 20px !important; }
+  .mt-task-table tr td:not([colspan]):first-child { padding-top: 14px !important; }
+  .mt-task-table tr td:not([colspan]):last-child { padding-bottom: 14px !important; }
+  .mt-task-table td:nth-child(2)::before,
+  .mt-task-table td:nth-child(3)::before,
+  .mt-task-table td:nth-child(4)::before {
+    display: block;
+    margin-bottom: 2px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .mt-task-table td:nth-child(2)::before { content: "Tom · Expert"; }
+  .mt-task-table td:nth-child(3)::before { content: "Maya · First-time user"; }
+  .mt-task-table td:nth-child(4)::before { content: "Priya · Impatient mobile user"; }
+}

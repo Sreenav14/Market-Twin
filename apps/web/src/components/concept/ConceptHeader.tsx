@@ -54,10 +54,11 @@ export const ConceptHeader: React.FC<ConceptHeaderProps> = ({
           <button
             type="button"
             onClick={() => onNavigate && onNavigate("How it works")}
-            className="font-button-label transition-colors"
+            className="font-button-label transition-colors hidden lg:block"
             style={{
               minHeight: "44px",
               padding: "8px 12px",
+              whiteSpace: "nowrap",
               background: "none",
               border: "none",
               color: "var(--ink)",
@@ -70,10 +71,11 @@ export const ConceptHeader: React.FC<ConceptHeaderProps> = ({
           <button
             type="button"
             onClick={() => onNavigate && onNavigate("Example report")}
-            className="font-button-label transition-colors"
+            className="font-button-label transition-colors hidden lg:block"
             style={{
               minHeight: "44px",
               padding: "8px 12px",
+              whiteSpace: "nowrap",
               background: "none",
               border: "none",
               color: "var(--ink)",
@@ -94,6 +96,7 @@ export const ConceptHeader: React.FC<ConceptHeaderProps> = ({
           style={{
             minHeight: "44px",
             padding: "8px 16px",
+            whiteSpace: "nowrap",
             background: "none",
             border: "none",
             color: "var(--ink)",

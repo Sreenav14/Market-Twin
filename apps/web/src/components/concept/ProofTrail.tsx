@@ -12,6 +12,13 @@ interface ProofTrailProps {
   className?: string;
 }
 
+/**
+ * The evidence slot under a problem card. This sample report has no real
+ * captured frames to show, so the slot is an honest labelled panel in the
+ * house style — it names the steps the proof covers and says plainly that
+ * the frames themselves are not part of the sample, instead of drawing
+ * fake wireframe "screenshots" (Hallmark P2-21).
+ */
 export const ProofTrail: React.FC<ProofTrailProps> = ({
   totalScreenshots,
   testerName = "Maya",
@@ -31,92 +38,91 @@ export const ProofTrail: React.FC<ProofTrailProps> = ({
 
   const ariaLabel =
     typeof totalScreenshots === "number"
-      ? `${totalScreenshots} screenshots, ${shownCount} shown`
-      : `Screenshots from ${testerName}'s attempt (${shownCount} shown)`;
+      ? `Sample evidence: ${totalScreenshots} screenshots from ${testerName}'s attempt, frames not shown in this sample`
+      : `Sample evidence from ${testerName}'s attempt, frames not shown in this sample`;
 
   return (
     <div
       role="img"
       aria-label={ariaLabel}
-      className={`concept-proof-trail flex items-center gap-2 ${className}`}
-      style={{ marginTop: "8px" }}
+      className={`concept-proof-trail ${className}`}
+      style={{
+        marginTop: "12px",
+        backgroundColor: "var(--paper)",
+        border: "1px solid var(--line)",
+        borderRadius: "10px",
+        padding: "12px",
+      }}
     >
-      <div className="flex items-center gap-2" aria-hidden="true">
-        {displaySteps.map((s, idx) => (
-          <div key={idx} className="flex flex-col items-center">
-            <div
-              style={{
-                width: "56px",
-                height: "36px",
-                borderRadius: "6px",
-                border: "1px solid var(--line)",
-                backgroundColor: "var(--paper)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-                position: "relative",
-              }}
-            >
-              {/* Mini mock wireframe sketch */}
+      <div
+        className="font-meta-label"
+        style={{ color: "var(--ink-faint)", marginBottom: "8px" }}
+        aria-hidden="true"
+      >
+        SAMPLE EVIDENCE
+      </div>
+
+      {typeof totalScreenshots === "number" ? (
+        <>
+          <div className="flex flex-wrap items-stretch gap-2" aria-hidden="true">
+            {displaySteps.map((s, idx) => (
               <div
+                key={idx}
                 style={{
-                  width: "44px",
-                  height: "24px",
+                  width: "104px",
                   border: "1px solid var(--line)",
-                  borderRadius: "2px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  padding: "2px",
+                  borderRadius: "6px",
+                  backgroundColor: "var(--card)",
+                  padding: "8px",
                 }}
               >
                 <div
-                  style={{
-                    height: "4px",
-                    width: "70%",
-                    backgroundColor: "var(--line)",
-                    borderRadius: "1px",
-                  }}
-                />
+                  className="font-meta-label"
+                  style={{ color: "var(--ink)", marginBottom: "4px" }}
+                >
+                  {s.label || `STEP ${s.stepNumber}`}
+                </div>
                 <div
-                  style={{
-                    height: "3px",
-                    width: "50%",
-                    backgroundColor: "var(--line)",
-                    borderRadius: "1px",
-                  }}
-                />
+                  className="font-body-small"
+                  style={{ color: "var(--ink-faint)", fontSize: "12px", lineHeight: "16px" }}
+                >
+                  Sample frame, not shown
+                </div>
               </div>
-            </div>
-            <span
-              className="font-meta-label"
-              style={{
-                fontSize: "11px",
-                lineHeight: "16px",
-                color: "var(--ink-faint)",
-                marginTop: "4px",
-              }}
-            >
-              {s.label || `STEP ${s.stepNumber}`}
-            </span>
+            ))}
+            {remaining > 0 && (
+              <div
+                className="font-mono-data"
+                style={{
+                  fontSize: "12px",
+                  lineHeight: "18px",
+                  color: "var(--ink-2)",
+                  alignSelf: "center",
+                  marginLeft: "4px",
+                }}
+              >
+                +{remaining} more
+              </div>
+            )}
           </div>
-        ))}
-      </div>
-
-      {remaining > 0 && (
-        <span
-          className="font-mono-data"
-          style={{
-            fontSize: "12px",
-            lineHeight: "18px",
-            color: "var(--ink-2)",
-            marginLeft: "4px",
-          }}
+          <p
+            className="font-body-small"
+            style={{ color: "var(--ink-2)", margin: "8px 0 0" }}
+            aria-hidden="true"
+          >
+            {totalScreenshots} screenshots were captured for this problem. The
+            frames themselves are not part of this sample report.
+          </p>
+        </>
+      ) : (
+        <p
+          className="font-body-small"
+          style={{ color: "var(--ink-2)", margin: 0 }}
           aria-hidden="true"
         >
-          +{remaining} more
-        </span>
+          Proof is attached to this problem. The frames themselves are not
+          part of this sample report.
+        </p>
       )}
     </div>
   );

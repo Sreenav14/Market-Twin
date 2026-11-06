@@ -88,70 +88,35 @@ export const CoverageBar: React.FC<CoverageBarProps> = ({
         )}
       </div>
 
+      {/* One signal per state in the legend: the status glyph in its status
+          colour plus the word and count. The bar above already carries the
+          colour blocks; squares and dot separators here only repeated it. */}
       <div
-        className="flex flex-wrap items-center gap-x-4 gap-y-2 font-grid-cell"
+        className="flex flex-wrap items-center gap-x-5 gap-y-2 font-grid-cell"
         style={{ fontSize: "13px", color: "var(--ink)" }}
         aria-hidden="true"
       >
         <span className="inline-flex items-center gap-1.5">
-          <span
-            style={{
-              width: "12px",
-              height: "12px",
-              borderRadius: "3px",
-              backgroundColor: "var(--works)",
-              display: "inline-block",
-            }}
-          />
-          <span style={{ fontWeight: 600 }}>✓ Worked</span>
+          <span style={{ fontWeight: 600, color: "var(--works)" }}>✓</span>
+          <span style={{ fontWeight: 600 }}>Worked</span>
           <span>{totals.worked}</span>
         </span>
 
-        <span style={{ color: "var(--ink-faint)" }}>·</span>
-
         <span className="inline-flex items-center gap-1.5">
-          <span
-            style={{
-              width: "12px",
-              height: "12px",
-              borderRadius: "3px",
-              backgroundColor: "var(--broken)",
-              display: "inline-block",
-            }}
-          />
-          <span style={{ fontWeight: 600 }}>✕ Broken</span>
+          <span style={{ fontWeight: 600, color: "var(--broken)" }}>✕</span>
+          <span style={{ fontWeight: 600 }}>Broken</span>
           <span>{totals.broken}</span>
         </span>
 
-        <span style={{ color: "var(--ink-faint)" }}>·</span>
-
         <span className="inline-flex items-center gap-1.5">
-          <span
-            style={{
-              width: "12px",
-              height: "12px",
-              borderRadius: "3px",
-              backgroundColor: "var(--couldnot)",
-              display: "inline-block",
-            }}
-          />
-          <span style={{ fontWeight: 600 }}>? Could not check</span>
+          <span style={{ fontWeight: 600, color: "var(--couldnot)" }}>?</span>
+          <span style={{ fontWeight: 600 }}>Could not check</span>
           <span>{totals.couldNotCheck}</span>
         </span>
 
-        <span style={{ color: "var(--ink-faint)" }}>·</span>
-
         <span className="inline-flex items-center gap-1.5">
-          <span
-            style={{
-              width: "12px",
-              height: "12px",
-              borderRadius: "3px",
-              backgroundColor: "var(--notchecked)",
-              display: "inline-block",
-            }}
-          />
-          <span style={{ fontWeight: 600 }}>– Not checked</span>
+          <span style={{ fontWeight: 600, color: "var(--notchecked)" }}>–</span>
+          <span style={{ fontWeight: 600 }}>Not checked</span>
           <span>{totals.notChecked}</span>
         </span>
       </div>

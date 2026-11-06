@@ -91,9 +91,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           height: "18px",
                           borderRadius: "999px",
                           backgroundColor: "var(--ink)",
-                          color: "#FFFFFF",
+                          color: "var(--ink-on-dark)",
                           fontSize: "10px",
-                          fontWeight: 700,
+                          fontWeight: 600,
                         }}
                       >
                         {blockedCount}
@@ -112,7 +112,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             height: "32px",
             borderRadius: "50%",
             backgroundColor: "var(--ink)",
-            color: "#FFFFFF",
+            color: "var(--ink-on-dark)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -137,23 +137,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               Your dashboard will live here.
             </h2>
             <p className="font-body" style={{ color: "var(--ink-2)", maxWidth: "540px", margin: "0 0 24px 0" }}>
-              Add an app and we will test it like a person would — then show you what worked, what broke, and what we could not check.
+              Add an app and we will test it like a person would, then show you what worked, what broke, and what we could not check.
             </p>
             <button
               type="button"
               onClick={() => onNavigate && onNavigate("Add an app")}
-              className="font-button-label transition-opacity"
+              className="font-button-label transition-colors"
               style={{
                 minHeight: "44px",
                 padding: "12px 24px",
                 borderRadius: 0,
-                backgroundColor: "var(--ink)",
-                color: "#FFFFFF",
-                border: "none",
+                backgroundColor: "var(--flame-deep)",
+                color: "var(--ink-on-dark)",
+                border: "1px solid var(--flame-deep)",
                 cursor: "pointer",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep)")}
             >
               Add an app
             </button>
@@ -212,9 +212,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <>
                 {/* 1. Needs you */}
                 <section style={{ marginBottom: "32px" }}>
-                  <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "8px" }}>
-                    NEEDS YOU
-                  </div>
                   <h2 className="font-h2-workspace" style={{ color: "var(--ink)", margin: "0 0 16px 0" }}>
                     Needs you
                   </h2>
@@ -228,9 +225,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
                 {/* 2. Happening now */}
                 <section style={{ marginBottom: "32px" }}>
-                  <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "8px" }}>
-                    HAPPENING NOW
-                  </div>
                   <h2 className="font-h2-workspace" style={{ color: "var(--ink)", margin: "0 0 16px 0" }}>
                     Happening now
                   </h2>
@@ -257,9 +251,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
             {/* 3. Your apps */}
             <section style={{ marginBottom: "32px" }}>
-              <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "8px" }}>
-                YOUR APPS
-              </div>
               <h2 className="font-h2-workspace" style={{ color: "var(--ink)", margin: "0 0 16px 0" }}>
                 Your apps
               </h2>
@@ -322,6 +313,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   </span>
                 </div>
 
+                {/* The verdict's problem words earn the card's space */}
+                <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginBottom: "16px" }}>
+                  <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "8px" }}>
+                    PROBLEMS IN THE LATEST TEST
+                  </div>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                    {data.problems.map((problem) => (
+                      <li
+                        key={problem.id}
+                        className="font-body"
+                        style={{ display: "flex", gap: "8px", alignItems: "baseline", color: "var(--ink)", padding: "2px 0" }}
+                      >
+                        <span aria-hidden="true" style={{ color: "var(--broken)", fontWeight: 600 }}>✕</span>
+                        {problem.title}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
                 <div style={{ marginBottom: "20px" }}>
                   <VerdictStrip
                     appName={data.app.name}
@@ -354,11 +364,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </section>
 
-            {/* 4. Recent tests */}
+            {/* 4. Recent tests — a small table, not dot-joined single lines */}
             <section>
-              <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "8px" }}>
-                RECENT TESTS
-              </div>
               <h2 className="font-h2-workspace" style={{ color: "var(--ink)", margin: "0 0 16px 0" }}>
                 Recent tests
               </h2>
@@ -369,27 +376,49 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   border: "1px solid var(--line)",
                   borderRadius: "10px",
                   boxShadow: "var(--shadow-soft)",
+                  overflowX: "auto",
                 }}
               >
-                <div
-                  className="font-grid-cell flex items-center justify-between"
-                  style={{
-                    padding: "16px 20px",
-                    borderBottom: "1px solid var(--line)",
-                    color: "var(--ink)",
-                  }}
-                >
-                  <span>Thread & Co. · Sat 31 Oct 2026 · Testing now · 9 of 18 attempts</span>
-                </div>
-                <div
-                  className="font-grid-cell flex items-center justify-between"
-                  style={{
-                    padding: "16px 20px",
-                    color: "var(--ink-2)",
-                  }}
-                >
-                  <span>Thread & Co. · Wed 21 Oct 2026 · Stopped early · 6 of 18 attempts</span>
-                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "560px" }}>
+                  <thead>
+                    <tr>
+                      {["App", "Date", "Status", "Attempts", "Verdict"].map((h) => (
+                        <th
+                          key={h}
+                          scope="col"
+                          className="font-meta-label"
+                          style={{
+                            textAlign: "left",
+                            padding: "12px 20px",
+                            color: "var(--ink-faint)",
+                            borderBottom: "1px solid var(--line)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="font-grid-cell">
+                    <tr style={{ color: "var(--ink)" }}>
+                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)" }}>{data.app.name}</td>
+                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>{data.testDateLabel}</td>
+                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)" }}>Testing now</td>
+                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>
+                        {data.live.attemptsDone} of {data.totals.attempts} attempts
+                      </td>
+                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", color: "var(--ink-2)" }}>—</td>
+                    </tr>
+                    <tr style={{ color: "var(--ink-2)" }}>
+                      <td style={{ padding: "14px 20px" }}>{data.app.name}</td>
+                      <td style={{ padding: "14px 20px", whiteSpace: "nowrap" }}>{data.previousTest.dateLabel}</td>
+                      <td style={{ padding: "14px 20px" }}>{data.previousTest.status.split(" · ")[0]}</td>
+                      <td style={{ padding: "14px 20px", whiteSpace: "nowrap" }}>{data.previousTest.status.split(" · ")[1]}</td>
+                      <td style={{ padding: "14px 20px" }}>No verdict</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </section>
           </>

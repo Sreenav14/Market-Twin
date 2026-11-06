@@ -50,7 +50,7 @@ export function WorkspaceDashboardPage() {
     return <article className="concept-live-row" key={test.id}>
       <div><h3 className="font-h3">{testTitle(test)}</h3><TestStatusBadge status={test.status} />
         {test.status_reason ? <p className="font-body-small">{test.status_reason}</p> : null}</div>
-      <Link className="text-link" to={action.to}>{action.label} →</Link>
+      <Link className="text-link" to={action.to}>{action.label}</Link>
     </article>;
   });
   return <div className="concept-live-dashboard">
@@ -59,7 +59,7 @@ export function WorkspaceDashboardPage() {
     {state.isError ? <p role="alert">Could not refresh your dashboard. Showing the last loaded data. <button className="text-link" onClick={() => void state.refetch()}>Try again</button></p> : null}
     {applications.length === 0 ? <section className="concept-live-empty">
       <h2 className="font-h2-marketing">Your dashboard will live here.</h2>
-      <p className="font-body">Add an app and we will test it like a person would — then show you what worked, what broke, and what we could not check.</p>
+      <p className="font-body">Add an app and we will test it like a person would, then show you what worked, what broke, and what we could not check.</p>
       {writable ? <Link className="primary-button" to="/applications/new">Add an app</Link>
         : <p>An owner or administrator can add an app.</p>}
     </section> : <>
@@ -67,21 +67,21 @@ export function WorkspaceDashboardPage() {
         {oldestAwaitingHuman ? <article className="concept-live-row">
           <div><h3 className="font-h3">{testTitle(oldestAwaitingHuman)}</h3>
             <p className="font-body-small">Needs you — the tester is paused{oldestAwaitingHuman.status_reason ? ` · ${oldestAwaitingHuman.status_reason}` : ""}</p></div>
-          <Link className="text-link" to={`/runs/${oldestAwaitingHuman.id}/human-action`}>Help this tester →</Link>
+          <Link className="text-link" to={`/runs/${oldestAwaitingHuman.id}/human-action`}>Help this tester</Link>
         </article> : null}
         {needsYou.length ? rows(needsYou) : <p className="font-body">Nothing needs you right now.</p>}</section>
       <section aria-labelledby="dashboard-happening"><h2 id="dashboard-happening" className="font-h2-workspace">Happening now</h2>
         {active.length ? rows(active) : <p className="font-body-small">No test is running right now.</p>}</section>
       <section aria-labelledby="dashboard-apps"><div className="concept-live-heading"><h2 id="dashboard-apps" className="font-h2-workspace">Your apps</h2>
-        {writable ? <Link className="text-link" to="/applications/new">Add an app →</Link> : null}</div>
+        {writable ? <Link className="text-link" to="/applications/new">Add an app</Link> : null}</div>
         {applications.map(app => <article className="concept-live-row" key={app.id}>
           <div><h3 className="font-h3"><Link to={`/applications/${app.id}`}>{app.name}</Link></h3>
             {app.description ? <p className="font-body-small">{app.description}</p> : null}</div>
-          <Link className="text-link" to={`/applications/${app.id}/runs`}>See tests →</Link>
+          <Link className="text-link" to={`/applications/${app.id}/runs`}>See tests</Link>
         </article>)}</section>
       <section aria-labelledby="dashboard-results"><h2 id="dashboard-results" className="font-h2-workspace">Recent tests</h2>
         {finished.length ? rows(finished.slice(0, 5)) : <p className="font-body-small">Your test results will appear here.</p>}
-        <Link className="text-link" to="/runs">See all tests →</Link></section>
+        <Link className="text-link" to="/runs">See all tests</Link></section>
       {drafts.length ? <section aria-labelledby="dashboard-drafts"><h2 id="dashboard-drafts" className="font-h2-workspace">Draft tests</h2>{rows(drafts)}</section> : null}
     </>}
   </div>;

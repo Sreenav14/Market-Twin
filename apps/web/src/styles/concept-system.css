@@ -5,6 +5,25 @@
    these rules, so the whole product reads as one product.
    Values come only from concept-tokens.css / tokens.css. No new colours. */
 
+/* ---------- Marketing header on small phones: fits 320px, no sideways scroll ---------- */
+@media (max-width: 639px) {
+  .concept-marketing-header {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .concept-marketing-header > div:last-child { gap: 8px; }
+  .concept-marketing-header > div:last-child button {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+/* ---------- Focus on dark surfaces: light ring (footer, plum bands) ---------- */
+.concept-footer :focus-visible {
+  outline: var(--focus-ring-dark);
+  outline-offset: 2px;
+}
+
 /* ---------- Smoothness: one motion language ---------- */
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
@@ -18,6 +37,9 @@
 .status-badge, .tab-count, .monospace, .font-mono-data {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Meta labels: 11px floor, never smaller (gate 75) ---------- */
+.font-meta-label { font-size: 11px; }
 
 /* ---------- Kickers / eyebrows: one voice on every page ---------- */
 .mt-shell .eyebrow,
@@ -206,8 +228,10 @@
 }
 .text-input:focus, .signin-input:focus,
 .mt-shell input:focus, .mt-shell select:focus, .mt-shell textarea:focus {
-  border-color: var(--ink);
-  /* the ring comes from the global :focus-visible rule — one ring only */
+  /* Focus is an outline ring, never a border swap: the border keeps its
+     width and colour in every state, so the box never moves. */
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 .form-help { color: var(--ink-2); font-size: 13px; line-height: 19px; }
 .form-error, .error-text, .composer-error {
@@ -310,12 +334,39 @@ a.data-row:hover, a.study-row:hover,
 .topnav-link:hover { color: var(--ink); }
 .topnav-link.active { color: var(--ink); font-weight: 650; }
 
+/* Closed accordions hide their body in every engine — some rendering
+   shells lack the UA rule, which left the body text overflowing the
+   closed row's box (Hallmark P2-18, gate 72). */
+details:not([open]) > :not(summary) {
+  display: none;
+}
+
 /* ---------- Sign-in layout: form + the product's own visual ---------- */
 .signin-layout {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: 48px;
-  align-items: start;
+  /* The form column is shorter than the triptych column; centring it
+     vertically balances the split instead of leaving dead space below. */
+  align-items: center;
+}
+/* The one primary recipe on the sign-in submit (Hallmark P1-15/16): the
+   button previously rendered paper-on-ink and read as disabled. */
+.signin-layout .ui-button.primary-button {
+  background: var(--flame-deep);
+  border: 1px solid var(--flame-deep);
+  border-radius: 0;
+  color: var(--ink-on-dark);
+}
+.signin-layout .ui-button.primary-button:hover:not(:disabled) {
+  background: var(--flame-deep-hover);
+  border-color: var(--flame-deep-hover);
+}
+.signin-layout .ui-button.primary-button:disabled {
+  background: var(--notchecked-tint);
+  border-color: var(--line);
+  color: var(--notchecked);
+  cursor: not-allowed;
 }
 @media (max-width: 899px) {
   .signin-layout { grid-template-columns: 1fr; gap: 32px; }

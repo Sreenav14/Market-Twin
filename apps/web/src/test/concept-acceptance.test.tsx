@@ -102,7 +102,10 @@ describe("MarketTwin Arize-Inspired Concept Acceptance (§15, §15A)", () => {
       );
       const text = container.textContent || "";
 
-      expect(text).toContain("Stopped early · 6 of 18 attempts");
+      // Hallmark P1-14: the recent-tests rows are now a table, so the status
+      // and attempts live in separate cells instead of one dot-joined string.
+      expect(text).toContain("Stopped early");
+      expect(text).toContain("6 of 18 attempts");
       // Must not assert verdict word next to Wed 21 Oct 2026
       expect(text).not.toMatch(/Wed 21 Oct 2026[^.]*?Not ready yet/);
     });

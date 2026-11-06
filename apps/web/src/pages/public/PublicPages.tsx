@@ -449,7 +449,8 @@ export function HowPage() {
     boxShadow: "var(--shadow-soft)",
     padding: "24px",
   };
-  const kickerStyle: CSSProperties = { color: "var(--flame-deep)", margin: "0 0 12px" };
+  const kickerStyle: CSSProperties = { color: "var(--flame-deep)", margin: "0 0 24px" };
+  const bandKickerStyle: CSSProperties = { color: "var(--flame-label-band)", margin: "0 0 24px" };
   const sectionTitleStyle: CSSProperties = { margin: "0 0 12px", maxWidth: "640px" };
   const bodyStyle: CSSProperties = { color: "var(--ink-2)", margin: 0 };
 
@@ -460,11 +461,11 @@ export function HowPage() {
       cards: [
         {
           heading: "Add your app",
-          text: "Give MarketTwin your app's address and say which environment it may test. Nothing runs until you authorize that target.",
+          text: "Give MarketTwin your app’s address and say which environment it may test. Nothing runs until you authorize that target.",
         },
         {
           heading: "Add what you know",
-          text: "Attach your docs, help pages or videos. Testers learn how things should work from them — the docs are context, never proof.",
+          text: "Attach your docs, help pages or videos. Testers learn how things should work from them. The docs are context, never proof.",
         },
         {
           heading: "Boundaries are enforced",
@@ -477,7 +478,7 @@ export function HowPage() {
       title: "Testers explore first. You approve the checklist.",
       cards: [
         {
-          heading: "Explore — no verdict yet",
+          heading: "Explore, no verdict yet",
           text: "Testers click through your app and map what is actually there: pages, buttons, forms and flows. They do not pass or fail anything in this step.",
         },
         {
@@ -500,11 +501,11 @@ export function HowPage() {
         },
         {
           heading: "Watch it happen live",
-          text: "Follow each tester's browser as it works — the step it is on, in plain words, with screenshots as it goes. No spinner theatre: you see the real screen.",
+          text: "Follow each tester’s browser as it works: the step it is on, in plain words, with screenshots as it goes. No spinner theatre: you see the real screen.",
         },
         {
           heading: "Stuck means it asks you",
-          text: "If a tester reaches something only a person should do — a sign-in challenge, a payment confirmation — the test pauses and asks for your help instead of guessing.",
+          text: "If a tester reaches something only a person should do (a sign-in challenge, a payment confirmation), the test pauses and asks for your help instead of guessing.",
         },
       ],
     },
@@ -513,15 +514,15 @@ export function HowPage() {
   const couldNotCheck: Array<{ title: string; text: string }> = [
     {
       title: "The page or connection failed",
-      text: "A timeout, a slow connection or a page that never finishes loading means that attempt could not be checked. It is recorded as could not check — never quietly counted as worked or broken.",
+      text: "A timeout, a slow connection or a page that never finishes loading means that attempt could not be checked. It is recorded as could not check, never quietly counted as worked or broken.",
     },
     {
       title: "A sign-in or challenge blocked the way",
       text: "Login screens, CAPTCHAs and multi-factor prompts pause the tester. Unless you step in to help, that part stays could not check.",
     },
     {
-      title: "The target's own boundaries stopped it",
-      text: "If a step needs a page outside the target's authorized origins, policy stops the browser. That is a boundary doing its job, not a defect in your app.",
+      title: "The target’s own boundaries stopped it",
+      text: "If a step needs a page outside the target’s authorized origins, policy stops the browser. That is a boundary doing its job, not a defect in your app.",
     },
     {
       title: "Evidence could not be captured",
@@ -532,22 +533,24 @@ export function HowPage() {
   return (
     <PublicLayout title="How it works">
       {/* Hero */}
-      <section aria-labelledby="how-hero-heading" style={{ paddingTop: "72px", paddingBottom: "56px" }}>
+      <section aria-labelledby="how-hero-heading" style={{ paddingTop: "72px", paddingBottom: "80px" }}>
         <div className="concept-marketing-container">
           <p className="font-meta-label" style={kickerStyle}>
             HOW IT WORKS
           </p>
           <h1 id="how-hero-heading" className="font-display" style={{ margin: "0 0 24px", maxWidth: "760px" }}>
-            Your app, tested like a person — with proof.
+            Your app, tested like a person, with proof.
           </h1>
           <p className="font-body" style={{ color: "var(--ink-2)", maxWidth: "640px", margin: "0 0 28px" }}>
             MarketTwin sends testers with different perspectives into your app.
             They explore it, you approve what “working” means, and then they
-            check it — in real browsers, with screenshots for every claim.
+            check it in real browsers, with screenshots for every claim.
           </p>
           <nav aria-label="On this page" style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {[
               ["#teach", "01 · Teach"],
+              ["#explore", "02 · Explore"],
+              ["#run", "03 · Testers run"],
               ["#verdict", "04 · The verdict"],
               ["#could-not-check", "05 · Could not check"],
               ["#limits", "06 · Honest limits"],
@@ -573,21 +576,74 @@ export function HowPage() {
         </div>
       </section>
 
-      {/* Steps 01–03 */}
-      <section id="teach" aria-label="How a test runs" style={{ paddingBottom: "8px" }}>
+      {/* Steps 01–03 — each step shows its own object, not the same card grid */}
+      <section aria-label="How a test runs" style={{ paddingBottom: "8px" }}>
         <div className="concept-marketing-container">
-          {steps.map((step) => (
-            <div key={step.kicker} style={{ padding: "40px 0" }}>
+          {steps.map((step, stepIndex) => (
+            <div
+              key={step.kicker}
+              id={["teach", "explore", "run"][stepIndex]}
+              style={{ padding: "40px 0" }}
+            >
               <p className="font-meta-label" style={kickerStyle}>{step.kicker}</p>
               <h2 className="font-h2-marketing" style={sectionTitleStyle}>{step.title}</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-                {step.cards.map((card) => (
-                  <article key={card.heading} style={cardStyle}>
-                    <h3 className="font-h3" style={{ margin: "0 0 8px" }}>{card.heading}</h3>
-                    <p className="font-body-small" style={bodyStyle}>{card.text}</p>
-                  </article>
-                ))}
-              </div>
+              {stepIndex === 1 ? (
+                <>
+                  {/* 02 shows the actual checklist, not three more cards */}
+                  <h3 className="font-h3" style={{ margin: "0 0 8px" }}>{step.cards[0].heading}</h3>
+                  <p className="font-body" style={{ ...bodyStyle, maxWidth: "640px", margin: "0 0 20px" }}>
+                    {step.cards[0].text}
+                  </p>
+                  <div style={{ ...cardStyle, maxWidth: "760px" }}>
+                    <h3 className="font-h3" style={{ margin: "0 0 4px" }}>{step.cards[1].heading}</h3>
+                    <p className="font-body-small" style={{ ...bodyStyle, margin: "0 0 12px" }}>
+                      {step.cards[1].text}
+                    </p>
+                    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                      {["A visitor can buy a t-shirt", "The discount code lowers the total"].map((line) => (
+                        <li
+                          key={line}
+                          className="font-body"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                            padding: "10px 0",
+                            borderTop: "1px solid var(--line)",
+                            color: "var(--ink)",
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: "16px",
+                              height: "16px",
+                              flexShrink: 0,
+                              border: "1.5px solid var(--ink-faint)",
+                              borderRadius: "3px",
+                              backgroundColor: "var(--card)",
+                            }}
+                          />
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                    <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "4px" }}>
+                      <h3 className="font-h3" style={{ margin: "0 0 8px" }}>{step.cards[2].heading}</h3>
+                      <p className="font-body-small" style={bodyStyle}>{step.cards[2].text}</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+                  {step.cards.map((card) => (
+                    <article key={card.heading} style={cardStyle}>
+                      <h3 className="font-h3" style={{ margin: "0 0 8px" }}>{card.heading}</h3>
+                      <p className="font-body-small" style={bodyStyle}>{card.text}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -596,15 +652,15 @@ export function HowPage() {
       {/* The verdict — peach band, the signature visual */}
       <section id="verdict" aria-labelledby="verdict-heading" style={{ backgroundColor: "var(--band-peach)", padding: "64px 0", marginTop: "40px" }}>
         <div className="concept-marketing-container">
-          <p className="font-meta-label" style={kickerStyle}>04 / ONE VERDICT</p>
+          <p className="font-meta-label" style={bandKickerStyle}>04 / ONE VERDICT</p>
           <h2 id="verdict-heading" className="font-h2-marketing" style={sectionTitleStyle}>
             Every attempt lands in one of three words.
           </h2>
           <p className="font-body" style={{ color: "var(--ink-2)", maxWidth: "640px", margin: "0 0 20px" }}>
-            <strong style={{ color: "var(--ink)" }}>Worked</strong>,{" "}
-            <strong style={{ color: "var(--ink)" }}>Broken</strong>, or{" "}
-            <strong style={{ color: "var(--ink)" }}>Could not check</strong> —
-            the same three words on every page of the product. A problem only
+            <strong style={{ color: "var(--ink)", fontWeight: 600 }}>Worked</strong>,{" "}
+            <strong style={{ color: "var(--ink)", fontWeight: 600 }}>Broken</strong>, or{" "}
+            <strong style={{ color: "var(--ink)", fontWeight: 600 }}>Could not check</strong>.
+            The same three words on every page of the product. A problem only
             counts as confirmed when it happens again on a re-check, with
             screenshots from both attempts.
           </p>
@@ -627,7 +683,7 @@ export function HowPage() {
           </h2>
           <p className="font-body" style={{ color: "var(--ink-2)", maxWidth: "640px", margin: "0 0 24px" }}>
             Some attempts cannot be completed honestly. MarketTwin says which
-            ones, and why — it never folds them into “worked” to make the
+            ones, and why. It never folds them into “worked” to make the
             numbers look better.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -646,52 +702,51 @@ export function HowPage() {
       {/* Honest limits — lilac band */}
       <section id="limits" aria-labelledby="limits-heading" style={{ backgroundColor: "var(--band-lilac)", padding: "64px 0" }}>
         <div className="concept-marketing-container">
-          <p className="font-meta-label" style={kickerStyle}>06 / HONEST LIMITS</p>
+          <p className="font-meta-label" style={bandKickerStyle}>06 / HONEST LIMITS</p>
           <h2 id="limits-heading" className="font-h2-marketing" style={sectionTitleStyle}>
             What MarketTwin does not claim.
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-            <article style={cardStyle}>
-              <h3 className="font-h3" style={{ margin: "0 0 8px" }}>Not real user research</h3>
-              <p className="font-body-small" style={bodyStyle}>
-                Testers show you how your app behaves, not how real customers
-                feel about your product. Use it alongside talking to people,
-                not instead of it.
-              </p>
-            </article>
-            <article style={cardStyle}>
-              <h3 className="font-h3" style={{ margin: "0 0 8px" }}>Not a certification</h3>
-              <p className="font-body-small" style={bodyStyle}>
-                A passing run is not an accessibility (WCAG) certificate or a
-                security audit. It is evidence about the tasks that were
-                checked, on the day they were checked.
-              </p>
-            </article>
-            <article style={cardStyle}>
-              <h3 className="font-h3" style={{ margin: "0 0 8px" }}>Only where you allow</h3>
-              <p className="font-body-small" style={bodyStyle}>
-                MarketTwin tests only targets you authorize, inside the
-                network boundaries you set. An empty results list means
-                nothing was found in what was checked — not that an app has
-                no problems anywhere.
-              </p>
-            </article>
+          {/* 06 is a plain ruled list — no cards, the limits read as limits */}
+          <div>
+            {[
+              {
+                heading: "Not real user research",
+                text: "Testers show you how your app behaves, not how real customers feel about your product. Use it alongside talking to people, not instead of it.",
+              },
+              {
+                heading: "Not a certification",
+                text: "A passing run is not an accessibility (WCAG) certificate or a security audit. It is evidence about the tasks that were checked, on the day they were checked.",
+              },
+              {
+                heading: "Only where you allow",
+                text: "MarketTwin tests only targets you authorize, inside the network boundaries you set. An empty results list means nothing was found in what was checked — not that an app has no problems anywhere.",
+              },
+            ].map((row) => (
+              <div
+                key={row.heading}
+                className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-2 md:gap-8"
+                style={{ borderTop: "1px solid var(--ink)", padding: "20px 0" }}
+              >
+                <h3 className="font-h3" style={{ margin: 0 }}>{row.heading}</h3>
+                <p className="font-body" style={{ ...bodyStyle, maxWidth: "640px" }}>{row.text}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Closing CTA — plum band, same as the concept landing */}
-      <section aria-labelledby="how-closing-heading" style={{ backgroundColor: "var(--plum)", padding: "72px 0" }}>
-        <div className="concept-marketing-container" style={{ textAlign: "center" }}>
+      <section aria-labelledby="how-closing-heading" style={{ backgroundColor: "var(--plum)", padding: "64px 0" }}>
+        <div className="concept-marketing-container">
           <h2
             id="how-closing-heading"
             className="font-h2-marketing on-dark"
-            style={{ color: "#FFFFFF", margin: "0 auto 16px", maxWidth: "560px" }}
+            style={{ color: "var(--ink-on-dark)", margin: "0 0 16px", maxWidth: "760px" }}
           >
             See it on your own app.
           </h2>
-          <p className="font-body on-dark" style={{ color: "rgba(255,255,255,0.75)", margin: "0 auto 28px", maxWidth: "480px" }}>
-            Add your app's address and watch three testers try it — the first
+          <p className="font-body on-dark" style={{ color: "rgba(255,255,255,0.75)", margin: "0 0 28px", maxWidth: "640px" }}>
+            Add your app’s address and watch three testers try it. The first
             verdict comes with its proof attached.
           </p>
           <Link
@@ -704,11 +759,11 @@ export function HowPage() {
               minHeight: "44px",
               padding: "12px 24px",
               backgroundColor: "var(--flame-deep)",
-              color: "#FFFFFF",
+              color: "var(--ink-on-dark)",
               textDecoration: "none",
             }}
           >
-            START A TEST <ArrowRight size={16} aria-hidden="true" />
+            START A TEST
           </Link>
         </div>
       </section>

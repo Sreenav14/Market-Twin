@@ -62,18 +62,19 @@ export const TakeoverPanel: React.FC<TakeoverPanelProps> = ({
             type="button"
             aria-pressed="false"
             onClick={handleTakeover}
-            className="font-button-label transition-opacity w-full sm:w-auto"
+            className="font-button-label transition-colors w-full sm:w-auto"
             style={{
               minHeight: "44px",
               padding: "12px 20px",
               borderRadius: 0,
-              backgroundColor: "var(--ink)",
-              color: "#FFFFFF",
-              border: "none",
+              backgroundColor: "var(--flame-deep)",
+              color: "var(--ink-on-dark)",
+              border: "1px solid var(--flame-deep)",
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep-hover)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep)")}
           >
             Take over {testerName}&apos;s browser
           </button>
@@ -99,18 +100,19 @@ export const TakeoverPanel: React.FC<TakeoverPanelProps> = ({
             type="button"
             aria-pressed="true"
             onClick={handleHandBack}
-            className="font-button-label transition-opacity w-full sm:w-auto"
+            className="font-button-label transition-colors w-full sm:w-auto"
             style={{
               minHeight: "44px",
               padding: "12px 20px",
               borderRadius: 0,
-              backgroundColor: "var(--ink)",
-              color: "#FFFFFF",
-              border: "none",
+              backgroundColor: "var(--flame-deep)",
+              color: "var(--ink-on-dark)",
+              border: "1px solid var(--flame-deep)",
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep-hover)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep)")}
           >
             Hand back to {testerName}
           </button>

@@ -92,10 +92,9 @@ export const UrlIntakeForm: React.FC<UrlIntakeFormProps> = ({
             borderRadius: 0,
             border: hasError
               ? "1px solid var(--broken)"
-              : "1px solid var(--line)",
+              : "1px solid var(--ink-faint)",
             backgroundColor: "var(--card)",
             color: "var(--ink)",
-            outline: "none",
           }}
         />
 

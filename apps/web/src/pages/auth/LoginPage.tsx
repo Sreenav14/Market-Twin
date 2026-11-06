@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Spinner } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
@@ -96,14 +95,11 @@ export function LoginPage({
         >
           {/* Sign-in form — the same card, field and button as everywhere else */}
           <section aria-labelledby="signin-form-title" style={{ minWidth: 0 }}>
-            <p className="font-meta-label" style={{ color: "var(--flame-deep)", margin: "0 0 12px" }}>
-              SIGN IN
-            </p>
             <h1 id="signin-form-title" className="font-h2-marketing" style={{ margin: "0 0 12px" }}>
               Welcome back.
             </h1>
             <p className="font-body" style={{ color: "var(--ink-2)", margin: "0 0 28px", maxWidth: "420px" }}>
-              See what your testers found — what worked, what broke, and what
+              See what your testers found: what worked, what broke, and what
               could not be checked.
             </p>
 
@@ -169,10 +165,7 @@ export function LoginPage({
                       <span>Signing in…</span>
                     </>
                   ) : (
-                    <>
-                      <span>Continue to workspace</span>
-                      <ArrowRight size={18} aria-hidden="true" />
-                    </>
+                    <span>Continue to workspace</span>
                   )}
                 </Button>
               </form>
@@ -189,12 +182,12 @@ export function LoginPage({
             <p className="font-meta-label" style={{ color: "var(--ink-faint)", margin: "0 0 12px" }}>
               THREE LOOKS, ONE VERDICT
             </p>
-            <TriptychSignature compact />
-            <p className="font-body-small" style={{ color: "var(--ink-2)", margin: "16px 0 0", maxWidth: "560px" }}>
-              Three testers try your app independently — an expert, a first-time
+            <p className="font-body-small" style={{ color: "var(--ink-2)", margin: "0 0 16px", maxWidth: "560px" }}>
+              Three testers try your app independently: an expert, a first-time
               user, and someone in a hurry on their phone. Their results are put
               together into one verdict, with the screenshots to prove it.
             </p>
+            <TriptychSignature compact />
           </section>
         </div>
       </main>

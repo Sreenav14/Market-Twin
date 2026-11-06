@@ -50,11 +50,14 @@ export const ProgressLine: React.FC<ProgressLineProps> = ({
         )}
       </div>
 
+      {/* Same bar family as the results-page CoverageBar: 14px rounded bar,
+          neutral not-checked tone for the portion done (its outcome split is
+          not published mid-run, so no outcome colour is claimed). */}
       <div
         aria-hidden="true"
         style={{
-          height: "8px",
-          borderRadius: "4px",
+          height: "14px",
+          borderRadius: "7px",
           backgroundColor: "var(--notchecked-tint)",
           width: "100%",
           overflow: "hidden",
@@ -64,8 +67,8 @@ export const ProgressLine: React.FC<ProgressLineProps> = ({
           style={{
             height: "100%",
             width: `${pct}%`,
-            backgroundColor: "var(--ink)",
-            borderRadius: "4px",
+            backgroundColor: "var(--notchecked)",
+            borderRadius: "7px",
           }}
         />
       </div>

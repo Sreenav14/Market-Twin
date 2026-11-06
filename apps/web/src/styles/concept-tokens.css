@@ -5,6 +5,7 @@
   --paper: #FAF7F1;
   --card: #FFFFFF;
   --ink: #111111;
+  --ink-on-dark: #FFFFFF;
   --ink-2: #5F5C52;
   --ink-faint: #6E6A5E;
   --line: #E4E0D6;
@@ -16,6 +17,9 @@
   --flame: #E4572E;
   --flame-deep: #BC4218;
   --flame-deep-hover: #A83A15;
+  /* Label colour on tinted bands (peach/lilac): flame-deep measures ~4.1:1
+     there at label size; this deeper step clears 4.5:1 on both bands. */
+  --flame-label-band: #A83A15;
   --works: #1F7A3D;
   --works-tint: #EAF6EE;
   --broken: #C62F3B;
@@ -38,12 +42,12 @@
 
 /* Accessibility: Focus Rings */
 :focus-visible {
-  outline: 2px solid #111111;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 .on-dark:focus-visible {
-  outline: 2px solid #FFFFFF;
+  outline: var(--focus-ring-dark);
   outline-offset: 2px;
 }
 
@@ -65,6 +69,7 @@
   line-height: 64px;
   font-weight: 500;
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 @media (max-width: 899px) {
@@ -106,10 +111,11 @@
 
 .font-h2-marketing {
   font-family: "Newsreader", Georgia, serif;
-  font-size: 32px;
-  line-height: 40px;
+  font-size: 36px;
+  line-height: 44px;
   font-weight: 500;
   letter-spacing: -0.005em;
+  text-wrap: balance;
 }
 
 .font-h2-workspace {

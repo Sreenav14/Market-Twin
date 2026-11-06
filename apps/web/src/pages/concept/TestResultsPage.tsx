@@ -86,7 +86,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
             height: "32px",
             borderRadius: "50%",
             backgroundColor: "var(--ink)",
-            color: "#FFFFFF",
+            color: "var(--ink-on-dark)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -178,7 +178,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
             }}
           >
             <table
-              className="w-full border-collapse font-grid-cell"
+              className="mt-task-table w-full border-collapse font-grid-cell"
               style={{ textAlign: "left" }}
             >
               <thead>
@@ -194,7 +194,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                           height: "24px",
                           borderRadius: "50%",
                           backgroundColor: "var(--tom)",
-                          color: "#FFF",
+                          color: "var(--ink-on-dark)",
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -218,7 +218,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                           height: "24px",
                           borderRadius: "50%",
                           backgroundColor: "var(--maya)",
-                          color: "#FFF",
+                          color: "var(--ink-on-dark)",
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -242,7 +242,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                           height: "24px",
                           borderRadius: "50%",
                           backgroundColor: "var(--priya)",
-                          color: "#FFF",
+                          color: "var(--ink-on-dark)",
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -532,13 +532,13 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
             }}
           >
             <li>
-              1 attempt could not be checked — Priya&apos;s search timed out on her connection.
+              1 attempt could not be checked. Priya&apos;s search timed out on her connection.
             </li>
             <li>
-              Task 3 for Tom and Priya — the plan gave this task to Maya only.
+              Task 3 for Tom and Priya. The plan gave this task to Maya only.
             </li>
             <li>
-              Track an order for Tom and Maya — needs a real order email, which the plan did not include.
+              Track an order for Tom and Maya. Needs a real order email, which the plan did not include.
             </li>
           </ul>
         </section>

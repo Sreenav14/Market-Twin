@@ -193,7 +193,7 @@ export const WatchLivePage: React.FC<WatchLivePageProps> = ({
             height: "32px",
             borderRadius: "50%",
             backgroundColor: "var(--ink)",
-            color: "#FFFFFF",
+            color: "var(--ink-on-dark)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

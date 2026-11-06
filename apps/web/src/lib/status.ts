@@ -12,11 +12,12 @@ export interface StatusEntry {
 }
 
 export type HarnessItemStatus =
+  | "pending"
+  | "running"
   | "worked"
   | "broken"
   | "could_not_check"
   | "not_checked"
-  | "observed_once"
   | "blocked"
   | "needs_human_login";
 
@@ -24,9 +25,9 @@ export type ExecutionStatus =
   | "running"
   | "completed"
   | "timed_out"
-  | "timeout"
   | "policy_blocked"
   | "cancelled"
+  | "skipped"
   | "failed";
 
 // The infra entry set: the exact labels KafkaStatusBadge renders today
@@ -59,11 +60,12 @@ export const RUN_STATUS: Record<TestRunStatus, StatusEntry> = {
 };
 
 export const HARNESS_ITEM_STATUS: Record<HarnessItemStatus, StatusEntry> = {
+  pending: { word: "Pending", tone: "notchecked" },
+  running: { word: "Running", tone: "info" },
   worked: { word: "Worked", tone: "works" },
   broken: { word: "Broken", tone: "broken" },
   could_not_check: { word: "Could not check", tone: "couldnot" },
   not_checked: { word: "Not checked", tone: "notchecked" },
-  observed_once: { word: "Seen once", tone: "couldnot" },
   blocked: { word: "Blocked", tone: "couldnot" },
   needs_human_login: { word: "Needs your login", tone: "couldnot" },
 };
@@ -79,9 +81,9 @@ export const EXECUTION_STATUS: Record<ExecutionStatus, StatusEntry> = {
   running: { word: "Running", tone: "info" },
   completed: { word: "Done", tone: "works" },
   timed_out: { word: "Timed out", tone: "couldnot" },
-  timeout: { word: "Timed out", tone: "couldnot" },
   policy_blocked: { word: "Blocked by policy", tone: "couldnot" },
   cancelled: { word: "Cancelled", tone: "notchecked" },
+  skipped: { word: "Skipped", tone: "notchecked" },
   failed: { word: "Failed", tone: "broken" },
 };
 

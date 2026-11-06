@@ -38,7 +38,7 @@ export const NeedsYouRow: React.FC<NeedsYouRowProps> = ({
             height: "24px",
             borderRadius: "50%",
             backgroundColor: testerColour,
-            color: "#FFFFFF",
+            color: "var(--ink-on-dark)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -67,7 +67,7 @@ export const NeedsYouRow: React.FC<NeedsYouRowProps> = ({
                 borderRadius: "50%",
                 border: "1.5px solid var(--ink)",
                 fontSize: "11px",
-                fontWeight: 700,
+                fontWeight: 600,
                 color: "var(--ink)",
               }}
               aria-hidden="true"
@@ -88,7 +88,7 @@ export const NeedsYouRow: React.FC<NeedsYouRowProps> = ({
         </div>
       </div>
 
-      {/* Button: Help {Name} */}
+      {/* Button: Help {Name} — the urgent action is the page's filled primary */}
       <button
         type="button"
         onClick={onHelpClick}
@@ -97,14 +97,14 @@ export const NeedsYouRow: React.FC<NeedsYouRowProps> = ({
           minHeight: "44px",
           padding: "12px 20px",
           borderRadius: 0,
-          backgroundColor: "#FFFFFF",
-          border: "1px solid var(--ink)",
-          color: "var(--ink)",
+          backgroundColor: "var(--flame-deep)",
+          border: "1px solid var(--flame-deep)",
+          color: "var(--ink-on-dark)",
           cursor: "pointer",
           whiteSpace: "nowrap",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--paper)")}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#FFFFFF")}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep-hover)")}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--flame-deep)")}
       >
         Help {testerName}
       </button>

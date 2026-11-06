@@ -46,16 +46,15 @@ describe("status language", () => {
     expect(statusEntry("harnessItem", "could_not_check").word).toBe(
       "Could not check",
     );
-    expect(statusEntry("harnessItem", "observed_once").word).toBe("Seen once");
+    expect(statusEntry("harnessItem", "pending").word).toBe("Pending");
+    expect(statusEntry("harnessItem", "running").word).toBe("Running");
     expect(statusEntry("harnessItem", "needs_human_login").word).toBe(
       "Needs your login",
     );
     expect(statusEntry("journeyOutcome", "passed").word).toBe("Worked");
     expect(statusEntry("journeyOutcome", "partial").word).toBe("Partly done");
-    expect(statusEntry("execution", "timed_out")).toEqual(
-      statusEntry("execution", "timeout"),
-    );
     expect(statusEntry("execution", "timed_out").word).toBe("Timed out");
+    expect(statusEntry("execution", "skipped").word).toBe("Skipped");
     expect(statusEntry("severity", "critical").tone).toBe("broken");
     expect(statusEntry("severity", "medium").tone).toBe("couldnot");
     expect(statusEntry("infra", "connected_relay_off").word).toBe(

@@ -226,7 +226,6 @@ export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }
                     }}
                   >
                     <span>{item.name}</span>
-                    <span style={{ color: "var(--ink-faint)" }}>→</span>
                   </div>
                   <div
                     className="font-body-small"

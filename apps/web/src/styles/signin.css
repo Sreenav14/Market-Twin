@@ -223,9 +223,9 @@
 
 .signin-input:focus,
 .signin-form .text-input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--mt-accent-subtle);
+  /* Outline ring, not a border swap: border width and colour stay constant. */
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .signin-help {

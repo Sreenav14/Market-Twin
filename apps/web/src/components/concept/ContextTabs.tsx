@@ -67,6 +67,8 @@ export const ContextTabs: React.FC<ContextTabsProps> = ({
         style={{
           paddingLeft: "32px",
           paddingRight: "32px",
+          overflowX: "auto",
+          flexWrap: "nowrap",
         }}
       >
         {tabs.map((tab, idx) => {
@@ -91,6 +93,8 @@ export const ContextTabs: React.FC<ContextTabsProps> = ({
                 border: "none",
                 borderRadius: 0,
                 cursor: "pointer",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
                 boxShadow: isSelected ? "inset 0 -2px 0 var(--ink)" : "none",
               }}
             >

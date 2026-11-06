@@ -48,20 +48,28 @@ export const VerdictStrip: React.FC<VerdictStripProps> = ({
               borderRadius: "4px",
               minWidth: "16px",
               backgroundColor: seg.isFinished
-                ? "var(--ink)"
+                ? "var(--flame-deep)"
                 : "var(--notchecked-tint)",
               border: seg.isFinished ? "none" : "1px solid var(--line)",
             }}
           />
         ))}
       </div>
+      {/* Captions decode each segment: date, and the verdict word or why there is none */}
+      <div className="flex gap-1" aria-hidden="true">
+        {segments.map((seg, idx) => (
+          <div key={idx} style={{ flex: 1, minWidth: "16px" }} className="font-body-small">
+            <span style={{ color: "var(--ink-2)" }}>{seg.dateLabel}</span>
+            {seg.verdict ? (
+              <span style={{ color: "var(--ink)", fontWeight: 600 }}> · {seg.verdict}.</span>
+            ) : (
+              <span style={{ color: "var(--ink-2)" }}> · Stopped early, no verdict.</span>
+            )}
+          </div>
+        ))}
+      </div>
       {lastTestDate && (
-        <div
-          className="font-body-small"
-          style={{ color: "var(--ink-2)", fontSize: "14px" }}
-        >
-          Last test: {lastTestDate}
-        </div>
+        <span className="sr-only">Last test: {lastTestDate}</span>
       )}
     </div>
   );

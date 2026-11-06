@@ -53,7 +53,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         style={{
           height: "36px",
           backgroundColor: "var(--plum)",
-          color: "#FFFFFF",
+          color: "var(--ink-on-dark)",
           paddingLeft: "16px",
           paddingRight: "16px",
         }}
@@ -62,9 +62,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           type="button"
           onClick={() => onNavigate && onNavigate("Example report")}
           className="on-dark hover:underline flex items-center gap-1 cursor-pointer"
-          style={{ background: "none", border: "none", color: "#FFFFFF", padding: 0 }}
+          style={{ background: "none", border: "none", color: "var(--ink-on-dark)", padding: 0 }}
         >
-          <span>New — see a full example test, start to finish →</span>
+          <span>New: see a full example test, start to finish</span>
         </button>
       </div>
 
@@ -75,76 +75,83 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         onStartTest={handleStartTest}
       />
 
-      {/* 3. Hero Section */}
+      {/* 3. Hero Section — copy and form left, the signature right, first screen */}
       <section
         style={{
-          paddingTop: "88px",
-          paddingBottom: "64px",
+          paddingTop: "40px",
+          paddingBottom: "48px",
           backgroundColor: "var(--paper)",
         }}
       >
         <div className="concept-marketing-container">
-          {/* Eyebrow */}
-          <div
-            className="font-meta-label"
-            style={{ color: "var(--flame-deep)", marginBottom: "16px" }}
-          >
-            YOUR APP, TESTED LIKE A PERSON
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-start">
+            <div>
+              {/* Eyebrow */}
+              <div
+                className="font-meta-label"
+                style={{ color: "var(--flame-deep)", marginBottom: "16px" }}
+              >
+                YOUR APP, TESTED LIKE A PERSON
+              </div>
+
+              {/* H1 */}
+              <h1
+                className="font-display"
+                style={{
+                  color: "var(--ink)",
+                  maxWidth: "720px",
+                  margin: "0 0 24px 0",
+                }}
+              >
+                Know if your app is ready, before your customers find out.
+              </h1>
+
+              {/* Lede — one sentence */}
+              <p
+                className="font-body"
+                style={{
+                  color: "var(--ink-2)",
+                  maxWidth: "640px",
+                  margin: "0 0 28px 0",
+                }}
+              >
+                Three testers (an expert, a first-timer, and someone in a hurry
+                on their phone) try your app the way real people do, and you
+                get one honest answer, with proof: what worked, what broke, and
+                what we could not check.
+              </p>
+
+              {/* URL Intake Form */}
+              <UrlIntakeForm
+                onValidSubmit={(_origin, url) => {
+                  onStartTest?.(url);
+                }}
+              />
+
+              {/* Promise line — under the form, where it backs the action up */}
+              <p
+                className="font-body-small"
+                style={{
+                  fontWeight: 600,
+                  color: "var(--ink)",
+                  margin: "4px 0 0 0",
+                }}
+              >
+                We only call something broken when the evidence proves it, twice.
+              </p>
+            </div>
+
+            {/* The signature, inside the first screen */}
+            <TriptychSignature compact={true} />
           </div>
 
-          {/* H1 */}
-          <h1
-            className="font-display"
-            style={{
-              color: "var(--ink)",
-              maxWidth: "720px",
-              margin: "0 0 24px 0",
-            }}
-          >
-            Know if your app is ready — before your customers find out.
-          </h1>
-
-          {/* Lede */}
-          <p
-            className="font-body"
-            style={{
-              color: "var(--ink-2)",
-              maxWidth: "640px",
-              margin: "0 0 16px 0",
-            }}
-          >
-            Give us your app&apos;s address. Three testers — an expert, a first-timer,
-            and someone in a hurry on their phone — try to use it the way real
-            people do. You get one honest answer, with proof: what worked, what
-            broke, and what we could not check.
-          </p>
-
-          {/* Promise line */}
-          <p
-            className="font-body"
-            style={{
-              fontWeight: 600,
-              color: "var(--ink)",
-              margin: "0 0 32px 0",
-            }}
-          >
-            We only call something broken when the evidence proves it — twice.
-          </p>
-
-          {/* URL Intake Form */}
-          <UrlIntakeForm
-            onValidSubmit={(_origin, url) => {
-              onStartTest?.(url);
-            }}
-          />
-
           {/* Segmented Hero Control (Tablist) */}
-          <div style={{ marginTop: "32px" }}>
+          <div style={{ marginTop: "40px" }}>
             <div
               role="tablist"
               aria-label="Getting started options"
               className="flex items-center gap-2 border-b"
-              style={{ borderColor: "var(--line)", marginBottom: "16px" }}
+              style={{ borderColor: "var(--line)", marginBottom: "16px", overflowX: "auto", flexWrap: "nowrap" }}
             >
               {[
                 { id: "app", label: "I have an app to test" },
@@ -166,6 +173,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       border: "none",
                       color: isSelected ? "var(--ink)" : "var(--ink-2)",
                       cursor: "pointer",
+                      whiteSpace: "nowrap",
                       boxShadow: isSelected ? "inset 0 -2px 0 var(--ink)" : "none",
                     }}
                   >
@@ -199,19 +207,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 4. Signature Visual Section */}
-      <section style={{ padding: "64px 0", backgroundColor: "var(--paper)" }}>
-        <div className="concept-marketing-container">
-          <TriptychSignature compact={false} />
-        </div>
-      </section>
-
       {/* 5. Stat Band (Boxless, 1px line top + bottom) */}
       <section
         style={{
           borderTop: "1px solid var(--line)",
           borderBottom: "1px solid var(--line)",
-          padding: "40px 0",
+          padding: "72px 0 40px",
           backgroundColor: "var(--paper)",
         }}
       >
@@ -280,7 +281,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               role="tablist"
               aria-label="Example test views"
               className="flex items-center gap-2 border-b"
-              style={{ borderColor: "var(--line)", marginBottom: "24px" }}
+              style={{ borderColor: "var(--line)", marginBottom: "24px", overflowX: "auto", flexWrap: "nowrap" }}
             >
               <button
                 role="tab"
@@ -292,6 +293,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   padding: "12px 16px",
                   background: "none",
                   border: "none",
+                  whiteSpace: "nowrap",
                   color: exampleCardTab === "results" ? "var(--ink)" : "var(--ink-2)",
                   cursor: "pointer",
                   boxShadow: exampleCardTab === "results" ? "inset 0 -2px 0 var(--ink)" : "none",
@@ -309,6 +311,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   padding: "12px 16px",
                   background: "none",
                   border: "none",
+                  whiteSpace: "nowrap",
                   color: exampleCardTab === "watch" ? "var(--ink)" : "var(--ink-2)",
                   cursor: "pointer",
                   boxShadow: exampleCardTab === "watch" ? "inset 0 -2px 0 var(--ink)" : "none",
@@ -432,7 +435,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Testers try it for real
               </h3>
               <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
-                They click, type and pay like people do — and get stuck like people do.
+                They click, type and pay like people do, and get stuck like people do.
               </p>
             </div>
 
@@ -447,7 +450,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 You get one answer
               </h3>
               <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
-                Worked, broken, or could not check — each with the screenshots to prove it.
+                Worked, broken, or could not check, each with the screenshots to prove it.
               </p>
             </div>
           </div>
@@ -464,70 +467,40 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             What you get
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div
-              style={{
-                backgroundColor: "var(--card)",
-                border: "1px solid var(--line)",
-                borderRadius: "10px",
-                padding: "20px",
-              }}
-            >
-              <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "4px" }}>
-                VERDICT
-              </div>
-              <div className="font-verdict-word" style={{ fontSize: "28px", color: "var(--ink)", marginBottom: "8px" }}>
-                Not ready yet
-              </div>
-              <p className="font-body" style={{ color: "var(--ink)", margin: "0 0 12px 0" }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
+            <div style={{ borderTop: "1px solid var(--ink)", paddingTop: "16px" }}>
+              <h3 className="font-h3" style={{ color: "var(--ink)", margin: "0 0 6px 0" }}>
+                One verdict word
+              </h3>
+              <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
                 One word, one reason, and what the test was based on.
               </p>
             </div>
 
-            <div
-              style={{
-                backgroundColor: "var(--card)",
-                border: "1px solid var(--line)",
-                borderRadius: "10px",
-                padding: "20px",
-              }}
-            >
-              <CoverageBar totals={data.totals} />
-              <p className="font-body" style={{ color: "var(--ink)", marginTop: "12px", margin: "12px 0 0 0" }}>
+            <div style={{ borderTop: "1px solid var(--ink)", paddingTop: "16px" }}>
+              <h3 className="font-h3" style={{ color: "var(--ink)", margin: "0 0 6px 0" }}>
+                Every attempt counted
+              </h3>
+              <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
                 Every attempt counted, including the ones we could not check.
               </p>
             </div>
 
-            <div
-              style={{
-                backgroundColor: "var(--card)",
-                border: "1px solid var(--line)",
-                borderRadius: "10px",
-                padding: "20px",
-              }}
-            >
-              <div className="font-h3" style={{ color: "var(--ink)", marginBottom: "4px" }}>
-                Pay button does nothing
-              </div>
-              <ProofChip screenshots={7} rechecked={true} />
-              <p className="font-body" style={{ color: "var(--ink)", marginTop: "8px", margin: "8px 0 0 0" }}>
+            <div style={{ borderTop: "1px solid var(--ink)", paddingTop: "16px" }}>
+              <h3 className="font-h3" style={{ color: "var(--ink)", margin: "0 0 6px 0" }}>
+                Problems, confirmed twice
+              </h3>
+              <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
                 A problem counts only when it fails again on a second check.
               </p>
             </div>
 
-            <div
-              style={{
-                backgroundColor: "var(--card)",
-                border: "1px solid var(--line)",
-                borderRadius: "10px",
-                padding: "20px",
-              }}
-            >
-              <blockquote className="font-quote" style={{ fontSize: "18px", color: "var(--ink)", margin: "0 0 4px 0" }}>
-                &ldquo;The pay button just sat there. I didn&apos;t know if I&apos;d been charged.&rdquo;
-              </blockquote>
-              <p className="font-body" style={{ color: "var(--ink)", margin: "4px 0 0 0" }}>
-                How it felt, in the tester&apos;s own words — never a score.
+            <div style={{ borderTop: "1px solid var(--ink)", paddingTop: "16px" }}>
+              <h3 className="font-h3" style={{ color: "var(--ink)", margin: "0 0 6px 0" }}>
+                Feelings, in their words
+              </h3>
+              <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
+                How it felt, in the tester&apos;s own words, never a score.
               </p>
             </div>
           </div>
@@ -562,27 +535,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 10. Final CTA Section (Rose Band #F9DEE4) */}
-      <section style={{ padding: "96px 0", backgroundColor: "var(--band-rose)" }}>
+      {/* 10. Final CTA Section (Rose Band #F9DEE4) — same two-column posture as the hero */}
+      <section style={{ padding: "88px 0", backgroundColor: "var(--band-rose)" }}>
         <div className="concept-marketing-container">
-          <h2
-            className="font-h2-marketing"
-            style={{ color: "var(--ink)", margin: "0 0 24px 0" }}
-          >
-            Find out before your customers do.
-          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div>
+              <h2
+                className="font-h2-marketing"
+                style={{ color: "var(--ink)", margin: "0 0 16px 0" }}
+              >
+                Find out before your customers do.
+              </h2>
+              <p className="font-body" style={{ color: "var(--ink)", margin: 0 }}>
+                A full test takes about 20 minutes.
+              </p>
+            </div>
 
-          <UrlIntakeForm
-            onValidSubmit={(_origin, url) => {
-              onStartTest?.(url);
-            }}
-          />
-
-          <div
-            className="font-body-small"
-            style={{ color: "var(--ink)", marginTop: "16px" }}
-          >
-            A full test takes about 20 minutes.
+            <UrlIntakeForm
+              onValidSubmit={(_origin, url) => {
+                onStartTest?.(url);
+              }}
+            />
           </div>
         </div>
       </section>

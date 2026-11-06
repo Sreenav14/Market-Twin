@@ -100,7 +100,7 @@ export const TesterCard: React.FC<TesterCardProps> = ({ tester, className = "" }
                   borderRadius: "50%",
                   border: "1px solid var(--ink)",
                   fontSize: "10px",
-                  fontWeight: 700,
+                  fontWeight: 600,
                   color: "var(--ink)",
                 }}
               >
@@ -162,14 +162,10 @@ export const TesterCard: React.FC<TesterCardProps> = ({ tester, className = "" }
           >
             <span
               className="font-meta-label"
-              style={{ fontSize: "10px", color: "var(--ink-faint)" }}
+              style={{ color: "var(--ink-faint)" }}
             >
               {inOwnerControl ? "YOUR VIEW" : `${tester.name.toUpperCase()}'S VIEW`}
             </span>
-            <div className="flex gap-1">
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--line)" }} />
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--line)" }} />
-            </div>
           </div>
 
           {/* Frame content */}

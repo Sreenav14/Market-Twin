@@ -60,7 +60,7 @@ export const ConceptFooter: React.FC<ConceptFooterProps> = ({
                     <button
                       type="button"
                       onClick={() => onNavigate && onNavigate(item)}
-                      className="transition-opacity text-left"
+                      className="on-dark transition-opacity text-left"
                       style={{
                         background: "none",
                         border: "none",
@@ -100,7 +100,7 @@ export const ConceptFooter: React.FC<ConceptFooterProps> = ({
                   <button
                     type="button"
                     onClick={() => onNavigate && onNavigate(item)}
-                    className="transition-opacity text-left"
+                    className="on-dark transition-opacity text-left"
                     style={{
                       background: "none",
                       border: "none",
@@ -139,7 +139,7 @@ export const ConceptFooter: React.FC<ConceptFooterProps> = ({
                   <button
                     type="button"
                     onClick={() => onNavigate && onNavigate(item)}
-                    className="transition-opacity text-left"
+                    className="on-dark transition-opacity text-left"
                     style={{
                       background: "none",
                       border: "none",
