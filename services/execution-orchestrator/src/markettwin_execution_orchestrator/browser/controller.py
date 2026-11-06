@@ -232,6 +232,8 @@ class BrowserController:
                 args=[
                     "--disable-quic",
                     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
                 ],
             )
             self._egress_proxies[session_id] = egress
@@ -1092,15 +1094,29 @@ class BrowserController:
 
     async def get_page_index(
         self, *, session_id: UUID, execution_id: UUID, journey_id: UUID, cursor: int = 0,
+        authenticated_session: bool = False,
     ) -> BrowserActionResult:
-        """Index public-page interactive accessibility nodes beyond the viewport."""
+        """Index public-page interactive accessibility nodes beyond the viewport.
+
+        Authenticated sessions are refused by default: full-page
+        discovery must never read a logged-in app. The single exception
+        is the harness handoff. ``begin_human_control`` marks a session
+        authenticated (``session.authenticated_session``) when the
+        operator takes the browser to log in personally, and the
+        session's state is afterwards held only in memory by
+        ``AuthSessionBroker``. The harness driver passes
+        ``authenticated_session=True`` only for a session it created
+        from such a broker snapshot, so the inventory can see the
+        logged-in app the operator handed over. Never pass it for a
+        session that was authenticated any other way.
+        """
         if cursor < 0:
             raise BrowserActionError("Page index cursor must be nonnegative.")
         session = self._get_session(
             session_id=session_id, execution_id=execution_id, journey_id=journey_id,
         )
         async with self._agent_control_action(session):
-            if session.authenticated_session:
+            if session.authenticated_session and not authenticated_session:
                 raise BrowserPolicyError("Full-page discovery excludes authenticated sessions.")
             snapshot = await session.page.locator("body").aria_snapshot(timeout=session.timeout_ms)
             entries: list[dict[str, object]] = []

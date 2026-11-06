@@ -313,7 +313,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                       </tr>
                       {task.notCheckedReason && (
                         <tr style={{ borderBottom: "1px solid var(--line)", backgroundColor: "var(--paper)" }}>
-                          <td colSpan={4} style={{ padding: "10px 20px" }} className="font-body-small text-ink-2">
+                          <td colSpan={4} style={{ padding: "10px 20px", color: "var(--ink-2)" }} className="font-body-small">
                             {task.notCheckedReason}
                           </td>
                         </tr>

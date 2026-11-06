@@ -1,9 +1,9 @@
 import type { TestRun } from "./api";
 
 const statusLabels: Record<string, string> = {
-  inconclusive: "Could not check", policy_blocked: "Could not check",
-  unverified: "Needs checking", timed_out: "Time limit reached",
-  awaiting_human: "Needs your help", human_action_required: "Needs your help",
+  inconclusive: "Could not check", policy_blocked: "Blocked by policy",
+  unverified: "Needs checking", timed_out: "Timed out",
+  awaiting_human: "Needs you", human_action_required: "Needs your help",
   evaluation_pending: "Waiting for results", evaluating: "Checking results",
   verified_deterministic: "Checked", verified_visual: "Checked",
   did_not_reproduce: "Did not happen again", replay_unavailable: "Could not check again",

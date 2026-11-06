@@ -39,6 +39,8 @@ export function WorkspaceDashboardPage() {
   const { applications } = state.data;
   const runs = [...state.data.runs].sort((a, b) => (Date.parse(b.created_at ?? "") || 0) - (Date.parse(a.created_at ?? "") || 0));
   const needsYou = runs.filter(test => isApprovedReplayDraft(test) || test.status === "awaiting_human" || test.configuration_snapshot.discovery_stage === "awaiting_approval");
+  const awaitingHuman = runs.filter(test => test.status === "awaiting_human");
+  const oldestAwaitingHuman = awaitingHuman[awaitingHuman.length - 1];
   const drafts = runs.filter(test => test.status === "draft" && !isApprovedReplayDraft(test));
   const active = runs.filter(test => ["planning", "queued", "running"].includes(test.status));
   const finished = runs.filter(test => ["completed", "failed", "cancelled"].includes(test.status));
@@ -62,6 +64,11 @@ export function WorkspaceDashboardPage() {
         : <p>An owner or administrator can add an app.</p>}
     </section> : <>
       <section aria-labelledby="dashboard-needs-you"><h2 id="dashboard-needs-you" className="font-h2-workspace">Needs your help</h2>
+        {oldestAwaitingHuman ? <article className="concept-live-row">
+          <div><h3 className="font-h3">{testTitle(oldestAwaitingHuman)}</h3>
+            <p className="font-body-small">Needs you — the tester is paused{oldestAwaitingHuman.status_reason ? ` · ${oldestAwaitingHuman.status_reason}` : ""}</p></div>
+          <Link className="text-link" to={`/runs/${oldestAwaitingHuman.id}/human-action`}>Help this tester →</Link>
+        </article> : null}
         {needsYou.length ? rows(needsYou) : <p className="font-body">Nothing needs you right now.</p>}</section>
       <section aria-labelledby="dashboard-happening"><h2 id="dashboard-happening" className="font-h2-workspace">Happening now</h2>
         {active.length ? rows(active) : <p className="font-body-small">No test is running right now.</p>}</section>

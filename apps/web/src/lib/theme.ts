@@ -5,7 +5,7 @@ export type ThemeMode = "dark" | "light" | "system";
 const STORAGE_KEY = "markettwin-theme";
 
 export function getStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") {
@@ -14,8 +14,8 @@ export function getStoredTheme(): ThemeMode {
   } catch {
     // Rendering must still work when Chrome blocks site storage.
   }
-  // Default to dark mode as requested
-  return "dark";
+  // The warm concept is the single product theme; light is the default.
+  return "light";
 }
 
 export function getEffectiveTheme(mode: ThemeMode = getStoredTheme()): "dark" | "light" {

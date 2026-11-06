@@ -35,5 +35,5 @@ it("groups journeys by a key while preserving their order", () => {
 });
 
 it("summarizes recorded values without inventing missing states", () => {
-  expect(countLabels(["completed", "completed", null, "policy_blocked"])).toBe("2 completed · 1 not recorded · 1 policy blocked");
+  expect(countLabels(["completed", "completed", null, "policy_blocked"])).toBe("2 completed · 1 not recorded · 1 Blocked by policy");
 });

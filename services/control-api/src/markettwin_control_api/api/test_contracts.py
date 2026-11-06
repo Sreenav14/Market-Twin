@@ -287,11 +287,14 @@ async def approve_test_contract(
                 for j in contract.journeys
             )
 
+            # Approval is idempotent: re-approving an already approved
+            # contract must not rewrite who approved it or when, so the
+            # original approver stamp of record is preserved.
             approved_contract = contract.model_copy(
                 update={
                     "status": "approved",
-                    "approved_by_user_id": user_id,
-                    "approved_at": datetime.now(UTC),
+                    "approved_by_user_id": contract.approved_by_user_id or user_id,
+                    "approved_at": contract.approved_at or datetime.now(UTC),
                     "journeys": approved_journeys,
                 }
             )

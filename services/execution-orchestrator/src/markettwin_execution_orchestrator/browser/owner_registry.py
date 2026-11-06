@@ -75,6 +75,15 @@ class BrowserOwnerRegistry:
     async def frame(self, lease: OwnerLease) -> bytes:
         return await self._owner(lease.handle).frame(lease)
 
+    async def start_screencast(self, handle: BrowserSessionHandle, *, generation: int) -> None:
+        await self._owner(handle).start_screencast(handle, generation=generation)
+
+    async def next_screencast_frame(self, handle: BrowserSessionHandle, *, generation: int) -> bytes:
+        return await self._owner(handle).next_screencast_frame(handle, generation=generation)
+
+    async def stop_screencast(self, handle: BrowserSessionHandle) -> None:
+        await self._owner(handle).stop_screencast(handle)
+
     async def diagnostics(self, lease: OwnerLease) -> tuple[dict[str, str | int], ...]:
         return await self._owner(lease.handle).diagnostics(lease)
 

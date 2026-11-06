@@ -370,11 +370,18 @@ async def execute_discovery_run(
             journal.end(False, "provider_error")
             journal.notes.append("Discovery stopped because its agent was unavailable.")
         finally:
-            await runner.close()
-            artifacts = await controller.close_session(session_id=handle.session_id)
-            await SessionArtifactRecorder(session=session, execution_id=execution_id,
-                                          storage=storage).record(artifacts)
-            await executions.mark_browser_session_closed(browser_session_id=handle.session_id)
+            # Closing the runner must never skip closing the browser session:
+            # a runner.close() failure previously leaked the session and lost
+            # its artifact recording, because every step shared one chain.
+            try:
+                await runner.close()
+            finally:
+                artifacts = await controller.close_session(session_id=handle.session_id)
+                await SessionArtifactRecorder(session=session, execution_id=execution_id,
+                                              storage=storage).record(artifacts)
+                await executions.mark_browser_session_closed(
+                    browser_session_id=handle.session_id,
+                )
     owned = set((await session.scalars(select(ExecutionStep.id).where(
         ExecutionStep.execution_id == execution_id, ExecutionStep.status == "completed",
     ))).all())

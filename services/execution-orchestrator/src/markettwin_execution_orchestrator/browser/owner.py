@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Literal, Protocol, cast
 from uuid import UUID
 
-from playwright.async_api import Page
+from playwright.async_api import CDPSession, Page
 from pydantic import BaseModel, ConfigDict, Field
 
 from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
@@ -32,6 +32,9 @@ OBSERVATION_CLEANUP_SECONDS = 0.25
 OBSERVATION_MAX_BYTES = 2 * 1024 * 1024
 VIEWER_OPERATION_SECONDS = 2.0
 POINTER_RELEASE_SECONDS = 0.5
+SCREENCAST_QUALITY = 70
+SCREENCAST_MAX_WIDTH = 1280
+SCREENCAST_FRAME_SECONDS = 5.0
 POINTER_EVENTS = frozenset({"pointer_down", "pointer_move", "pointer_up", "pointer_cancel"})
 
 
@@ -73,6 +76,23 @@ class _ViewerConnection:
     pointer_held: bool = False
     pointer_page: Page | None = None
 
+@dataclass(slots=True)
+class _ScreencastSource:
+    """One persistent CDP screencast for one watched session.
+
+    Frames arrive on the channel callback; only the latest frame is kept
+    (latest-frame-only coalescing), every frame is acked, and the source
+    stops when its last viewer detaches.
+    """
+
+    handle: BrowserSessionHandle
+    generation: int
+    channel: CDPSession
+    latest_frame: bytes | None = None
+    frame_event: asyncio.Event = field(default_factory=asyncio.Event)
+    viewers: int = 0
+    stopped: bool = False
+
 
 class BrowserOwner(Protocol):
     async def attach(self, lease: OwnerLease) -> None: ...
@@ -80,6 +100,9 @@ class BrowserOwner(Protocol):
     async def renew(self, lease: OwnerLease) -> None: ...
     async def input(self, lease: OwnerLease, event: ViewerInput) -> None: ...
     async def frame(self, lease: OwnerLease) -> bytes: ...
+    async def start_screencast(self, handle: BrowserSessionHandle, *, generation: int) -> None: ...
+    async def next_screencast_frame(self, handle: BrowserSessionHandle, *, generation: int) -> bytes: ...
+    async def stop_screencast(self, handle: BrowserSessionHandle) -> None: ...
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None: ...
 
 
@@ -94,6 +117,7 @@ class ControllerBrowserOwner:
     def __init__(self, controller: BrowserController) -> None:
         self._controller = controller
         self._connections: dict[UUID, _ViewerConnection] = {}
+        self._screencasts: dict[UUID, _ScreencastSource] = {}
 
     def _session(self, handle: BrowserSessionHandle) -> JourneyBrowserSession:
         return self._controller._get_session(  # pyright: ignore[reportPrivateUsage]
@@ -450,6 +474,140 @@ class ControllerBrowserOwner:
                 except Exception:
                     # Cleanup failure cannot expose page data or hold agent control.
                     pass
+
+    def _screencast_allowed(
+        self, session: JourneyBrowserSession, generation: int,
+    ) -> None:
+        """Watchable states: an agent or pending browser (observer path), or the
+        attached human-control connection (takeover path). Nothing else."""
+        if session.control_mode == "human":
+            connection = self._connections.get(session.session_id)
+            if (
+                connection is None or not connection.connected
+                or connection.lease.generation != generation
+                or connection.lease.expires_at <= datetime.now(UTC)
+                or session.capture_enabled or session.tracing_active
+            ):
+                raise ViewerRejectedError("Browser observation is unavailable.")
+        elif session.control_mode not in OBSERVABLE_CONTROL_MODES:
+            raise ViewerRejectedError("Browser observation is unavailable.")
+        if (
+            session.control_generation != generation
+            or session.state != "open"
+            or not session.browser.is_connected()
+        ):
+            raise ViewerRejectedError("Browser observation is unavailable.")
+        try:
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+        except Exception:
+            raise ViewerRejectedError("Browser observation is unavailable.") from None
+
+    async def _ack_screencast_frame(self, source: _ScreencastSource, session_id: int) -> None:
+        try:
+            send = cast(
+                Callable[[str, dict[str, object]], Awaitable[dict[str, object]]],
+                source.channel.send,  # pyright: ignore[reportUnknownMemberType]
+            )
+            await send("Page.screencastFrameAck", {"sessionId": session_id})
+        except Exception:
+            pass
+
+    async def start_screencast(self, handle: BrowserSessionHandle, *, generation: int) -> None:
+        """Start (or join) the one persistent screencast for a watched session."""
+        session = self._session(handle)
+        async with self._locked(session):
+            self._screencast_allowed(session, generation)
+            existing = self._screencasts.get(handle.session_id)
+            if existing is not None and existing.generation == generation and not existing.stopped:
+                existing.viewers += 1
+                return
+            if existing is not None:
+                await self._stop_screencast_source(existing)
+            channel = await session.context.new_cdp_session(session.page)
+            source = _ScreencastSource(handle=handle, generation=generation, channel=channel, viewers=1)
+
+            def on_frame(params: dict[str, object]) -> None:
+                if source.stopped:
+                    return
+                try:
+                    data = base64.b64decode(cast(str, params["data"]), validate=True)
+                except Exception:
+                    return
+                if len(data) > OBSERVATION_MAX_BYTES:
+                    return
+                # Latest-frame-only coalescing: a slow viewer never builds a backlog.
+                source.latest_frame = data
+                source.frame_event.set()
+                frame_session = params.get("sessionId")
+                if isinstance(frame_session, int):
+                    asyncio.ensure_future(self._ack_screencast_frame(source, frame_session))
+
+            channel.on("Page.screencastFrame", on_frame)
+            send = cast(
+                Callable[[str, dict[str, object]], Awaitable[dict[str, object]]],
+                channel.send,  # pyright: ignore[reportUnknownMemberType]
+            )
+            try:
+                await send("Page.startScreencast", {
+                    "format": "jpeg", "quality": SCREENCAST_QUALITY,
+                    "maxWidth": SCREENCAST_MAX_WIDTH, "everyNthFrame": 1,
+                })
+            except Exception:
+                try:
+                    await channel.detach()
+                except Exception:
+                    pass
+                raise ViewerRejectedError("Browser observation is unavailable.") from None
+            self._screencasts[handle.session_id] = source
+
+    async def next_screencast_frame(self, handle: BrowserSessionHandle, *, generation: int) -> bytes:
+        """Wait for the newest screencast frame. Never captures a screenshot and
+        never holds the session lock, so watching cannot stall the executor."""
+        source = self._screencasts.get(handle.session_id)
+        if source is None or source.generation != generation or source.stopped:
+            raise ViewerRejectedError("Browser observation is unavailable.")
+        self._screencast_allowed(self._session(handle), generation)
+        try:
+            async with asyncio.timeout(SCREENCAST_FRAME_SECONDS):
+                await source.frame_event.wait()
+        except TimeoutError:
+            raise ViewerRejectedError("Browser frame is unavailable.") from None
+        source.frame_event.clear()
+        if source.latest_frame is None:
+            raise ViewerRejectedError("Browser frame is unavailable.")
+        return source.latest_frame
+
+    async def stop_screencast(self, handle: BrowserSessionHandle) -> None:
+        """Detach one viewer; the screencast stops with its last viewer."""
+        source = self._screencasts.get(handle.session_id)
+        if source is None:
+            return
+        source.viewers -= 1
+        if source.viewers > 0:
+            return
+        session = self._session(handle)
+        async with self._locked(session):
+            await self._stop_screencast_source(source)
+
+    async def _stop_screencast_source(self, source: _ScreencastSource) -> None:
+        if self._screencasts.get(source.handle.session_id) is source:
+            self._screencasts.pop(source.handle.session_id, None)
+        source.stopped = True
+        source.frame_event.set()
+        send = cast(
+            Callable[[str, dict[str, object]], Awaitable[dict[str, object]]],
+            source.channel.send,  # pyright: ignore[reportUnknownMemberType]
+        )
+        try:
+            async with asyncio.timeout(OBSERVATION_CLEANUP_SECONDS):
+                await send("Page.stopScreencast", {})
+        except Exception:
+            pass
+        try:
+            async with asyncio.timeout(OBSERVATION_CLEANUP_SECONDS):
+                await source.channel.detach()
+        except Exception:
+            pass
 
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None:
         session = self._session(handle)

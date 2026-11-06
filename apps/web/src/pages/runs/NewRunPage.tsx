@@ -54,7 +54,10 @@ export function NewRunPage() {
   const [name, setName] = useState("");
   const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
   const requestedMode = params.get("mode");
-  const [executionMode, setExecutionMode] = useState(requestedMode === "legacy_persona" || requestedMode === "deep_feature_v1" ? requestedMode : "discovery_contract_v1");
+  // OWNER-CHECK 4: no capabilities key exists in any creation-payload source on
+  // the build line, so the harness option ships disabled (see OWNER-CHECK below).
+  const harnessAvailable = false;
+  const [executionMode, setExecutionMode] = useState(requestedMode === "legacy_persona" || requestedMode === "deep_feature_v1" || requestedMode === "harness_v1" ? requestedMode : "discovery_contract_v1");
   const [humanActionApprovals, setHumanActionApprovals] = useState(false);
   const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
   const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
@@ -364,8 +367,11 @@ export function NewRunPage() {
               <option value="legacy_persona">Older exploratory journeys</option>
               <option value="deep_feature_v1">Feature cases — experimental</option>
               <option value="discovery_contract_v1">Explore, approve and test</option>
+              <option value="harness_v1" disabled={!harnessAvailable}>Full test — checks every interaction</option>
             </select>
             {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unconfirmed.</p> : null}
+            {executionMode === "harness_v1" ? <p className="form-help">The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it.</p> : null}
+            {!harnessAvailable ? <p className="form-help">Not available yet</p> : null}
             <label htmlFor="testing-depth">Testing depth</label>
             <select id="testing-depth" value={testingDepth} disabled={busy} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
               <option value="low">Low — focused coverage</option>

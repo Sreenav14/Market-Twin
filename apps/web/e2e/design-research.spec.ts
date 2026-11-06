@@ -20,9 +20,9 @@ test('Chrome layout: dark workspace and readable results', async ({ page }) => {
   for (const width of [1440, 1920, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const [name, route] of [
-      ['workspace', '/overview'],
-      ['results', `/runs/${runId}/report`],
-      ['inspection', `/runs/${runId}/report?reportView=inspection`],
+      ['workspace', '/dashboard'],
+      ['results', `/runs/${runId}/results`],
+      ['inspection', `/runs/${runId}/results?reportView=inspection`],
     ]) {
       await page.goto(route);
       await expect(page.locator('#main-content')).toBeVisible();
@@ -392,9 +392,9 @@ const phase = process.env.DESIGN_PHASE || 'after';
 const out = process.env.DESIGN_EVIDENCE_DIR || path.resolve(process.cwd(), 'test-results/design-review', phase);
 const widths = [1440, 1024, 768, 390];
 const screens = [
-  ['overview', '/overview'], ['applications', '/applications'], ['tests', '/runs'],
+  ['overview', '/dashboard'], ['applications', '/applications'], ['tests', '/runs'],
   ['composer', '/applications/' + appId + '/runs/new'],
-  ['report', '/runs/' + runId + '/report'],
+  ['report', '/runs/' + runId + '/results'],
   ['journey', '/runs/' + runId + '/journeys/' + journeyId + '?step=13'],
   ['knowledge', '/knowledge/review'], ['ingestion', '/ingestion'],
   ['settings', '/settings/profile'], ['execution', '/runs/' + runId + '/activity'],

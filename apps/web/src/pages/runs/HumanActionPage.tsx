@@ -197,14 +197,16 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       ? { requestId: activeRequestId, done: () => release.mutate(activeRequestId) } : null);
   }, [activeLease?.lease_id, activeRequestId, canManageHumanActions, ended, onControlChange]);
 
+  const harnessLoginPark = run.configuration_snapshot?.execution_mode === "harness_v1" && run.status === "awaiting_human";
+
   if (inline && !activeLease && !pending.length && !leased.length && !pendingApprovals.length
       && !actions.isError && !approvals.isError && run.status !== "awaiting_human") return null;
 
   return (
     <section className="results-boundary" aria-labelledby="human-action-heading">
       <p className="section-label">Human assistance</p>
-      <h2 id="human-action-heading">Continue in the test browser</h2>
-      <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>
+      <h2 id="human-action-heading">{harnessLoginPark ? "Log in so the test can continue" : "Continue in the test browser"}</h2>
+      {harnessLoginPark ? <p>Your login session is held only in memory on our servers while this run is active. It is discarded when the run ends. We never store your password.</p> : <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>}
       {!canManageHumanActions ? <p className="human-action-denied" role="status">Human browser control and action approvals require an owner or administrator role. {run.status === "awaiting_human" ? "This test is paused until an authorized operator acts." : "Ask an authorized operator to review protected requests."}</p> : null}
       {canManageHumanActions ? <>
       <h2>Login and protected interaction</h2>

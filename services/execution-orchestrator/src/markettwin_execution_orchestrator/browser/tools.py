@@ -32,6 +32,7 @@ def create_browser_tools(
     handle: BrowserSessionHandle,
     step_recorder: BrowserStepRecorder | None = None,
     discovery: bool = False,
+    harness: bool = False,
 ) -> list[BrowserTool]:
     """Create a least-privilege tool set permanently bound to one Journey."""
     # ADK may dispatch several tool calls concurrently. Serialize the complete
@@ -486,7 +487,7 @@ def create_browser_tools(
         browser_check,
         browser_uncheck,
     ]
-    if discovery:
+    if discovery or harness:
         tools.append(browser_get_page_index)
     return tools
 

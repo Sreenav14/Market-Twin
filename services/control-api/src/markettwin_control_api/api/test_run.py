@@ -65,7 +65,7 @@ class CreateTestRunRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     testing_depth: Literal["low", "medium", "high"] = "medium"
     execution_mode: Literal[
-        "legacy_persona", "deep_feature_v1", "discovery_contract_v1",
+        "legacy_persona", "deep_feature_v1", "discovery_contract_v1", "harness_v1",
     ] = "discovery_contract_v1"
     frozen_contract_source_run_id: UUID | None = None
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
@@ -364,7 +364,7 @@ async def create_test_run(
             }
             if payload.name is not None:
                 configuration_snapshot["test_name"] = payload.name
-            if payload.execution_mode in {"deep_feature_v1", "discovery_contract_v1"}:
+            if payload.execution_mode in {"deep_feature_v1", "discovery_contract_v1", "harness_v1"}:
                 configuration_snapshot["execution_mode"] = payload.execution_mode
             if payload.auth_verification is not None:
                 configuration_snapshot["auth_mode"] = payload.auth_mode or "required"

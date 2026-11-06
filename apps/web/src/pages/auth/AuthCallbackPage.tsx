@@ -1,20 +1,23 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { PublicLayout } from "../public/PublicLayout";
-
 export function AuthCallbackPage() {
+  useEffect(() => {
+    document.title = "Authentication · MarketTwin";
+  }, []);
   return (
-    <PublicLayout title="Authentication">
-      <section className="concept-system" aria-labelledby="auth-callback-title">
-        <div className="concept-system-content">
-          <p className="font-meta-label">Production authentication</p>
-          <h1 id="auth-callback-title">Production sign-in is not available here</h1>
-          <p>
-            This workspace uses local sign-in. Production Cognito authentication
-            is not configured on this page, and this callback does not sign you in.
+    <div className="auth-layout">
+      <main className="auth-main auth-main-single">
+        <section className="auth-card">
+          <p className="eyebrow">Production authentication</p>
+          <h1 className="auth-callback-title">Cognito callback</h1>
+          <p className="panel-note">
+            Production Cognito Authorization Code + PKCE is part of the locked
+            architecture, but the current local V1 uses the local identity
+            provider. This route does not simulate a production login.
           </p>
-          <Link className="concept-public-primary" to="/login">Return to sign in</Link>
-        </div>
-      </section>
-    </PublicLayout>
+          <Link className="primary-button" to="/login">Return to sign in</Link>
+        </section>
+      </main>
+    </div>
   );
 }

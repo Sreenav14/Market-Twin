@@ -142,6 +142,13 @@ export function AppShell({
         Knowledge
       </Link>
       <NavLink
+        to="/ingestion"
+        aria-label="Add knowledge"
+        className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
+      >
+        Add knowledge
+      </NavLink>
+      <NavLink
         to="/agents"
         aria-label="Testers"
         className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}

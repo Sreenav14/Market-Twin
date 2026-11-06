@@ -5,60 +5,8 @@
   font-style: normal;
   font-display: swap;
 }
-/* Carry the concept palette into the existing permission and evidence-aware pages. */
-.concept-workspace {
-  color-scheme: light;
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-ui: var(--font-sans);
-  --font-heading: var(--font-sans);
-  --font-editorial: "Newsreader", Georgia, serif;
-  --mt-canvas: var(--paper);
-  --mt-surface: var(--card);
-  --mt-surface-subtle: var(--notchecked-tint);
-  --mt-surface-hover: var(--notchecked-tint);
-  --mt-surface-overlay: var(--card);
-  --mt-ink: var(--ink);
-  --mt-ink-secondary: var(--ink-2);
-  --mt-ink-tertiary: var(--ink-faint);
-  --mt-border: var(--line);
-  --mt-border-strong: var(--ink-faint);
-  --mt-accent: var(--ink);
-  --mt-accent-hover: var(--ink-2);
-  --mt-accent-foreground: var(--card);
-  --mt-accent-subtle: var(--notchecked-tint);
-  --mt-topbar-bg: var(--card);
-  --mt-topbar-fg: var(--ink);
-  --mt-topbar-border: var(--line);
-  --mt-success: var(--works);
-  --mt-danger: var(--broken);
-  --mt-warning: var(--couldnot);
-  --mt-info: var(--notchecked);
-  --mt-focus: var(--ink);
-  --mt-inconclusive: var(--couldnot);
-  --success-bg: var(--works-tint);
-  --danger-bg: var(--broken-tint);
-  --warning-bg: var(--couldnot-tint);
-  --info-bg: var(--notchecked-tint);
-  --page: var(--paper);
-  --surface: var(--card);
-  --surface-muted: var(--notchecked-tint);
-  --surface-hover: var(--notchecked-tint);
-  --surface-overlay: var(--card);
-  --sidebar: var(--paper);
-  --text: var(--ink);
-  --text-2: var(--ink-2);
-  --text-3: var(--ink-faint);
-  --border: var(--line);
-  --border-strong: var(--ink-faint);
-  --primary: var(--ink);
-  --primary-hover: var(--ink-2);
-  --on-primary: var(--card);
-  --success: var(--works);
-  --danger: var(--broken);
-  --warning: var(--couldnot);
-  --info: var(--notchecked);
-  font-family: var(--font-ui);
-}
+/* The concept palette is the product theme now: it lives in tokens.css
+   as the base token values, so no per-shell remap is needed here. */
 .concept-workspace .mt-topbar-inner { min-height: 56px; }
 .concept-workspace .topnav-link { height: 56px; }
 .concept-workspace .topnav-link:hover, .concept-workspace .topnav-link.active { background: var(--notchecked-tint); }

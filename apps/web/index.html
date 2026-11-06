@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en" data-theme="dark" class="dark">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark light" />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#FAF7F1" />
     <meta
       name="description"
       content="MarketTwin helps product teams evaluate authorized applications through dynamic simulated-user perspectives and evidence-backed studies."
@@ -13,19 +13,12 @@
     <script>
       (function() {
         try {
-          var stored = localStorage.getItem('markettwin-theme');
-          if (stored !== 'dark' && stored !== 'light' && stored !== 'system') stored = 'dark';
-          var effective = stored === 'system'
-            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-            : stored;
-          document.documentElement.setAttribute('data-theme', effective);
-          if (effective === 'dark') {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
+          // One product theme: the warm concept (light). A stored preference
+          // from the retired dual-theme era no longer changes the palette.
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.classList.remove('dark');
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', effective === 'dark' ? '#0b0f14' : '#eae6dd');
+          if (meta) meta.setAttribute('content', '#FAF7F1');
         } catch(e) {}
       })();
     </script>

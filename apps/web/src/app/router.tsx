@@ -61,8 +61,8 @@ export function AuthenticatedRouter({
         />
         <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<WorkspaceDashboardPage />} />
-        <Route path="/results" element={<Navigate to="/runs" replace />} />
-        <Route path="/test-results" element={<Navigate to="/runs" replace />} />
+        <Route path="/results" element={<Navigate to="/runs?status=completed" replace />} />
+        <Route path="/test-results" element={<Navigate to="/runs?status=completed" replace />} />
         <Route path="/watch" element={<Navigate to="/dashboard" replace />} />
         <Route path="/watch-live" element={<Navigate to="/dashboard" replace />} />
         <Route path="/ingestion" element={<IngestionPage />} />

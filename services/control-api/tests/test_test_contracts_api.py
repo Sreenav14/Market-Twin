@@ -275,6 +275,19 @@ async def test_contract_approve_sets_user_approved_origin(api_context):
 
 
 @pytest.mark.asyncio
+async def test_contract_reapproval_preserves_original_approver_stamp(api_context):
+    session, workspace_id, run_id, user_id, request = api_context
+    await test_contracts.get_test_contract(workspace_id, run_id, request)
+
+    first = await test_contracts.approve_test_contract(workspace_id, run_id, request)
+    second = await test_contracts.approve_test_contract(workspace_id, run_id, request)
+
+    assert second.status == "approved"
+    assert second.approved_by_user_id == first.approved_by_user_id == user_id
+    assert second.approved_at == first.approved_at
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("worker_available", [True, False])
 async def test_contract_start_freezes_contract_and_queues_run(
     api_context, monkeypatch, worker_available,

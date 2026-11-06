@@ -112,6 +112,22 @@ it("keeps lease secrets out of React Query cache across claim and release", asyn
   expect(cachedAfterRelease).not.toContain("viewer-ticket-secret");
 });
 
+it("uses the harness login heading and honesty copy for a harness login park", async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.spyOn(api, "listHumanActions").mockResolvedValue([]);
+  vi.spyOn(api, "listActionApprovals").mockResolvedValue([]);
+  const context = {
+    run: { id: "run-1", status: "awaiting_human", configuration_snapshot: { execution_mode: "harness_v1" } },
+    user: { id: "user-1" }, workspace: { id: "workspace-1", role: "owner" },
+  } as unknown as RunContext;
+  function ContextOutlet() { return <Outlet context={context} />; }
+  render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={["/runs/run-1/human-action"]}>
+    <Routes><Route path="/runs/:runId" element={<ContextOutlet />}><Route path="human-action" element={<HumanActionPage />} /></Route></Routes>
+  </MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByRole("heading", { name: "Log in so the test can continue" })).toBeInTheDocument();
+  expect(screen.getByText("Your login session is held only in memory on our servers while this run is active. It is discarded when the run ends. We never store your password.")).toBeInTheDocument();
+});
+
 it("does not query or render human controls for a viewer role", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const listActions = vi.spyOn(api, "listHumanActions").mockResolvedValue([]);

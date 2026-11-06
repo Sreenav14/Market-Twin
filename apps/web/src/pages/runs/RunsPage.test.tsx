@@ -20,10 +20,10 @@ const runs = (["completed", "awaiting_human"] as const).map((status, index) => (
   created_at: index === 0 ? "2026-10-18T11:00:00Z" : "2026-10-19T11:00:00Z",
 })) satisfies TestRun[];
 
-function mount(role = "owner") {
+function mount(role = "owner", entry = "/runs") {
   function Context() { return <Outlet context={{ user: { id: "user" }, workspace: { id: "workspace", role } }} />; }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/runs"]}><Routes><Route element={<Context />}>
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[entry]}><Routes><Route element={<Context />}>
     <Route path="/runs" element={<RunsPage />} />
     <Route path="/applications/:applicationId/runs" element={<ApplicationRunsPage />} />
   </Route></Routes></MemoryRouter></QueryClientProvider>);
@@ -50,6 +50,17 @@ it("opens applications first, then loads only the selected application's tests",
   await userEvent.type(screen.getByRole("searchbox", { name: "Find a test" }), "missing");
   expect(screen.getByRole("heading", { name: "No matching tests" })).toBeInTheDocument();
   await userEvent.click(screen.getByRole("link", { name: "All tests" }));
+  await screen.findByText("Other");
+});
+
+it("honours ?status= with a workspace-wide filtered tests view", async () => {
+  vi.spyOn(api, "listApplications").mockResolvedValue(applications);
+  vi.spyOn(api, "listRuns").mockImplementation((id) => Promise.resolve(id === "app-0" ? runs : []));
+  mount("owner", "/runs?status=awaiting_human");
+  await screen.findByText(/Sign in/);
+  expect(screen.queryByText(/Checkout/)).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/runs/run-1/human-action");
+  await userEvent.click(screen.getByRole("button", { name: "Clear filter" }));
   await screen.findByText("Other");
 });
 

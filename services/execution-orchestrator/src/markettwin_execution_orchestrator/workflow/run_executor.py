@@ -77,7 +77,7 @@ class MarketTwinRunRequest:
     )
     replay_plan: dict[str, object] | None = None
     execution_mode: Literal[
-        "legacy_persona", "deep_feature_v1", "discovery_contract_v1",
+        "legacy_persona", "deep_feature_v1", "discovery_contract_v1", "harness_v1",
     ] = "discovery_contract_v1"
     feature_scope: dict[str, object] | None = None
     feature_budget: dict[str, object] | None = None
@@ -136,6 +136,12 @@ async def _execute_markettwin_run(
         request.network_policy,
     )
 
+    if request.execution_mode == "harness_v1":
+        from markettwin_execution_orchestrator.workflow.harness_run import (
+            execute_harness_run,
+        )
+
+        return await execute_harness_run(request=request, session=session)
     if request.execution_mode == "discovery_contract_v1":
         from markettwin_database.models import TestRun
 

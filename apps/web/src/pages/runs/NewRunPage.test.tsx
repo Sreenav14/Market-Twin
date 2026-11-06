@@ -89,3 +89,51 @@ it("defaults new tests to exploration and opens contract review after starting d
   expect(start).toHaveBeenCalledExactlyOnceWith("run");
   expect(create.mock.invocationCallOrder[0]).toBeLessThan(start.mock.invocationCallOrder[0]);
 });
+
+it("renders the harness option disabled as not available yet and keeps the current default", async () => {
+  vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
+  vi.spyOn(api, "listTargets").mockResolvedValue([{
+    id: "target", name: "Authorized fixture", status: "active", requires_auth: false,
+    base_url: "https://fixture.test", environment: "production", allowed_origins: [],
+  } as unknown as Target]);
+  vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
+  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
+  vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
+  const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
+  function ContextOutlet() { return <Outlet context={context} />; }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/applications/app/runs/new?target=target"]}>
+    <Routes><Route element={<ContextOutlet />}><Route path="/applications/:applicationId/runs/new" element={<NewRunPage />} /></Route></Routes>
+  </MemoryRouter></QueryClientProvider>);
+  await screen.findByRole("button", { name: "Explore the app" });
+  expect(screen.getByLabelText("Testing mode")).toHaveValue("discovery_contract_v1");
+  expect(screen.getByRole("option", { name: "Full test — checks every interaction" })).toBeDisabled();
+  expect(screen.getByText("Not available yet")).toBeInTheDocument();
+});
+
+it("posts harness_v1 when the harness mode is preselected", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
+  vi.spyOn(api, "listTargets").mockResolvedValue([{
+    id: "target", name: "Authorized fixture", status: "active", requires_auth: false,
+    base_url: "https://fixture.test", environment: "production", allowed_origins: [],
+  } as unknown as Target]);
+  vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
+  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
+  const create = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
+  const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
+  function ContextOutlet() { return <Outlet context={context} />; }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/applications/app/runs/new?target=target&mode=harness_v1"]}>
+    <Routes><Route element={<ContextOutlet />}><Route path="/applications/:applicationId/runs/new" element={<NewRunPage />} />
+      <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
+  </MemoryRouter></QueryClientProvider>);
+  await screen.findByRole("button", { name: "Create test" });
+  expect(screen.getByLabelText("Testing mode")).toHaveValue("harness_v1");
+  expect(screen.getByText("The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it.")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Your testing goal"), { target: { value: "Check the protected account page" } });
+  await user.click(screen.getByRole("button", { name: "Create test" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0]?.[6]).toBe("harness_v1");
+  expect(await screen.findByText("Created run")).toBeInTheDocument();
+});

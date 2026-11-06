@@ -1,95 +1,120 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, api, type LiveBrowser } from "../../lib/api";
+import { api, type LiveBrowser } from "../../lib/api";
 import { LiveBrowserObserver } from "./LiveBrowserObserver";
 
 const browser: LiveBrowser = { browser_session_id: "browser-1", execution_id: "execution-1", journey_id: "journey-1", generation: 1, control_state: "agent", viewer_state: "available", journey_title: "Check registration", requesting_agent: "Persona" };
-const decode = vi.fn();
+const stream = { url: "ws://localhost/api/v1/hitl-viewer", ticket: "observer-ticket" };
+
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  static OPEN = 1;
+  readyState = 0;
+  binaryType: BinaryType = "blob";
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  readonly sent: string[] = [];
+
+  constructor(readonly url: string) {
+    MockWebSocket.instances.push(this);
+  }
+
+  send(data: string) {
+    this.sent.push(data);
+  }
+
+  close() {
+    this.readyState = 3;
+  }
+
+  open() {
+    this.readyState = MockWebSocket.OPEN;
+    this.onopen?.(new Event("open"));
+  }
+
+  async frame() {
+    await act(async () => this.onmessage?.({ data: new Blob(["frame"], { type: "image/jpeg" }) } as MessageEvent<Blob>));
+  }
+}
+
 const create = vi.fn();
 const revoke = vi.fn();
+const decode = vi.fn();
 beforeEach(() => {
-  vi.useFakeTimers();
-  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  MockWebSocket.instances = [];
+  vi.stubGlobal("WebSocket", MockWebSocket);
   create.mockReset().mockImplementation(() => `blob:volatile-${create.mock.calls.length}`);
-  revoke.mockReset(); decode.mockReset().mockResolvedValue(undefined);
+  revoke.mockReset();
+  decode.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: revoke });
   vi.stubGlobal("Image", class { src = ""; decode = decode; });
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
-async function flush() { await act(async () => { await Promise.resolve(); }); }
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it.each(["agent", "human_pending"])("shows volatile passive frames during %s without acquiring control or exposing input", async (control_state) => {
-  const frames = vi.spyOn(api, "getLiveBrowserFrame").mockResolvedValue(new Blob(["frame"], { type: "image/jpeg" }));
-  const claim = vi.spyOn(api, "claimHumanAction");
-  const { unmount } = render(<LiveBrowserObserver runId="run-1" browser={{ ...browser, control_state }} identity="owner-workspace" permitted />);
-  await flush();
+it("renders socket frames in watch mode without polling or sending input", async () => {
+  const frames = vi.spyOn(api, "getLiveBrowserFrame");
+  render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted stream={stream} />);
+  const socket = MockWebSocket.instances[0];
+  expect(socket.url).toBe(stream.url);
+  socket.open();
+  expect(socket.sent).toEqual([JSON.stringify({ ticket: "observer-ticket" })]);
+  await socket.frame();
   expect(screen.getByRole("img")).toHaveAttribute("src", "blob:volatile-1");
-  expect(screen.getByRole("status")).toHaveTextContent("Browser input is disabled");
+  expect(screen.getByRole("status")).toHaveTextContent("Read-only live view. Browser input is disabled.");
+  expect(screen.getByText(/Frame delivered/)).toBeInTheDocument();
+  expect(screen.queryByText(/fps/i)).not.toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /control|approve/i })).not.toBeInTheDocument();
-  fireEvent.keyDown(screen.getByRole("img"), { key: "a" });
-  fireEvent.pointerDown(screen.getByRole("img"));
-  expect(claim).not.toHaveBeenCalled();
-  expect(frames).toHaveBeenCalledOnce();
-  unmount();
-  expect(revoke).toHaveBeenCalledWith("blob:volatile-1");
+  expect(frames).not.toHaveBeenCalled();
 });
 
-it("aborts and clears on generation change, rejects a late response, and clears on human claim", async () => {
-  let finishOld: ((blob: Blob) => void) | undefined;
-  const frames = vi.spyOn(api, "getLiveBrowserFrame")
-    .mockImplementationOnce(() => new Promise((resolve) => { finishOld = resolve; }))
-    .mockResolvedValue(new Blob(["new frame"]));
-  const { rerender } = render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted />);
-  const oldSignal = frames.mock.calls[0][2];
-  rerender(<LiveBrowserObserver runId="run-1" browser={{ ...browser, generation: 2 }} identity="owner" permitted />);
-  await flush();
-  expect(oldSignal.aborted).toBe(true);
-  expect(screen.getByRole("img")).toHaveAttribute("src", "blob:volatile-1");
-  await act(async () => finishOld?.(new Blob(["old frame"])));
-  expect(create).toHaveBeenCalledOnce();
-  rerender(<LiveBrowserObserver runId="run-1" browser={{ ...browser, generation: 3, control_state: "human", viewer_state: "suppressed" }} identity="owner" permitted />);
+it("switches to control chrome without restarting the stream", async () => {
+  const onReturnControl = vi.fn();
+  const { rerender } = render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted stream={stream} onReturnControl={onReturnControl} />);
+  const socket = MockWebSocket.instances[0];
+  socket.open();
+  await socket.frame();
+  rerender(<LiveBrowserObserver runId="run-1" browser={{ ...browser, control_state: "human" }} identity="owner" permitted stream={stream} onReturnControl={onReturnControl} />);
+  expect(MockWebSocket.instances).toHaveLength(1);
+  expect(screen.getByRole("status")).toHaveTextContent("You are controlling this browser — the test is paused");
+  fireEvent.click(screen.getByRole("button", { name: "Return control" }));
+  expect(onReturnControl).toHaveBeenCalledOnce();
+});
+
+it("shows the parked-for-login panel over the dimmed last frame", async () => {
+  const onTakeControl = vi.fn();
+  render(<LiveBrowserObserver runId="run-1" browser={{ ...browser, control_state: "human_pending" }} identity="owner" permitted stream={stream} onTakeControl={onTakeControl} />);
+  const socket = MockWebSocket.instances[0];
+  socket.open();
+  await socket.frame();
+  expect(screen.getByRole("img")).toHaveStyle({ opacity: "0.45" });
+  expect(screen.getByText("The tester needs you to log in")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Take control and log in" }));
+  expect(onTakeControl).toHaveBeenCalledOnce();
+});
+
+it("shows the waiting, error and protected states with the exact copy", async () => {
+  const { rerender } = render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted stream={stream} />);
+  expect(screen.getByRole("status")).toHaveTextContent("Waiting for the first live frame.");
+  const socket = MockWebSocket.instances[0];
+  act(() => socket.onerror?.(new Event("error")));
+  expect(screen.getByRole("status")).toHaveTextContent("Browser frame temporarily unavailable; the test can continue.");
+  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  rerender(<LiveBrowserObserver runId="run-1" browser={{ ...browser, control_state: "human", viewer_state: "suppressed" }} identity="owner" permitted stream={stream} />);
+  expect(screen.getByText("Read-only observation is hidden during protected human interaction.")).toBeInTheDocument();
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  expect(revoke).toHaveBeenCalledWith("blob:volatile-1");
-  expect(frames).toHaveBeenCalledTimes(2);
 });
 
-it("clears pixels and stops polling after permission denial", async () => {
-  const frames = vi.spyOn(api, "getLiveBrowserFrame").mockResolvedValueOnce(new Blob(["frame"]))
-    .mockRejectedValue(new ApiError("Denied", 403));
-  render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted />);
-  await flush();
-  await act(async () => vi.advanceTimersByTimeAsync(1000));
-  expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  expect(screen.getByRole("status")).toHaveTextContent("Check your workspace permissions");
-  await act(async () => vi.advanceTimersByTimeAsync(10000));
-  expect(frames).toHaveBeenCalledTimes(2);
-});
-
-it("stops fetching and clears frames while hidden, then resumes once visible", async () => {
-  const frames = vi.spyOn(api, "getLiveBrowserFrame").mockResolvedValue(new Blob(["frame"]));
-  render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted />);
-  await flush();
+it("pauses the live view while the tab is hidden", async () => {
+  render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted stream={stream} />);
+  const socket = MockWebSocket.instances[0];
+  socket.open();
+  await socket.frame();
+  expect(screen.getByRole("img")).toBeInTheDocument();
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
   act(() => document.dispatchEvent(new Event("visibilitychange")));
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  await act(async () => vi.advanceTimersByTimeAsync(10000));
-  expect(frames).toHaveBeenCalledOnce();
-  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-  act(() => document.dispatchEvent(new Event("visibilitychange")));
-  await flush();
-  expect(frames).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole("img")).toBeInTheDocument();
-});
-
-it("never displays a malformed image or a frame after role loss", async () => {
-  vi.spyOn(api, "getLiveBrowserFrame").mockResolvedValue(new Blob(["not an image"]));
-  decode.mockRejectedValue(new Error("Invalid image"));
-  const { rerender } = render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted />);
-  await flush();
-  expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  expect(revoke).toHaveBeenCalledWith("blob:volatile-1");
-  rerender(<LiveBrowserObserver runId="run-1" browser={browser} identity="viewer" permitted={false} />);
-  expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  expect(screen.getByText(/requires an owner or administrator role/)).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("Live view paused while this tab is hidden.");
 });

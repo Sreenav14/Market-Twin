@@ -22,6 +22,7 @@ import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { canManageLifecycle } from "../lib/permissions";
 import { Button } from "../components/ui/button";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
+import { statusEntry } from "../lib/status";
 import { testTitle, testReference, textValue } from "../lib/format";
 import { canDeleteTest, terminalTestStatuses } from "../lib/results";
 import { AppShellContext } from "./AppShell";
@@ -194,13 +195,13 @@ export function RunLayout() {
       {run.status === "draft" ? <RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /> : null}
       {run.configuration_snapshot.discovery_stage === "awaiting_approval" && !location.pathname.endsWith("/contract") ? <section className="panel"><h2>Approve the tests</h2><p>Exploration is complete. Review the journeys and checks before testing begins.</p><Link to={`/runs/${run.id}/contract`}>Review the tests</Link></section> : null}
       {run.status === "awaiting_human" && run.configuration_snapshot.discovery_stage !== "awaiting_approval" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") && !location.pathname.endsWith("/watch") ? (
-        <section className="run-action-required" aria-labelledby="run-action-required-title">
+        <section className="run-action-required" aria-labelledby="run-action-required-title" style={{ background: "var(--couldnot-tint)" }}>
           <div>
-            <p className="section-label">Action required</p>
-            <h2 id="run-action-required-title">A human action is holding this test</h2>
-            <p>The agent is paused until an authorized operator completes or skips the affected work.</p>
+            <p className="section-label">{statusEntry("run", run.status).word}</p>
+            <h2 id="run-action-required-title" style={{ color: "var(--flame-deep)" }}>{statusEntry("run", run.status).word} — the tester is paused</h2>
+            {run.status_reason ? <p>{run.status_reason}</p> : <p>The tester is paused until you complete or skip the affected work.</p>}
           </div>
-          <Link className="primary-button" aria-label="Open Human Assistance for this test" to={`/runs/${run.id}/watch`}>Watch live</Link>
+          <Link className="primary-button" to={`/runs/${run.id}/human-action`}>Help this tester</Link>
         </section>
       ) : null}
       <div className="run-workspace">

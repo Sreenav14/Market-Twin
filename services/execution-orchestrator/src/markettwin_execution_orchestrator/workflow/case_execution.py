@@ -89,6 +89,32 @@ MAX_HUMAN_LOGIN_WAIT_SECONDS = 10 * 60
 OPAQUE_CONFIRMATION_REASON = "An opaque confirmation requires human browser takeover."
 
 
+def _precondition_target_matches(expected: ExpectedAssertion, next_action: CaseAction) -> bool:
+    """Whether a point-of-use check guards the action that follows it.
+
+    Approved contract checks are translated from ContractAssertion, which
+    carries role/name only, while the replayed action target also keeps the
+    scope recorded at discovery. Strict target equality therefore never
+    matched for a control inside a named form or region, and its failed
+    visible/enabled check was not recognised as a failed precondition.
+    A scope recorded on the check itself must still match exactly; an
+    unscoped check matches the same role/name (or label/text) in any scope.
+    """
+    expected_target = expected.target
+    action_target = next_action.target
+    if expected_target is None or action_target is None:
+        return False
+    if (expected_target.role, expected_target.name, expected_target.label,
+            expected_target.text) != (action_target.role, action_target.name,
+                                      action_target.label, action_target.text):
+        return False
+    if expected_target.scope_role is None:
+        return True
+    return (expected_target.scope_role, expected_target.scope_name) == (
+        action_target.scope_role, action_target.scope_name,
+    )
+
+
 def _is_failed_action_precondition(
     expected: ExpectedAssertion,
     observed: AssertionResult,
@@ -98,8 +124,7 @@ def _is_failed_action_precondition(
         next_action is not None
         and expected.origin == "user_approved"
         and expected.oracle in {"visible", "enabled"}
-        and expected.target is not None
-        and expected.target == next_action.target
+        and _precondition_target_matches(expected, next_action)
         and observed.status == "not_satisfied"
     )
 

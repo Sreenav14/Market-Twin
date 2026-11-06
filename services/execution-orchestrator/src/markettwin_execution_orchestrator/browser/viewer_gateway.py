@@ -20,6 +20,7 @@ from markettwin_execution_orchestrator.browser.network_diagnostics import (
     NETWORK_DIAGNOSTIC_DESTINATIONS,
     NETWORK_DIAGNOSTIC_REASONS,
 )
+from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
 from markettwin_execution_orchestrator.browser.owner import (
     BrowserOwner,
     OwnerLease,
@@ -41,6 +42,21 @@ class _Ticket:
     lease: OwnerLease
     expires_at: datetime
 
+@dataclass(frozen=True, slots=True)
+class ObserverLease:
+    """Read-only watch grant: an exact browser + generation, no input channel."""
+
+    handle: BrowserSessionHandle
+    actor_id: UUID
+    generation: int
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class _ObserverTicket:
+    lease: ObserverLease
+    expires_at: datetime
+
 
 class ViewerGateway:
     """One ticket/connection per lease; neither frames nor input are recorded."""
@@ -60,7 +76,9 @@ class ViewerGateway:
         self._origins = allowed_origins
         self._local_ws = allow_local_ws
         self._tickets: dict[str, _Ticket] = {}
+        self._observer_tickets: dict[str, _ObserverTicket] = {}
         self._connected: set[UUID] = set()
+        self._observing: set[UUID] = set()
         self._attached: set[UUID] = set()
         self._leases: dict[UUID, OwnerLease] = {}
         self.router = APIRouter()
@@ -95,6 +113,78 @@ class ViewerGateway:
         self._leases[lease.lease_id] = lease
         return token
 
+    async def issue_observer_ticket(self, actor_id: UUID, lease: ObserverLease) -> str:
+        """Same ticket discipline as issue_ticket: only a digest is kept, the
+        ticket lives 30 s, is single-use, and a newer ticket for the same
+        browser invalidates the older one. The URL is never logged."""
+        now = datetime.now(UTC)
+        self._observer_tickets = {
+            key: value for key, value in self._observer_tickets.items() if value.expires_at > now
+        }
+        if (
+            actor_id != lease.actor_id
+            or lease.expires_at <= now
+            or not await self._observer_permitted(actor_id, lease)
+            or lease.handle.session_id in self._observing
+            or len(self._observer_tickets) >= 100
+        ):
+            raise ViewerRejectedError("Viewer authority is unavailable.")
+        self._observer_tickets = {
+            key: value
+            for key, value in self._observer_tickets.items()
+            if value.lease.handle.session_id != lease.handle.session_id
+        }
+        token = secrets.token_urlsafe(32)
+        self._observer_tickets[hashlib.sha256(token.encode()).hexdigest()] = _ObserverTicket(
+            lease, min(now + timedelta(seconds=30), lease.expires_at),
+        )
+        return token
+
+    async def _observer_permitted(self, actor_id: UUID, lease: ObserverLease) -> bool:
+        if lease.expires_at <= datetime.now(UTC):
+            return False
+        check = getattr(self._authority, "observer_permitted", None)
+        if not callable(check):
+            return False
+        return await cast(
+            Callable[[UUID, BrowserSessionHandle, int], Awaitable[bool]], check,
+        )(actor_id, lease.handle, lease.generation)
+
+    async def _connect_observer(self, websocket: WebSocket, actor_id: UUID, lease: ObserverLease) -> None:
+        """Observer connection: screencast frames out, nothing in.
+
+        There is deliberately no receive task: an observer ticket can never
+        reach owner.input, whatever the client sends after the handshake.
+        Human-control leases keep using connect()'s unchanged path.
+        """
+        if (
+            actor_id != lease.actor_id
+            or not await self._observer_permitted(actor_id, lease)
+            or lease.handle.session_id in self._connected
+            or lease.handle.session_id in self._observing
+        ):
+            raise ViewerRejectedError("Viewer authority is unavailable.")
+        self._observing.add(lease.handle.session_id)
+        try:
+            await self._owner.start_screencast(lease.handle, generation=lease.generation)
+            while True:
+                if not await self._observer_permitted(actor_id, lease):
+                    break
+                frame = await self._owner.next_screencast_frame(
+                    lease.handle, generation=lease.generation,
+                )
+                if not await self._observer_permitted(actor_id, lease):
+                    break
+                async with asyncio.timeout(5):
+                    await websocket.send_bytes(frame)
+            raise ViewerRejectedError("Viewer authority is unavailable.")
+        finally:
+            self._observing.discard(lease.handle.session_id)
+            try:
+                await self._owner.stop_screencast(lease.handle)
+            except Exception:
+                pass
+
     async def _permitted(self, cookie: str, lease: OwnerLease) -> bool:
         if lease.expires_at <= datetime.now(UTC):
             return False
@@ -111,6 +201,9 @@ class ViewerGateway:
         now = datetime.now(UTC)
         self._tickets = {
             key: ticket for key, ticket in self._tickets.items() if ticket.expires_at > now
+        }
+        self._observer_tickets = {
+            key: ticket for key, ticket in self._observer_tickets.items() if ticket.expires_at > now
         }
         for lease_id, lease in tuple(self._leases.items()):
             if lease.expires_at > now or lease.handle.session_id in self._connected:
@@ -203,7 +296,14 @@ class ViewerGateway:
             token = payload["ticket"]
             if not isinstance(token, str) or len(token) > 128:
                 raise ViewerRejectedError("Viewer handshake was rejected.")
-            ticket = self._tickets.pop(hashlib.sha256(token.encode()).hexdigest(), None)
+            digest = hashlib.sha256(token.encode()).hexdigest()
+            observer_ticket = self._observer_tickets.pop(digest, None)
+            if observer_ticket is not None:
+                if observer_ticket.expires_at <= datetime.now(UTC):
+                    raise ViewerRejectedError("Viewer ticket is unavailable.")
+                await self._connect_observer(websocket, actor_id, observer_ticket.lease)
+                return
+            ticket = self._tickets.pop(digest, None)
             if ticket is None or ticket.expires_at <= datetime.now(UTC):
                 raise ViewerRejectedError("Viewer ticket is unavailable.")
             lease = self._leases.get(ticket.lease.lease_id)

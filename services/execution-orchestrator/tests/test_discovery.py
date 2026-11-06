@@ -1,13 +1,16 @@
 """Discovery mechanics and provenance; these tests do not measure model quality."""
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from markettwin_execution_orchestrator.browser import AllowedOrigin, BrowserController
 from markettwin_execution_orchestrator.browser.tools import create_browser_tools
+from markettwin_execution_orchestrator.workflow import discovery
 from markettwin_execution_orchestrator.workflow.discovery import (
     DiscoveryJournal,
     DiscoveryProgressTracker,
+    execute_discovery_run,
     record_discovered_step,
 )
 from markettwin_shared.discovery_contract import DiscoveredJourney, DiscoveredStep
@@ -179,3 +182,135 @@ def test_indexed_offscreen_name_is_grounded_but_index_does_not_cross_pages():
     journal.end(True)
     assert journal.journeys[0].completed
     assert "billing-query-page" not in journal.indexed_paths
+
+
+async def test_discovery_cleanup_survives_runner_close_failure(monkeypatch) -> None:
+    # A runner.close() failure must not skip closing the browser session,
+    # recording its artifacts, or marking the session closed.
+    calls: list[str] = []
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.run = SimpleNamespace(configuration_snapshot={}, status="queued")
+
+        async def get(self, _model, _key, **_kwargs):
+            return self.run
+
+        async def commit(self) -> None:
+            pass
+
+        async def scalars(self, _statement):
+            return SimpleNamespace(all=lambda: [])
+
+    class FakePlanRepository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def create_auth_bootstrap(self, **_kwargs):
+            return SimpleNamespace(journey_id=uuid4())
+
+    class FakeExecutionRepository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def create_agent_execution(self, **_kwargs) -> None:
+            pass
+
+        async def create_browser_session(self, **_kwargs) -> None:
+            pass
+
+        async def mark_browser_session_closed(self, **_kwargs) -> None:
+            calls.append("mark_browser_session_closed")
+
+        async def finish_agent_execution(self, **_kwargs) -> None:
+            pass
+
+    class FakeRunStateRepository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def mark_running(self, **_kwargs) -> None:
+            pass
+
+    class FakeRunEventRepository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def create(self, **_kwargs) -> None:
+            pass
+
+    class FakeStorage:
+        @classmethod
+        def from_environment(cls):
+            return object()
+
+    class FakeStepRecorder:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+    class FakeArtifactRecorder:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        async def record(self, artifacts) -> None:
+            calls.append("record_artifacts")
+
+    class FakeController:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args) -> bool:
+            return False
+
+        async def create_session(self, **_kwargs):
+            return SimpleNamespace(session_id=uuid4())
+
+        def bind_authentication_handler(self, _handle, _handler) -> None:
+            pass
+
+        async def close_session(self, **_kwargs):
+            calls.append("close_session")
+            return object()
+
+    class FakeSessionService:
+        async def create_session(self, **_kwargs) -> None:
+            pass
+
+    class FakeRunner:
+        def __init__(self, **_kwargs) -> None:
+            self.session_service = FakeSessionService()
+
+        async def run_async(self, **_kwargs):
+            if False:
+                yield None
+
+        async def close(self) -> None:
+            raise RuntimeError("runner close failed")
+
+    monkeypatch.setattr(discovery, "PlanRepository", FakePlanRepository)
+    monkeypatch.setattr(discovery, "ExecutionRepository", FakeExecutionRepository)
+    monkeypatch.setattr(discovery, "RunStateRepository", FakeRunStateRepository)
+    monkeypatch.setattr(discovery, "RunEventRepository", FakeRunEventRepository)
+    monkeypatch.setattr(discovery, "S3ArtifactStorage", FakeStorage)
+    monkeypatch.setattr(discovery, "ExecutionStepRecorder", FakeStepRecorder)
+    monkeypatch.setattr(discovery, "SessionArtifactRecorder", FakeArtifactRecorder)
+    monkeypatch.setattr(discovery, "BrowserController", FakeController)
+    monkeypatch.setattr(discovery, "InMemoryRunner", FakeRunner)
+    monkeypatch.setattr(discovery, "create_browser_tools", lambda **_kwargs: [])
+    monkeypatch.setattr(discovery, "create_discovery_agent", lambda _tools: object())
+    monkeypatch.setattr(
+        discovery, "default_scope", lambda _request: SimpleNamespace(safe_test_data=()),
+    )
+
+    request = SimpleNamespace(
+        run_id=uuid4(),
+        start_url="http://127.0.0.1:8931/",
+        study_brief="Explore the fixture.",
+        allowed_origins=(),
+        network_policy="local_development",
+        fixture_action_rules=(),
+    )
+    with pytest.raises(RuntimeError, match="runner close failed"):
+        await execute_discovery_run(request=request, session=FakeSession())
+
+    assert calls == ["close_session", "record_artifacts", "mark_browser_session_closed"]

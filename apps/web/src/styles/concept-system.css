@@ -1,0 +1,333 @@
+/* MarketTwin design system — one unified theme on every surface.
+   This layer is imported LAST on purpose: every page — landing, sign-in,
+   how-it-works, workspace, run detail, settings, system pages — resolves
+   its headings, cards, buttons, badges, tabs, forms and states through
+   these rules, so the whole product reads as one product.
+   Values come only from concept-tokens.css / tokens.css. No new colours. */
+
+/* ---------- Smoothness: one motion language ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+.primary-button, .secondary-button, .danger-button, .ui-button, .mt-button,
+.text-link, .tab-link, .topnav-link, .nav-link, .data-row, .study-row,
+.settings-nav a, .back-link, .icon-button, .mt-text-link {
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease, opacity 120ms ease;
+}
+.status-badge, .tab-count, .monospace, .font-mono-data {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Kickers / eyebrows: one voice on every page ---------- */
+.mt-shell .eyebrow,
+.mt-shell .section-label,
+.eyebrow, .section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flame-deep);
+}
+
+/* ---------- Page headers: same title voice everywhere ---------- */
+.mt-shell .page-header { margin-bottom: 28px; }
+.mt-shell .page-header h1,
+.page-header h1 {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+@media (max-width: 639px) {
+  .mt-shell .page-header h1, .page-header h1 { font-size: 24px; line-height: 32px; }
+}
+.page-description { color: var(--ink-2); font-size: 15px; line-height: 24px; max-width: 68ch; }
+
+/* ---------- Cards / panels: white, hairline, soft shadow ---------- */
+.mt-shell .panel,
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+  padding: 24px;
+}
+.mt-shell .panel h2, .panel h2,
+.mt-shell .section-heading h2, .section-heading h2 {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 650;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.panel h3, .section-heading h3 {
+  font-size: 18px; line-height: 26px; font-weight: 600; color: var(--ink);
+}
+.panel-note, .inline-note { color: var(--ink-2); font-size: 14px; line-height: 22px; }
+
+/* ---------- Buttons: one primary action colour (flame-deep) ---------- */
+.mt-shell .primary-button, .primary-button,
+.mt-shell .ui-button[data-variant="default"], .start-test-button {
+  background: var(--flame-deep);
+  border: 1px solid var(--flame-deep);
+  color: #fff;
+  border-radius: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.mt-shell .primary-button:hover:not(:disabled), .primary-button:hover:not(:disabled),
+.start-test-button:hover:not(:disabled) {
+  background: var(--flame-deep-hover);
+  border-color: var(--flame-deep-hover);
+}
+.mt-shell .secondary-button, .secondary-button, .mt-button {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.mt-shell .secondary-button:hover:not(:disabled), .secondary-button:hover:not(:disabled),
+.mt-button:hover { background: var(--notchecked-tint); }
+.danger-button {
+  background: var(--card);
+  border: 1px solid var(--danger-border);
+  color: var(--broken);
+  border-radius: 8px;
+  min-height: 44px;
+  font-weight: 600;
+}
+.danger-button:hover:not(:disabled) { background: var(--broken-tint); }
+.secondary-button:disabled, .danger-button:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Disabled primary reads as neutral, not washed-out flame */
+.primary-button:disabled, .ui-button.primary-button:disabled, .start-test-button:disabled {
+  background: var(--notchecked-tint);
+  border-color: var(--line);
+  color: var(--notchecked);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* Links read the same everywhere: flame-deep, underlined on hover */
+.text-link, .mt-text-link, .back-link {
+  color: var(--flame-deep);
+  font-weight: 500;
+  text-decoration: none;
+}
+.text-link:hover, .mt-text-link:hover, .back-link:hover {
+  color: var(--flame-deep-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Status badges: one status language, pill shape ---------- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.status-badge .status-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex-shrink: 0; }
+.status-success { background: var(--works-tint); color: var(--works); border-color: #bcdcc6; }
+.status-danger { background: var(--broken-tint); color: var(--broken); border-color: var(--danger-border); }
+.status-warning { background: var(--couldnot-tint); color: var(--couldnot); border-color: var(--warning-border); }
+.status-info { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
+.status-neutral { background: var(--notchecked-tint); color: var(--notchecked); border-color: var(--line); }
+
+/* ---------- Tabs: one tab language (run pages, settings, everywhere) ---------- */
+.tab-strip {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+.tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 0;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.tab-link:hover { color: var(--ink); }
+.tab-link.active { color: var(--ink); font-weight: 650; border-bottom-color: var(--ink); }
+.tab-count {
+  background: var(--notchecked-tint);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---------- Forms: same fields on every page ---------- */
+.field-label, .signin-label {
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.text-input, .signin-input, input.text-input,
+.mt-shell input[type="text"], .mt-shell input[type="email"],
+.mt-shell input[type="url"], .mt-shell select, .mt-shell textarea {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 15px;
+  color: var(--ink);
+}
+.text-input:focus, .signin-input:focus,
+.mt-shell input:focus, .mt-shell select:focus, .mt-shell textarea:focus {
+  border-color: var(--ink);
+  /* the ring comes from the global :focus-visible rule — one ring only */
+}
+.form-help { color: var(--ink-2); font-size: 13px; line-height: 19px; }
+.form-error, .error-text, .composer-error {
+  color: var(--broken);
+  background: var(--broken-tint);
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+/* ---------- Lists & rows ---------- */
+.data-row, .study-row {
+  border-bottom: 1px solid var(--line);
+  padding: 16px 8px;
+  color: var(--ink);
+}
+a.data-row:hover, a.study-row:hover,
+.data-row:hover, .study-row:hover { background: var(--notchecked-tint); }
+.row-primary { font-weight: 600; color: var(--ink); }
+.muted { color: var(--ink-2); }
+
+/* ---------- Settings: same card + nav language ---------- */
+.settings-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 899px) { .settings-layout { grid-template-columns: 1fr; } }
+.settings-nav {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+.settings-nav a:hover { background: var(--notchecked-tint); color: var(--ink); }
+.settings-nav a.active {
+  background: var(--notchecked-tint);
+  color: var(--ink);
+  font-weight: 650;
+  border-left-color: var(--flame-deep);
+}
+
+/* ---------- States: empty / loading / error look like the product ---------- */
+.empty-state {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--ink-2);
+}
+.error-panel {
+  background: var(--broken-tint);
+  border: 1px solid var(--danger-border);
+  border-radius: 10px;
+  color: var(--broken);
+  padding: 20px 24px;
+}
+.state-panel { text-align: center; color: var(--ink-2); }
+.boot-screen {
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+/* ---------- Shell: topbar matches the marketing header ---------- */
+.mt-topbar { background: var(--card); border-bottom: 1px solid var(--line); }
+.mt-topbar-wordmark {
+  font-size: 18px; line-height: 24px; font-weight: 650; color: var(--ink);
+}
+.topnav-link {
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.topnav-link:hover { color: var(--ink); }
+.topnav-link.active { color: var(--ink); font-weight: 650; }
+
+/* ---------- Sign-in layout: form + the product's own visual ---------- */
+.signin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 48px;
+  align-items: start;
+}
+@media (max-width: 899px) {
+  .signin-layout { grid-template-columns: 1fr; gap: 32px; }
+}
+
+/* Needs-you / action-required banners: amber call to action, never a badge */
+.run-action-required {
+  background: var(--couldnot-tint);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+.run-action-required h2 { font-size: 20px; line-height: 28px; font-weight: 650; color: var(--ink); margin: 4px 0 6px; }
+.run-action-required p { color: var(--ink-2); margin: 0; }

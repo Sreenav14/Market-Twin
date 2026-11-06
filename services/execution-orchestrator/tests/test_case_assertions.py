@@ -102,6 +102,61 @@ def test_only_owner_approved_failed_visibility_on_the_next_exact_target_blocks_a
     )
 
 
+def test_failed_precondition_matches_scoped_action_when_check_is_unscoped():
+    # Contract checks are translated from ContractAssertion, which carries
+    # role/name only, while the replayed click target keeps the scope that
+    # discovery recorded. The failed check must still guard that action.
+    scoped_action = CaseAction(
+        action="click",
+        target=SemanticTarget(
+            role="button", name="Continue", scope_role="form", scope_name="Checkout",
+        ),
+    )
+    expected = ExpectedAssertion(
+        assertion_id="continue_enabled",
+        oracle="enabled",
+        target=SemanticTarget(role="button", name="Continue"),
+        expected_value=True,
+        after_step_ordinal=0,
+        origin="user_approved",
+    )
+    observed = AssertionResult(
+        case_id="journey",
+        assertion_id="continue_enabled",
+        oracle="enabled",
+        expected_value=True,
+        observed_value=False,
+        status="not_satisfied",
+        execution_id=uuid4(),
+        step_id=2,
+        artifact_ids=(uuid4(),),
+        origin="user_approved",
+        elapsed_ms=1,
+    )
+
+    assert _is_failed_action_precondition(expected, observed, scoped_action)
+    # A check that names a different scope must not guard the action.
+    other_scope = expected.model_copy(
+        update={
+            "target": SemanticTarget(
+                role="button", name="Continue",
+                scope_role="form", scope_name="Registration",
+            ),
+        },
+    )
+    assert not _is_failed_action_precondition(other_scope, observed, scoped_action)
+    # A check scoped exactly like the action still matches.
+    same_scope = expected.model_copy(
+        update={
+            "target": SemanticTarget(
+                role="button", name="Continue",
+                scope_role="form", scope_name="Checkout",
+            ),
+        },
+    )
+    assert _is_failed_action_precondition(same_scope, observed, scoped_action)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("opaque_takeover", [False, True])
 async def test_executor_persists_failed_pre_action_evidence_and_skips_action_and_later_checks(
