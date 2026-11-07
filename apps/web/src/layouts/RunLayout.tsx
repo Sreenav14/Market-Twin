@@ -22,7 +22,7 @@ import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { canManageLifecycle } from "../lib/permissions";
 import { Button } from "../components/ui/button";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
-import { statusEntry } from "../lib/status";
+import { CONTRACT_STAGE_STATUS, MODE_STATUS, statusEntry } from "../lib/status";
 import { testTitle, testReference, textValue } from "../lib/format";
 import { canDeleteTest, terminalTestStatuses } from "../lib/results";
 import { AppShellContext } from "./AppShell";
@@ -111,11 +111,16 @@ export function RunLayout() {
       />
     );
   const run = runQuery.data;
-  const executionMode = run.configuration_snapshot.execution_mode === "discovery_contract_v1"
-    ? "Explore, approve and test"
-    : run.configuration_snapshot.execution_mode === "deep_feature_v1"
-    ? "Feature cases · deterministic execution"
-    : "Persona journeys";
+  // The mode descriptor and the header stage badge take their words from
+  // lib/status.ts — the one status vocabulary (examination X-1).
+  const modeKey = typeof run.configuration_snapshot.execution_mode === "string"
+    ? run.configuration_snapshot.execution_mode
+    : "legacy_persona";
+  const executionMode = (MODE_STATUS[modeKey] ?? MODE_STATUS.legacy_persona).word;
+  const discoveryStage = typeof run.configuration_snapshot.discovery_stage === "string"
+    ? run.configuration_snapshot.discovery_stage
+    : "";
+  const stageEntry = CONTRACT_STAGE_STATUS[discoveryStage];
   const results: ResultsState =
     run.status !== "completed"
       ? { status: "waiting", data: null, error: null }
@@ -142,7 +147,7 @@ export function RunLayout() {
         description={`${textValue(run.target_snapshot.name, "Target")} · ${textValue(run.target_snapshot.environment, "Environment")} · ${executionMode}`}
         action={
           <div className="header-actions">
-            {run.configuration_snapshot.execution_mode === "discovery_contract_v1" ? <StatusBadge status={results.status === "ready" ? "Completed" : ({ discovering: "Exploring", awaiting_approval: "Awaiting test approval", executing: "Testing", evaluating: "Writing report" } as Record<string, string>)[String(run.configuration_snapshot.discovery_stage)] || run.status} /> : <TestStatusBadge status={run.status} />}
+            {run.configuration_snapshot.execution_mode === "discovery_contract_v1" && results.status !== "ready" && stageEntry ? <StatusBadge status={discoveryStage} source="contractStage" /> : <TestStatusBadge status={run.status} />}
             {canManageLifecycle(appContext.workspace.role) &&
             run.status === "draft" ? (
               <>
@@ -214,7 +219,7 @@ export function RunLayout() {
             to={`/runs/${run.id}/${tab}`}
             className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}
           >
-            {tab === "overview" ? "Summary" : tab === "watch" ? "Watch live" : tab === "results" ? "Test results" : tab[0].toUpperCase() + tab.slice(1)}
+            {tab === "overview" ? "Summary" : tab === "watch" ? (run.status === "running" || run.status === "awaiting_human" ? "Watch live" : "Watch") : tab === "results" ? "Test results" : tab[0].toUpperCase() + tab.slice(1)}
             {tab === "findings" && results.status === "ready" ? (
               <span className="tab-count">{results.data.findings.length}</span>
             ) : null}
@@ -236,20 +241,12 @@ export function RunLayout() {
         context={{ ...appContext, run, results, refresh } satisfies RunContext}
       /></HumanAssistanceHost>
       </div>
-      {!location.pathname.endsWith("/human-action") &&
-      !location.pathname.endsWith("/activity") &&
-      !location.pathname.endsWith("/watch") &&
-      !location.pathname.endsWith("/report") &&
-      !location.pathname.endsWith("/results") &&
-      !location.pathname.endsWith("/contract") &&
-      !location.pathname.endsWith("/evidence") ? (
-        <RunFlowPanel
-          runId={run.id}
-          userId={appContext.user.id}
-          runStatus={run.status}
-          reportReady={results.status === "ready"}
-        />
-      ) : null}
+      <RunFlowPanel
+        runId={run.id}
+        userId={appContext.user.id}
+        runStatus={run.status}
+        reportReady={results.status === "ready"}
+      />
       </div>
     </>
   );

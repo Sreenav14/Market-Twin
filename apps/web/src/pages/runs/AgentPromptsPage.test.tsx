@@ -28,7 +28,7 @@ it.each(["legacy_persona", "deep_feature_v1"])("shows actual goals, failed outco
   function Layout() { return <Outlet context={context} />; }
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/runs/run/agents"]}><Routes><Route element={<Layout />}><Route path="/runs/:runId/agents" element={<AgentPromptsPage />} /></Route></Routes></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByText("Check registration", { exact: true })).toBeInTheDocument();
-  expect(screen.getByText("failed", { exact: true })).toBeInTheDocument();
+  expect(screen.getByText("Broken", { exact: true })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Inspect actions and evidence" })).toHaveAttribute("href", "/runs/run/journeys/journey");
   expect(screen.getByText("3 steps · 2 artifacts")).toBeInTheDocument();
   if (mode === "deep_feature_v1") expect(screen.getByRole("heading", { name: "Feature case 1" })).toBeInTheDocument();

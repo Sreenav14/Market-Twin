@@ -7,7 +7,7 @@ import { terminalTestStatuses } from "../../lib/results";
 import { groupJourneys, simulatedTesterJourneys } from "../../lib/testerWork";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { ExecutionBadge, OutcomeBadge } from "../../components/ui/StatusBadge";
 
 export function RunMissionsPage() {
   const { run, user } = useOutletContext<RunContext>();
@@ -100,9 +100,11 @@ export function RunMissionsPage() {
                   <h3 style={{ margin: "6px 0 6px", fontSize: 20, fontWeight: 650 }}>
                     {first.mission_title}
                   </h3>
-                  <p style={{ margin: 0, fontSize: 14, color: "var(--text-2)", lineHeight: 1.5 }}>
-                    {first.mission_objective}
-                  </p>
+                  {first.mission_objective && first.mission_objective.trim() !== first.mission_title.trim() ? (
+                    <p style={{ margin: 0, fontSize: 14, color: "var(--text-2)", lineHeight: 1.5 }}>
+                      {first.mission_objective}
+                    </p>
+                  ) : null}
                   <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-3)" }}>
                     <span style={{ fontWeight: 600, color: "var(--text-2)" }}>Simulated testers: </span>
                     <span>{[...new Set(group.journeys.map((j) => j.persona_name))].join(", ")}</span>
@@ -133,6 +135,7 @@ export function RunMissionsPage() {
                   </h4>
 
                   <div
+                    className="goals-matrix"
                     style={{
                       border: "1px solid var(--border)",
                       borderRadius: 6,
@@ -141,6 +144,7 @@ export function RunMissionsPage() {
                   >
                     {/* Matrix Table Heading */}
                     <div
+                      className="goals-matrix-head"
                       style={{
                         display: "grid",
                         gridTemplateColumns: "var(--concept-goals-columns)",
@@ -196,28 +200,17 @@ export function RunMissionsPage() {
                         </div>
 
                         <div>
-                          <StatusBadge status={journey.execution_status || "not started"} />
+                          <ExecutionBadge status={journey.execution_status || "not started"} />
                         </div>
 
                         <div>
-                          <StatusBadge status={journey.outcome || "not recorded"} />
+                          <OutcomeBadge outcome={journey.outcome || "not recorded"} />
                         </div>
 
                         <div style={{ display: "flex", justifyContent: "flex-end" }}>
                           <Link
+                            className="primary-button compact"
                             to={`/runs/${run.id}/journeys/${journey.id}`}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 4,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: "var(--primary)",
-                              textDecoration: "none",
-                              padding: "4px 8px",
-                              borderRadius: 4,
-                              background: "var(--surface-muted)",
-                            }}
                           >
                             <span>Inspect ({journey.step_count} steps)</span>
                             <ArrowUpRight size={12} aria-hidden="true" />

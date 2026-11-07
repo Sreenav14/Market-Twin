@@ -1,8 +1,11 @@
 /* Report analysis uses solid surfaces. Counts, outcomes and evidence retain separate meanings. */
-.report-destinations { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 20px; padding:4px; background:var(--surface-muted); border-radius:6px; }
-.report-destinations a { padding:13px 20px; border-radius:7px; min-height:46px; color:var(--text-2); font-size:14px; font-weight:500; }
-.report-destinations a:hover { background:var(--surface); }
-.report-destinations a[aria-current="page"] { color:var(--on-primary); background:var(--primary); }
+/* Report views use the app's underline-tab idiom (the same recipe as
+   .tab-strip/.tab-link), not a flame pill in a segmented bar
+   (examination, Legacy results). */
+.report-destinations { display:flex; gap:24px; flex-wrap:wrap; margin:16px 0 20px; border-bottom:1px solid var(--line); }
+.report-destinations a { display:inline-flex; align-items:center; min-height:44px; padding:10px 0; color:var(--ink-2); font-size:14px; font-weight:500; text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-1px; }
+.report-destinations a:hover { color:var(--ink); }
+.report-destinations a[aria-current="page"] { color:var(--ink); font-weight:650; border-bottom-color:var(--ink); }
 .report-analytics { margin:28px 0 36px; min-width:0; }
 .report-analysis-heading { margin-bottom:24px; }
 .report-analysis-heading h2 { margin-bottom:10px; font-size:28px; letter-spacing:-.02em; }

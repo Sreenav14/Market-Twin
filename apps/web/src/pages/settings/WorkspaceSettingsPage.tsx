@@ -8,7 +8,6 @@ export function WorkspaceSettingsPage() {
     <section className="panel settings-panel">
       <div className="section-heading compact-heading">
         <div>
-          <p className="eyebrow">Workspace</p>
           <h2>Workspace details</h2>
         </div>
         <StatusBadge status={workspace.status} />

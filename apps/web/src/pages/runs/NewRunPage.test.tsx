@@ -107,8 +107,10 @@ it("renders the harness option disabled as not available yet and keeps the curre
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Explore the app" });
   expect(screen.getByLabelText("Testing mode")).toHaveValue("discovery_contract_v1");
-  expect(screen.getByRole("option", { name: "Full test — checks every interaction" })).toBeDisabled();
-  expect(screen.getByText("Not available yet")).toBeInTheDocument();
+  // The unavailability note is attached to the disabled option itself,
+  // not a floating line under the select (examination, New test).
+  expect(screen.getByRole("option", { name: "Full test — checks every interaction (not available yet)" })).toBeDisabled();
+  expect(screen.queryByText("Not available yet")).not.toBeInTheDocument();
 });
 
 it("posts harness_v1 when the harness mode is preselected", async () => {

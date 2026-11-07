@@ -76,18 +76,18 @@ function ApplicationPicker() {
     <>
       <PageHeader title="Tests" description="Choose an application to see its tests."
         action={canWriteWorkspace(workspace.role)
-          ? <Link className="primary-button" to="/applications/new">Add application</Link> : undefined} />
+          ? <Link className="primary-button" to="/applications/new">Add an app</Link> : undefined} />
       {state.status === "loading" ? <LoadingPanel label="Loading applications" />
         : state.status === "error" ? <ErrorPanel message={state.error}
           action={<button className="secondary-button" onClick={() => setRevision((value) => value + 1)}>Try again</button>} />
         : applications.length === 0 ? <EmptyState title="No applications yet"
           copy="Add an application, then create tests for its authorized targets."
           action={canWriteWorkspace(workspace.role)
-            ? <Link className="primary-button" to="/applications/new">Add application</Link> : undefined} />
+            ? <Link className="primary-button" to="/applications/new">Add an app</Link> : undefined} />
         : <>
           <div className="filter-bar">
             <div className="search-field">
-              <input type="search" aria-label="Find an application" placeholder="Find an application…"
+              <input type="search" aria-label="Filter applications" placeholder="Filter applications…"
                 value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
             {search ? <button className="secondary-button compact" onClick={() => setSearch("")}>Clear search</button> : null}

@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { Inbox } from "lucide-react";
 
 export function Spinner() {
   return <span className="spinner" aria-hidden="true" />;
@@ -43,7 +44,7 @@ export function EmptyState({
   return (
     <div className="empty-state">
       <div className="empty-mark" aria-hidden="true">
-        —
+        <Inbox size={22} strokeWidth={1.5} />
       </div>
       <h2>{title}</h2>
       <p>{copy}</p>

@@ -75,7 +75,7 @@
 .panel {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   box-shadow: var(--shadow-soft);
   padding: 24px;
 }
@@ -99,10 +99,10 @@
   background: var(--flame-deep);
   border: 1px solid var(--flame-deep);
   color: #fff;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   min-height: 44px;
   padding: 0 20px;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 .mt-shell .primary-button:hover:not(:disabled), .primary-button:hover:not(:disabled),
@@ -114,10 +114,10 @@
   background: var(--card);
   border: 1px solid var(--line);
   color: var(--ink);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   min-height: 44px;
   padding: 0 18px;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
 }
 .mt-shell .secondary-button:hover:not(:disabled), .secondary-button:hover:not(:disabled),
@@ -126,18 +126,17 @@
   background: var(--card);
   border: 1px solid var(--danger-border);
   color: var(--broken);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   min-height: 44px;
   font-weight: 600;
 }
 .danger-button:hover:not(:disabled) { background: var(--broken-tint); }
-.secondary-button:disabled, .danger-button:disabled { opacity: 0.55; cursor: not-allowed; }
-/* Disabled primary reads as neutral, not washed-out flame */
-.primary-button:disabled, .ui-button.primary-button:disabled, .start-test-button:disabled {
-  background: var(--notchecked-tint);
-  border-color: var(--line);
-  color: var(--notchecked);
-  opacity: 1;
+/* One disabled recipe for every button (examination X-3): reduced
+   opacity + not-allowed cursor, whatever the variant — a disabled
+   control must never read as an enabled neutral button. */
+.primary-button:disabled, .ui-button:disabled, .secondary-button:disabled,
+.danger-button:disabled, .ghost-button:disabled, .start-test-button:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -158,7 +157,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 999px;
+  border-radius: var(--mt-radius-pill);
   padding: 4px 12px;
   font-size: 13px;
   line-height: 18px;
@@ -166,7 +165,7 @@
   white-space: nowrap;
   border: 1px solid transparent;
 }
-.status-badge .status-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex-shrink: 0; }
+.status-badge .status-dot { width: 7px; height: 7px; border-radius: var(--mt-radius-pill); background: currentColor; flex-shrink: 0; }
 .status-success { background: var(--works-tint); color: var(--works); border-color: #bcdcc6; }
 .status-danger { background: var(--broken-tint); color: var(--broken); border-color: var(--danger-border); }
 .status-warning { background: var(--couldnot-tint); color: var(--couldnot); border-color: var(--warning-border); }
@@ -188,7 +187,7 @@
   min-height: 44px;
   padding: 10px 0;
   color: var(--ink-2);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   border-bottom: 2px solid transparent;
@@ -200,7 +199,7 @@
 .tab-count {
   background: var(--notchecked-tint);
   color: var(--ink-2);
-  border-radius: 999px;
+  border-radius: var(--mt-radius-pill);
   padding: 1px 8px;
   font-size: 12px;
   font-weight: 600;
@@ -219,12 +218,21 @@
 .mt-shell input[type="text"], .mt-shell input[type="email"],
 .mt-shell input[type="url"], .mt-shell select, .mt-shell textarea {
   background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  /* The one field recipe (fields audit): the border is --field-border,
+     never --line. --line is the divider/card-edge hairline (#E4E0D6,
+     ~1.3:1 on paper and on white) — as a field border it read as no
+     border at all, which is why fields looked borderless. The older
+     layers (base, product-theme) always used the strong tone; this
+     rule, imported last, was overriding them for the field types it
+     lists. Border-colour changes ride the motion register (110ms,
+     colour only). */
+  border: 1px solid var(--field-border);
+  border-radius: var(--mt-radius-md);
   min-height: 44px;
   padding: 8px 12px;
   font-size: 15px;
   color: var(--ink);
+  transition: border-color var(--dur-quick) var(--ease-change);
 }
 .text-input:focus, .signin-input:focus,
 .mt-shell input:focus, .mt-shell select:focus, .mt-shell textarea:focus {
@@ -233,12 +241,38 @@
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
+/* Field states (fields audit — no stylesheet defined any of these
+   before, so a faint field stayed faint on hover, a disabled field
+   looked live, and an aria-invalid field looked valid). Hover deepens
+   the border one step, colour only. The generic shell selectors cover
+   the input types the recipe above does not list (date, password,
+   number, search outside a .search-field shell); where a field's
+   border is intentionally 0 (search-field and filter-select inners),
+   a border-colour change is invisible, so no second frame can appear. */
+.text-input:hover:not(:disabled), .signin-input:hover:not(:disabled),
+.mt-shell input:hover:not(:disabled), .mt-shell select:hover:not(:disabled),
+.mt-shell textarea:hover:not(:disabled) {
+  border-color: var(--field-border-hover);
+}
+.text-input[aria-invalid="true"], .signin-input[aria-invalid="true"],
+.mt-shell input[aria-invalid="true"], .mt-shell select[aria-invalid="true"],
+.mt-shell textarea[aria-invalid="true"] {
+  border-color: var(--field-border-error);
+}
+.text-input:disabled, .signin-input:disabled,
+.mt-shell input[type="text"]:disabled, .mt-shell input[type="email"]:disabled,
+.mt-shell input[type="url"]:disabled, .mt-shell select:disabled,
+.mt-shell textarea:disabled {
+  background: var(--surface-muted);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
 .form-help { color: var(--ink-2); font-size: 13px; line-height: 19px; }
 .form-error, .error-text, .composer-error {
   color: var(--broken);
   background: var(--broken-tint);
   border: 1px solid var(--danger-border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   padding: 10px 14px;
   font-size: 14px;
   line-height: 21px;
@@ -261,7 +295,7 @@ a.data-row:hover, a.study-row:hover,
 .settings-nav {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   box-shadow: var(--shadow-soft);
   padding: 8px;
   display: flex;
@@ -273,9 +307,9 @@ a.data-row:hover, a.study-row:hover,
   align-items: center;
   min-height: 44px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   color: var(--ink-2);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   border-left: 3px solid transparent;
@@ -292,7 +326,7 @@ a.data-row:hover, a.study-row:hover,
 .empty-state {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   box-shadow: var(--shadow-soft);
   padding: 48px 24px;
   text-align: center;
@@ -301,7 +335,7 @@ a.data-row:hover, a.study-row:hover,
 .error-panel {
   background: var(--broken-tint);
   border: 1px solid var(--danger-border);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   color: var(--broken);
   padding: 20px 24px;
 }
@@ -328,7 +362,7 @@ a.data-row:hover, a.study-row:hover,
 }
 .topnav-link {
   color: var(--ink-2);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   display: inline-flex;
@@ -365,12 +399,6 @@ details:not([open]) > :not(summary) {
   background: var(--flame-deep-hover);
   border-color: var(--flame-deep-hover);
 }
-.signin-layout .ui-button.primary-button:disabled {
-  background: var(--notchecked-tint);
-  border-color: var(--line);
-  color: var(--notchecked);
-  cursor: not-allowed;
-}
 @media (max-width: 899px) {
   .signin-layout { grid-template-columns: 1fr; gap: 32px; }
 }
@@ -379,7 +407,7 @@ details:not([open]) > :not(summary) {
 .run-action-required {
   background: var(--couldnot-tint);
   border: 1px solid var(--warning-border);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   padding: 20px 24px;
   margin-bottom: 24px;
 }
@@ -396,7 +424,7 @@ details:not([open]) > :not(summary) {
   gap: 4px;
   background: var(--notchecked-tint);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   padding: 4px;
 }
 .segmented-control-item {
@@ -406,10 +434,10 @@ details:not([open]) > :not(summary) {
   min-height: 40px;
   padding: 8px 16px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   background: transparent;
   color: var(--ink-2);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
@@ -424,7 +452,7 @@ details:not([open]) > :not(summary) {
 .segmented-control-item:disabled { opacity: 0.55; cursor: not-allowed; }
 @media (max-width: 639px) {
   .segmented-control { display: flex; width: 100%; }
-  .segmented-control-item { flex: 1; justify-content: center; }
+  .segmented-control-item { flex: 1; justify-content: center; padding: 8px; font-size: 13px; white-space: nowrap; }
 }
 
 /* ---------- Data rows: the grid fits the children rows actually carry ----------
@@ -456,7 +484,7 @@ details:not([open]) > :not(summary) {
 .inline-note[role="alert"] {
   background: var(--couldnot-tint);
   border: 1px solid var(--warning-border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   padding: 10px 14px;
   color: var(--couldnot);
 }
@@ -469,17 +497,17 @@ details:not([open]) > :not(summary) {
 .mt-shell input.file-input {
   width: 100%;
   border: 1.5px dashed var(--mt-border-strong);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   background: var(--notchecked-tint);
   padding: 16px 18px;
-  font-size: 14.5px;
+  font-size: 14px;
   color: var(--ink-2);
   cursor: pointer;
 }
 .mt-shell input.file-input::file-selector-button {
   background: var(--card);
   border: 1px solid var(--mt-border-strong);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   padding: 10px 16px;
   margin-right: 14px;
   font: inherit;
@@ -494,11 +522,11 @@ details:not([open]) > :not(summary) {
    Hallmark signed-in SI-13: the two help blocks were full bordered
    cards nested inside the form card, dressed in inline styles. Flat
    tinted zones now; the words are unchanged. */
-.info-card-flat { border: 0; border-radius: 8px; padding: 14px 16px; }
+.info-card-flat { border: 0; border-radius: var(--mt-radius-md); padding: 14px 16px; }
 .info-card-title { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
 .info-card-title svg { color: var(--evidence); }
 .info-card-flat .form-help { margin: 6px 0 0; font-size: 13px; line-height: 1.6; }
-.info-card-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-3); line-height: 1.6; }
+.info-card-list { margin: 8px 0 0; padding-left: 18px; list-style: disc; font-size: 12px; color: var(--text-3); line-height: 1.6; }
 
 /* ---------- Knowledge rows: one actions rhythm (SI-14) ---------- */
 .knowledge-row-actions { gap: 14px; }
@@ -513,3 +541,11 @@ details:not([open]) > :not(summary) {
    Hand-inlined 11px shrinks in knowledge/target pages become a single
    named size on the shared badge. */
 .status-badge-sm { font-size: 12px; line-height: 16px; padding: 2px 9px; min-height: 22px; }
+
+/* Priya's panel is phone-narrow only while the three panels share a
+   row; stacked, it is full width like its siblings — otherwise the
+   inset reads as a layout bug (examination, Landing). */
+.triptych-panel-phone { margin-inline: auto; }
+@media (min-width: 1024px) {
+  .triptych-panel-phone { max-width: 260px; margin-inline: 0; flex-shrink: 0; }
+}

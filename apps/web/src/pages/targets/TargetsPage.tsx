@@ -47,6 +47,13 @@ export function TargetsPage() {
     [applicationId, revision],
   );
 
+  // All hooks run unconditionally, before any early return: the runs
+  // request feeds the tab-strip counts.
+  const runsState = useAsync(
+    () => api.listRuns(applicationId),
+    [applicationId, revision],
+  );
+
   if (appState.status === "loading")
     return <LoadingPanel label="Loading application" />;
   if (appState.status === "error")
@@ -55,13 +62,12 @@ export function TargetsPage() {
   const canWrite =
     canWriteWorkspace(workspace.role) && appState.data.status === "active";
   const targets = targetsState.data ?? [];
-
   return (
     <>
       <PageHeader
         eyebrow={appState.data.name}
         title="Targets"
-        description="Environments MarketTwin may test after explicit authorization."
+        description="Targets MarketTwin may test after explicit authorization."
         action={
           canWrite ? (
             <Link
@@ -81,12 +87,14 @@ export function TargetsPage() {
         >
           Overview
         </Link>
-        <span className="tab-link active">Targets</span>
+        <span className="tab-link active">
+          Targets{targetsState.status === "ready" ? ` (${targets.length})` : ""}
+        </span>
         <Link
           className="tab-link"
           to={`/applications/${applicationId}/runs`}
         >
-          Tests
+          Tests{runsState.status === "ready" ? ` (${runsState.data.length})` : ""}
         </Link>
       </div>
 
@@ -114,7 +122,7 @@ export function TargetsPage() {
       ) : targets.length === 0 ? (
         <EmptyState
           title="No targets configured"
-          copy="Add an environment before creating a test. Initial execution origins are derived from the base URL."
+          copy="Add a target before creating a test. Initial execution origins are derived from the base URL."
           action={
             canWrite ? (
               <Link

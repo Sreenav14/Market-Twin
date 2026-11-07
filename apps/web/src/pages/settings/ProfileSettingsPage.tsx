@@ -6,7 +6,6 @@ export function ProfileSettingsPage() {
     <section className="panel settings-panel">
       <div className="section-heading compact-heading">
         <div>
-          <p className="eyebrow">Account</p>
           <h2>Profile</h2>
         </div>
       </div>

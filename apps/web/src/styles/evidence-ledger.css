@@ -45,7 +45,7 @@
   color: var(--lm);
   text-decoration: none;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   transition: background-color 120ms ease, color 120ms ease;
 }
 
@@ -60,7 +60,7 @@
   background: var(--lp);
   color: var(--li);
   border: 1px solid var(--lr);
-  border-radius: 12px;
+  border-radius: var(--mt-radius-lg);
   padding: 24px;
   box-shadow: var(--shadow);
   width: 100%;
@@ -69,7 +69,7 @@
 
 /* Executive Verdict Banner */
 .evidence-ledger .ledger-verdict-banner {
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   padding: 24px 28px;
   margin-bottom: 32px;
   display: flex;
@@ -113,7 +113,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--mt-radius-xl);
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -182,7 +182,7 @@
   padding: 16px 20px;
   background: var(--ls);
   border: 1px solid var(--lr);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
 }
 
@@ -256,7 +256,7 @@
 .evidence-ledger .ledger-finding-card {
   background: var(--ls);
   border: 1px solid var(--lr);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   padding: 20px 22px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   transition: border-color 140ms ease, box-shadow 140ms ease;
@@ -324,7 +324,7 @@
 /* Diagnostic Clusters / Accordions */
 .evidence-ledger .ledger-cluster {
   border: 1px solid var(--lr);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   background: var(--ls);
   margin-bottom: 12px;
   overflow: hidden;
@@ -367,7 +367,7 @@
   font: 12px var(--font-sans);
   background: var(--surface-muted);
   padding: 3px 8px;
-  border-radius: 12px;
+  border-radius: var(--mt-radius-lg);
 }
 
 .evidence-ledger .ledger-cluster ul {
@@ -400,7 +400,7 @@
   background: var(--ls);
   padding: 24px;
   border: 1px solid var(--lr);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
 }
 
@@ -442,7 +442,7 @@
   height: 10px;
   background: var(--border);
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: var(--mt-radius-sm);
   margin-top: 8px;
 }
 
@@ -450,7 +450,7 @@
   display: block;
   height: 100%;
   background: var(--la);
-  border-radius: 5px;
+  border-radius: var(--mt-radius-sm);
   transition: width 300ms ease;
 }
 
@@ -469,7 +469,7 @@
   text-decoration: none;
   margin-top: 12px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   background: var(--las);
   transition: background 120ms ease;
 }
@@ -502,7 +502,7 @@
 .evidence-ledger .ledger-outcome-card {
   background: var(--ls);
   border: 1px solid var(--lr);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   padding: 14px 18px;
   display: flex;
   align-items: center;
@@ -523,8 +523,8 @@
 }
 
 .evidence-ledger .ledger-original {
-  border: 1px dashed var(--lr);
-  border-radius: 8px;
+  border: 1px solid var(--lr);
+  border-radius: var(--mt-radius-md);
   background: var(--surface-muted);
   margin: 28px 0;
   padding: 16px 20px;
@@ -583,7 +583,7 @@
 @media (max-width: 768px) {
   .evidence-ledger .ledger-paper {
     padding: 20px;
-    border-radius: 8px;
+    border-radius: var(--mt-radius-md);
   }
   .evidence-ledger .ledger-metrics {
     grid-template-columns: 1fr;

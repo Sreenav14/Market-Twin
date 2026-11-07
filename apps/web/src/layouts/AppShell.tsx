@@ -84,7 +84,7 @@ export function AppShell({
 
   const applicationTests = /^\/applications\/[^/]+\/runs(?:\/|$)/.test(location.pathname);
   const applicationsRoute = (location.pathname.startsWith("/applications") && !applicationTests) || location.pathname.startsWith("/targets/");
-  const knowledgeRoute = location.pathname === "/ingestion" || location.pathname.startsWith("/knowledge/");
+  const knowledgeRoute = location.pathname.startsWith("/knowledge/");
 
   const signOut = () => {
     setLogoutError(null);

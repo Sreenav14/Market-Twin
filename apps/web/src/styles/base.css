@@ -77,12 +77,17 @@ dd,
 }
 button:focus-visible,
 a:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
 summary:focus-visible {
   outline: 3px solid var(--mt-focus);
   outline-offset: 3px;
+}
+/* One focus recipe for text inputs (examination X-10): the border never
+   changes; a single 2px outline at a 2px offset is the whole signal. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 main:focus {
   outline: none;
@@ -106,7 +111,7 @@ h3[id] {
   background: var(--surface);
   color: var(--primary);
   border: 2px solid var(--primary);
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
 }
 .skip-link:focus {
   transform: translateY(0);
@@ -154,7 +159,7 @@ h3[id] {
   gap: 8px;
   min-height: 42px;
   padding: 9px 16px;
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
@@ -176,10 +181,6 @@ h3[id] {
 }
 .ghost-button:hover:not(:disabled) {
   background: var(--surface-muted);
-}
-.ghost-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .button-square {
   width: 42px;
@@ -220,7 +221,7 @@ h3[id] {
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   background: var(--surface);
   color: var(--text);
   font-size: 15px;
@@ -242,7 +243,7 @@ h3[id] {
 .knowledge-list-row .row-primary strong, .knowledge-list-row .row-primary span { white-space: normal; overflow-wrap: anywhere; }
 .knowledge-row-actions { display: flex; align-items: center; gap: 16px; }
 .ingestion-progress { display: grid; gap: 6px; width: 200px; max-width: 100%; font-size: 12px; color: var(--text-3); }
-.ingestion-progress progress { appearance: none; width: 100%; height: 4px; border: 0; border-radius: 4px; overflow: hidden; background: var(--surface-muted); accent-color: var(--primary); }
+.ingestion-progress progress { appearance: none; width: 100%; height: 4px; border: 0; border-radius: var(--mt-radius-sm); overflow: hidden; background: var(--surface-muted); accent-color: var(--primary); }
 .ingestion-progress progress::-webkit-progress-bar { background: var(--surface-muted); }
 .ingestion-progress progress::-webkit-progress-value { background: var(--primary); transition: width 300ms ease; }
 .ingestion-progress progress::-moz-progress-bar { background: var(--primary); }
@@ -253,7 +254,7 @@ h3[id] {
 .knowledge-choice label > span > span { font-size: 13px; }
 .knowledge-choice input[type="checkbox"], .knowledge-confirmation input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0; flex-shrink: 0; accent-color: var(--primary); margin-top: 2px; }
 .form-grid input[type="file"] { width: 100%; max-width: 100%; }
-.form-grid input[type="file"]::file-selector-button { border: 1px solid var(--border-strong); border-radius: 5px; padding: 6px 10px; margin-right: 12px; color: var(--text); background: var(--surface-muted); font: inherit; cursor: pointer; }
+.form-grid input[type="file"]::file-selector-button { border: 1px solid var(--border-strong); border-radius: var(--mt-radius-sm); padding: 6px 10px; margin-right: 12px; color: var(--text); background: var(--surface-muted); font: inherit; cursor: pointer; }
 @media (max-width: 700px) {
   .composer-knowledge { padding: 20px 16px; }
   .knowledge-choice { align-items: flex-start; }
@@ -266,7 +267,7 @@ h3[id] {
   width: fit-content;
   padding: 4px 9px;
   min-height: 26px;
-  border-radius: 5px;
+  border-radius: var(--mt-radius-sm);
   font-size: 12px;
   line-height: 1.3;
   font-weight: 550;
@@ -307,8 +308,14 @@ h3[id] {
 .empty-state {
   min-height: 220px;
   border-style: solid;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   box-shadow: none;
+}
+.empty-mark {
+  display: flex;
+  justify-content: center;
+  color: var(--text-3);
+  margin-bottom: 10px;
 }
 .empty-state h2 {
   font-size: 22px;
@@ -336,7 +343,7 @@ h3[id] {
   color: var(--text-3);
 }
 .panel {
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   padding: 24px;
 }
 .panel h2,
@@ -371,7 +378,7 @@ h3[id] {
   font-size: 13px;
 }
 .data-list {
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   box-shadow: none;
 }
 .data-row:hover {
@@ -380,13 +387,13 @@ h3[id] {
 .product-icon {
   background: var(--info-bg);
   color: var(--info);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   font-size: 13px;
 }
 .info-card,
 .danger-zone {
   box-shadow: none;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
 }
 .info-card p,
 .danger-zone p,
@@ -418,7 +425,7 @@ h3[id] {
 .tab-count {
   font-size: 11px;
   background: var(--surface-muted);
-  border-radius: 4px;
+  border-radius: var(--mt-radius-sm);
   padding: 1px 6px;
   color: var(--text-2);
 }
@@ -427,7 +434,7 @@ h3[id] {
   background: var(--surface-overlay);
   color: var(--text);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: var(--mt-radius-sm);
   font-size: 12px;
   z-index: 100;
 }
@@ -456,4 +463,13 @@ h3[id] {
 pre { max-width: 100%; overflow: auto; }
 @media (pointer: coarse) {
   .icon-button, .compact, .tab-link { min-height: 44px; min-width: 44px; }
+}
+
+/* Knowledge rows at narrow widths (examination FLOOR): the actions
+   block moves under the name, and the source file name ellipsises on
+   one line instead of breaking character by character. */
+@media (max-width: 640px) {
+  .data-row.knowledge-list-row { grid-template-columns: 40px minmax(0, 1fr); }
+  .knowledge-list-row .knowledge-row-actions { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+  .knowledge-list-row .row-primary span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
 }

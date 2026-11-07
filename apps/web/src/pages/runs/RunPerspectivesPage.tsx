@@ -7,7 +7,7 @@ import { terminalTestStatuses } from "../../lib/results";
 import { countLabels, groupJourneys, simulatedTesterJourneys } from "../../lib/testerWork";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { ExecutionBadge, OutcomeBadge } from "../../components/ui/StatusBadge";
 
 export function RunPerspectivesPage() {
   const { run, user } = useOutletContext<RunContext>();
@@ -143,7 +143,7 @@ export function RunPerspectivesPage() {
                       Execution Summary
                     </dt>
                     <dd style={{ margin: "4px 0 0", fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                      {countLabels(group.journeys.map((j) => j.execution_status))}
+                      {countLabels(group.journeys.map((j) => j.execution_status), "journeyExecution")}
                     </dd>
                   </div>
                   <div>
@@ -151,7 +151,7 @@ export function RunPerspectivesPage() {
                       Recorded Outcomes
                     </dt>
                     <dd style={{ margin: "4px 0 0", fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                      {countLabels(group.journeys.map((j) => j.outcome))}
+                      {countLabels(group.journeys.map((j) => j.outcome), "journeyOutcome")}
                     </dd>
                   </div>
                 </dl>
@@ -194,8 +194,8 @@ export function RunPerspectivesPage() {
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-                          <StatusBadge status={journey.execution_status || "not started"} />
-                          <StatusBadge status={journey.outcome || "not recorded"} />
+                          <ExecutionBadge status={journey.execution_status || "not started"} />
+                          <OutcomeBadge outcome={journey.outcome || "not recorded"} />
                           <Link
                             to={`/runs/${run.id}/journeys/${journey.id}`}
                             style={{

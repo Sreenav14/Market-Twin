@@ -20,14 +20,14 @@ export function RunAssessmentView({ assessment, runId }: { assessment: unknown; 
   return <section className="run-assessment" aria-labelledby="assessment-heading">
     <h3 id="assessment-heading">Overall assessment</h3>
     {result.status !== "completed" ? <p className="inline-note">{result.status === "unavailable" && typeof result.reason === "string" ? result.reason : "An overall model assessment was not recorded for this report version. Saved journey results and evidence checks remain available."}</p> : <>
-      <div className="run-record-badges"><span>Testing goal <StatusBadge status={outcome(overall.goal_outcome)} /></span></div>
+      <div className="run-record-badges"><span>Testing goal <StatusBadge status={outcome(overall.goal_outcome)} source="journeyOutcome" /></span></div>
       <details className="run-assessment-details"><summary>Saved assessment details</summary><p>Model label for ease of use: {typeof overall.ease_of_use === "string" ? statusLabel(overall.ease_of_use) : "Could not check"}</p></details>
       <p>{typeof overall.summary === "string" ? overall.summary : "No overall summary recorded."}</p>
       {strings(overall.recommendations).length ? <><h4>Recommendations</h4><ul>{strings(overall.recommendations).map((item, index) => <li key={index}>{item}</li>)}</ul></> : null}
       <h4>Scope and limitations</h4><ul>{strings(overall.limitations).map((item, index) => <li key={index}>{item}</li>)}</ul>
       <div className="run-evidence-links">{strings(overall.supporting_journey_ids).map((id) => <Link className="text-link" key={id} to={`/runs/${runId}/journeys/${id}`}>Supporting journey {id.slice(0, 8)}</Link>)}</div>
       <details className="run-assessment-details"><summary>Individual journey evaluations · {individual.length}</summary><div className="run-records">{individual.map((item, index) => <article className="panel run-record" key={index}>
-        <div className="section-heading"><h4>{typeof item.persona_name === "string" && typeof item.mission_title === "string" ? `${item.persona_name} · ${item.mission_title}` : typeof item.journey_id === "string" ? `Journey ${item.journey_id.slice(0, 8)}` : "Recorded journey"}</h4><StatusBadge status={outcome(item.goal_outcome)} /></div>
+        <div className="section-heading"><h4>{typeof item.persona_name === "string" && typeof item.mission_title === "string" ? `${item.persona_name} · ${item.mission_title}` : typeof item.journey_id === "string" ? `Journey ${item.journey_id.slice(0, 8)}` : "Recorded journey"}</h4><StatusBadge status={outcome(item.goal_outcome)} source="journeyOutcome" /></div>
         <p>{typeof item.summary === "string" ? item.summary : "No summary recorded."}</p>
         <details className="run-assessment-details"><summary>Saved assessment details</summary><p>Model label for ease of use: {typeof item.ease_of_use === "string" ? statusLabel(item.ease_of_use) : "Could not check"}</p></details>
         <ul>{strings(item.recommendations).map((recommendation, itemIndex) => <li key={itemIndex}>{recommendation}</li>)}</ul>

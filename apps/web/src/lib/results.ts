@@ -171,6 +171,18 @@ export function reportVerdict(results: RunResults, feature = results.report.payl
   };
 }
 
+/** The locked market-worthy verdict words (owner decision): the only
+ * words a market_verdict may be printed with, on every surface. */
+export function marketVerdictWord(verdict: string): string {
+  const words: Record<string, string> = {
+    ready: "Ready",
+    ready_with_issues: "Ready with issues",
+    not_ready: "Not ready yet",
+    insufficient_evidence: "Can't tell yet",
+  };
+  return words[verdict] ?? "Verdict unavailable";
+}
+
 export function formatDate(value: string | null) {
   if (!value || Number.isNaN(Date.parse(value))) return "Not recorded";
   return new Intl.DateTimeFormat(undefined, {

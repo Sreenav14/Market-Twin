@@ -179,18 +179,9 @@ export const ConceptFooter: React.FC<ConceptFooterProps> = ({
               color: "rgba(255, 255, 255, 0.7)",
             }}
           >
-            © 2026 MarketTwin · Concept design
+            © 2026 MarketTwin
           </div>
 
-          <div
-            className="font-meta-label"
-            style={{
-              fontSize: "11px",
-              color: "rgba(255, 255, 255, 0.7)",
-            }}
-          >
-            Developed by SJ
-          </div>
         </div>
       </div>
     </footer>

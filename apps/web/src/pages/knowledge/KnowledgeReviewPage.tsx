@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/button";
 import { StatusPill } from "../../components/ui/StatusBadge";
 import { ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
 import { api, type IngestionEntry } from "../../lib/api";
+import { statusEntry } from "../../lib/status";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { type AppShellContext } from "../../layouts/AppShell";
 import { KnowledgeResult } from "./KnowledgeResult";
@@ -84,7 +85,11 @@ export function KnowledgeReviewPage() {
   }
 
   const entry = state.data;
-  const hasKnowledge = Boolean(entry.knowledge_count + entry.artifact_count + entry.skill_count);
+  const previewExtracted =
+    entry.preview.application_knowledge.length + entry.preview.artifacts.length + entry.preview.skills.length;
+  const summaryExtracted = entry.knowledge_count + entry.artifact_count + entry.skill_count;
+  const hasKnowledge = previewExtracted > 0;
+  const extractedUnlisted = summaryExtracted > 0 && previewExtracted === 0;
   const pending = isIngestionPending(entry);
   const failed = entry.processing_status === "failed";
   const isApproved = entry.status === "approved";
@@ -93,23 +98,28 @@ export function KnowledgeReviewPage() {
     entry.source_name.startsWith("http://") ||
     entry.source_name.startsWith("https://");
 
-  const eyebrow = pending
-    ? "In progress"
-    : failed
-    ? "Processing failed"
-    : isApproved
-    ? "Approved knowledge"
-    : "Needs review";
+  const statusPill = pending ? (
+    <StatusPill tone="info" glyph="•">
+      {statusEntry("lifecycle", entry.processing_stage ?? entry.processing_status ?? "processing").word}
+    </StatusPill>
+  ) : failed ? (
+    <StatusPill tone="danger" glyph="✕">Processing failed</StatusPill>
+  ) : isApproved ? (
+    <StatusPill tone="success" glyph="✓">Approved</StatusPill>
+  ) : (
+    <StatusPill tone="neutral" glyph="!">Needs review</StatusPill>
+  );
 
   return (
     <div className="knowledge-review-page">
       <Link className="back-link" to="/knowledge/review">Back to review knowledge</Link>
       <PageHeader
-        eyebrow={eyebrow}
+        eyebrow="Knowledge"
         title={entry.name}
         description={entry.source_name}
         action={
           <div className="knowledge-row-actions">
+            {statusPill}
             {entry.original_source_url ? (
               <a className="secondary-button" href={entry.original_source_url} target="_blank" rel="noreferrer">
                 <ExternalLink size={15} aria-hidden="true" />
@@ -290,18 +300,18 @@ export function KnowledgeReviewPage() {
                     }}
                   >
                     <CheckCircle2 size={16} />
-                    <span>Extracted items: {entry.knowledge_count + entry.artifact_count + entry.skill_count} ready</span>
+                    <span>Extracted items: {previewExtracted} ready</span>
                   </div>
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
                       gap: "8px",
-                      color: entry.issue_count === 0 ? "var(--success)" : "var(--warning)",
+                      color: entry.preview.extraction_issues.length === 0 ? "var(--success)" : "var(--warning)",
                     }}
                   >
                     <ShieldCheck size={16} />
-                    <span>Extraction issues: {entry.issue_count} recorded</span>
+                    <span>Extraction issues: {entry.preview.extraction_issues.length} recorded</span>
                   </div>
                 </div>
                 <label className="knowledge-confirmation">
@@ -314,7 +324,7 @@ export function KnowledgeReviewPage() {
                   <span>I reviewed this knowledge against its source and confirmed the source purpose.</span>
                 </label>
                 {error ? <p className="form-error" role="alert">{error}</p> : null}
-                {!hasKnowledge ? <p className="form-note">This source produced no knowledge to approve.</p> : null}
+                {!hasKnowledge ? <p className="form-note">{extractedUnlisted ? "The extracted items for this source could not be listed here, so there is nothing to review or approve yet." : "This source produced no knowledge to approve."}</p> : null}
                 <div className="form-actions">
                   <Button disabled={!confirmed || busy || !hasKnowledge} onClick={() => void approve()}>
                     {busy ? <><Spinner /> Approving…</> : "Approve knowledge"}

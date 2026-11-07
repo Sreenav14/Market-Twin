@@ -619,11 +619,17 @@ export function HowPage() {
                               width: "16px",
                               height: "16px",
                               flexShrink: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "11px",
+                              lineHeight: 1,
+                              color: "var(--flame-deep)",
                               border: "1.5px solid var(--ink-faint)",
                               borderRadius: "3px",
-                              backgroundColor: "var(--card)",
+                              backgroundColor: "var(--surface-muted)",
                             }}
-                          />
+                          >✓</span>
                           {line}
                         </li>
                       ))}

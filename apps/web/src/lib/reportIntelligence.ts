@@ -5,7 +5,7 @@ import { findingClassification, isConfirmedFinding } from './results';
 export const taskOutcomes = ['passed', 'failed', 'blocked', 'not_tested', 'inconclusive'] as const;
 export type TaskOutcome = typeof taskOutcomes[number];
 export const outcomeLabels: Record<TaskOutcome, string> = {
-  passed: 'Passed', failed: 'Failed', blocked: 'Blocked', not_tested: 'Not tested', inconclusive: 'Inconclusive',
+  passed: 'Worked', failed: 'Broken', blocked: 'Blocked', not_tested: 'Not checked', inconclusive: 'Could not check',
 };
 
 export function taskOutcome(journey: JourneyExecution): TaskOutcome {

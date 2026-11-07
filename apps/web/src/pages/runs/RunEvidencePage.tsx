@@ -37,7 +37,7 @@ export function RunEvidencePage() {
         <p className="muted">{evidence.data.artifacts.length} artifacts in this page · {evidence.data.journey.step_count} recorded steps</p>
         {evidence.data.artifacts.length ? <ul className="evidence-artifact-list">{evidence.data.artifacts.map((artifact) => <li key={artifact.id}>
           <article className="panel evidence-artifact">
-            <div><strong>{artifact.artifact_type.replaceAll("_", " ")}</strong><p className="muted">Artifact <code>{artifact.id}</code> · {artifact.kind?.replaceAll("_", " ") ?? "type not recorded"}{artifact.step_id ? ` · Step ${artifact.step_id}` : " · No step linked"} · {new Date(artifact.created_at).toLocaleString()}</p></div>
+            <div><strong>{artifact.artifact_type.replaceAll("_", " ").replace(/^\w|\s\w/g, (letter) => letter.toUpperCase())}</strong><p className="muted"><code>{artifact.id}</code>{artifact.step_id ? ` · Step ${artifact.step_id}` : " · No step linked"} · {new Date(artifact.created_at).toLocaleString()}</p></div>
             <ArtifactEvidence runId={run.id} artifactId={artifact.id} />
           </article>
         </li>)}</ul> : <p className="inline-note">No artifact metadata is available for this journey page.</p>}

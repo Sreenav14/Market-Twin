@@ -48,10 +48,7 @@ export function ApplicationRunsPage() {
     canWriteWorkspace(workspace.role) && appState.data.status === "active";
   const runs = runsState.data ?? [];
   const filteredRuns = runs.filter((run) =>
-    (status === "all" || (status === "in_progress"
-      ? ["planning", "queued", "running"].includes(run.status)
-      : status === "stopped" ? ["failed", "cancelled", "timed_out", "policy_blocked"].includes(run.status)
-      : run.status === status))
+    (status === "all" || run.status === status)
     && `${testTitle(run)} ${textValue(run.target_snapshot.name, "")}`.toLowerCase().includes(search.trim().toLowerCase()),
   ).sort((a, b) => {
     const aCreated = Date.parse(a.created_at ?? "");
@@ -76,7 +73,6 @@ export function ApplicationRunsPage() {
     <>
       <Link className="back-link" to="/runs">All tests</Link>
       <PageHeader
-        eyebrow={appState.data.name}
         title="Tests"
         description={`Browse tests for ${appState.data.name}.`}
         action={
@@ -117,9 +113,10 @@ export function ApplicationRunsPage() {
           <div className="search-field"><input type="search" aria-label="Find a test"
             placeholder="Find a test…" value={search} onChange={(event) => filter("q", event.target.value)} /></div>
           <select className="text-input filter-control" aria-label="Filter tests by status" value={status} onChange={(event) => filter("status", event.target.value)}>
-            <option value="all">All statuses</option><option value="awaiting_human">Needs your help</option>
-            <option value="in_progress">In progress</option><option value="completed">Completed</option>
-            <option value="stopped">Failed / stopped</option><option value="draft">Drafts</option>
+            <option value="all">All statuses</option><option value="awaiting_human">Needs you</option>
+            <option value="planning">Planning</option><option value="queued">Queued</option><option value="running">Running</option>
+            <option value="completed">Completed</option><option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option><option value="draft">Draft</option>
           </select>
           <select className="text-input filter-control" aria-label="Sort tests" value={sort} onChange={(event) => filter("sort", event.target.value)}>
             <option value="recent">Recent first</option><option value="oldest">Oldest first</option>

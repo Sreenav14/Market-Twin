@@ -76,7 +76,7 @@ function RecordedFlow({runId,userId,journey}: {runId:string;userId:string;journe
         <span>Step {step.step_number}</span><strong>{step.action_summary}</strong><span>{step.status.replaceAll('_',' ')}</span>
       </button></li>)}</ol>
       {detail.hasNextPage?<button className="secondary-button" disabled={detail.isFetchingNextPage} onClick={()=>void detail.fetchNextPage()}>{detail.isFetchingNextPage?'Loading steps…':'Load more recorded steps'}</button>:null}
-      {selected?<section className="report-step-detail" data-assertion={assertion?.status} aria-label="Selected recorded step" aria-live="polite"><div className="section-heading"><h4>{selected.action_summary}</h4><StatusBadge status={selected.status}/></div>
+      {selected?<section className="report-step-detail" data-assertion={assertion?.status} aria-label="Selected recorded step" aria-live="polite"><div className="section-heading"><h4>{selected.action_summary}</h4><StatusBadge status={selected.status} source="journeyExecution"/></div>
         {assertion?<dl className="report-value-comparison"><div><dt>Expected</dt><dd>{assertion.expected}</dd></div><div><dt>Observed</dt><dd>{assertion.observed}</dd></div></dl>
           :<p>{selected.observation_summary||'No observation was recorded for this step.'}</p>}
         <p className="muted">{selected.started_at?<time dateTime={selected.started_at}>{new Date(selected.started_at).toLocaleString()}</time>:'Timestamp not recorded'} · Step ID {selected.id}</p>

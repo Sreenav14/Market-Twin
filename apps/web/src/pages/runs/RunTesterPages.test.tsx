@@ -45,8 +45,8 @@ it("groups saved journeys under each simulated tester and excludes discovery", a
   expect(await screen.findByRole("heading", { name: "New visitor" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Returning user" })).toBeInTheDocument();
   expect(screen.getByText("2 planned journeys")).toBeInTheDocument();
-  expect(screen.getByText("1 completed · 1 failed")).toBeInTheDocument();
-  expect(screen.getByText("1 passed · 1 Could not check")).toBeInTheDocument();
+  expect(screen.getByText("1 Done · 1 Failed")).toBeInTheDocument();
+  expect(screen.getByText("1 Worked · 1 Could not check")).toBeInTheDocument();
   expect(screen.getAllByText("1 not recorded")).toHaveLength(2);
   expect(screen.queryByText("Browser discovery")).not.toBeInTheDocument();
   expect(screen.queryByText(/Exactly three/)).not.toBeInTheDocument();

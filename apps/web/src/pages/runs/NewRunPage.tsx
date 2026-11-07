@@ -178,7 +178,7 @@ export function NewRunPage() {
   const header = (
     <PageHeader
       eyebrow="New test"
-      title={executionMode === "discovery_contract_v1" ? "Here's my app" : "Create a test"}
+      title="Start a test"
       description={executionMode === "discovery_contract_v1" ? "Choose your app and tell the testers who it is for." : "Choose a target and describe the task to test."}
     />
   );
@@ -287,7 +287,7 @@ export function NewRunPage() {
             <input className="text-input" id="test-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} placeholder="For example, Pricing clarity" aria-describedby="test-name-help" />
             <p className="form-help" id="test-name-help">A short label for lists and activity. A unique incremental ID is assigned automatically. Your testing goal stays separate below.</p>
           </div>
-          <div className="composer-target">
+          <div className="composer-knowledge form-grid">
             <label htmlFor="test-target">{executionMode === "discovery_contract_v1" ? "App" : "Application target"}</label>
             <select
               id="test-target"
@@ -303,10 +303,10 @@ export function NewRunPage() {
               ))}
             </select>
             {!target ? <p role="alert" className="form-error">The requested target is unavailable or not authorized. Choose an authorized target to continue.</p> : null}
-            <span className="authorized-label">
-              <ShieldCheck size={15} aria-hidden="true" />
+            <p className="form-help">
+              <ShieldCheck size={15} aria-hidden="true" />{" "}
               {target ? "Authorized" : "Target required"}
-            </span>
+            </p>
           </div>
           {executionMode === "discovery_contract_v1" ? <div className="composer-knowledge form-grid">
             <div className="composer-app-url">
@@ -367,11 +367,10 @@ export function NewRunPage() {
               <option value="legacy_persona">Older exploratory journeys</option>
               <option value="deep_feature_v1">Feature cases — experimental</option>
               <option value="discovery_contract_v1">Explore, approve and test</option>
-              <option value="harness_v1" disabled={!harnessAvailable}>Full test — checks every interaction</option>
+              <option value="harness_v1" disabled={!harnessAvailable}>{harnessAvailable ? "Full test — checks every interaction" : "Full test — checks every interaction (not available yet)"}</option>
             </select>
             {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unconfirmed.</p> : null}
             {executionMode === "harness_v1" ? <p className="form-help">The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it.</p> : null}
-            {!harnessAvailable ? <p className="form-help">Not available yet</p> : null}
             <label htmlFor="testing-depth">Testing depth</label>
             <select id="testing-depth" value={testingDepth} disabled={busy} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
               <option value="low">Low — focused coverage</option>

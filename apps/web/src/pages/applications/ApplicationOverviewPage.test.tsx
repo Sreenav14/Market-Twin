@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError, api, Application, Target, TargetAuthorization } from "../../lib/api";
 import { ApplicationOverviewPage } from "./ApplicationOverviewPage";
 
-const application: Application = { id: "app-1", workspace_id: "ws-1", created_by_user_id: "user-1", name: "Storefront", description: null, status: "active" };
+const application: Application = { id: "app-1", workspace_id: "ws-1", created_by_user_id: "user-1", name: "Storefront", description: null, status: "active", latest_run_summary: null };
 const target: Target = { id: "target-1", application_id: "app-1", name: "Staging", environment: "staging", base_url: "https://staging.example.com", requires_auth: false, status: "active", allowed_origins: [] };
 const authorization: TargetAuthorization = { id: "auth-1", target_id: "target-1", created_by_user_id: "user-1", authorized_by_user_id: "user-1", status: "authorized", authorization_basis: "Owned target", created_at: "2026-10-18", authorized_at: "2026-10-18", revoked_at: null, expires_at: null };
 
@@ -41,10 +41,10 @@ it("keeps an authorization outage distinct from missing authorization and recove
   vi.spyOn(api, "getAuthorization").mockRejectedValueOnce(new ApiError("Unavailable", 503)).mockResolvedValue(authorization);
   open();
   await screen.findByText("Not available");
-  expect(screen.queryByText("not authorized")).not.toBeInTheDocument();
+  expect(screen.queryByText("Not authorized")).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: /Authorize target|Start a test/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Retry target readiness" }));
-  await screen.findByText("authorized");
+  await screen.findByText("Authorized");
   expect(screen.queryByRole("button", { name: "Retry target readiness" })).not.toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: /Start a test/ }).length).toBeGreaterThan(0);
 });
@@ -60,7 +60,7 @@ it("offers retry after a target-list outage instead of suggesting an empty confi
 it("offers authorization when the API confirms that the grant is missing", async () => {
   vi.spyOn(api, "getAuthorization").mockRejectedValue(new ApiError("Not found", 404));
   open();
-  await screen.findByText("not authorized");
+  await screen.findByText("Not authorized");
   expect(screen.getAllByRole("link", { name: /Authorize target/ }).length).toBeGreaterThan(0);
   expect(screen.queryByRole("button", { name: "Retry target readiness" })).not.toBeInTheDocument();
 });

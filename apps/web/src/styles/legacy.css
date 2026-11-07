@@ -55,7 +55,7 @@ a:focus-visible {
   height: 15px;
   border: 2px solid currentColor;
   border-right-color: transparent;
-  border-radius: 999px;
+  border-radius: var(--mt-radius-pill);
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin {
@@ -104,7 +104,7 @@ a:focus-visible {
 .workspace-copy span,
 .user-copy span {
   color: var(--text-3);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .workspace-switcher {
   display: flex;
@@ -113,7 +113,7 @@ a:focus-visible {
   min-height: 58px;
   padding: 9px 10px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--mt-radius-lg);
   background: var(--surface);
 }
 .workspace-avatar,
@@ -122,13 +122,13 @@ a:focus-visible {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--mt-radius-lg);
   background: var(--surface-muted);
   font-size: 12px;
   font-weight: 750;
 }
 .user-avatar {
-  border-radius: 999px;
+  border-radius: var(--mt-radius-pill);
 }
 .workspace-copy,
 .user-copy {
@@ -158,9 +158,9 @@ a:focus-visible {
   gap: 10px;
   min-height: 40px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: var(--mt-radius-lg);
   color: var(--text-3);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 .nav-link:hover {
@@ -175,7 +175,7 @@ a:focus-visible {
 .sidebar-section-label {
   margin: 26px 10px 0;
   color: var(--text-3);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -194,7 +194,7 @@ a:focus-visible {
   width: 34px;
   height: 34px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--mt-radius-lg);
   color: var(--text-3);
   background: transparent;
   cursor: pointer;
@@ -217,7 +217,7 @@ a:focus-visible {
 }
 .breadcrumb {
   color: var(--text-3);
-  font-size: 11.5px;
+  font-size: 12px;
   text-transform: capitalize;
 }
 .environment-pill {
@@ -227,10 +227,10 @@ a:focus-visible {
   min-height: 30px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--mt-radius-pill);
   color: var(--text-3);
   background: var(--surface);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .environment-pill > span {
   width: 6px;
@@ -287,7 +287,7 @@ a:focus-visible {
   gap: 8px;
   min-height: 42px;
   padding: 0 15px;
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -310,12 +310,6 @@ a:focus-visible {
   color: var(--danger);
   background: var(--danger-bg);
 }
-.primary-button:disabled,
-.secondary-button:disabled,
-.danger-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 .compact {
   min-height: 34px;
   padding: 0 11px;
@@ -328,7 +322,7 @@ a:focus-visible {
 }
 .text-link {
   color: var(--primary);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 .metric-grid {
@@ -348,7 +342,7 @@ a:focus-visible {
 .metric-card {
   min-height: 140px;
   padding: 20px;
-  border-radius: 16px;
+  border-radius: var(--mt-radius-xl);
 }
 .metric-card > span {
   color: var(--text-3);
@@ -402,14 +396,14 @@ a:focus-visible {
   gap: 14px;
   min-height: 104px;
   padding: 16px;
-  border-radius: 14px;
+  border-radius: var(--mt-radius-xl);
 }
 .product-icon {
   display: grid;
   place-items: center;
   width: 46px;
   height: 46px;
-  border-radius: 12px;
+  border-radius: var(--mt-radius-lg);
   color: var(--info);
   background: var(--info-bg);
   border: 1px solid var(--info-border);
@@ -427,7 +421,7 @@ a:focus-visible {
 }
 .panel {
   padding: 22px;
-  border-radius: 16px;
+  border-radius: var(--mt-radius-xl);
 }
 .state-panel {
   min-height: 170px;
@@ -439,7 +433,7 @@ a:focus-visible {
 }
 .data-list {
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--mt-radius-xl);
 }
 .data-row {
   display: grid;
@@ -461,7 +455,7 @@ a:focus-visible {
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   color: var(--primary);
   background: var(--info-bg);
 }
@@ -479,7 +473,7 @@ a:focus-visible {
 .row-primary span,
 .environment-label {
   color: var(--text-3);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .status-badge {
   display: inline-flex;
@@ -487,8 +481,8 @@ a:focus-visible {
   justify-content: center;
   min-height: 25px;
   padding: 0 9px;
-  border-radius: 999px;
-  font-size: 9.5px;
+  border-radius: var(--mt-radius-pill);
+  font-size: 10px;
   font-weight: 800;
   text-transform: capitalize;
 }
@@ -518,14 +512,14 @@ a:focus-visible {
 }
 .field-label {
   color: var(--text-2);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 750;
 }
 .text-input,
 .text-area {
   width: 100%;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   color: var(--text);
   background: var(--surface);
 }
@@ -558,11 +552,39 @@ a:focus-visible {
   gap: 18px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   background: var(--surface-muted);
 }
 .confirmation-row {
   justify-content: flex-start;
+}
+/* Toggle rows (Add target's protected-experience row) share the
+   confirmation band's recipe, with the label on its own line and the
+   description beneath it — this class previously had no styles at all,
+   so the label and description ran together (examination, Add target). */
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--mt-radius-lg);
+  background: var(--surface-muted);
+  cursor: pointer;
+}
+.toggle-row strong {
+  display: block;
+}
+.toggle-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.toggle-row input {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 .two-column-layout {
   display: grid;
@@ -573,11 +595,12 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+  align-items: start;
 }
 .info-card {
   padding: 22px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--mt-radius-xl);
   background: var(--surface-muted);
 }
 .info-card p,
@@ -586,7 +609,7 @@ a:focus-visible {
 .panel-note {
   margin: 8px 0 0;
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.65;
 }
 .definition-list {
@@ -607,7 +630,7 @@ a:focus-visible {
 }
 .definition-list dd {
   margin: 0;
-  font-size: 10.8px;
+  font-size: 11px;
 }
 .monospace {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -623,7 +646,7 @@ a:focus-visible {
   gap: 14px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--mt-radius-lg);
   background: var(--surface-muted);
 }
 .authorization-status {
@@ -636,7 +659,7 @@ a:focus-visible {
   place-items: center;
   width: 46px;
   height: 46px;
-  border-radius: 12px;
+  border-radius: var(--mt-radius-lg);
   color: var(--danger);
   background: var(--danger-bg);
 }
@@ -646,7 +669,7 @@ a:focus-visible {
 }
 .authorization-status p:last-child {
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .audit-box {
   display: grid;
@@ -673,35 +696,16 @@ a:focus-visible {
   margin-top: 20px;
   padding: 12px;
   border: 1px solid var(--warning-border);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   background: var(--warning-bg);
   font-size: 11px;
 }
 .study-composer {
   overflow: hidden;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: var(--mt-radius-xl);
   background: var(--surface);
   box-shadow: var(--shadow);
-}
-.composer-target {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 15px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-muted);
-}
-.composer-target label {
-  color: var(--text-3);
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-.composer-target select {
-  flex: 1;
-  border: 0;
-  background: transparent;
 }
 .composer-body {
   padding: 22px 22px 14px;
@@ -737,7 +741,7 @@ a:focus-visible {
   align-items: center;
   gap: 8px;
   color: var(--text-3);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .dynamic-dot {
   width: 7px;
@@ -782,7 +786,7 @@ a:focus-visible {
 }
 .run-progress {
   padding: 20px;
-  border-radius: 14px;
+  border-radius: var(--mt-radius-xl);
 }
 .run-progress-track {
   display: grid;
@@ -791,7 +795,7 @@ a:focus-visible {
 }
 .run-progress-track span {
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--mt-radius-pill);
   background: var(--surface-muted);
 }
 .run-progress-track span.complete {
@@ -831,7 +835,7 @@ a:focus-visible {
   margin-top: 42px;
   padding: 22px;
   border: 1px solid var(--danger-border);
-  border-radius: 14px;
+  border-radius: var(--mt-radius-xl);
   background: var(--danger-bg);
 }
 .danger-actions {
@@ -844,7 +848,7 @@ a:focus-visible {
   min-height: 240px;
   padding: 34px;
   border: 1px dashed var(--border);
-  border-radius: 14px;
+  border-radius: var(--mt-radius-xl);
   text-align: center;
   background: var(--surface);
 }
@@ -863,7 +867,7 @@ a:focus-visible {
   gap: 20px;
   padding: 16px;
   border: 1px solid var(--danger-border);
-  border-radius: 11px;
+  border-radius: var(--mt-radius-lg);
   color: var(--danger);
   background: var(--danger-bg);
   font-size: 11px;
@@ -882,9 +886,9 @@ a:focus-visible {
   display: flex;
   align-items: center;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 650;
 }
 .settings-nav a.active {
@@ -917,7 +921,7 @@ a:focus-visible {
 }
 .auth-environment {
   color: var(--text-3);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .auth-main {
   width: min(1040px, 100%);
@@ -951,7 +955,7 @@ a:focus-visible {
 .auth-card {
   padding: 28px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--mt-radius-xl);
   box-shadow: var(--shadow-overlay);
 }
 .auth-copy {
@@ -963,7 +967,7 @@ a:focus-visible {
 }
 .auth-copy p {
   color: var(--text-3);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .auth-footer {
   min-height: 70px;

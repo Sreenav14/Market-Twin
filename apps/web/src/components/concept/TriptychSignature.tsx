@@ -21,7 +21,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
     >
       {/* 3 Panels Row */}
       <div
-        className="flex flex-col lg:flex-row items-stretch lg:items-start justify-center gap-6"
+        className="flex flex-col lg:flex-row items-stretch justify-center gap-6"
         aria-hidden={compact ? undefined : true}
       >
         {/* Tom Panel */}
@@ -210,10 +210,9 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
 
         {/* Priya Panel (Phone width: 260px fixed on desktop) */}
         <div
-          className="triptych-panel mx-auto lg:mx-0"
+          className="triptych-panel triptych-panel-phone"
           style={{
             width: "100%",
-            maxWidth: "260px",
             backgroundColor: "var(--card)",
             border: "1px solid var(--line)",
             borderTop: "3px solid var(--priya)",

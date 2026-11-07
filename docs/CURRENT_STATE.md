@@ -1,5 +1,71 @@
 # Current MarketTwin state
 
+## Test results redesign — figures, not a text wall — 2026-11-06
+
+Owner verdict on a real run's export (MT-000113 · Sup_13, discovery-contract
+report): a wall of text, zero figures, verdict buried at the bottom, app
+chrome printed into the PDF. Rebuilt the results experience around the
+data-presentation research rules (length encoding only, counts on segments,
+direct labels instead of legends, denominator-first, conclusion titles,
+could-not-check as a first-class named bucket, no motion on a completed
+run). Commits `0c58fa9`, `adf35d2`, `8b5bcf8` (local only, NOT pushed).
+
+- Contract report: verdict panel first (word largest, basis sentence,
+  confirmed/coverage/journey figures), coverage as one stacked bar with
+  the untested remainder named, journey outcomes as an interactive stacked
+  bar — clicking a bucket filters the journey rows and findings sections
+  below, with the filter stated in words — findings in two permanent
+  counted groups (confirmed badged "Failed again on re-check"; seen-once
+  outlined, never merged), testers as identical small-multiple panels in
+  the lilac band with machine metric tokens ([checks_passed=6]) moved out
+  of the quotes into evidence lines. Quotes stay word-for-word otherwise;
+  no scores anywhere; impressions never touch the verdict.
+- The ledger report's Journey Outcomes now use the same StackedBar.
+- New print stylesheet: topbar/tab strip/menus/actions/skip link no
+  longer print; figures print with exact colours.
+- Data gap recorded, not faked: discovered-feature NAMES are not in the
+  report payload (counts only), so untested features beyond the approved
+  journeys are named by count; per-finding next actions and annotated
+  screenshots are not in the payload either.
+- Gates: web **224/224** (220 + 4 new), typecheck 0, production build 0.
+  Mocked-interception before/after renders (MT-000113-shaped fixture) in
+  the Hallmark audit folder; print verified via Playwright PDF (zero
+  chrome strings); sibling run routes at zero horizontal scroll.
+
+## Results wiring fix — harness_v1 journey.result publication — 2026-11-06
+
+Owner report: "the results are not coming." Root cause found by tracing the
+chain end to end and reproduced with failing tests first: evaluation
+requires one `journey.result` event per registered PersonaJourney
+(`evaluation_repository.list_journey_results` raises otherwise), but
+`execute_harness_run` published none — it wrote only `harness.*` state
+events. Every completed harness run therefore failed evaluation, retried
+with backoff, and was quarantined after 5 attempts; no Report/Finding rows
+were ever created, `GET /test-runs/{id}/results` returned 409 forever, and
+the web's results surfaces polled a waiting state that could never resolve.
+The other three modes were verified wired (legacy via
+`multi_persona_executor`, deep via its per-case emission, contract via its
+own evaluator).
+
+Fix (commit `b9b2536`, local only, NOT pushed): executed harness items
+publish `journey.result` from their deciding execution (attempt-2
+confirmation included), mirroring deep_run's emission — D-1 `timed_out`
+translation, verdict→outcome mapping, assertion outcomes as
+`criterion_evidence` with step ids. Safety-gated items and the
+bootstrap/discovery journey publish a skipped result backed by a real
+execution record finished `skipped`. Confirmation/resumed executions now
+record their real `attempt_number` from the board counter. Two new
+failing-first tests; the D-1 test updated for the bootstrap accounting
+record. Gates: orchestrator **613 passed / 3 skipped** (611 + 2 new),
+evaluation **137 passed**, control-api **380 / 10** — baselines held.
+
+Owner-side notes: harness runs already quarantined in a live database
+(`evaluation_quarantined_at` set) are NOT revived by this fix — clear
+`evaluation_quarantined_at`/`evaluation_attempts` for those runs or re-run
+the tests. Known wording warts left untouched: skipped harness journeys
+inherit the legacy "human assistance skipped" sentences in the report
+summary and journey error line; the payloads carry the true reason.
+
 ## Home — rename + research-led rebuild — 2026-11-06 (this session)
 
 The signed-in Dashboard is now **Home** (owner's rename; route path

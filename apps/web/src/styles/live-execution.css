@@ -37,15 +37,15 @@
 .hbv-scroll-controls button:hover:not(:disabled) { background: var(--surface-hover); }
 .hbv-scroll-controls button:disabled { color: var(--text-3); cursor: default; }
 .hbv-scroll-controls span { writing-mode: vertical-rl; align-self: center; font-size: 11px; color: var(--text-2); }
-.hbv-text-input { flex: 1 1 200px; min-width: 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--mt-radius-sm, 4px); background: var(--surface); color: var(--text); font-size: 14px; }
+.hbv-text-input { flex: 1 1 200px; min-width: 0; padding: 6px 10px; border: 1px solid var(--field-border); border-radius: var(--mt-radius-sm); background: var(--surface); color: var(--text); font-size: 14px; }
 .hbv-text-input:disabled { opacity: 0.4; cursor: not-allowed; }
 .hbv-leave-btn { flex-shrink: 0; }
 .human-browser-viewer .viewer-keyboard-help { font-size: 12px; color: var(--text-2); margin: 4px 0 0; padding: 0 12px; }
-.human-browser-viewer .viewer-keyboard-help kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; background: var(--surface-muted); }
+.human-browser-viewer .viewer-keyboard-help kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--mt-radius-sm); font-size: 11px; background: var(--surface-muted); }
 /* In the live-browser-column context, the viewer still takes full column width */
 .live-browser-column .human-browser-viewer { margin-top: 12px; }
 /* Active control section: full-width, not constrained by study-summary grid */
-.hbv-active-section { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: var(--mt-radius-sm, 6px); overflow: hidden; margin-top: 8px; }
+.hbv-active-section { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: var(--mt-radius-sm); overflow: hidden; margin-top: 8px; }
 .hbv-active-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .hbv-active-header__info { flex: 1 1 300px; min-width: 0; }
 .hbv-active-header__info h2 { margin: 0 0 6px; font-size: 16px; display: flex; align-items: center; gap: 6px; }
@@ -81,7 +81,7 @@
    status pills (same canonical words), and the facts rail sits in the
    card instead of floating in dead space. */
 .tester-journeys { display: grid; gap: 16px; margin-bottom: 24px; }
-.tester-journey { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(180px, 1fr) auto; gap: 24px; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-soft); }
+.tester-journey { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(180px, 1fr) auto; gap: 24px; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: var(--mt-radius-lg); box-shadow: var(--shadow-soft); }
 .tester-journey h3, .tester-journey p { margin: 0 0 8px; }
 .tester-journey p { color: var(--text-2); }
 .tester-journey-facts { display: grid; gap: 12px; align-content: start; margin: 0; }

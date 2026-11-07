@@ -5,7 +5,7 @@ import { ArrowLeft, Paperclip, Route, ScanSearch } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { SeverityBadge, StatusBadge } from "../../components/ui/StatusBadge";
 import { EmptyState } from "../../components/ui/StateViews";
 import { findingClassification } from "../../lib/results";
 import { api, type ArtifactAccess } from "../../lib/api";
@@ -121,7 +121,7 @@ export function FindingDetailPage() {
           <div className="finding-detail-grid">
             <article className="finding-article">
               <div className="finding-title-meta">
-                <StatusBadge status={finding.severity} />
+                <SeverityBadge severity={finding.severity} />
                 <span className="category-label">
                   {statusLabel(findingClassification(finding))} ·{" "}
                   {finding.category.replaceAll("_", " ")}

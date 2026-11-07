@@ -7,7 +7,7 @@
 .agent-flow-stage h3 { font-size: 14px; margin: 0 0 8px; }
 .agent-flow-stage > .muted { font-size: 12px; }
 .agent-prompt-list h2 { font-size: 15px; margin-bottom: 16px; }
-.agent-prompt-choice { width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px; border: 1px solid transparent; border-radius: 6px; color: var(--text); background: transparent; cursor: pointer; }
+.agent-prompt-choice { width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px; border: 1px solid transparent; border-radius: var(--mt-radius-sm); color: var(--text); background: transparent; cursor: pointer; }
 .agent-prompt-choice > * { min-width: 0; overflow-wrap: anywhere; }
 .agent-prompt-heading > div { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .agent-prompt-choice span { color: var(--text-2); font-size: 12px; }
@@ -36,13 +36,13 @@
    select-a-project hint is a quiet dashed panel — never a warning. */
 .agent-project-head { display: flex; align-items: center; gap: 10px; }
 .agent-project-head strong { font-size: 16px; }
-.agent-project-open { color: var(--flame-deep); font-weight: 500; font-size: 13.5px; }
+.agent-project-open { color: var(--flame-deep); font-weight: 500; font-size: 14px; }
 .agent-prompt-choice:hover .agent-project-open { text-decoration: underline; text-underline-offset: 3px; }
 .agent-project-hint {
   border: 1px dashed var(--mt-border-strong);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   padding: 16px 20px;
   color: var(--ink-2);
-  font-size: 14.5px;
+  font-size: 14px;
   margin-top: 20px;
 }

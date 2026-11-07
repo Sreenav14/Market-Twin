@@ -96,7 +96,7 @@
   margin-top: 28px;
 }
 
-.knowledge-result .section-block > h2 {
+.knowledge-result .section-block h2 {
   margin: 0 0 14px;
   font-size: 18px;
 }
@@ -111,7 +111,7 @@
   padding: 20px;
   margin: 0 0 24px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   background: var(--surface);
 }
 
@@ -174,7 +174,6 @@
 }
 
 .knowledge-result .knowledge-empty-section h2 {
-  font-size: 16px;
   margin-bottom: 6px;
 }
 
@@ -277,7 +276,7 @@
 .knowledge-evidence-content:focus-visible {
   outline: 3px solid var(--primary);
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: var(--mt-radius-sm);
 }
 
 .knowledge-evidence .row-primary span {
@@ -294,7 +293,7 @@
   margin: 0 0 16px;
   padding: 16px;
   background: var(--surface-muted);
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   font-size: 13px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

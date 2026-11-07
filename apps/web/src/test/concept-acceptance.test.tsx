@@ -59,9 +59,9 @@ describe("MarketTwin Arize-Inspired Concept Acceptance (§15, §15A)", () => {
       );
 
       expect(screen.getByText(/Not ready yet · Sat 31 Oct 2026/)).toBeInTheDocument();
-      expect(screen.getByText("2 fixed")).toBeInTheDocument();
-      expect(screen.getByText("1 still broken")).toBeInTheDocument();
-      expect(screen.getByText("1 new")).toBeInTheDocument();
+      expect(screen.getByText("2 of 3 fixed")).toBeInTheDocument();
+      expect(screen.getByText("1 of 3 still broken")).toBeInTheDocument();
+      expect(screen.getByText("1 new of 2 current problems")).toBeInTheDocument();
       expect(screen.getByText("Nothing needs you right now.")).toBeInTheDocument();
     });
 
@@ -301,12 +301,11 @@ describe("MarketTwin Arize-Inspired Concept Acceptance (§15, §15A)", () => {
       expect(screen.getByRole("button", { name: "Help Priya" })).toBeInTheDocument();
     });
 
-    it("Footer includes normative bottom bar credit line", () => {
+    it("Footer carries the plain copyright line, no concept credit", () => {
       render(<LandingPage data={CANONICAL_DEMO_DATA} />);
-      expect(
-        screen.getByText("© 2026 MarketTwin · Concept design")
-      ).toBeInTheDocument();
-      expect(screen.getByText("Developed by SJ")).toBeInTheDocument();
+      expect(screen.getByText("© 2026 MarketTwin")).toBeInTheDocument();
+      expect(screen.queryByText(/Concept design/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Developed by/)).not.toBeInTheDocument();
     });
   });
 });

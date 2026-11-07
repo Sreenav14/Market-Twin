@@ -8,7 +8,7 @@ execute_test_case. They measure driver mechanics, not model quality.
 import json
 import statistics
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from markettwin_database.models import TestRun
@@ -960,9 +960,129 @@ async def test_budget_exhausted_item_is_timed_out_on_the_record_and_could_not_ch
     assert run.configuration_snapshot["harness_stage"] == "done"
     assert len(seen) == 1
     finished = seen[0].finish_agent_execution.await_args_list
-    assert len(finished) == 2
-    assert finished[0].kwargs["status"] == "timed_out"
-    assert finished[1].kwargs["status"] == "completed"
+    # The bootstrap journey's skipped accounting record finishes first
+    # (journey-result wiring); the two item records follow, in order.
+    assert len(finished) == 3
+    assert finished[0].kwargs["status"] == "skipped"
+    assert finished[1].kwargs["status"] == "timed_out"
+    assert finished[2].kwargs["status"] == "completed"
+
+
+async def test_completed_harness_run_publishes_a_journey_result_for_every_journey(
+    monkeypatch,
+) -> None:
+    """Evaluation reads one journey.result per journey; a completed
+    harness run must publish them all, or no report can ever be built."""
+    run_id = uuid4()
+    run, session, request = _fixture_run(run_id)
+    calls: list[str] = []
+    events = _install_driver_doubles(monkeypatch, twin="broken", calls=calls)
+    # The driver publishes journey results through its own repository
+    # handle; route it into the same capture as the harness.* events.
+    monkeypatch.setattr(
+        harness_run, "RunEventRepository", lambda _: events, raising=False,
+    )
+    record = PersistedJourneyRecord(
+        uuid4(), uuid4(), uuid4(),
+        "browser_discovery__observe_starting_page", 10000,
+    )
+    monkeypatch.setattr(
+        harness_run, "PlanRepository",
+        lambda _: Mock(create_auth_bootstrap=AsyncMock(return_value=record)),
+    )
+    await harness_run.execute_harness_run(request=request, session=session)
+    published = [
+        call.kwargs
+        for call in events.create.await_args_list
+        if call.kwargs["event_type"] == "journey.result"
+    ]
+    by_journey = {entry["journey_id"]: entry for entry in published}
+    loaded = await load_harness_state(session, run_id)
+    assert loaded is not None
+    assert run.configuration_snapshot["harness_stage"] == "done"
+    for item in loaded.ordered_items():
+        entry = by_journey.get(UUID(str(item.journey_id)))
+        assert entry is not None, f"no journey.result published for {item.case_id}"
+        assert entry["execution_id"] is not None
+        payload = entry["payload"]
+        assert payload["journey_key"] == item.case_id
+        if item.status == "worked":
+            assert payload["status"] == "completed"
+            assert payload["outcome"] == "passed"
+        elif item.status == "broken":
+            assert payload["status"] == "completed"
+            assert payload["outcome"] == "failed"
+            unsatisfied = [
+                evidence for evidence in payload["criterion_evidence"]
+                if evidence["status"] == "unsatisfied"
+            ]
+            assert unsatisfied
+            assert all(evidence["evidence_step_ids"] for evidence in unsatisfied)
+        elif item.status == "could_not_check":
+            assert payload["outcome"] == "inconclusive"
+        elif item.status == "blocked":
+            assert payload["status"] == "policy_blocked"
+            assert payload["outcome"] is None
+    # The discovery/bootstrap journey carries persona ownership only; it
+    # is accounted for as skipped, never as a check that passed or failed.
+    bootstrap = by_journey.get(record.journey_id)
+    assert bootstrap is not None
+    assert bootstrap["execution_id"] is not None
+    assert bootstrap["payload"]["status"] == "skipped"
+
+
+async def test_safety_skipped_items_publish_skipped_journey_results(
+    monkeypatch,
+) -> None:
+    """An item the safety gate never exercises still owes evaluation a
+    journey.result (status skipped), backed by a real execution record."""
+    entries = (
+        _entry(1, "button", "Search"),
+        _entry(2, "button", "Delete account"),
+    )
+    controller = _FakeInventoryController(pages={INVENTORY_URL: entries},
+                                          start_url=INVENTORY_URL)
+    script = {"Check Search": _worked}
+    run_id = uuid4()
+    run, session, request = _inventory_run(run_id, start_url=INVENTORY_URL)
+    calls: list[str] = []
+    events = _install_inventory_doubles(monkeypatch, controller=controller,
+                                        script=script, calls=calls)
+    monkeypatch.setattr(
+        harness_run, "RunEventRepository", lambda _: events, raising=False,
+    )
+    executions = Mock(create_agent_execution=AsyncMock(),
+                      finish_agent_execution=AsyncMock(),
+                      create_browser_session=AsyncMock())
+    monkeypatch.setattr(harness_run, "ExecutionRepository", lambda _: executions)
+    await harness_run.execute_harness_run(request=request, session=session)
+    loaded = await load_harness_state(session, run_id)
+    assert loaded is not None
+    assert calls == ["Check Search"]
+    skipped = next(
+        item for item in loaded.ordered_items() if item.status == "not_checked"
+    )
+    published = [
+        call.kwargs
+        for call in events.create.await_args_list
+        if call.kwargs["event_type"] == "journey.result"
+    ]
+    entry = next(
+        (e for e in published if e["journey_id"] == UUID(str(skipped.journey_id))),
+        None,
+    )
+    assert entry is not None
+    assert entry["execution_id"] is not None
+    assert entry["payload"]["status"] == "skipped"
+    assert entry["payload"]["outcome"] is None
+    finishes = [
+        call.kwargs for call in executions.finish_agent_execution.await_args_list
+    ]
+    assert any(
+        finish["execution_id"] == entry["execution_id"]
+        and finish["status"] == "skipped"
+        for finish in finishes
+    )
 
 
 # === end of harness tests ===

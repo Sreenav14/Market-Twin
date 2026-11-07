@@ -230,7 +230,7 @@ export function TargetAuthorizationPage() {
               </div>
             ) : (
               <div className="panel-note" style={{ margin: "8px 0 0" }}>
-                No active authorization is on record for this target environment. Browser testers are strictly blocked from dispatching requests to this environment.
+                No active authorization is on record for this target. Browser testers are strictly blocked from dispatching requests to this target.
               </div>
             )}
           </section>
@@ -255,7 +255,7 @@ export function TargetAuthorizationPage() {
                   <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
                     {origin.include_subdomains
                       ? "Includes subdomains (legacy permission)"
-                      : "Exact host only"}
+                      : "Exact origin (subdomains blocked)"}
                   </span>
                 </div>
               ))}

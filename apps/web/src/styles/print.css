@@ -1,0 +1,56 @@
+/* Print: exporting a run page (above all Test results) yields the report,
+   not the app. Navigation, tab strips, menus and action buttons are chrome;
+   figures keep their colours so the printed page reads like the screen. */
+@media print {
+  .skip-link,
+  .mt-topbar,
+  .tab-strip,
+  .run-more-nav,
+  .study-utility,
+  .header-actions,
+  .dialog-overlay {
+    display: none !important;
+  }
+
+  body,
+  .mt-shell {
+    background: #fff !important;
+  }
+
+  .mt-page-content {
+    padding: 0 !important;
+  }
+
+  /* Sticky screen furniture must not pin itself over printed pages. */
+  .contract-coverage,
+  .contract-approval-footer {
+    position: static !important;
+  }
+
+  /* Figures are the report: print their colours exactly. */
+  .contract-report *,
+  .evidence-ledger *,
+  .tester-panel * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .contract-report .panel,
+  .evidence-ledger .ledger-paper,
+  .tester-panel,
+  .rf-journey-row {
+    break-inside: avoid;
+  }
+
+  /* Interactive-only controls inside a report are noise on paper. */
+  .contract-report button,
+  .evidence-ledger button {
+    display: none !important;
+  }
+
+  .contract-report a,
+  .evidence-ledger a {
+    color: inherit;
+    text-decoration: none;
+  }
+}

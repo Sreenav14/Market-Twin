@@ -48,7 +48,7 @@ export function NewTargetPage() {
   if (!canWriteWorkspace(workspace.role)) {
     return (
       <>
-        <PageHeader eyebrow="Target" title="Add environment" />
+        <PageHeader eyebrow="Target" title="Add target" />
         <div className="error-panel" role="alert">
           <div>
             <strong>Read-only workspace</strong>
@@ -115,8 +115,8 @@ export function NewTargetPage() {
     <>
       <PageHeader
         eyebrow="Application target"
-        title="Add environment"
-        description="Creating an environment does not authorize a browser to test it. You will review and authorize the execution scope in the next step."
+        title="Add target"
+        description="Creating a target does not authorize a browser to test it. You will review and authorize the execution scope in the next step."
       />
       <div className="two-column-layout">
         <form className="panel form-grid" onSubmit={submit} noValidate>
@@ -262,7 +262,7 @@ export function NewTargetPage() {
           </span>
           <h2>Two-step security boundary</h2>
           <p>
-            <strong>Creating an environment does not authorize testing.</strong>
+            <strong>Creating a target does not authorize testing.</strong>
           </p>
           <p style={{ marginTop: "10px" }}>
             MarketTwin derives the initial allowed origin from the base URL scheme, host, and port.

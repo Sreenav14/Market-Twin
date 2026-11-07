@@ -24,9 +24,11 @@ export function emptyFindingsSummary(results: RunResults) {
     }
   } else {
     const journeys = asRecord(payload.journeys);
-    addCount("Journeys evaluated", journeys.total);
+    // Outcome rows in the canonical words only (examination X-2: the
+    // legacy Passed/Failed dialect is gone). The journeys total is not
+    // repeated here — Summary's metrics rail already prints it once.
     for (const [outcome, value] of Object.entries(asRecord(journeys.outcome_counts))) {
-      const labels: Record<string, string> = { passed: "Passed outcomes", failed: "Failed outcomes", partial: "Partial outcomes", inconclusive: "Inconclusive outcomes", none: "Outcomes not recorded" };
+      const labels: Record<string, string> = { passed: "Worked", failed: "Broken", partial: "Partly done", inconclusive: "Could not check", none: "Not recorded" };
       if (labels[outcome]) addCount(labels[outcome], value);
     }
   }

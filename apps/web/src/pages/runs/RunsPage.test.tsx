@@ -10,7 +10,7 @@ import { RunsPage } from "./RunsPage";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const applications = ["Jev", "Other"].map((name, index) => ({
   id: `app-${index}`, name, status: "active", description: `${name} application`,
-  workspace_id: "workspace", created_by_user_id: "user",
+  workspace_id: "workspace", created_by_user_id: "user", latest_run_summary: null,
 })) satisfies Application[];
 const runs = (["completed", "awaiting_human"] as const).map((status, index) => ({
   id: `run-${index}`, application_id: "app-0", status,
@@ -37,7 +37,7 @@ it("opens applications first, then loads only the selected application's tests",
   mount();
   await screen.findByText("Jev");
   expect(list).not.toHaveBeenCalled();
-  await userEvent.type(screen.getByRole("searchbox", { name: "Find an application" }), "jev");
+  await userEvent.type(screen.getByRole("searchbox", { name: "Filter applications" }), "jev");
   expect(screen.queryByText("Other")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("link", { name: /Jev.*View tests/ }));
   await screen.findByText(/Checkout/);

@@ -5,7 +5,7 @@ import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { FindingListItem } from "../../components/markettwin/FindingListItem";
 import { CopyButton } from "../../components/markettwin/CopyButton";
 import { reportMetrics, sortFindings, findingClassification, isConfirmedFinding } from "../../lib/results";
-import { textValue, testBrief, statusLabel } from "../../lib/format";
+import { textValue, testBrief } from "../../lib/format";
 import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
 
 export function RunOverviewPage() {
@@ -42,7 +42,7 @@ export function RunOverviewPage() {
     <>
       {run.status_reason ? <p className="panel" role="status">{run.status_reason}</p> : null}
       {!["draft", "failed", "cancelled"].includes(run.status) ? (
-        <section className="run-action-required">
+        <section className={`run-action-required${awaitingApproval || pausedForHuman ? "" : " run-action-required--calm"}`}>
           <div>
             <h2>
               {awaitingApproval ? "Approve the tests" : pausedForHuman
@@ -51,6 +51,10 @@ export function RunOverviewPage() {
                 ? ready
                   ? "Test results ready"
                   : "Execution completed · Evaluation in progress"
+                : run.status === "queued"
+                ? "Waiting to start"
+                : run.status === "planning"
+                ? "Planning the test"
                 : "Watch this test execute"}
             </h2>
             <p>
@@ -60,6 +64,8 @@ export function RunOverviewPage() {
                 ? ready
                   ? "Review confirmed issues, observations, and supporting visual evidence."
                   : "Evaluation is currently compiling recorded journeys and step assertions."
+                : run.status === "queued" || run.status === "planning"
+                ? "The Watch page shows the test browser and recorded actions as soon as execution starts."
                 : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}
             </p>
           </div>
@@ -81,6 +87,8 @@ export function RunOverviewPage() {
               ? ready
                 ? "See test results"
                 : "Inspect Journeys"
+              : run.status === "queued" || run.status === "planning"
+              ? "Open Watch"
               : "Watch live"}
           </Link>
         </section>
@@ -113,7 +121,7 @@ export function RunOverviewPage() {
                   : pausedForHuman
                     ? "Not confirmed"
                   : index < stage
-                    ? "Complete"
+                    ? "Done"
                     : index === stage
                       ? "Current stage"
                       : "Up next"}
@@ -147,7 +155,7 @@ export function RunOverviewPage() {
               </div>
               <dl className="result-metrics">
                 <div><dt>Confirmed issues</dt><dd>{results.data.findings.filter(isConfirmedFinding).length}</dd></div>
-                <div><dt>Needs Verification</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Needs Verification").length}</dd></div>
+                <div><dt>Needs checking</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Needs Verification").length}</dd></div>
                 <div><dt>Execution issues</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Test execution issue").length}</dd></div>
                 <div>
                   <dt>Journeys evaluated</dt>
@@ -164,7 +172,6 @@ export function RunOverviewPage() {
               </dl>
             </div>
             {emptySummary?.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
-            <div className="outcome-counts" role="group" aria-label="Recorded journey outcomes">{metrics.outcomes.map(([outcome, count]) => <span key={outcome}>{outcome === "none" ? "Not recorded" : statusLabel(outcome)}: {count}</span>)}</div>
             {results.data.findings.length > 0 ? (
               <section className="section-block">
                 <div className="section-heading">

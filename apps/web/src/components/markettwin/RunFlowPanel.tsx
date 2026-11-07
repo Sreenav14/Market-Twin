@@ -14,7 +14,7 @@ export interface RunFlow {
 function FlowStep({ node, connected }: { node: RunFlow["nodes"][number]; connected: boolean }) {
   return <li className={connected ? "run-flow-node connected" : "run-flow-node"}>
     <span className="run-flow-node-label">{node.label}</span>
-    <StatusBadge status={node.status} />
+    <StatusBadge status={node.status} source="flow" />
     {["journey", "discovery"].includes(node.kind) ? <span className="run-flow-tools">Browser tools · Playwright</span> : null}
   </li>;
 }

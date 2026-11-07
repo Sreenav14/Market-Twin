@@ -64,12 +64,12 @@ export function IngestionPage() {
   return (
     <div className="knowledge-ingestion">
       <PageHeader
-        title="Ingestion"
+        title="Add knowledge"
         description="Upload a file or research a public link to generate draft knowledge and skills. Review and approve them before using them in a test."
       />
       {canWrite ? (
         <form className="panel form-grid form-card" onSubmit={(event) => void submit(event)} aria-busy={busy}>
-          <h2>Ingest knowledge</h2>
+          <h2>Add a source</h2>
 
           <div className="source-choice-group">
             <span className="field-label" id="source-type-label">Source type</span>
@@ -219,7 +219,7 @@ export function IngestionPage() {
 
           <div className="form-actions">
             <Button type="submit" disabled={(sourceType === "file" ? !file : !url.trim()) || !name.trim() || !role || busy}>
-              {busy ? <><Spinner /> Saving source…</> : "Ingest knowledge"}
+              {busy ? <><Spinner /> Saving source…</> : "Add knowledge"}
             </Button>
           </div>
         </form>

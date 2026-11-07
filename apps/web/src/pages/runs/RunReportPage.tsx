@@ -8,7 +8,7 @@ import {
 import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { SeverityBadge } from "../../components/ui/StatusBadge";
 import { RunAssessmentView } from "../../components/markettwin/RunAssessmentView";
 import { FeatureCases } from "../../components/markettwin/FeatureCases";
 import { ReportAnalytics, ReportNavigation, reportView } from "../../components/markettwin/ReportIntelligence";
@@ -23,6 +23,28 @@ import {
 import type { Finding } from "../../lib/api";
 import { ContractReport } from "./ContractReport";
 import { statusLabel } from "../../lib/format";
+import { StackedBar, type BarSegment } from "../../components/markettwin/ResultFigures";
+import { statusEntry } from "../../lib/status";
+import type { JourneyOutcome } from "../../lib/api";
+
+// Fixed order everywhere outcomes are shown: worked, broken, partly, could not check.
+const OUTCOME_ORDER: readonly string[] = ["passed", "failed", "partial", "inconclusive", "none"];
+function outcomeSegments(outcomes: [string, number][]): BarSegment[] {
+  const byKey = new Map(outcomes);
+  const ordered = OUTCOME_ORDER.filter((key) => byKey.has(key));
+  const extra = outcomes.map(([key]) => key).filter((key) => !OUTCOME_ORDER.includes(key));
+  return [...ordered, ...extra].map((key) => {
+    const known = key !== "none" && ["passed", "failed", "partial", "inconclusive"].includes(key)
+      ? statusEntry("journeyOutcome", key as JourneyOutcome)
+      : null;
+    return {
+      key,
+      word: key === "none" ? "Not reported" : known ? known.word : statusLabel(key),
+      count: byKey.get(key) ?? 0,
+      tone: known ? known.tone : "notchecked",
+    };
+  });
+}
 
 function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string }) {
   const classification = findingClassification(finding);
@@ -30,7 +52,7 @@ function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string
   return (
     <li className="ledger-finding-card">
       <div className="ledger-finding-meta">
-        <StatusBadge status={finding.severity} />
+        <SeverityBadge severity={finding.severity} />
         <span>{statusLabel(classification)} · {finding.category.replaceAll("_", " ")}</span>
       </div>
       <h4>
@@ -196,14 +218,11 @@ export function RunReportPage() {
                 An unfinished journey is neither a pass nor a confirmed product bug.
               </p>
               {metrics.outcomes.length > 0 ? (
-                <dl className="ledger-outcomes">
-                  {metrics.outcomes.map(([outcome, count]) => (
-                    <div key={outcome} className="ledger-outcome-card">
-                      <dt>{outcome === "none" ? "Not reported" : statusLabel(outcome)}</dt>
-                      <dd>{count}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <StackedBar
+                  total={metrics.outcomes.reduce((sum, [, outcomeCount]) => sum + outcomeCount, 0)}
+                  unit="journeys"
+                  segments={outcomeSegments(metrics.outcomes)}
+                />
               ) : (
                 <p className="ledger-fineprint">Outcome counts are not available.</p>
               )}
@@ -334,7 +353,6 @@ export function RunReportPage() {
           {/* Assessment Section */}
           <section id="report-assessment" className="ledger-lower">
             <span className="ledger-kicker">05 / Synthesis</span>
-            <h3>Evaluator Assessment</h3>
             <RunAssessmentView assessment={data.report.payload.assessment} runId={run.id} />
           </section>
 

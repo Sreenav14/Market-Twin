@@ -1,5 +1,6 @@
 """Application HTTP endpoints."""
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -16,6 +17,7 @@ from markettwin_control_api.api.permissions import (
 from markettwin_control_api.persistence.repositories import (
     ApplicationRecord,
     ApplicationRepository,
+    LatestRunSummaryRecord,
     WorkspaceAccess,
     WorkspaceRepository,
 )
@@ -68,6 +70,20 @@ class CreateApplicationRequest(BaseModel):
         return cleaned or None
 
 
+class LatestRunSummaryResponse(BaseModel):
+    """The application's latest completed run that produced a report.
+
+    The verdict is the report's stored market verdict, passed through
+    verbatim; it is never inferred from the run's status. Null when the
+    report carries no market verdict.
+    """
+
+    latest_run_id: UUID
+    latest_run_status: str
+    verdict: str | None
+    finished_at: datetime | None
+
+
 class ApplicationResponse(BaseModel):
     """Application returned to the frontend."""
 
@@ -77,10 +93,12 @@ class ApplicationResponse(BaseModel):
     name: str
     description: str | None
     status: str
+    latest_run_summary: LatestRunSummaryResponse | None = None
 
 
 def application_response(
     application: ApplicationRecord,
+    latest_run_summary: LatestRunSummaryRecord | None = None,
 ) -> ApplicationResponse:
     """Convert repository data into an HTTP response."""
 
@@ -91,6 +109,16 @@ def application_response(
         name=application.name,
         description=application.description,
         status=application.status,
+        latest_run_summary=(
+            LatestRunSummaryResponse(
+                latest_run_id=latest_run_summary.run_id,
+                latest_run_status=latest_run_summary.run_status,
+                verdict=latest_run_summary.verdict,
+                finished_at=latest_run_summary.finished_at,
+            )
+            if latest_run_summary is not None
+            else None
+        ),
     )
 
 
@@ -201,8 +229,19 @@ async def list_applications(
                 workspace_id=workspace_id
             )
 
+            summaries = await repository.latest_run_summaries(
+                workspace_id=workspace_id,
+                application_ids=[
+                    application.application_id
+                    for application in applications
+                ],
+            )
+
     return [
-        application_response(application)
+        application_response(
+            application,
+            summaries.get(application.application_id),
+        )
         for application in applications
     ]
 

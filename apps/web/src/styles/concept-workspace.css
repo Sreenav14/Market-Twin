@@ -17,14 +17,14 @@
 .concept-workspace :is(.panel, .empty-state, .state-panel, .error-panel, .run-create-zone) { background: var(--card); border: 1px solid var(--line); border-radius: 0; box-shadow: none; }
 .concept-workspace :is(.panel, .empty-state) h2 { color: var(--ink); font-family: var(--font-ui); font-size: 22px; line-height: 30px; font-weight: 650; }
 .concept-workspace .panel :is(.panel, .state-panel) { border: 0; background: transparent; }
-.concept-workspace :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { color: var(--ink); background: var(--card); border-color: var(--line); border-radius: 0; box-shadow: none; font-family: var(--font-ui); }
+.concept-workspace :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { color: var(--ink); background: var(--card); border-color: var(--field-border); border-radius: 0; box-shadow: none; font-family: var(--font-ui); }
 .concept-workspace :where(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .concept-workspace :where(.primary-button, .secondary-button, .danger-button) { border-radius: 0; min-height: 44px; box-shadow: none; font-family: var(--font-ui); }
 .concept-workspace :is(.text-input, .text-select, .text-area, .primary-button, .secondary-button, .danger-button), .concept-workspace .study-composer :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: 0; box-shadow: none; }
 /* Hallmark signed-in SI-6: badges keep their tone border in the
    workspace — border:0 here plus a fill identical to the row hover
    tint made neutral pills melt into tinted rows. */
-.concept-workspace .status-badge { min-height: 24px; padding: 4px 12px; gap: 6px; font-size: 13px; line-height: 18px; border-radius: 999px; }
+.concept-workspace .status-badge { min-height: 24px; padding: 4px 12px; gap: 6px; font-size: 13px; line-height: 18px; border-radius: var(--mt-radius-pill); }
 .concept-workspace .status-badge .status-dot { display: inline; width: auto; height: auto; background: none; border-radius: 0; font-size: 12px; line-height: 1; }
 .concept-workspace .status-success { color: var(--works); background: var(--works-tint); }
 .concept-workspace .status-danger { color: var(--broken); background: var(--broken-tint); }
@@ -36,7 +36,7 @@
 .concept-workspace :is(.data-row, .deletable-row) { border-radius: 0; box-shadow: none; border-color: var(--line); }
 /* Hallmark signed-in SI-15: lists take the panel radius (10px), ending
    the square-list / round-panel mix. The list already clips overflow. */
-.concept-workspace .data-list { border-radius: 10px; box-shadow: none; border-color: var(--line); }
+.concept-workspace .data-list { border-radius: var(--mt-radius-lg); box-shadow: none; border-color: var(--line); }
 .concept-workspace :where(pre, code) { overflow-wrap: anywhere; }
 .concept-workspace :where(.page-header-copy, .page-action, .panel, .form-grid > *, .settings-content) { min-width: 0; }
 @media (max-width: 639px) {
@@ -71,15 +71,15 @@
    strip (alert-tinted only when something needs the owner), and the
    longest-waiting run is a tinted feature card whose action is the
    flame primary — the urgent thing finally looks urgent. */
-.concept-live-panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-soft); padding: 24px; }
+.concept-live-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--mt-radius-lg); box-shadow: var(--shadow-soft); padding: 24px; }
 .concept-live-panel .concept-live-row:last-child { border-bottom: 0; padding-bottom: 4px; }
 .concept-live-panel h2 { margin-bottom: 8px; }
 .concept-live-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
-.concept-live-stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-soft); padding: 16px 20px; display: grid; gap: 2px; }
+.concept-live-stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--mt-radius-lg); box-shadow: var(--shadow-soft); padding: 16px 20px; display: grid; gap: 2px; }
 .concept-live-stat .font-stat-numeral { font-size: 32px; line-height: 38px; }
 .concept-live-stat .font-body-small { color: var(--ink-2); }
 .concept-live-stat.is-alert { background: var(--couldnot-tint); border-color: var(--warning-border); }
-.concept-live-feature { display: flex; align-items: center; justify-content: space-between; gap: 20px; background: var(--couldnot-tint); border: 1px solid var(--warning-border); border-radius: 10px; padding: 20px 24px; margin: 12px 0 4px; }
+.concept-live-feature { display: flex; align-items: center; justify-content: space-between; gap: 20px; background: var(--couldnot-tint); border: 1px solid var(--warning-border); border-radius: var(--mt-radius-lg); padding: 20px 24px; margin: 12px 0 4px; }
 .concept-live-feature h3 { margin: 0 0 6px; overflow-wrap: anywhere; }
 .concept-live-feature p { color: var(--ink-2); margin: 0; }
 .concept-live-feature > .primary-button { flex-shrink: 0; display: inline-flex; align-items: center; text-decoration: none; }
@@ -106,7 +106,7 @@
 .concept-live-result p { color: var(--ink-2); margin: 8px 0 0; }
 .concept-live-result > .text-link { flex-shrink: 0; }
 .concept-live-more { margin-top: 10px; }
-.concept-live-more > summary { cursor: pointer; color: var(--flame-deep); font-size: 14.5px; font-weight: 500; min-height: 32px; display: inline-flex; align-items: center; }
+.concept-live-more > summary { cursor: pointer; color: var(--flame-deep); font-size: 14px; font-weight: 500; min-height: 32px; display: inline-flex; align-items: center; }
 .concept-live-more > summary:hover { text-decoration: underline; }
 .concept-live-more > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .concept-live-filter { margin: 4px 0 8px; }
@@ -123,7 +123,7 @@
   from { background-color: var(--notchecked-tint); }
   to { background-color: transparent; }
 }
-.mt-change { animation: mt-change-settle 900ms ease-out; border-radius: 6px; }
+.mt-change { animation: mt-change-settle 900ms ease-out; border-radius: var(--mt-radius-sm); }
 @media (prefers-reduced-motion: reduce) {
   .mt-change { animation: none; }
 }
@@ -158,4 +158,165 @@
   .mt-task-table td:nth-child(2)::before { content: "Tom · Expert"; }
   .mt-task-table td:nth-child(3)::before { content: "Maya · First-time user"; }
   .mt-task-table td:nth-child(4)::before { content: "Priya · Impatient mobile user"; }
+}
+
+/* ---------- The Briefing Desk (Home, research §4.5) ----------
+   One column, ~880px. Every number and sentence on it is a field
+   rendering, a verbatim quote, or fixed chrome. */
+.desk { max-width: 880px; margin-inline: auto; padding-bottom: 32px; color: var(--ink); display: grid; gap: 30px; align-content: start; }
+.desk-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.desk-heading h1 { margin: 0; }
+.desk-heading-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.desk-kbd { font-family: var(--font-mono, monospace); font-size: 11px; border: 1px solid var(--line); border-radius: var(--mt-radius-sm); padding: 1px 5px; background: var(--surface-muted); }
+.desk-section-label { font-family: var(--font-mono, monospace); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 14px; }
+.desk-eyebrow { font-family: var(--font-mono, monospace); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 10px; }
+
+/* Masthead */
+.desk-masthead { border-top: 2px solid var(--ink); padding-top: 22px; }
+.desk-masthead-ready { background: var(--works-tint); border: 1px solid var(--line); border-top: 3px solid var(--works); border-radius: var(--mt-radius-lg); padding: 22px; }
+.desk-masthead-failed { border-top-color: var(--ink-2); }
+.desk-masthead-compact .desk-verdict-word { font-size: 30px; }
+.desk-verdict-word { font-family: var(--font-display, serif); font-size: 56px; line-height: 1.05; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 14px; color: var(--ink); }
+.desk-outcome-bar { display: flex; gap: 3px; margin: 6px 0 14px; }
+.desk-outcome-segment { position: relative; display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 9px 12px; border-radius: var(--mt-radius-md); font-size: 13px; font-weight: 550; color: var(--ink); text-decoration: none; white-space: nowrap; overflow: hidden; }
+.desk-outcome-fill { position: absolute; inset: 0; border-radius: var(--mt-radius-md); transform-origin: left center; }
+.desk-outcome-fill.tone-works { background: var(--works-tint); }
+.desk-outcome-fill.tone-broken { background: var(--broken-tint); }
+.desk-outcome-fill.tone-couldnot { background: var(--couldnot-tint); }
+.desk-outcome-fill.tone-notchecked { background: var(--notchecked-tint); }
+.desk-outcome-label { position: relative; display: inline-flex; align-items: baseline; gap: 6px; }
+.desk-outcome-count { font-weight: 700; font-size: 15px; }
+.desk-outcome-line { font-size: 15px; margin: 6px 0 14px; }
+.desk-basis { font-size: 16px; line-height: 1.55; color: var(--ink); margin: 0 0 16px; max-width: 68ch; }
+.desk-evidence { background: var(--surface-muted); border-left: 3px solid var(--flame); border-radius: 0 var(--mt-radius-md) var(--mt-radius-md) 0; padding: 14px 16px; }
+.desk-evidence-title { font-weight: 650; font-size: 15px; margin: 0 0 4px; }
+.desk-evidence-detail { font-size: 13px; color: var(--ink-2); margin: 0; }
+.desk-previous { font-size: 15px; margin: 0; }
+
+/* Needs-you tray */
+.desk-tray-cards { display: grid; gap: 12px; }
+.desk-speech-card { position: relative; border: 1px solid var(--line); border-radius: var(--mt-radius-lg); background: var(--card); padding: 16px 18px; display: grid; gap: 8px; justify-items: start; }
+.desk-card-eyebrow { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0; }
+.desk-card-quote { font-size: 16px; line-height: 1.5; margin: 0; }
+blockquote.desk-card-quote { quotes: "“" "”"; }
+.desk-card-context { font-size: 13px; color: var(--ink-2); margin: 0; }
+.desk-calm { font-size: 15px; color: var(--ink-2); margin: 0; }
+
+/* Live strip */
+.desk-strip { border: 1px solid var(--line); border-radius: var(--mt-radius-lg); padding: 16px 18px; display: grid; gap: 16px; }
+.desk-strip-promoted { border-top: 3px solid var(--flame); }
+.desk-strip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.desk-strip-head .desk-section-label { margin: 0; }
+.desk-updated { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-2); }
+.desk-strip-run-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; font-size: 14px; }
+.desk-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-2); flex-shrink: 0; }
+.desk-dot.tone-info { background: var(--info); }
+.desk-dot.tone-works { background: var(--works); }
+.desk-dot.tone-broken { background: var(--broken); }
+.desk-dot.tone-couldnot { background: var(--couldnot); }
+.desk-dot.tone-notchecked { background: var(--notchecked); }
+.desk-step-bars { display: grid; gap: 6px; }
+.desk-step-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.desk-step-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desk-step-track { height: 6px; border-radius: var(--mt-radius-pill); background: var(--notchecked-tint); overflow: hidden; }
+.desk-step-fill { display: block; width: 100%; height: 100%; background: var(--flame); border-radius: var(--mt-radius-pill); transform-origin: left center; transition: transform var(--dur-bar) var(--ease-change); }
+.desk-step-count { color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+.desk-strip-counts { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
+
+/* Voices */
+.desk-voices { border-radius: var(--mt-radius-lg); padding: 18px; display: grid; gap: 14px; }
+.desk-voice { margin: 0; }
+.desk-voice p { font-family: var(--font-display, serif); font-size: 18px; line-height: 1.45; margin: 0 0 4px; }
+.desk-voice cite { font-style: normal; font-size: 13px; color: var(--ink-2); }
+
+/* Apps rail + archive */
+.desk-app-row, .desk-archive-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.desk-app-row { justify-content: flex-start; }
+.desk-app-copy { flex: 1; min-width: 0; }
+.desk-app-copy h3 { margin: 0; }
+.desk-app-copy p { margin: 2px 0 0; }
+.desk-app-tile { width: 38px; height: 38px; border-radius: var(--mt-radius-md); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: var(--ink); flex-shrink: 0; }
+.desk-archive-row h3 { margin: 0 0 4px; }
+
+/* Welcome + example (state A/B) */
+.desk-welcome { border: 1px solid var(--line); border-radius: var(--mt-radius-lg); padding: 24px; display: grid; gap: 12px; justify-items: start; }
+.desk-welcome h2, .desk-welcome p { margin: 0; }
+.desk-example { border: 1px dashed var(--line); border-radius: var(--mt-radius-lg); padding: 20px; }
+.desk-example-label { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 16px; }
+.desk-example .desk-verdict-word { font-size: 40px; }
+.desk-footer-line { font-size: 13px; color: var(--ink-2); margin: 0; }
+
+@media (max-width: 640px) {
+  .desk-verdict-word { font-size: 40px; }
+  .desk-outcome-bar { flex-wrap: wrap; }
+  .desk-outcome-segment { flex: 1 1 auto !important; }
+  .desk-step-row { grid-template-columns: minmax(70px, 110px) 1fr auto; }
+}
+
+/* ---------- Desk motion (home-motion research §4/§5) ----------
+   The honest motion system. Five rules, enforced here and in
+   deskMotion.tsx: nothing animates on arrival; only real changes move;
+   one register (Carbon productive tokens, tokens.css); exactly one
+   attention event (a new Needs-you item); reduced motion = the same
+   information with no travel. Transform and opacity only — a length is
+   never animated through layout, and no animation on this page loops. */
+
+/* Section zones: appear (state change while present) / leave (fade-through).
+   An empty zone renders display:contents so it never becomes a grid item. */
+.desk-zone-empty { display: contents; }
+.desk-appear { opacity: 0; transition: opacity var(--dur-enter) var(--ease-enter); }
+.desk-appear.desk-appear-in { opacity: 1; }
+.desk-zone-leaving { opacity: 0; transition: opacity var(--dur-exit) var(--ease-exit); }
+
+/* Masthead crossfade: the leaving copy overlays while the new content
+   fades in under it. Identical for every verdict — motion never
+   differentiates Ready / Not ready yet / Can't tell yet / Failed. */
+.desk-swap { position: relative; }
+.desk-swap-leaving { position: absolute; inset: 0 auto auto 0; width: 100%; opacity: 1; transition: opacity var(--dur-exit) var(--ease-exit); pointer-events: none; }
+.desk-swap-leaving.desk-swap-leaving-out { opacity: 0; }
+.desk-swap-enter { opacity: 0; transition: opacity var(--dur-enter) var(--ease-enter); }
+.desk-swap-enter.desk-swap-enter-in { opacity: 1; }
+
+/* Generic one-shot entrances (tray cards lift 4px; archive rows fade
+   only). The from-state is applied at mount; deskMotion flips
+   .desk-entered next frame; classes are dropped once settled. */
+.desk-enter { opacity: 0; transition: opacity var(--dur-enter) var(--ease-enter), transform var(--dur-enter) var(--ease-enter); }
+.desk-enter-lift { transform: translateY(4px); }
+.desk-enter.desk-entered { opacity: 1; transform: translateY(0); }
+
+/* The one attention event: a new Needs-you card. A flame wash decays
+   over ~600ms; a static flame edge then remains until the item leaves
+   the tray. No pulse, no repeat, no badge. */
+.desk-speech-card.desk-enter::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--flame); opacity: 0.14; pointer-events: none; transition: opacity 600ms var(--ease-change); }
+.desk-speech-card.desk-enter.desk-entered::before { opacity: 0; }
+.desk-card-new { box-shadow: inset 3px 0 0 var(--flame); }
+
+/* Archive rows leaving on a filter change (user-driven only; a poll
+   never animates an exit). */
+.desk-row-leaving { opacity: 0; transition: opacity var(--dur-exit) var(--ease-exit); }
+
+/* Controls: hover is colour-only at the quick duration; press is a
+   0.98 scale on real buttons; the focus ring is never transitioned
+   (outline is in no transition list, here or globally). */
+.desk .primary-button, .desk .secondary-button, .desk .text-link, .desk .segmented-control-item {
+  transition: background-color var(--dur-quick) var(--ease-change), border-color var(--dur-quick) var(--ease-change), color var(--dur-quick) var(--ease-change), transform var(--dur-quick) var(--ease-change);
+}
+.desk button:active, .desk .primary-button:active, .desk .secondary-button:active { transform: scale(0.98); }
+
+/* While the document is hidden, every change applies instantly: the
+   page adds .desk-suspended so no transition can queue up and replay
+   when the tab becomes visible again. */
+.desk-suspended *, .desk-suspended *::before, .desk-suspended *::after { transition: none !important; }
+
+/* Reduced motion: the same information, statically. Transitions are
+   effectively zeroed (state changes still happen; nothing travels),
+   and deskMotion renders end states directly — bars snap to their
+   true length and the tray cue is the persistent static flame edge. */
+@media (prefers-reduced-motion: reduce) {
+  .desk *, .desk *::before, .desk *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

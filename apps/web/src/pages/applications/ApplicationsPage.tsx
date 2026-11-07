@@ -110,7 +110,7 @@ export function ApplicationsPage() {
               <div className="search-field">
                 <input
                   type="search"
-                  placeholder="Filter applications by name or description…"
+                  placeholder="Filter applications…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   aria-label="Filter applications"

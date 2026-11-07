@@ -80,7 +80,7 @@ export function TargetOverviewPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Target environment"
+        eyebrow="Target"
         title={target.name}
         description={`${target.environment.toUpperCase()} · ${target.base_url}`}
         action={
@@ -158,12 +158,6 @@ export function TargetOverviewPage() {
               </dd>
             </div>
             <div>
-              <dt>Authorization status</dt>
-              <dd>
-                <StatusBadge status={authBadgeStatus} />
-              </dd>
-            </div>
-            <div>
               <dt>Authentication</dt>
               <dd>
                 {target.requires_auth
@@ -202,14 +196,7 @@ export function TargetOverviewPage() {
           </dl>
 
           <div style={{ marginTop: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            {authorized && canWrite ? (
-              <Link
-                to={`/applications/${target.application_id}/runs/new?target=${encodeURIComponent(target.id)}`}
-                className="primary-button"
-              >
-                <Icon name="plus" size={16} /> Start a test against target
-              </Link>
-            ) : !authorized && canAuthorize ? (
+            {!authorized && canAuthorize ? (
               <Link
                 to={`/targets/${target.id}/authorization`}
                 className="primary-button"
@@ -253,7 +240,7 @@ export function TargetOverviewPage() {
                 <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
                   {origin.include_subdomains
                     ? "Includes subdomains (legacy)"
-                    : "Exact host only"}
+                    : "Exact origin (subdomains blocked)"}
                 </span>
               </div>
             ))}

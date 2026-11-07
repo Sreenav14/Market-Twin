@@ -46,7 +46,7 @@ async function selectSource() {
   await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
   // jsdom does not validate a FileList populated by userEvent; real clicks are covered by Playwright.
   await act(async () => {
-    fireEvent.submit(screen.getByRole("button", { name: "Ingest knowledge" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Add knowledge" }).closest("form")!);
   });
   return user;
 }
@@ -101,7 +101,7 @@ describe("workspace ingestion", () => {
     await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
     await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
     await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
-    await user.click(screen.getByRole("button", { name: "Ingest knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Add knowledge" }));
     expect(ingest).toHaveBeenCalledWith("workspace", "https://example.com/docs", "Product docs", ["product_knowledge"]);
     expect(await screen.findByText("A documented feature")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve knowledge" })).toBeDisabled();
@@ -122,7 +122,7 @@ describe("workspace ingestion", () => {
     await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
     await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
     await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
-    await user.click(screen.getByRole("button", { name: "Ingest knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Add knowledge" }));
     expect(await screen.findByRole("progressbar", { name: "Ingestion progress" })).toBeInTheDocument();
     expect(screen.getByText("Researching public pages — 0 inspected, 0 inaccessible.")).toBeInTheDocument();
     expect(screen.getByText(/You can leave this page/)).toBeInTheDocument();
@@ -149,9 +149,9 @@ describe("workspace ingestion", () => {
     renderPage();
     await selectSource();
     expect(await screen.findByRole("alert")).toHaveTextContent("Knowledge processing is unavailable.");
-    expect(screen.getByRole("button", { name: "Ingest knowledge" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add knowledge" })).toBeEnabled();
     await act(async () => {
-      fireEvent.submit(screen.getByRole("button", { name: "Ingest knowledge" }).closest("form")!);
+      fireEvent.submit(screen.getByRole("button", { name: "Add knowledge" }).closest("form")!);
     });
     expect(ingest).toHaveBeenCalledTimes(2);
   });
@@ -211,7 +211,7 @@ describe("workspace ingestion", () => {
     const rename = vi.spyOn(api, "renameIngestion").mockResolvedValue({ ...approved, name: "Shared product rules" });
     const attach = vi.spyOn(api, "attachIngestion").mockResolvedValue({ ...approved, name: "Shared product rules", application_ids: ["app"] });
     renderPage("member", "/knowledge/review/entry", approved);
-    vi.mocked(api.listApplications).mockResolvedValue([{ id: "app", workspace_id: "workspace", created_by_user_id: "user", name: "Demo application", description: null, status: "active" }]);
+    vi.mocked(api.listApplications).mockResolvedValue([{ id: "app", workspace_id: "workspace", created_by_user_id: "user", name: "Demo application", description: null, status: "active", latest_run_summary: null }]);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Rename" }));
     await user.clear(screen.getByLabelText("Knowledge set name"));
@@ -228,7 +228,7 @@ describe("workspace ingestion", () => {
 
   it("keeps knowledge test creation unavailable to viewers", async () => {
     renderPage("viewer", "/knowledge/review/entry", { ...entry, status: "approved", application_ids: ["app"] });
-    vi.mocked(api.listApplications).mockResolvedValue([{ id: "app", workspace_id: "workspace", created_by_user_id: "user", name: "Storefront", description: null, status: "active" }]);
+    vi.mocked(api.listApplications).mockResolvedValue([{ id: "app", workspace_id: "workspace", created_by_user_id: "user", name: "Storefront", description: null, status: "active", latest_run_summary: null }]);
     expect(await screen.findByRole("checkbox", { name: "Storefront" })).toBeDisabled();
     expect(screen.queryByRole("link", { name: /Start a test/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save applications" })).not.toBeInTheDocument();

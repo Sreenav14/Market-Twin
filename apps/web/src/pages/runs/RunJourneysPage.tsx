@@ -6,7 +6,7 @@ import { api, request } from "../../lib/api";
 import { terminalTestStatuses } from "../../lib/results";
 import { journeyBlocker, journeyIdentity } from "../../lib/journeyPresentation";
 import { groupJourneys } from "../../lib/testerWork";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { ExecutionBadge, OutcomeBadge } from "../../components/ui/StatusBadge";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { FeatureCases } from "../../components/markettwin/FeatureCases";
@@ -151,7 +151,7 @@ export function RunJourneysPage() {
                         </p>
                       </div>
                       <div className="run-record-badges">
-                        <span>Execution <StatusBadge status={journey.execution_status || "not started"} /></span>
+                        <span>Execution <ExecutionBadge status={journey.execution_status || "not started"} /></span>
                       </div>
                     </div>
 
@@ -168,7 +168,7 @@ export function RunJourneysPage() {
                         <ArrowUpRight size={13} aria-hidden="true" />
                       </Link>
                       <Link className="text-link" to={`/runs/${run.id}/human-action`}>
-                        Human Assistance history
+                        Human assistance history
                       </Link>
                     </div>
 
@@ -260,8 +260,8 @@ export function RunJourneysPage() {
                       </div>
 
                       <div className="run-record-badges">
-                        <span>Execution <StatusBadge status={journey.execution_status || "not started"} /></span>
-                        <span>Outcome <StatusBadge status={journey.outcome || "not recorded"} /></span>
+                        <span>Execution <ExecutionBadge status={journey.execution_status || "not started"} /></span>
+                        <span>Outcome <OutcomeBadge outcome={journey.outcome || "not recorded"} /></span>
                       </div>
                     </div>
 
@@ -278,7 +278,7 @@ export function RunJourneysPage() {
                         <ArrowUpRight size={13} aria-hidden="true" />
                       </Link>
                       <Link className="text-link" to={`/runs/${run.id}/human-action`}>
-                        Human Assistance history
+                        Human assistance history
                       </Link>
                     </div>
 
@@ -405,8 +405,8 @@ export function RunJourneysPage() {
                         </div>
 
                         <div className="run-record-badges">
-                          <span>Execution <StatusBadge status={journey.execution_status || "not started"} /></span>
-                          <span>Outcome <StatusBadge status={journey.outcome || "not recorded"} /></span>
+                          <span>Execution <ExecutionBadge status={journey.execution_status || "not started"} /></span>
+                          <span>Outcome <OutcomeBadge outcome={journey.outcome || "not recorded"} /></span>
                         </div>
                       </div>
 
@@ -425,7 +425,7 @@ export function RunJourneysPage() {
                           <ArrowUpRight size={13} aria-hidden="true" />
                         </Link>
                         <Link className="text-link" to={`/runs/${run.id}/human-action`}>
-                          Human Assistance history
+                          Human assistance history
                         </Link>
                       </div>
 

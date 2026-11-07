@@ -110,7 +110,7 @@
   color: var(--primary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
 }
 
 .signin-workflow strong {
@@ -216,9 +216,9 @@
   font-size: 15px;
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  border: 1px solid var(--field-border);
+  border-radius: var(--mt-radius-md);
+  transition: border-color var(--dur-quick) var(--ease-change);
 }
 
 .signin-input:focus,
@@ -248,7 +248,7 @@
   color: var(--danger);
   background: var(--danger-bg);
   border: 1px solid var(--danger-border);
-  border-radius: 5px;
+  border-radius: var(--mt-radius-sm);
   padding: 6px 10px;
   width: 100%;
   line-height: 1.4;
@@ -265,7 +265,7 @@
   background: var(--primary);
   color: var(--on-primary);
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--mt-radius-md);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -280,7 +280,6 @@
 
 .signin-submit-btn:disabled,
 .signin-form .ui-button:disabled {
-  opacity: 0.6;
   cursor: not-allowed;
   transform: none;
 }

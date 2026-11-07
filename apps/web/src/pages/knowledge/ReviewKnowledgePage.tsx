@@ -77,7 +77,7 @@ export function ReviewKnowledgePage() {
       <PageHeader
         title="Review knowledge"
         description="Check generated items against the source, approve the set, then attach it to an application for test selection."
-        action={<Link className="secondary-button" to="/ingestion">Ingest knowledge</Link>}
+        action={<Link className="secondary-button" to="/ingestion">Add knowledge</Link>}
       />
 
       {state.isPending ? (
@@ -275,7 +275,7 @@ export function ReviewKnowledgePage() {
           copy="Ingest a source first. Its generated knowledge will appear here for review."
           action={
             canWriteWorkspace(workspace.role) ? (
-              <Link className="primary-button" to="/ingestion">Ingest knowledge</Link>
+              <Link className="primary-button" to="/ingestion">Add knowledge</Link>
             ) : undefined
           }
         />

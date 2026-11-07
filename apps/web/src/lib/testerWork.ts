@@ -1,6 +1,7 @@
 import type { JourneyExecution } from "./api";
 import { journeyIdentity } from "./journeyPresentation";
 import { statusLabel } from "./format";
+import { statusEntry, type StatusSource } from "./status";
 
 // Simulated testers and missions exist only for persona journeys. Browser
 // discovery records and deterministic Feature Cases are excluded.
@@ -26,10 +27,12 @@ export function groupJourneys(journeys: JourneyExecution[], keyOf: (journey: Jou
 }
 
 // Summarizes recorded values exactly as stored, without inventing a missing state.
-export function countLabels(values: (string | null)[]): string {
+// With a source, labels are the canonical words for that source instead
+// (examination X-2: outcome summaries must not print the passed/failed dialect).
+export function countLabels(values: (string | null)[], source?: StatusSource): string {
   const counts = new Map<string, number>();
   for (const value of values) {
-    const label = value ? statusLabel(value) : "not recorded";
+    const label = value ? (source ? statusEntry(source, value).word : statusLabel(value)) : "not recorded";
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return [...counts].map(([label, count]) => `${count} ${label}`).join(" · ");

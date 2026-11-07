@@ -7,7 +7,7 @@ import { ApiError, api, type TestRun } from "../lib/api";
 
 const user = { id: "user", email: "owner@example.test", normalized_email: "owner@example.test", display_name: "Owner" };
 const workspace = { id: "workspace", name: "Live workspace", role: "owner", status: "active" };
-const app = { id: "app", workspace_id: workspace.id, created_by_user_id: user.id, name: "Actual storefront", description: null, status: "active" };
+const app = { id: "app", workspace_id: workspace.id, created_by_user_id: user.id, name: "Actual storefront", description: null, status: "active", latest_run_summary: null };
 const clients: QueryClient[] = [];
 afterEach(() => { cleanup(); clients.forEach(client => client.clear()); clients.length = 0; vi.restoreAllMocks(); });
 
@@ -48,17 +48,24 @@ it("uses actual workspace tests and sends contract approval to its owner review 
     { id: "draft", status: "draft", configuration_snapshot: { test_name: "Ordinary draft" } },
   ].map(test => ({ ...test, workspace_id: workspace.id, application_id: app.id, target_id: "target", created_by_user_id: user.id, target_snapshot: {} })) as TestRun[];
   vi.spyOn(api, "listRuns").mockResolvedValue(tests);
+  vi.spyOn(api, "getRunResults").mockResolvedValue({
+    test_run_id: "done",
+    report: { id: "report", version: 1, status: "completed", executive_summary: "All approved journeys completed.", payload: {}, generated_at: "2026-11-03T11:00:00Z" },
+    findings: [],
+  } as never);
   mount("/overview");
   await screen.findByRole("heading", { name: "Home", level: 1 });
   // The heading renders during loading since SI-8; wait for the data row.
-  expect(await screen.findByRole("link", { name: /Approve the tests/ })).toHaveAttribute("href", "/runs/review/contract");
+  const trayRegion = await screen.findByRole("region", { name: /NEEDS YOU/ });
+  const trayLinks = within(trayRegion).getAllByRole("link", { name: /Review the tests/ })
+    .map((link) => link.getAttribute("href"));
+  expect(trayLinks).toEqual(expect.arrayContaining(["/runs/review/contract", "/runs/replay/contract"]));
   expect(screen.getByRole("link", { name: /Watch live/ })).toHaveAttribute("href", "/runs/live/watch");
-  expect(screen.getByRole("link", { name: /See test results/ })).toHaveAttribute("href", "/runs/done/results");
-  expect(within(screen.getByRole("region", { name: "Needs your help" })).getByRole("link", { name: /Run approved tests/ })).toHaveAttribute("href", "/runs/replay/contract");
-  expect(screen.getAllByRole("link", { name: /Run approved tests/ })).toHaveLength(1);
-  const drafts = within(screen.getByRole("region", { name: "Draft tests" }));
+  expect(screen.getByRole("link", { name: /Read the full result/ })).toHaveAttribute("href", "/runs/done/results");
+  expect(screen.getAllByRole("link", { name: /Review the tests/ })).toHaveLength(2);
+  const drafts = within(screen.getByRole("region", { name: "RECENT TESTS" }));
   expect(drafts.getByRole("link", { name: /Review draft/ })).toHaveAttribute("href", "/runs/draft/overview");
-  expect(drafts.queryByText("Approved source replay")).not.toBeInTheDocument();
+  expect(drafts.queryByText(/Approved source replay/)).not.toBeInTheDocument();
   expect(screen.getByText("Testing the checkout")).toBeVisible();
   expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
   expect(screen.queryByText("Thread & Co.")).not.toBeInTheDocument();
@@ -70,9 +77,9 @@ it("keeps the empty dashboard read-only for viewers", async () => {
   vi.spyOn(api, "listWorkspaces").mockResolvedValue([{ ...workspace, role: "viewer" }]);
   vi.spyOn(api, "listApplications").mockResolvedValue([]);
   mount("/dashboard");
-  await screen.findByText("Your home will live here.");
+  await screen.findByText("Your briefing desk.");
   expect(screen.queryByRole("link", { name: "Add an app" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Start a test" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "+ New test" })).not.toBeInTheDocument();
 });
 
 it("carries a landing URL through sign-in and app creation into target authorization setup", async () => {

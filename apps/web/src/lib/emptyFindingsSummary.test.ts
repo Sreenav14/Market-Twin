@@ -35,6 +35,6 @@ it("does not invent missing coverage or treat malformed counts as zero", () => {
 it("preserves persona outcome distinctions in the empty findings explanation", () => {
   const summary = emptyFindingsSummary(report({ journeys: { total: 3, outcome_counts: { passed: 1, failed: 1, inconclusive: 1 } } }));
   expect(summary.featureCases).toBe(false);
-  expect(summary.counts).toContainEqual(["Failed outcomes", 1]);
-  expect(summary.counts).toContainEqual(["Inconclusive outcomes", 1]);
+  expect(summary.counts).toContainEqual(["Broken", 1]);
+  expect(summary.counts).toContainEqual(["Could not check", 1]);
 });

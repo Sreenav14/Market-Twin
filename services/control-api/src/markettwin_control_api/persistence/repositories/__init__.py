@@ -1,6 +1,10 @@
 """ control API persistence repositories """
 
-from .application_repository import ApplicationRecord, ApplicationRepository
+from .application_repository import (
+    ApplicationRecord,
+    ApplicationRepository,
+    LatestRunSummaryRecord,
+)
 from .authorization_repository import TargetAuthorizationRecord, TargetAuthorizationRepository
 from .human_action_repository import (
     HumanActionConflictError,
@@ -35,6 +39,7 @@ __all__ = (
     "WorkspaceAccess",
     "ApplicationRepository",
     "ApplicationRecord",
+    "LatestRunSummaryRecord",
     "TargetRepository",
     "TargetRecord",
     "AllowedOriginRecord",

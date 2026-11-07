@@ -3,7 +3,7 @@
 .journey-header-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   padding: 24px;
   margin-bottom: 24px;
   box-shadow: var(--shadow);
@@ -26,7 +26,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--mt-radius-sm);
   background: var(--surface-muted);
   font: 12px var(--font-ui);
   color: var(--text);
@@ -59,7 +59,7 @@
   text-align: left;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
@@ -111,7 +111,7 @@
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--mt-radius-lg);
   padding: 24px;
   box-shadow: var(--shadow);
 }
@@ -126,7 +126,7 @@
   display: grid;
   gap: 8px;
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   background: var(--surface-muted);
   border: 1px solid var(--border);
   font-size: 13px;
@@ -141,7 +141,7 @@
 /* Assertion Grid */
 .journey-assertion-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   background: var(--surface-muted);
   padding: 18px 20px;
   margin-bottom: 20px;
@@ -169,13 +169,13 @@
 .journey-assertion-card dd code {
   font: 12px var(--font-mono);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--mt-radius-sm);
   background: var(--surface-hover);
 }
 
 .journey-screenshot-box {
   margin-top: 16px;
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--page);
@@ -222,7 +222,7 @@
   min-height: 72px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--mt-radius-md);
   background: var(--surface);
   color: var(--text);
   text-align: left;
@@ -376,4 +376,12 @@
 .authenticated-coverage > p {
   margin: 8px 0;
   color: var(--text-2);
+}
+
+/* Testing-goals matrix at phone widths: stacked cards, no header row
+   (examination, Testing goals). The column template resolves through
+   the token, so narrowing the token reflows every row at once. */
+@media (max-width: 640px) {
+  .goals-matrix { --concept-goals-columns: minmax(0, 1fr); }
+  .goals-matrix-head { display: none !important; }
 }

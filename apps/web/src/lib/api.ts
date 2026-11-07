@@ -26,6 +26,17 @@ export interface Workspace {
   role: string;
 }
 
+/** The app's latest completed run that produced a report (W2). The
+ * verdict is the report's stored market verdict, verbatim; null when
+ * that report carries no market verdict. The whole summary is null
+ * when the app has no completed run with a finished report. */
+export interface LatestRunSummary {
+  latest_run_id: string;
+  latest_run_status: string;
+  verdict: string | null;
+  finished_at: string | null;
+}
+
 export interface Application {
   id: string;
   workspace_id: string;
@@ -33,6 +44,7 @@ export interface Application {
   name: string;
   description: string | null;
   status: string;
+  latest_run_summary: LatestRunSummary | null;
 }
 
 export interface HumanAction {

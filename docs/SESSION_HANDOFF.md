@@ -952,3 +952,44 @@ The final consolidation removed 60 standalone documentation files. Inventory che
 confirm three project docs plus unchanged AGENTS.md instructions, 89 valid local
 links/anchors, 52 Figma frame links and all 14 T00-T13 task rows. Font licenses and
 non-document evidence were not removed; no application tests were needed.
+
+## 2026-11-06 — Results wiring diagnosis + harness_v1 fix
+
+Diagnosis (four lenses: principal engineer / manager / researcher / end
+client) traced API → outbox → Kafka → orchestrator → evaluation → DB →
+API read → web for all four execution modes. One proven wiring gap, in
+harness_v1 only: no `journey.result` events were ever published, so
+evaluation could never succeed for a completed harness run (raise in
+`list_journey_results` → retry/backoff → quarantine at 5 attempts → no
+Report → 409 forever). Fixed in commit `b9b2536` (see CURRENT_STATE.md
+for the full record). Pickup side verified sound: queueing is gated by
+`require_run_ready` preflight (relay + Kafka + both worker heartbeats +
+model), the relay is in-process when `OUTBOX_RELAY_ENABLED=true`, and
+stall reasons are surfaced on run reads (`stalled_run_reason`). Decision:
+fix at the producer (harness publishes the shared contract, mirroring
+deep_run) rather than relaxing the evaluator's per-journey integrity
+check, which legacy depends on. NOT pushed.
+
+## 2026-11-06 — Test results redesign (figures, not a text wall)
+
+Owner exported MT-000113 (Sup_13, klaviyo.com, discovery-contract mode) to
+PDF and judged the results page bad: text wall, no figures, verdict last,
+chrome in the printout. Rebuilt per the owner's data-presentation research
+(report in research_notes, 2026-11-07): verdict panel first with figures;
+coverage as ONE stacked bar (2 of 7, remainder named — by journey title
+where the payload allows, by count beyond it: discovered-feature names are
+NOT in the payload, recorded as a data gap); outcome stacked bar in fixed
+worked → broken → could-not-check order with click-to-filter cross-filtering
+(journey rows + findings sections, filter stated in words, second click
+clears); findings permanently split confirmed (solid "Failed again on
+re-check" badge) vs seen-once (outlined badge), each group counted and
+defined; testers as small multiples in the lilac band, most-blocked first,
+identical meter encoding, quotes verbatim except machine [key=value]
+tokens moved to a mono evidence line under each quote. Ledger report
+adopted the same StackedBar for Journey Outcomes. Print stylesheet kills
+app chrome in exports. Commits 0c58fa9 / adf35d2 / 8b5bcf8, local only.
+Gates 224/224 + typecheck 0 + build 0. Design reconciliations vs research:
+canonical status tones kept (locked palette outranks Okabe-Ito) because
+every segment also carries word + count; tester order = most-blocked-first
+per research D, replacing run order; no animated transitions (house floor
+forbids animating width; state change is stated in words instead).

@@ -5,10 +5,10 @@ import { StatusBadge } from "./StatusBadge";
 describe("StatusBadge", () => {
   it("renders authorized as success", () => {
     render(<StatusBadge status="authorized" />);
-    expect(screen.getByText("authorized")).toHaveClass("status-success");
+    expect(screen.getByText("Authorized")).toHaveClass("status-success");
   });
   it("renders failed as danger", () => {
     render(<StatusBadge status="failed" />);
-    expect(screen.getByText("failed")).toHaveClass("status-danger");
+    expect(screen.getByText("Failed")).toHaveClass("status-danger");
   });
 });

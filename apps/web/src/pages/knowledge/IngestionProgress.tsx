@@ -1,5 +1,6 @@
 import { type IngestionSummary } from "../../lib/api";
 import { StatusPill } from "../../components/ui/StatusBadge";
+import { statusEntry } from "../../lib/status";
 
 export function isIngestionPending(entry: IngestionSummary) {
   return entry.processing_status === "queued" || entry.processing_status === "processing";
@@ -23,8 +24,13 @@ export function IngestionProgress({ entry }: { entry: IngestionSummary }) {
     const label = entry.processing_error
       || (entry.processing_stage ? ingestionStageLabel(entry)
         : queued ? "Source saved · Waiting to process" : "Processing source");
+    const stageWord = entry.processing_error ? "Processing failed"
+      : statusEntry("lifecycle", entry.processing_stage ?? (queued ? "queued" : "processing")).word;
     return <div className="ingestion-progress">
-      <span role="status"><span aria-hidden="true">◐ </span>{label}</span>
+      <StatusPill tone={entry.processing_error ? "danger" : "info"} glyph={entry.processing_error ? "✕" : "•"}>
+        {stageWord}
+      </StatusPill>
+      {entry.processing_error ? <span role="status">{entry.processing_error}</span> : null}
       <progress aria-label="Ingestion progress" aria-valuetext={label} />
     </div>;
   }

@@ -180,7 +180,7 @@ export function RunEvaluationPage() {
 
                     {/* 2. Verification Result */}
                     <div>
-                      <StatusBadge status={statusStr} />
+                      <StatusBadge status={statusStr} source="criterion" />
                     </div>
 
                     {/* 3. Rationale & Observations */}
@@ -245,7 +245,7 @@ export function RunEvaluationPage() {
 
         {/* Collapsed Technical Runtime Metadata & Evaluation Agents */}
         <details
-          className="panel"
+          className="panel evaluation-details"
           style={{
             marginTop: 24,
             padding: "16px 20px",

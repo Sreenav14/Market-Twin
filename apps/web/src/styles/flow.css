@@ -15,7 +15,7 @@
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--mt-radius-md);
 }
 .run-flow > details > summary {
   display: flex;
@@ -42,7 +42,7 @@
   align-items: center;
   gap: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--mt-radius-sm);
   background: var(--surface-muted);
   padding: 10px;
   min-width: 0;
@@ -68,7 +68,11 @@
 @media (max-width: 1099px) {
   .run-flow-journeys > summary { min-height: 44px; }
 }
-.run-action-required { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 18px 0; padding: 18px 20px; border: 1px solid var(--warning-border, var(--border)); border-left: 4px solid var(--warning, var(--primary)); border-radius: 8px; background: var(--warning-bg, var(--surface)); }
+.run-action-required { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 18px 0; padding: 18px 20px; border: 1px solid var(--warning-border, var(--border)); border-left: 4px solid var(--warning, var(--primary)); border-radius: var(--mt-radius-md); background: var(--warning-bg, var(--surface)); }
+/* Calm variant (examination X-4): the warning tint means "needs you" and
+   nothing else — informational banners (results ready, watch, evaluation
+   in progress) use the plain panel recipe. */
+.run-action-required--calm { border-color: var(--border); border-left-color: var(--text-3); background: var(--surface); }
 .run-action-required h2 { margin: 2px 0 6px; font-size: 18px; }
 .run-action-required p { margin: 0; color: var(--text-2); }
 .lifecycle-pause { margin: 18px 0 0; padding: 12px 16px; border-left: 3px solid var(--warning); background: var(--warning-bg); color: var(--text); }
@@ -86,12 +90,82 @@
 .contract-report dt { text-transform: capitalize; font-weight: 600; }
 .contract-report dd { margin: 4px 0 0; }
 .contract-report .text-link { display: inline-block; margin-right: 12px; }
+.contract-report .contract-coverage { position: static; }
+
+/* Result figures (ResultFigures.tsx): one stacked bar, counts on segments,
+   direct labels underneath — no legends, length is the only encoding. */
+.rf-figure { display: grid; gap: 8px; margin: 12px 0; }
+.rf-bar { display: flex; gap: 2px; height: 30px; border-radius: var(--mt-radius-md); overflow: hidden; background: var(--notchecked-tint); }
+.rf-bar-sm { height: 10px; border-radius: var(--mt-radius-sm); }
+.rf-seg { flex-basis: 0; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.rf-seg-works { background: var(--works); color: #fff; }
+.rf-seg-broken { background: var(--broken); color: #fff; }
+.rf-seg-couldnot { background: var(--couldnot); color: #fff; }
+.rf-seg-notchecked { background: var(--notchecked-tint); color: var(--ink); }
+.rf-seg-info { background: var(--plum); color: #fff; }
+.rf-seg-button { cursor: pointer; }
+.rf-seg-selected { box-shadow: inset 0 0 0 2px var(--ink); }
+.rf-seg-label { font-size: 12px; font-weight: 700; white-space: nowrap; padding: 0 6px; }
+.rf-labels { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.rf-label, .rf-label-button { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); }
+.rf-label-button { min-height: 32px; padding: 4px 10px; border: 1px solid transparent; border-radius: var(--mt-radius-md); background: none; cursor: pointer; font: inherit; color: var(--ink); }
+.rf-label-button:hover { border-color: var(--line); }
+.rf-label-active { background: var(--notchecked-tint); border-color: var(--line); font-weight: 700; }
+.rf-swatch { width: 10px; height: 10px; border-radius: var(--mt-radius-sm); flex: none; }
+.rf-subtitle { color: var(--ink-2); margin: 4px 0 0; }
+.rf-named-remainder { margin: 6px 0 0; }
+.rf-group-definition { color: var(--ink-2); margin: 2px 0 10px; }
+.rf-filter-note { background: var(--notchecked-tint); border-radius: var(--mt-radius-md); padding: 8px 12px; }
+.rf-clear-filter { font: inherit; cursor: pointer; }
+.rf-journey-rows { list-style: none; padding: 0; margin: 8px 0 0; display: grid; }
+.rf-journey-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.rf-journey-name { flex: 1; font-weight: 600; min-width: 0; }
+.rf-journey-meta { color: var(--ink-2); font-size: 13px; }
+.rf-journey-row .status-badge { flex: none; }
+@media (max-width: 640px) {
+  .rf-journey-row { flex-wrap: wrap; row-gap: 4px; }
+  .rf-journey-meta { flex-basis: 100%; order: 3; }
+}
+.rf-badge-outline { display: inline-block; padding: 1px 8px; border: 1.5px dashed var(--couldnot); border-radius: var(--mt-radius-pill); color: var(--couldnot); font-size: 12px; font-weight: 700; }
+
+/* Contract verdict panel: the word is the largest type on the page. */
+.contract-verdict { border-left: 4px solid var(--notchecked); }
+.contract-verdict.verdict-tone-works { border-left-color: var(--works); }
+.contract-verdict.verdict-tone-broken { border-left-color: var(--broken); }
+.contract-verdict.verdict-tone-couldnot { border-left-color: var(--couldnot); }
+.contract-verdict-word { font-size: 32px; font-weight: 700; line-height: 1.15; margin: 4px 0 6px; }
+.contract-verdict-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 14px 0 2px; }
+.contract-verdict-figures > div { border-top: 2px solid var(--line); padding-top: 8px; }
+.contract-verdict-figures dt { font-size: 12px; color: var(--ink-2); text-transform: none; font-weight: 600; }
+.contract-verdict-figures dd { font-size: 24px; font-weight: 700; margin: 2px 0 0; }
+
+/* Three Looks for results: tester small multiples inside the lilac impressions band. */
+.contract-feeling-band { background: var(--band-lilac); }
+.tester-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tester-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--mt-radius-lg); padding: 16px; min-width: 0; }
+.tester-panel-name { display: flex; align-items: center; gap: 8px; margin: 0; }
+.tester-chip { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.tester-panel-role { color: var(--ink-2); font-size: 12px; margin: 2px 0 10px; }
+.tester-quote { margin: 0; }
+.tester-quote p { margin: 0; }
+.tester-quote p::before { content: "“"; }
+.tester-quote p::after { content: "”"; }
+.tester-quote cite { display: block; margin-top: 4px; font-style: normal; color: var(--ink-2); font-size: 13px; }
+.tester-evidence-line { font-family: var(--mono, monospace); font-size: 12px; color: var(--ink-2); margin: 4px 0 0; }
+@media (max-width: 900px) { .tester-grid { grid-template-columns: 1fr; } }
 .run-more-nav { position: relative; align-self: stretch; }
 .run-more-nav > summary { display: flex; align-items: center; min-height: 42px; padding: 0 12px; cursor: pointer; color: var(--text-2); list-style: none; }
 .run-more-nav > summary::-webkit-details-marker { display: none; }
-.run-more-menu { position: absolute; z-index: 5; right: 0; top: calc(100% + 4px); display: grid; min-width: 190px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 24px rgb(20 30 25 / 12%); }
+.run-more-menu { position: absolute; z-index: 5; right: 0; top: calc(100% + 4px); display: grid; min-width: 190px; padding: 6px; border: 1px solid var(--border); border-radius: var(--mt-radius-md); background: var(--surface); box-shadow: 0 8px 24px rgb(20 30 25 / 12%); }
 .run-more-menu .tab-link { min-height: 40px; }
 @media (max-width: 640px) {
   .run-action-required { align-items: flex-start; flex-direction: column; }
   .run-more-menu { position: fixed; right: 16px; top: auto; }
 }
+
+/* Evaluation disclosure: the same chevron recipe as the run-flow
+   disclosure (examination, Evaluation). */
+.evaluation-details > summary { list-style: none; }
+.evaluation-details > summary::-webkit-details-marker { display: none; }
+.evaluation-details > summary::before { content: "›"; font-size: 20px; line-height: 1; }
+.evaluation-details[open] > summary::before { transform: rotate(90deg); }

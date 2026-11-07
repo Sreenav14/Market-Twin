@@ -1,18 +1,35 @@
 import type { TestRun } from "./api";
+import {
+  ASSERTION_STATUS,
+  EVALUATION_STATUS,
+  EXECUTION_STATUS,
+  FINDING_STATUS,
+  JOURNEY_OUTCOME_STATUS,
+  MODE_STATUS,
+  RUN_STATUS,
+} from "./status";
 
+function words(map: Record<string, { word: string }>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(map).map(([key, entry]) => [key, entry.word]),
+  );
+}
+
+// Prose labels for classifications, modes and pipeline states. Every word
+// is derived from lib/status.ts — the one status vocabulary (examination
+// X-1) — so a label printed in a sentence can never drift from the word
+// the same state wears as a pill. The only entry owned here is a prose
+// phrasing that is not a status ("Not available").
 const statusLabels: Record<string, string> = {
-  inconclusive: "Could not check", policy_blocked: "Blocked by policy",
-  unverified: "Needs checking", timed_out: "Timed out",
-  awaiting_human: "Needs you", human_action_required: "Needs your help",
-  evaluation_pending: "Waiting for results", evaluating: "Checking results",
-  verified_deterministic: "Checked", verified_visual: "Checked",
-  did_not_reproduce: "Did not happen again", replay_unavailable: "Could not check again",
-  satisfied: "Check passed", not_satisfied: "Check did not pass",
-  unavailable: "Not available", legacy_persona: "Exploratory testing",
-  deep_feature_v1: "Feature checks", discovery_contract_v1: "Explore, approve and test",
-  "needs verification": "Needs checking",
-  "verified assertion issue": "Checked issue",
-  "visually verified issue": "Visual observation",
+  ...words(FINDING_STATUS),
+  ...words(ASSERTION_STATUS),
+  ...words(EVALUATION_STATUS),
+  ...words(MODE_STATUS),
+  inconclusive: JOURNEY_OUTCOME_STATUS.inconclusive.word,
+  policy_blocked: EXECUTION_STATUS.policy_blocked.word,
+  timed_out: EXECUTION_STATUS.timed_out.word,
+  awaiting_human: RUN_STATUS.awaiting_human.word,
+  unavailable: "Not available",
 };
 
 export function statusLabel(value: string): string {
@@ -33,7 +50,9 @@ export function textValue(value: unknown, fallback = "—"): string {
  * language shown to users is consistently "Test".
  */
 export function testBrief(configuration: Record<string, unknown>): string {
-  return textValue(configuration.study_brief, "Untitled test");
+  const brief = textValue(configuration.study_brief, "");
+  if (brief) return brief;
+  return textValue(configuration.test_name, "Untitled test");
 }
 
 export function testReference(run: TestRun): string {

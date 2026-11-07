@@ -67,19 +67,18 @@ export function ContractApprovalPage() {
     void update(editing.journey, { assertions: editing.journey.assertions.map(check => check.assertion_id === editing.check.assertion_id ? editing.check : check) });
   }
   const waiting = state.isError && state.error instanceof ApiError && state.error.status === 404;
-  if (state.isPending || waiting) return <section className="panel"><h2>Approve the tests</h2>{["failed", "cancelled"].includes(run.status) ? <p>Exploration stopped before tests were available.</p> : <LoadingPanel label="Testers are exploring your app. Tests will appear here when exploration is complete." />}</section>;
+  if (state.isPending || waiting) return <section className="panel"><h2>Approve the tests</h2>{["failed", "cancelled"].includes(run.status) ? <p>Exploration stopped before tests were available.</p> : <LoadingPanel label={run.status === "queued" ? "Exploration has not started yet. Tests will appear here when exploration is complete." : "Testers are exploring your app. Tests will appear here when exploration is complete."} />}</section>;
   if (state.isError) return <ErrorPanel message={state.error.message} />;
   if (!contract) return null;
   return <div className="contract-review">
     <section className="panel"><h2>Approve the tests</h2>
       <p>Testers explored your app and found {discovery?.features?.length ?? "an unknown number of"} features. They completed {completed} journeys. {loginBlocked > 0 ? `${loginBlocked} journeys need a login and were skipped.` : ""}</p>
-      <p>These tests run against: {origins?.length ? origins.map(o => `${o.scheme}://${o.hostname}${o.port ? `:${o.port}` : ""}`).join(", ") : appUrl || "App address unavailable"}.</p>
-      <p>Review what each journey checks before running it. Approving tests does not grant access to additional apps or approve sensitive actions.</p>
-      <p>This run&apos;s {String(depth || "medium")} testing depth allows up to {journeyLimit} journeys. Extra completed journeys start excluded. To test more, create a new run with a higher testing depth.</p>
+      <p>These tests run against: {origins?.length ? origins.map(o => `${o.scheme}://${o.hostname}${o.port ? `:${o.port}` : ""}`).join(", ") : appUrl || "App address unavailable"}. Review each journey&apos;s checks before approving — approving does not grant access to other apps or approve sensitive actions.</p>
+      <p>This run&apos;s {String(depth || "medium")} testing depth allows up to {journeyLimit} journeys; extra completed journeys start excluded.</p>
       {includedJourneyCount > journeyLimit ? <p role="alert">You have included {includedJourneyCount} journeys, above this run's limit of {journeyLimit}. Exclude at least {includedJourneyCount - journeyLimit} before approval.</p> : null}
       {!canWrite ? <p>Your workspace role can review these tests but cannot change or approve them.</p> : null}
       {error ? <p role="alert" className="form-error">{error}</p> : null}
-      {completed === 0 ? <><p>No journeys were completed. There are no completed journeys to test.</p><Link to={`/applications/${run.application_id}/runs/new?target=${run.target_id}&mode=discovery_contract_v1`}>Explore again</Link></> : null}
+      {completed === 0 ? <><p>No journeys were completed, so there is nothing to test.</p><div className="button-row"><Link className="secondary-button" to={`/applications/${run.application_id}/runs/new?target=${run.target_id}&mode=discovery_contract_v1`}>Explore again</Link></div></> : null}
     </section>
     {contract.journeys.map(journey => <section className="panel" key={journey.journey_key} aria-label={journey.title}>
       <h3>{journey.title}</h3><ol>{journey.steps.map((step, i) => <li key={i}>{stepDescription(step)}</li>)}</ol>

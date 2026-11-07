@@ -209,7 +209,6 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       {harnessLoginPark ? <p>Your login session is held only in memory on our servers while this run is active. It is discarded when the run ends. We never store your password.</p> : <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>}
       {!canManageHumanActions ? <p className="human-action-denied" role="status">Human browser control and action approvals require an owner or administrator role. {run.status === "awaiting_human" ? "This test is paused until an authorized operator acts." : "Ask an authorized operator to review protected requests."}</p> : null}
       {canManageHumanActions ? <>
-      <h2>Login and protected interaction</h2>
       <section className="human-action-group human-auth-group" aria-label="Login and protected interaction requests">
 
       {actions.isPending ? <p role="status">Checking for a human action request…</p> : null}
@@ -227,15 +226,14 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
         <article className="study-summary" key={action.id}>
           <UserRound aria-hidden="true" />
           <div>
-            <h2>Awaiting human: {action.request_type.replaceAll("_", " ")}</h2>
+            <h2>{action.instructions ?? "The tester needs your help"}</h2>
             <p>The tester is paused. Taking control opens the same supervised browser context.</p>
             <RequestContext action={action} runId={run.id} />
-            {action.instructions ? <p>{action.instructions}</p> : null}
             {action.browser_state && action.browser_state !== "open" ? <p role="alert">This browser is no longer available for interaction. Review the request status or skip this work.</p> : null}
             <p className="muted">Request expires {action.expires_at ? new Date(action.expires_at).toLocaleString() : "when the run ends"}.</p>
           </div>
           <div className="button-row">
-            <button className="secondary-button" type="button" disabled={claim.isPending || skip.isPending || Boolean(activeLease) || resumePending || Boolean(action.browser_state && action.browser_state !== "open")} onClick={() => claim.mutate(action.id)}>
+            <button className="primary-button" type="button" disabled={claim.isPending || skip.isPending || Boolean(activeLease) || resumePending || Boolean(action.browser_state && action.browser_state !== "open")} onClick={() => claim.mutate(action.id)}>
               <ShieldCheck size={16} aria-hidden="true" /> Take browser control
             </button>
             <button className="secondary-button" type="button" disabled={skip.isPending || claim.isPending || release.isPending} onClick={() => skip.mutate(action.id)}>Skip this case/journey</button>

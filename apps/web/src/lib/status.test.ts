@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ASSERTION_STATUS,
+  CONTRACT_STAGE_STATUS,
+  CRITERION_STATUS,
+  EVALUATION_STATUS,
   EXECUTION_STATUS,
+  FINDING_STATUS,
+  FLOW_STATUS,
   HARNESS_ITEM_STATUS,
   INFRA_STATUS,
+  JOURNEY_EXECUTION_STATUS,
   JOURNEY_OUTCOME_STATUS,
+  LIFECYCLE_STATUS,
+  MODE_STATUS,
   RUN_STATUS,
   SEVERITY_STATUS,
   statusEntry,
@@ -15,9 +24,18 @@ const MAPS: Record<StatusSource, Record<string, StatusEntry>> = {
   run: RUN_STATUS,
   harnessItem: HARNESS_ITEM_STATUS,
   journeyOutcome: JOURNEY_OUTCOME_STATUS,
+  journeyExecution: JOURNEY_EXECUTION_STATUS,
   execution: EXECUTION_STATUS,
   severity: SEVERITY_STATUS,
   infra: INFRA_STATUS,
+  contractStage: CONTRACT_STAGE_STATUS,
+  finding: FINDING_STATUS,
+  assertion: ASSERTION_STATUS,
+  criterion: CRITERION_STATUS,
+  evaluation: EVALUATION_STATUS,
+  lifecycle: LIFECYCLE_STATUS,
+  mode: MODE_STATUS,
+  flow: FLOW_STATUS,
 };
 
 afterEach(() => {

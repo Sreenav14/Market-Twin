@@ -29,6 +29,9 @@ from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     PlanRepository,
 )
+from markettwin_execution_orchestrator.persistence.run_event_repository import (
+    RunEventRepository,
+)
 from markettwin_execution_orchestrator.persistence.run_state_repository import (
     RunStateRepository,
 )
@@ -259,6 +262,100 @@ def _result_status(result: CaseExecutionResult) -> ItemStatus:
     return "could_not_check"
 
 
+_OUTCOME_BY_VERDICT = {
+    "satisfied": "passed",
+    "not_satisfied": "failed",
+    "unverified": "inconclusive",
+}
+
+_CRITERION_STATUS = {
+    "satisfied": "satisfied",
+    "not_satisfied": "unsatisfied",
+    "unverified": "unverified",
+}
+
+
+async def _publish_journey_result(
+    *, session: AsyncSession, run_id: UUID, journey_id: UUID,
+    execution_id: UUID, result: CaseExecutionResult,
+) -> None:
+    """Publish the journey.result event evaluation reads for every journey.
+
+    Mirrors deep_run's per-case emission (the same CaseExecutionResult
+    contract), with the board's D-1 translation: a budget-exhausted
+    execution is a timed_out result. Assertion outcomes become criterion
+    evidence so findings link the exact steps that failed.
+    """
+
+    status = (
+        "timed_out" if result.execution_status == "budget_exhausted"
+        else result.execution_status
+    )
+    await RunEventRepository(session).create(
+        test_run_id=run_id,
+        event_type="journey.result",
+        journey_id=journey_id,
+        execution_id=execution_id,
+        payload={
+            **result.model_dump(mode="json"),
+            "mode": "harness_v1",
+            "status": status,
+            "outcome": (
+                _OUTCOME_BY_VERDICT[result.verdict]
+                if result.execution_status == "completed" else None
+            ),
+            "journey_key": result.case_id,
+            "summary": (
+                f"Case {result.case_id}: {result.verdict}."
+                + (f" Blocker: {result.blocker}." if result.blocker else "")
+            ),
+            "criterion_evidence": [
+                {
+                    "criterion": assertion.assertion_id,
+                    "status": _CRITERION_STATUS[assertion.status],
+                    "evidence_step_ids": [assertion.step_id],
+                }
+                for assertion in result.assertion_results
+            ],
+        },
+    )
+
+
+async def _publish_skipped_journey_result(
+    *, session: AsyncSession, executions: ExecutionRepository,
+    run_id: UUID, journey_id: UUID, case_id: str, summary: str,
+    runtime_name: str, error_code: str | None = None,
+) -> None:
+    """Account for a journey that will never execute, as skipped.
+
+    Evaluation requires one journey.result per registered journey and
+    treats status "skipped" as no finding; the execution record is
+    created and finished skipped so the journey's surfaces agree.
+    """
+
+    execution_id = uuid4()
+    await executions.create_agent_execution(
+        execution_id=execution_id, journey_id=journey_id,
+        runtime_name=runtime_name,
+    )
+    await executions.finish_agent_execution(
+        execution_id=execution_id, status="skipped", error_code=error_code,
+    )
+    await RunEventRepository(session).create(
+        test_run_id=run_id,
+        event_type="journey.result",
+        journey_id=journey_id,
+        execution_id=execution_id,
+        payload={
+            "mode": "harness_v1",
+            "status": "skipped",
+            "outcome": None,
+            "journey_key": case_id,
+            "summary": summary,
+        },
+    )
+
+
 def _item_wall_clock_seconds(state: HarnessState) -> int:
     """Per-item budget: max(30s, 10 × median item time); 240s until measured.
 
@@ -417,6 +514,19 @@ async def execute_harness_run(
             test_run_id=request.run_id, requires_identity_verification=False,
         )
         state.persona_id = str(record.persona_id)
+        # The bootstrap journey is never a unit of work in this mode —
+        # discovery runs in the driver's inventory session — but the row
+        # is registered, so evaluation is owed its result: skipped.
+        await _publish_skipped_journey_result(
+            session=session, executions=executions,
+            run_id=request.run_id, journey_id=record.journey_id,
+            case_id=record.journey_key,
+            summary=(
+                "Browser discovery is carried by the harness inventory "
+                "session; this journey holds persona ownership only."
+            ),
+            runtime_name="browser_discovery_v1",
+        )
         cases: dict[str, TestCaseSpec] = {}
         for ordinal, entry in enumerate(entries, start=1):
             case = TestCaseSpec.model_validate(entry["case"])
@@ -594,6 +704,14 @@ async def execute_harness_run(
                     item.status = "not_checked"
                     item.blocker = reason
                     state.budget_counters["items_finished"] += 1
+                    await _publish_skipped_journey_result(
+                        session=session, executions=executions,
+                        run_id=request.run_id,
+                        journey_id=UUID(str(item.journey_id)),
+                        case_id=case.case_id,
+                        summary=f"Check {case.case_id} was {reason}.",
+                        runtime_name="harness_v1", error_code=reason,
+                    )
                     run = await session.get(
                         TestRun, request.run_id, populate_existing=True,
                     )
@@ -628,6 +746,7 @@ async def execute_harness_run(
             execution_id = uuid4()
             await executions.create_agent_execution(
                 execution_id=execution_id, journey_id=journey_id,
+                attempt_number=item.attempts,
                 runtime_name="harness_v1",
             )
             await session.commit()
@@ -689,6 +808,7 @@ async def execute_harness_run(
                 for assertion in result.assertion_results
                 for artifact_id in assertion.artifact_ids
             ]
+            final_result, final_execution_id = result, execution_id
             # Attempt-2 confirmation (§5 rule 2), for generated checks:
             # a suspected failure is re-executed once. execute_test_case
             # creates a fresh browser context for every call
@@ -705,6 +825,7 @@ async def execute_harness_run(
                 confirm_id = uuid4()
                 await executions.create_agent_execution(
                     execution_id=confirm_id, journey_id=journey_id,
+                    attempt_number=item.attempts,
                     runtime_name="harness_v1",
                 )
                 await session.commit()
@@ -766,6 +887,7 @@ async def execute_harness_run(
                 if _result_status(confirm) != "broken":
                     item.status = "could_not_check"
                     item.locator = {**item.locator, "tier": "observed_once"}
+                final_result, final_execution_id = confirm, confirm_id
             state.budget_counters["items_finished"] += 1
             state.budget_counters["total_elapsed_ms"] += elapsed_ms
             results.append(result)
@@ -789,6 +911,14 @@ async def execute_harness_run(
                 run.status = "awaiting_human"
                 await session.commit()
                 return tuple(results)
+            # The item is terminal from here (the login-wall park above
+            # returns instead, and its item publishes on resume): publish
+            # the result evaluation reads, from the deciding execution.
+            await _publish_journey_result(
+                session=session, run_id=request.run_id,
+                journey_id=journey_id, execution_id=final_execution_id,
+                result=final_result,
+            )
             if item.status == "needs_human_login":
                 # An opaque confirmation parks exactly one item; the
                 # rest of the list still completes (contrast V10).

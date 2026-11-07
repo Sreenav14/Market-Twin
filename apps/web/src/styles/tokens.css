@@ -24,6 +24,9 @@
 }
 
 :root {
+  /* Testing-goals coverage matrix columns: tester / perspective /
+     execution / outcome / evidence. */
+  --concept-goals-columns: minmax(130px, 1fr) minmax(150px, 1.4fr) auto auto minmax(110px, auto);
   --font-sans: "Inter", system-ui, sans-serif;
   --font-ui: var(--font-sans);
   --font-heading: var(--font-sans);
@@ -70,9 +73,40 @@
   --mt-space-5: 20px;
   --mt-space-6: 24px;
   --mt-space-8: 32px;
-  --mt-radius-sm: 4px;
-  --mt-radius-md: 6px;
+  /* Radius scale (examination X-6): the only radii hand-written CSS may
+     use — 6 / 8 / 10 steps, 14 for large panels, 999 for pills. */
+  --mt-radius-sm: 6px;
+  --mt-radius-md: 8px;
   --mt-radius-lg: 10px;
+  --mt-radius-xl: 14px;
+  --mt-radius-pill: 999px;
+  /* Type scale (examination X-5): font sizes snap to
+     10 / 11 / 12 / 13 / 14 / 16 / 18 / 20 / 24 / 28 / 32 — no fractions. */
+
+  /* Motion (home-motion research §2/§4): ONE register for data-bearing
+     surfaces — IBM Carbon "productive". Monotonic easings only: no
+     overshoot, ever, because overshoot on a length-encoded bar draws a
+     false value. Durations: quick = Carbon fast-02, exit = moderate-01,
+     move = moderate-02, enter/bar = Material Standard decelerate/standard. */
+  --dur-quick: 110ms;
+  --dur-exit: 150ms;
+  --dur-move: 240ms;
+  --dur-enter: 250ms;
+  --dur-bar: 300ms;
+  --ease-change: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-enter: cubic-bezier(0, 0, 0.38, 0.9);
+  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9);
+
+  /* Field recipe (fields audit): ONE border source for every field.
+     The resting tone is the strong border the older layers already
+     used (--border-strong, #6E6A5E — clearly visible on paper and on
+     white/tinted cards); hover deepens one step to --ink-2; the error
+     tone is the same border the form-error box already uses. --line
+     (#E4E0D6) is a divider/card-edge hairline and must never be a
+     field border: on paper or card it reads as no border at all. */
+  --field-border: var(--border-strong);
+  --field-border-hover: var(--ink-2);
+  --field-border-error: var(--danger-border);
 
   --page: var(--mt-canvas);
   --surface: var(--mt-surface);

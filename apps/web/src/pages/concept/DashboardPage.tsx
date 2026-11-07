@@ -287,7 +287,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       color: "var(--ink)",
                     }}
                   >
-                    2 fixed
+                    2 of 3 fixed
                   </span>
                   <span
                     className="font-body-small"
@@ -298,7 +298,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       color: "var(--ink)",
                     }}
                   >
-                    1 still broken
+                    1 of 3 still broken
                   </span>
                   <span
                     className="font-body-small"
@@ -309,7 +309,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       color: "var(--ink)",
                     }}
                   >
-                    1 new
+                    1 new of 2 current problems
                   </span>
                 </div>
 

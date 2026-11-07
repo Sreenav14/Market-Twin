@@ -11,8 +11,8 @@ const destinations = [
     href: "/dashboard",
   },
   {
-    title: "Ingestion",
-    description: "Ingest knowledge from source files",
+    title: "Add knowledge",
+    description: "Add knowledge from source files or links",
     href: "/ingestion",
   },
   {

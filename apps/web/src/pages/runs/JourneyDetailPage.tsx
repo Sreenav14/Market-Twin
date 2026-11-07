@@ -12,7 +12,7 @@ import {
   journeyIdentity,
 } from "../../lib/journeyPresentation";
 import { ArtifactEvidence } from "./FindingDetailPage";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { ExecutionBadge, OutcomeBadge, StatusBadge } from "../../components/ui/StatusBadge";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 
@@ -113,7 +113,7 @@ export function JourneyDetailPage() {
             </p>
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            <StatusBadge status={journey.execution_status ?? "not started"} />
+            <ExecutionBadge status={journey.execution_status ?? "not started"} />
             <Button
               variant="secondary"
               disabled={query.isFetching}
@@ -138,7 +138,7 @@ export function JourneyDetailPage() {
           {!identity.discovery ? (
             <span className="journey-meta-chip">
               Product outcome:{" "}
-              <StatusBadge status={journey.outcome ?? "not recorded"} />
+              <OutcomeBadge outcome={journey.outcome ?? "not recorded"} />
             </span>
           ) : null}
         </div>
@@ -158,7 +158,7 @@ export function JourneyDetailPage() {
           </Link>
           <span aria-hidden="true">·</span>
           <Link className="text-link" to={`/runs/${run.id}/human-action`}>
-            Human Assistance history
+            Human assistance history
           </Link>
         </nav>
       </div>
@@ -195,7 +195,7 @@ export function JourneyDetailPage() {
                     <span className="journey-step-tag">
                       Step {item.step_number} · {item.action_type.replaceAll("_", " ")}
                     </span>
-                    <StatusBadge status={item.status} />
+                    <StatusBadge status={item.status} source="journeyExecution" />
                   </div>
                   <strong>{item.action_summary}</strong>
                 </button>
@@ -284,7 +284,7 @@ export function JourneyDetailPage() {
                 </dd>
                 <dt>Result</dt>
                 <dd>
-                  <StatusBadge status={observation.status} />
+                  <StatusBadge status={observation.status} source="assertion" />
                 </dd>
                 {observation.reason ? (
                   <>
@@ -356,6 +356,7 @@ export function JourneyDetailPage() {
                 <>
                   {" "}
                   <StatusBadge
+                    source="assertion"
                     status={
                       entries.find((entry) => entry.criterion === criterion)
                         ?.status ?? "not reported"

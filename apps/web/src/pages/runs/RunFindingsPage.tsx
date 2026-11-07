@@ -7,7 +7,7 @@ import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { EmptyState } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { findingClassification, isConfirmedFinding, severityOrder, sortFindings } from "../../lib/results";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { SeverityBadge } from "../../components/ui/StatusBadge";
 import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
 
 export function RunFindingsPage() {
@@ -138,18 +138,18 @@ export function RunFindingsPage() {
                 <div className="findings-groups">
                 {([
                   ["Confirmed issues", "confirmed"],
-                  ["Needs Verification", "Needs Verification"],
+                  ["Needs checking", "Needs Verification"],
                   ["Test execution issues", "Test execution issue"],
                 ] as const).map(([heading, classification]) => {
                   const items = filtered.filter((finding) => classification === "confirmed" ? isConfirmedFinding(finding) : findingClassification(finding) === classification);
                   return items.length ? (
                     <section key={heading} aria-label={heading}>
                       <h3>{heading}</h3>
-                      {heading === "Needs Verification" ? <p className="muted">These observations require relevant browser evidence. Agreement between simulated testers is not independent proof.</p> : null}
+                      {heading === "Needs checking" ? <p className="muted">These observations require relevant browser evidence. Agreement between simulated testers is not independent proof.</p> : null}
                       <ul className="finding-list findings-list">
                         {items.map((finding) => <li className="finding-item" key={finding.id}>
                           <button type="button" className="finding-select" aria-pressed={selected?.id === finding.id} onClick={() => selectFinding(finding.id)}>
-                            <StatusBadge status={finding.severity} />
+                            <SeverityBadge severity={finding.severity} />
                             <span className="category-label">{statusLabel(findingClassification(finding))} · {finding.category.replaceAll("_", " ")}</span>
                             <strong>{finding.title}</strong><span>{finding.summary}</span>
                             <small>{finding.evidence.step_ids.length} steps · {finding.evidence.artifact_ids.length} artifacts</small>
@@ -161,7 +161,7 @@ export function RunFindingsPage() {
                 })}
                 </div>
                 {selected ? <aside className="finding-inspector" aria-labelledby="finding-inspector-title" aria-live="polite">
-                  <div className="finding-title-meta"><StatusBadge status={selected.severity} /><span className="category-label">{statusLabel(findingClassification(selected))} · {selected.category.replaceAll("_", " ")}</span></div>
+                  <div className="finding-title-meta"><SeverityBadge severity={selected.severity} /><span className="category-label">{statusLabel(findingClassification(selected))} · {selected.category.replaceAll("_", " ")}</span></div>
                   <h3 id="finding-inspector-title">{selected.title}</h3><p>{selected.summary}</p>
                   <p><strong>Recommendation</strong><br />{selected.recommendation || "No recommendation was included."}</p>
                   <p className="muted">{selected.evidence.step_ids.length} cited steps · {selected.evidence.artifact_ids.length} artifacts · {selected.journey_ids.length} affected journeys</p>

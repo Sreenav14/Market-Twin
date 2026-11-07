@@ -112,7 +112,7 @@ export function ApplicationOverviewPage() {
         title={application.name}
         description={
           application.description ||
-          "Configure authorized target environments and run browser tests against this application."
+          "Configure authorized targets and run browser tests against this application."
         }
         action={primaryAction}
       />
@@ -132,12 +132,12 @@ export function ApplicationOverviewPage() {
       <section className="section-block" aria-labelledby="app-targets-heading">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Environments</p>
+            <p className="eyebrow">Targets</p>
             <h2 id="app-targets-heading">Targets</h2>
           </div>
           {canWrite && targetsState.status === "ready" ? (
             <Link
-              className="secondary-button compact"
+              className="primary-button compact"
               to={`/applications/${application.id}/targets/new`}
             >
               <Icon name="plus" size={14} /> Add target
@@ -151,7 +151,7 @@ export function ApplicationOverviewPage() {
         ) : targetsData.length === 0 ? (
           <EmptyState
             title="No targets configured"
-            copy="Add a local, staging, QA, demo, or production environment before running tests."
+            copy="Add a local, staging, QA, demo, or production target before running tests."
             action={
               canWrite ? (
                 <Link

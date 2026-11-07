@@ -151,7 +151,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               role="tablist"
               aria-label="Getting started options"
               className="flex items-center gap-2 border-b"
-              style={{ borderColor: "var(--line)", marginBottom: "16px", overflowX: "auto", flexWrap: "nowrap" }}
+              style={{ borderColor: "var(--line)", marginBottom: "16px", flexWrap: "wrap" }}
             >
               {[
                 { id: "app", label: "I have an app to test" },
@@ -337,7 +337,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
 
                 <div className="flex flex-col gap-4" style={{ marginBottom: "24px" }}>
-                  <div className="flex items-center justify-between p-3 border rounded-md" style={{ borderColor: "var(--line)" }}>
+                  <div className="example-finding-row p-3 border rounded-md" style={{ borderColor: "var(--line)" }}>
                     <div>
                       <div className="font-h3" style={{ fontSize: "16px", color: "var(--ink)" }}>
                         {data.problems[0].title}
@@ -349,7 +349,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <ProofChip screenshots={data.problems[0].proof.screenshots} rechecked={true} />
                   </div>
 
-                  <div className="flex items-center justify-between p-3 border rounded-md" style={{ borderColor: "var(--line)" }}>
+                  <div className="example-finding-row p-3 border rounded-md" style={{ borderColor: "var(--line)" }}>
                     <div>
                       <div className="font-h3" style={{ fontSize: "16px", color: "var(--ink)" }}>
                         {data.problems[1].title}

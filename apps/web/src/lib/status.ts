@@ -44,9 +44,18 @@ export type StatusSource =
   | "run"
   | "harnessItem"
   | "journeyOutcome"
+  | "journeyExecution"
   | "execution"
   | "severity"
-  | "infra";
+  | "infra"
+  | "contractStage"
+  | "finding"
+  | "assertion"
+  | "criterion"
+  | "evaluation"
+  | "lifecycle"
+  | "mode"
+  | "flow";
 
 export const RUN_STATUS: Record<TestRunStatus, StatusEntry> = {
   draft: { word: "Draft", tone: "notchecked" },
@@ -103,13 +112,133 @@ export const INFRA_STATUS: Record<InfraStatus, StatusEntry> = {
   unavailable: { word: "Kafka unavailable", tone: "couldnot" },
 };
 
+// Journey execution as rendered beside a journey (RunJourneysPage and its
+// siblings): the execution words plus the two states a journey record can
+// sit in before any execution exists.
+export const JOURNEY_EXECUTION_STATUS: Record<string, StatusEntry> = {
+  ...EXECUTION_STATUS,
+  pending: { word: "Pending", tone: "notchecked" },
+  "not started": { word: "Not started", tone: "notchecked" },
+  not_started: { word: "Not started", tone: "notchecked" },
+};
+
+// Run-flow node statuses (RunFlowPanel): journey execution values plus the
+// pipeline-only states the flow builder emits (test_run_results.py
+// build_run_flow) — a node waiting on the human, on the report, or with
+// nothing recorded.
+export const FLOW_STATUS: Record<string, StatusEntry> = {
+  ...JOURNEY_EXECUTION_STATUS,
+  awaiting_human: { word: "Needs you", tone: "couldnot" },
+  not_recorded: { word: "Not recorded", tone: "notchecked" },
+  awaiting_report: { word: "Awaiting report", tone: "info" },
+};
+
+// The contract run's discovery stages (RunLayout header). These words were
+// invented inline in the layout; they live here now so every status word in
+// the product comes from this one file (examination X-1).
+export const CONTRACT_STAGE_STATUS: Record<string, StatusEntry> = {
+  discovering: { word: "Exploring", tone: "info" },
+  awaiting_approval: { word: "Awaiting test approval", tone: "couldnot" },
+  executing: { word: "Testing", tone: "info" },
+  evaluating: { word: "Writing report", tone: "info" },
+};
+
+// Finding verification / classification words (FindingListItem,
+// FindingDetailPage, RunFindingsPage, testerWork summaries).
+export const FINDING_STATUS: Record<string, StatusEntry> = {
+  unverified: { word: "Needs checking", tone: "couldnot" },
+  "needs verification": { word: "Needs checking", tone: "couldnot" },
+  verified_deterministic: { word: "Checked", tone: "works" },
+  verified_visual: { word: "Checked", tone: "works" },
+  "verified assertion issue": { word: "Checked issue", tone: "broken" },
+  "visually verified issue": { word: "Visual observation", tone: "couldnot" },
+  did_not_reproduce: { word: "Did not happen again", tone: "notchecked" },
+  replay_unavailable: { word: "Could not check again", tone: "couldnot" },
+  human_action_required: { word: "Needs you", tone: "couldnot" },
+};
+
+// Assertion outcomes on criterion rows (JourneyDetailPage).
+export const ASSERTION_STATUS: Record<string, StatusEntry> = {
+  satisfied: { word: "Check passed", tone: "works" },
+  not_satisfied: { word: "Check did not pass", tone: "broken" },
+  "not reported": { word: "Not reported", tone: "notchecked" },
+};
+
+// Visual-evidence criterion results (RunEvaluationPage derives
+// passed/failed/unverified from the recorded criterion status).
+export const CRITERION_STATUS: Record<string, StatusEntry> = {
+  passed: { word: "Check passed", tone: "works" },
+  failed: { word: "Check did not pass", tone: "broken" },
+  unverified: { word: "Needs checking", tone: "couldnot" },
+};
+
+// Evaluation pipeline states.
+export const EVALUATION_STATUS: Record<string, StatusEntry> = {
+  evaluation_pending: { word: "Waiting for results", tone: "info" },
+  evaluating: { word: "Checking results", tone: "info" },
+};
+
+// Lifecycle words for the records that are not runs, journeys, executions
+// or findings: applications, targets, workspaces, knowledge sets, flow
+// nodes. One map, so a word can never drift between those surfaces.
+export const LIFECYCLE_STATUS: Record<string, StatusEntry> = {
+  active: { word: "Active", tone: "works" },
+  approved: { word: "Approved", tone: "works" },
+  authorized: { word: "Authorized", tone: "works" },
+  "not authorized": { word: "Not authorized", tone: "broken" },
+  revoked: { word: "Revoked", tone: "broken" },
+  expired: { word: "Expired", tone: "broken" },
+  draft: { word: "Draft", tone: "notchecked" },
+  frozen: { word: "Frozen", tone: "notchecked" },
+  open: { word: "Open", tone: "couldnot" },
+  pending: { word: "Pending", tone: "notchecked" },
+  paused: { word: "Paused", tone: "couldnot" },
+  ready: { word: "Ready", tone: "works" },
+  processing: { word: "Processing", tone: "info" },
+  researching: { word: "Researching", tone: "info" },
+  generating: { word: "Generating", tone: "info" },
+  review: { word: "Needs review", tone: "couldnot" },
+  queued: { word: "Queued", tone: "info" },
+  running: { word: "Running", tone: "info" },
+  waiting: { word: "Waiting", tone: "info" },
+  requested: { word: "Requested", tone: "info" },
+  started: { word: "Started", tone: "info" },
+  completed: { word: "Completed", tone: "works" },
+  failed: { word: "Failed", tone: "broken" },
+  healthy: { word: "Healthy", tone: "works" },
+  unavailable: { word: "Not available", tone: "couldnot" },
+  connected: { word: "Connected", tone: "works" },
+};
+
+// The execution-mode labels shown in run headers and pickers. One entry
+// per mode the API can name; harness_v1 registered here when the mode
+// shipped, so its header word comes from the same table as the others.
+export const MODE_STATUS: Record<string, StatusEntry> = {
+  discovery_contract_v1: { word: "Explore, approve and test", tone: "info" },
+  deep_feature_v1: { word: "Feature checks", tone: "info" },
+  legacy_persona: { word: "Exploratory testing", tone: "info" },
+  harness_v1: { word: "Lead agent testing", tone: "info" },
+};
+
 const STATUS_MAPS: Record<StatusSource, Record<string, StatusEntry>> = {
   run: RUN_STATUS,
   harnessItem: HARNESS_ITEM_STATUS,
-  journeyOutcome: JOURNEY_OUTCOME_STATUS,
+  journeyOutcome: {
+    ...JOURNEY_OUTCOME_STATUS,
+    "not recorded": { word: "Not recorded", tone: "notchecked" },
+  },
+  journeyExecution: JOURNEY_EXECUTION_STATUS,
   execution: EXECUTION_STATUS,
   severity: SEVERITY_STATUS,
   infra: INFRA_STATUS,
+  contractStage: CONTRACT_STAGE_STATUS,
+  finding: FINDING_STATUS,
+  assertion: ASSERTION_STATUS,
+  criterion: CRITERION_STATUS,
+  evaluation: EVALUATION_STATUS,
+  lifecycle: LIFECYCLE_STATUS,
+  mode: MODE_STATUS,
+  flow: FLOW_STATUS,
 };
 
 export function statusEntry(source: StatusSource, value: string): StatusEntry {
