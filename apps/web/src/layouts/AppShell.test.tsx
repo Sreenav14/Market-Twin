@@ -74,7 +74,7 @@ describe("AppShell responsive navigation", () => {
 
     await userEvents.click(await screen.findByRole("button", { name: "Open navigation" }));
     const dialog = await screen.findByRole("dialog", { name: "Workspace navigation" });
-    await userEvents.click(within(dialog).getByRole("link", { name: "Dashboard" }));
+    await userEvents.click(within(dialog).getByRole("link", { name: "Home" }));
 
     expect(await screen.findByRole("heading", { name: "Alpha workspace" })).toBeVisible();
     await waitFor(() => expect(dialog).not.toBeInTheDocument());

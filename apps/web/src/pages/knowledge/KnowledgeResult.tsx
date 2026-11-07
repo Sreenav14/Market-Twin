@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { StatusPill } from "../../components/ui/StatusBadge";
 import {
   type ApplicationKnowledgeDraft,
   type GeneratedSkillDraft,
@@ -360,9 +361,9 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
         <section className="section-block" aria-labelledby="issues-heading">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <h2 id="issues-heading">Extraction issues</h2>
-            <span className="status-badge status-warning" style={{ fontSize: "11px" }}>
+            <StatusPill tone="warning" size="sm">
               {preview.extraction_issues.length} {preview.extraction_issues.length === 1 ? "issue" : "issues"}
-            </span>
+            </StatusPill>
           </div>
           <p className="knowledge-section-help">
             The model recorded these issues while processing the source. Review them to verify whether any critical content was omitted.

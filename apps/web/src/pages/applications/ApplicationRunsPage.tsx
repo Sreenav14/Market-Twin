@@ -144,9 +144,9 @@ export function ApplicationRunsPage() {
                       textValue(run.target_snapshot.base_url, "Target"),
                     )}
                   </span>
+                  {run.status_reason ? <span>{run.status_reason}</span> : null}
                 </div>
                 <TestStatusBadge status={run.status} />
-                {run.status_reason ? <p className="form-help">{run.status_reason}</p> : null}
                 <Icon name="arrow" size={16} />
               </Link>
               {canManageLifecycle(workspace.role) ? (

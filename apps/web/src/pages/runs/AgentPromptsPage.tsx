@@ -1,9 +1,9 @@
-import { statusLabel } from "../../lib/format";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
+import { StatusBadge } from "../../components/ui/StatusBadge";
 import { Button } from "../../components/ui/button";
 import type { AppShellContext } from "../../layouts/AppShell";
 import { agentPrompts, type AgentPrompt } from "../../lib/agentPrompts";
@@ -148,11 +148,11 @@ export function AgentPromptsPage() {
       <section className="tester-journeys" aria-label="Testers and goals">
         <h2>{run.data?.configuration_snapshot.execution_mode === "deep_feature_v1" ? "Feature cases — recorded checks" : "Simulated testers and journeys"}</h2>
         {journeys.isPending ? <LoadingPanel label="Loading recorded work" /> : journeys.isError ? <ErrorPanel message={journeys.error.message} /> : !journeys.data.length ? <p>No testing work has been recorded. Start the test to create its plan.</p> : journeys.data.map((journey) => <article className="tester-journey" key={journey.id}>
-          <div><h3>{journey.runtime_name === "browser_discovery_v1" ? "Browser discovery" : run.data?.configuration_snapshot.execution_mode === "deep_feature_v1" ? `Feature case ${journey.ordinal}` : `${journey.persona_name} · simulated tester`}</h3>
+          <div className="tester-journey-main"><h3>{journey.runtime_name === "browser_discovery_v1" ? "Browser discovery" : run.data?.configuration_snapshot.execution_mode === "deep_feature_v1" ? `Feature case ${journey.ordinal}` : `${journey.persona_name} · simulated tester`}</h3>
             <strong>{journey.mission_title}</strong><p>{journey.mission_objective}</p>
             <details><summary>Success criteria and scenario</summary><ul>{journey.success_criteria.map((criterion, index) => <li key={index}>{criterion}</li>)}</ul><p>{journey.persona_perspective}</p></details>
           </div>
-          <dl className="definition-list"><div><dt>Execution</dt><dd>{journey.execution_status ? statusLabel(journey.execution_status) : "Not started"}</dd></div><div><dt>Recorded outcome</dt><dd>{journey.outcome ? statusLabel(journey.outcome) : "Not established"}</dd></div><div><dt>Recorded work</dt><dd>{journey.step_count} steps · {journey.artifact_count} artifacts</dd></div></dl>
+          <dl className="definition-list tester-journey-facts"><div><dt>Execution</dt><dd>{journey.execution_status ? <StatusBadge status={journey.execution_status} /> : "Not started"}</dd></div><div><dt>Recorded outcome</dt><dd>{journey.outcome ? <StatusBadge status={journey.outcome} /> : "Not established"}</dd></div><div><dt>Recorded work</dt><dd>{journey.step_count} steps · {journey.artifact_count} artifacts</dd></div></dl>
           <div className="button-row"><Link className="text-link" to={`/runs/${runId}/watch`}>Watch live</Link><Link className="text-link" to={`/runs/${runId}/journeys/${journey.id}`}>Inspect actions and evidence</Link></div>
         </article>)}
         <p className="muted">Execution completion and the product outcome are separate. A failed test is not automatically a confirmed website defect. Inspect its criteria and supporting evidence.</p>

@@ -903,4 +903,66 @@ async def test_login_wall_parks_then_resumes_the_same_session(monkeypatch) -> No
     assert run2.configuration_snapshot["harness_stage"] == "needs_login"
 
 
+async def test_budget_exhausted_item_is_timed_out_on_the_record_and_could_not_check_on_the_board(
+    monkeypatch,
+) -> None:
+    """D-1: a fake executor returning ``budget_exhausted`` for one item.
+
+    The execution record for that item must be finished as ``timed_out``
+    (the ``budget_exhausted`` -> ``timed_out`` translation in
+    ``harness_run.py``), while the board item itself lands on
+    ``could_not_check`` — ``ItemStatus`` has no ``timed_out`` value
+    (``harness_state.py``), so the item cannot carry that word; the
+    timed-out fact lives on the execution record only. The remaining
+    items still complete and the run finishes.
+    """
+    entries = (
+        _entry(1, "button", "Search"),
+        _entry(2, "button", "Save settings"),
+    )
+    controller = _FakeInventoryController(pages={INVENTORY_URL: entries},
+                                          start_url=INVENTORY_URL)
+
+    def exhausted(case, execution_id):
+        return _result_for(case, execution_id, verdict="unverified",
+                           status="budget_exhausted", blocker="action_limit")
+
+    script = {
+        "Check Search": exhausted,
+        "Check Save settings": _worked,
+    }
+    run_id = uuid4()
+    run, session, request = _inventory_run(run_id, start_url=INVENTORY_URL)
+    calls: list[str] = []
+    _install_inventory_doubles(monkeypatch, controller=controller,
+                               script=script, calls=calls)
+    # Retain the ExecutionRepository double so the test can read back
+    # the status each execution was finished with.
+    factory = harness_run.ExecutionRepository
+    seen: list[Mock] = []
+
+    def recording(session):
+        repo = factory(session)
+        seen.append(repo)
+        return repo
+
+    monkeypatch.setattr(harness_run, "ExecutionRepository", recording)
+    await harness_run.execute_harness_run(request=request, session=session)
+    loaded = await load_harness_state(session, run_id)
+    assert loaded is not None
+    by_name = {item.name: item for item in loaded.ordered_items()}
+    assert by_name["Search"].status == "could_not_check"
+    assert by_name["Search"].blocker == "action_limit"
+    assert by_name["Save settings"].status == "worked"
+    assert calls == ["Check Search", "Check Save settings"]
+    assert sum(loaded.counts().values()) == 2
+    assert loaded.counts()["pending"] == 0
+    assert run.configuration_snapshot["harness_stage"] == "done"
+    assert len(seen) == 1
+    finished = seen[0].finish_agent_execution.await_args_list
+    assert len(finished) == 2
+    assert finished[0].kwargs["status"] == "timed_out"
+    assert finished[1].kwargs["status"] == "completed"
+
+
 # === end of harness tests ===

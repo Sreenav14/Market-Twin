@@ -1,5 +1,35 @@
 # MarketTwin implementation handoff
 
+## 2026-11-06 — Home: rename + research-led rebuild (local only)
+
+Dashboard is renamed **Home** across the signed-in product (route path
+`/dashboard` unchanged) and rebuilt per
+`~/workspace/your_files/markettwin-hallmark-audit/HOME_RESEARCH_NOTES.md`;
+full record in the Home addendum to `HALLMARK_SIGNED_IN_AUDIT.md` and the
+top section of CURRENT_STATE.md. Commits HR-1..HR-4 + docs on top of
+`50d15f8`; gates 220/220 · typecheck 0 · build 0; NOT pushed. If Home
+work resumes: the snapshot/inbox/tally patterns are the house recipes
+now — extend them, don't fork them; the featured-run detail fetches
+(human-actions, journeys, results) are the sanctioned exception to
+BG-1's no-fan-out rule, lists stay list-shaped. Backend gaps BG-4/5/6
+are the blockers for a workspace activity feed or any Home chart.
+Owner-side steps unchanged (Gates 0/1/2, open decisions, font upload,
+push approval for everything since `3a462d1`).
+
+
+## 2026-11-06 — Hallmark signed-in redesign (head `2913c70`, local only)
+
+Signed-in audit + rebuild complete; see CURRENT_STATE.md (top section) and
+the audit addendum for the full record, inventory, and residuals. Next
+owner-side steps unchanged: Gates 0/1/2 on his stack, the still-open
+decisions (budget-exhaustion wording, D-3 park-expiry design, standard-mode
+switch), and the `inter-var.woff2` web upload. If UI work resumes: the
+recorded UI-U remainder is source-by-source `statusLabel` → `statusEntry`
+adoption (words must not change) and the dead dark-theme sweep
+(`lib/theme.ts` + `[data-theme="dark"]` rules, currently unreachable).
+Do not push this branch without the owner's say-so.
+
+
 Current follow-up: user asked ALL old UI surfaces be unified with concept format and
 architecture. /root/unify_test_pages owns runs/components/markettwin, now largely
 finished (94 focused pass); /root/unify_app_settings management (24 pass + browserQA

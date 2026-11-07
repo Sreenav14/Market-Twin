@@ -46,7 +46,7 @@
   text-decoration: none;
   padding: 6px 10px;
   border-radius: 6px;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .evidence-ledger .ledger-toc a:hover,
@@ -328,7 +328,7 @@
   background: var(--ls);
   margin-bottom: 12px;
   overflow: hidden;
-  transition: all 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
 
 .evidence-ledger .ledger-cluster summary {

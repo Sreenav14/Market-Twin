@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, api } from "../../lib/api";
+import { StatusPill } from "../ui/StatusBadge";
 
 export function KafkaStatusBadge() {
   const health = useQuery({
@@ -18,8 +19,9 @@ export function KafkaStatusBadge() {
         ? relayOff ? "Kafka connected · relay off" : "Kafka connected"
         : "Kafka unavailable";
   return (
-    <span
-      className={`status-badge status-${health.isPending ? "neutral" : connected && !relayOff ? "success" : "warning"}`}
+    <StatusPill
+      tone={health.isPending ? "neutral" : connected && !relayOff ? "success" : "warning"}
+      glyph=""
       role="status"
       title={
         health.isError
@@ -31,8 +33,7 @@ export function KafkaStatusBadge() {
           : "Kafka broker connectivity. This does not report execution worker availability."
       }
     >
-      <span className="status-dot" aria-hidden="true" />
       {label}
-    </span>
+    </StatusPill>
   );
 }

@@ -63,7 +63,7 @@
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
   position: relative;
 }
 

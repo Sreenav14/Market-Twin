@@ -1,5 +1,78 @@
 # Current MarketTwin state
 
+## Home — rename + research-led rebuild — 2026-11-06 (this session)
+
+The signed-in Dashboard is now **Home** (owner's rename; route path
+`/dashboard` unchanged — the name was the ask, the URL is plumbing), and
+Home was rebuilt from a written research pass before any code:
+`~/workspace/your_files/markettwin-hallmark-audit/HOME_RESEARCH_NOTES.md`
+(12 patterns read at source — NN/g, Laws of UX, agent-ecosystem UX,
+Linear/Vercel practice, skeleton-screen and gamification evidence — each
+with an APPLY / REJECT / BLOCKED-BY-DATA verdict against the verified
+API inventory). Completion record: the Home addendum appended to
+`HALLMARK_SIGNED_IN_AUDIT.md`.
+
+What Home does now: a plain-language snapshot briefs the returning owner
+from loaded data only (what needs you / what is running / the latest
+result and what it found); the featured needs-you card carries the
+agent's actual pending request (agent, journey, the request's own
+instructions, from `listHumanActions`); Happening now shows the featured
+active run's real journey/step tally from its journeys payload on the
+existing 5-second poll; Recent tests leads with the latest finished
+run's real outcome line (report payload) and its executive summary
+behind one disclosure, with a working status filter on the segmented
+recipe. Changed values on the polling surfaces settle with one brief
+tint pulse (keyed remount; background/opacity only; removed under
+reduced motion) — the same recipe applied to Watch's activity feed,
+where items genuinely arrive. Exactly three detail fetches, all for
+featured runs; no invented metrics, no per-row fan-out (BG-1), no
+gamification, no charts (blocked by data, BG-6).
+
+Five commits on top of `50d15f8` (HR-1 rename, HR-2 rebuild, HR-3
+apply-wider, HR-4 reduced-motion fix, plus this docs commit); NOT
+pushed. Gates on the final tree: web **220/220** (217 + 3 new Home
+tests), typecheck 0, production build 0. Proof: before/after Home
+renders (`screenshots-home-before/after`) and a 56-capture all-route
+sweep — zero horizontal scroll, zero stuck spinners. New backend gaps
+recorded: BG-4 (no workspace activity feed/timestamp), BG-5 (no
+cross-run activity endpoint), BG-6 (no time series). Public /examples
+concept views keep their "Dashboard" view name (example artifacts, not
+the product page — recorded in the addendum).
+
+
+## Hallmark signed-in redesign — 2026-11-06 (this session)
+
+The signed-in app was audited under the locked warm theme (owner verdict on
+his live app: "too plain, AI slop") and rebuilt. Full record:
+`~/workspace/your_files/markettwin-hallmark-audit/HALLMARK_SIGNED_IN_AUDIT.md`
+(8 deduped Floor defects + completion addendum with the unification
+inventory, measured before/after proof, and the all-route sweep).
+
+17 items, 16 commits, head `2913c70` on top of `f44f6c4`; NOT pushed.
+P0: the ingestion segmented control had no stylesheet at all; the data-row
+grid overflowed its children; search fields drew a double border; journey
+links touched at 0px; `.inline-note` wore warning amber for neutral copy;
+status pills melted into tinted rows; the `--primary` token resolved to ink
+(discharges the deferred public-round item P1-15 — token now flame-deep).
+P1: dashboard recomposed (summary strip, panels, featured needs-you once,
+per-app counts); journeys became cards with canonical status pills; Testers
+chooser cards completed and its hint de-warned; file picker became a drop
+field; `transition: all` eliminated; ingestion help blocks flattened.
+P2 + UI-U: knowledge row rhythm, list radius unified at 10px, one data-row
+height (72px), and one badge primitive (`StatusPill`) — six hand-rolled
+badge implementations consolidated, words/tones unchanged.
+
+Gates at every tier: web 217/217, typecheck 0, production build 0 — the
+baseline held throughout. Two test updates (SI-8) recorded in their commit:
+tests coupled to the dashboard H1 unmounting during load. Backend gaps
+noted for the owner, not faked: run-list payloads carry no counts/coverage
+(BG-1), no current-activity field (BG-2), applications carry no target
+count (BG-3). Residuals on record in the addendum: unreachable dark-theme
+dead code (`lib/theme.ts`, no caller), gate-4 tint region, progress-fill
+width transition. Public pages unchanged except the sign-in mode dot
+painting flame-deep via the token.
+
+
 ## UI unification follow-up — 2026-11-02 (current task)
 
 User requested remaining old pages be unified and wired to the new architecture.

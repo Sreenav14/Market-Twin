@@ -85,9 +85,15 @@
   --text-3: var(--mt-ink-tertiary);
   --border: var(--mt-border);
   --border-strong: var(--mt-border-strong);
-  --primary: var(--mt-accent);
-  --primary-hover: var(--mt-accent-hover);
-  --on-primary: var(--mt-accent-foreground);
+  /* Hallmark signed-in SI-7 (discharges public-round P1-15): the filled
+     primary was unified to flame-deep in concept-system.css, but the
+     token still resolved to ink, so everything painted from var(--primary)
+     — selection, checkbox accents, progress segments, selected states,
+     focus outlines — rendered black. One primary: flame-deep.
+     --mt-accent stays ink: evidence and subtle-surface semantics differ. */
+  --primary: var(--flame-deep);
+  --primary-hover: var(--flame-deep-hover);
+  --on-primary: var(--ink-on-dark);
   --success: var(--mt-success);
   --success-bg: var(--works-tint);
   --success-border: #7aaa8a;

@@ -21,7 +21,10 @@
 .concept-workspace :where(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .concept-workspace :where(.primary-button, .secondary-button, .danger-button) { border-radius: 0; min-height: 44px; box-shadow: none; font-family: var(--font-ui); }
 .concept-workspace :is(.text-input, .text-select, .text-area, .primary-button, .secondary-button, .danger-button), .concept-workspace .study-composer :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: 0; box-shadow: none; }
-.concept-workspace .status-badge { min-height: 24px; padding: 4px 12px; gap: 6px; font-size: 13px; line-height: 18px; border: 0; border-radius: 999px; }
+/* Hallmark signed-in SI-6: badges keep their tone border in the
+   workspace — border:0 here plus a fill identical to the row hover
+   tint made neutral pills melt into tinted rows. */
+.concept-workspace .status-badge { min-height: 24px; padding: 4px 12px; gap: 6px; font-size: 13px; line-height: 18px; border-radius: 999px; }
 .concept-workspace .status-badge .status-dot { display: inline; width: auto; height: auto; background: none; border-radius: 0; font-size: 12px; line-height: 1; }
 .concept-workspace .status-success { color: var(--works); background: var(--works-tint); }
 .concept-workspace .status-danger { color: var(--broken); background: var(--broken-tint); }
@@ -30,7 +33,10 @@
 .concept-workspace :where(.data-table, table) { color: var(--ink); }
 .concept-workspace :where(th, td) { border-color: var(--line); overflow-wrap: anywhere; }
 .concept-workspace :where(th) { color: var(--ink-2); background: transparent; }
-.concept-workspace :is(.data-row, .deletable-row, .data-list) { border-radius: 0; box-shadow: none; border-color: var(--line); }
+.concept-workspace :is(.data-row, .deletable-row) { border-radius: 0; box-shadow: none; border-color: var(--line); }
+/* Hallmark signed-in SI-15: lists take the panel radius (10px), ending
+   the square-list / round-panel mix. The list already clips overflow. */
+.concept-workspace .data-list { border-radius: 10px; box-shadow: none; border-color: var(--line); }
 .concept-workspace :where(pre, code) { overflow-wrap: anywhere; }
 .concept-workspace :where(.page-header-copy, .page-action, .panel, .form-grid > *, .settings-content) { min-width: 0; }
 @media (max-width: 639px) {
@@ -58,6 +64,68 @@
   .concept-live-heading, .concept-live-row { flex-wrap: wrap; gap: 12px; }
   .concept-live-row > div { width: 100%; min-width: 0; }
   .concept-live-empty { padding: 32px 0; }
+}
+
+/* Hallmark signed-in SI-8: the dashboard gets surfaces and a summary.
+   Sections are panels, the counts the page already loads become a stat
+   strip (alert-tinted only when something needs the owner), and the
+   longest-waiting run is a tinted feature card whose action is the
+   flame primary — the urgent thing finally looks urgent. */
+.concept-live-panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-soft); padding: 24px; }
+.concept-live-panel .concept-live-row:last-child { border-bottom: 0; padding-bottom: 4px; }
+.concept-live-panel h2 { margin-bottom: 8px; }
+.concept-live-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.concept-live-stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-soft); padding: 16px 20px; display: grid; gap: 2px; }
+.concept-live-stat .font-stat-numeral { font-size: 32px; line-height: 38px; }
+.concept-live-stat .font-body-small { color: var(--ink-2); }
+.concept-live-stat.is-alert { background: var(--couldnot-tint); border-color: var(--warning-border); }
+.concept-live-feature { display: flex; align-items: center; justify-content: space-between; gap: 20px; background: var(--couldnot-tint); border: 1px solid var(--warning-border); border-radius: 10px; padding: 20px 24px; margin: 12px 0 4px; }
+.concept-live-feature h3 { margin: 0 0 6px; overflow-wrap: anywhere; }
+.concept-live-feature p { color: var(--ink-2); margin: 0; }
+.concept-live-feature > .primary-button { flex-shrink: 0; display: inline-flex; align-items: center; text-decoration: none; }
+@media (max-width: 639px) {
+  .concept-live-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .concept-live-feature { flex-wrap: wrap; }
+  .concept-live-panel { padding: 20px 16px; }
+}
+
+/* Hallmark Home round (HR-2..HR-4): Home briefs before it lists. The
+   snapshot is one plain-language catch-up under the heading, composed
+   only from data the page loaded; the featured needs-you card carries
+   the agent's actual request; the featured active run carries its real
+   journey tally; the latest finished run leads Recent tests with its
+   real outcome and its report summary one disclosure away. Every rule
+   below reuses the SI-8 surfaces — no new chrome. */
+.concept-live-snapshot { color: var(--ink-2); max-width: 68ch; margin: 16px 0 0; }
+.concept-live-snapshot strong { color: var(--ink); }
+.concept-live-ask { color: var(--ink); margin-top: 8px; }
+.concept-live-ask strong { font-weight: 600; }
+.concept-live-progress { color: var(--ink-2); margin: 4px 0 8px; }
+.concept-live-result { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); padding: 4px 0 20px; margin-bottom: 8px; }
+.concept-live-result h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
+.concept-live-result p { color: var(--ink-2); margin: 8px 0 0; }
+.concept-live-result > .text-link { flex-shrink: 0; }
+.concept-live-more { margin-top: 10px; }
+.concept-live-more > summary { cursor: pointer; color: var(--flame-deep); font-size: 14.5px; font-weight: 500; min-height: 32px; display: inline-flex; align-items: center; }
+.concept-live-more > summary:hover { text-decoration: underline; }
+.concept-live-more > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.concept-live-filter { margin: 4px 0 8px; }
+@media (max-width: 639px) {
+  .concept-live-result { flex-wrap: wrap; }
+}
+
+/* HR-3: the change pulse. When a live value changes on a polling
+   surface, the new value remounts (keyed in the markup) and settles
+   with one brief tint pass — the update is perceived because the data
+   moved, not because something animates on a loop. Background only;
+   the global reduced-motion rule (base.css) removes it entirely. */
+@keyframes mt-change-settle {
+  from { background-color: var(--notchecked-tint); }
+  to { background-color: transparent; }
+}
+.mt-change { animation: mt-change-settle 900ms ease-out; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .mt-change { animation: none; }
 }
 
 /* Table headers take the system's semibold, not the UA's bold 700 —

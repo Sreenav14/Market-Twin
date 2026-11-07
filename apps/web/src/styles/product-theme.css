@@ -180,7 +180,7 @@
   min-height: 40px;
   min-width: 40px;
   border-radius: 6px;
-  transition: all 140ms ease;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .theme-toggle-btn:hover {

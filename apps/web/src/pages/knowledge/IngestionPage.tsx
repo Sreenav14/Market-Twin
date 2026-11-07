@@ -137,17 +137,17 @@ export function IngestionPage() {
                 aria-describedby="link-help"
               />
               <div
-                className="info-card"
+                className="info-card info-card-flat"
                 id="link-help"
               >
-                <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text)" }}>
-                  <Info size={15} aria-hidden="true" style={{ color: "var(--evidence)" }} />
+                <strong className="info-card-title">
+                  <Info size={15} aria-hidden="true" />
                   Public Link Research Constraints
                 </strong>
-                <p className="form-help" style={{ margin: "6px 0 0", fontSize: "13px", lineHeight: "1.6" }}>
+                <p className="form-help">
                   MarketTwin saves the link immediately, then researches it in the background. It follows connected public pages and expands menus, tabs and readable sections, up to 100 pages or 20 minutes. You can leave the page. Login, form submissions and private pages require a separate approved source.
                 </p>
-                <ul style={{ margin: "8px 0 0", paddingLeft: "18px", fontSize: "12px", color: "var(--text-3)", lineHeight: "1.6" }}>
+                <ul className="info-card-list">
                   <li>Public, permitted, read-only HTTP or HTTPS pages only (standard ports 80/443).</li>
                   <li>Destructive actions, form submissions, login/payment, and private network addresses are not supported.</li>
                   <li>Saves source with a durable entry immediately (HTTP 202) and continues in background.</li>
@@ -161,6 +161,7 @@ export function IngestionPage() {
                 key="source-file"
                 id="source-file"
                 type="file"
+                className="file-input"
                 disabled={busy}
                 required
                 onChange={(event) => {
@@ -172,17 +173,17 @@ export function IngestionPage() {
                 aria-describedby="source-help"
               />
               <div
-                className="info-card"
+                className="info-card info-card-flat"
                 id="source-help"
               >
-                <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text)" }}>
-                  <Info size={15} aria-hidden="true" style={{ color: "var(--evidence)" }} />
+                <strong className="info-card-title">
+                  <Info size={15} aria-hidden="true" />
                   File Specifications & Limits
                 </strong>
-                <p className="form-help" style={{ margin: "6px 0 0", fontSize: "13px", lineHeight: "1.6" }}>
+                <p className="form-help">
                   Choose one document, image, or video. Processing continues in the background after the upload finishes.
                 </p>
-                <ul style={{ margin: "8px 0 0", paddingLeft: "18px", fontSize: "12px", color: "var(--text-3)", lineHeight: "1.6" }}>
+                <ul className="info-card-list">
                   <li>Maximum file size: 50 MB based on backend configuration.</li>
                   <li>Supported formats: Documents (PDF, Markdown, TXT), Images (PNG, JPEG, WebP), and Media (MP4, WebM).</li>
                   <li>One file per ingestion entry. Large multi-file suites should be uploaded individually.</li>

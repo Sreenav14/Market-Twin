@@ -59,17 +59,41 @@
 .live-activity h3 { margin: 0 0 12px; }
 .live-activity select { width: 100%; margin-bottom: 12px; }
 .live-activity-list { list-style: none; margin: 0 0 16px; padding: 0; max-height: 560px; overflow-y: auto; }
+/* Home round HR-3 (apply-wider): the same settle recipe as Home's
+   change pulse, in the form this surface earns. Activity items are
+   keyed by event id and the page polls every 2s, so an item mounts
+   exactly when it is recorded — one brief fade marks its arrival.
+   Existing items never re-animate (their DOM nodes persist), and the
+   global reduced-motion rule removes the fade entirely. */
+@keyframes mt-activity-arrive { from { opacity: 0; } to { opacity: 1; } }
+.live-activity-list > li { animation: mt-activity-arrive 250ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .live-activity-list > li { animation: none; }
+}
 .live-activity-list li + li { border-top: 1px solid var(--border); }
 .live-activity-list button { display: grid; gap: 5px; width: 100%; padding: 12px 8px; text-align: left; border: 0; background: transparent; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
 .live-activity-list button:hover, .live-activity-list button[aria-pressed="true"] { background: var(--surface-hover); }
 .live-activity-list time, .live-activity-list span { color: var(--text-2); font-size: 14px; }
 .live-step-inspector { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px; }
 .live-step-inspector p { font-size: 14px; }
-.tester-journeys { display: grid; gap: 0; margin-bottom: 24px; }
-.tester-journey { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(160px, 1fr) auto; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+/* Hallmark signed-in SI-9: journeys are cards, not hairline rows — the
+   tester's goal leads, execution and outcome read as the product's own
+   status pills (same canonical words), and the facts rail sits in the
+   card instead of floating in dead space. */
+.tester-journeys { display: grid; gap: 16px; margin-bottom: 24px; }
+.tester-journey { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(180px, 1fr) auto; gap: 24px; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-soft); }
 .tester-journey h3, .tester-journey p { margin: 0 0 8px; }
 .tester-journey p { color: var(--text-2); }
-.tester-journey .button-row { align-content: start; }
+.tester-journey-facts { display: grid; gap: 12px; align-content: start; margin: 0; }
+.tester-journey-facts > div { display: grid; gap: 3px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.tester-journey-facts > div:last-child { padding-bottom: 0; border-bottom: 0; }
+.tester-journey-facts dt { color: var(--text-3); font-size: 13px; }
+.tester-journey-facts dd { margin: 0; }
+/* Hallmark signed-in SI-4: the row had no layout at all, so the two
+   links rendered glued together ("Watch liveInspect actions and
+   evidence", measured gap 0px). A stacked action column with air. */
+.tester-journey .button-row { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; align-content: start; }
+.tester-journey .button-row .text-link { display: inline-flex; align-items: center; min-height: 32px; }
 .tester-advanced > summary { padding: 16px 0; cursor: pointer; font-weight: 600; }
 @media (max-width: 1050px) { .live-workbench { grid-template-columns: 1fr; } .live-activity { border: 0; border-top: 1px solid var(--border); padding: 20px 0 0; } .live-activity-list { max-height: 360px; } }
 @media (max-width: 640px) { .live-execution-heading, .live-work-selector { display: block; } .live-work-selector > * { margin-bottom: 12px; } .live-browser-empty { min-height: 200px; padding: 16px; } .tester-journey { grid-template-columns: 1fr; } .live-browser-column .study-summary { display: block; } }

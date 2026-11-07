@@ -3,7 +3,7 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Icon } from "../../components/ui/Icon";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { StatusBadge, StatusPill } from "../../components/ui/StatusBadge";
 import { AllowedOrigin, api } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
@@ -199,12 +199,9 @@ export function TargetNetworkPolicyPage() {
                       }}
                     >
                       <strong style={{ fontSize: "15px" }}>{rev.name}</strong>
-                      <span
-                        className="status-badge status-warning"
-                        style={{ fontSize: "11px" }}
-                      >
+                      <StatusPill tone="warning" size="sm">
                         Pending — does not grant test execution permission
-                      </span>
+                      </StatusPill>
                     </div>
 
                     <div style={{ display: "grid", gap: "8px", margin: "12px 0" }}>

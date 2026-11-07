@@ -11,7 +11,7 @@ export function ForbiddenPage() {
         <div className="concept-system-actions">
           <Link to="/dashboard" className="primary-button">
             <Home size={15} aria-hidden="true" />
-            <span>Return to Dashboard</span>
+            <span>Return to Home</span>
           </Link>
           <Link to="/runs" className="secondary-button">See tests</Link>
         </div>

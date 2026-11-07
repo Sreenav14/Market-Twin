@@ -171,7 +171,7 @@
 .status-danger { background: var(--broken-tint); color: var(--broken); border-color: var(--danger-border); }
 .status-warning { background: var(--couldnot-tint); color: var(--couldnot); border-color: var(--warning-border); }
 .status-info { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
-.status-neutral { background: var(--notchecked-tint); color: var(--notchecked); border-color: var(--line); }
+.status-neutral { background: var(--notchecked-tint); color: var(--notchecked); border-color: var(--mt-border-strong); }
 
 /* ---------- Tabs: one tab language (run pages, settings, everywhere) ---------- */
 .tab-strip {
@@ -306,6 +306,9 @@ a.data-row:hover, a.study-row:hover,
   padding: 20px 24px;
 }
 .state-panel { text-align: center; color: var(--ink-2); }
+/* Hallmark signed-in SI-12: loading reserves a steady panel height and
+   centres in it, so content lands without the page jumping. */
+.state-panel { min-height: 240px; justify-content: center; }
 .boot-screen {
   background: var(--paper);
   color: var(--ink);
@@ -382,3 +385,131 @@ details:not([open]) > :not(summary) {
 }
 .run-action-required h2 { font-size: 20px; line-height: 28px; font-weight: 650; color: var(--ink); margin: 4px 0 6px; }
 .run-action-required p { color: var(--ink-2); margin: 0; }
+
+/* ---------- Segmented control (ingestion source type) ----------
+   Hallmark signed-in SI-1: the control shipped with no stylesheet at all
+   and rendered as jammed plain text. A track with one raised segment:
+   the selected option is a white card on the tint, never colour alone. */
+.source-choice-group { display: grid; gap: 8px; justify-items: start; }
+.segmented-control {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--notchecked-tint);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px;
+}
+.segmented-control-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.segmented-control-item:hover:not(:disabled) { color: var(--ink); }
+.segmented-control-item.active {
+  background: var(--card);
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+.segmented-control-item:disabled { opacity: 0.55; cursor: not-allowed; }
+@media (max-width: 639px) {
+  .segmented-control { display: flex; width: 100%; }
+  .segmented-control-item { flex: 1; justify-content: center; }
+}
+
+/* ---------- Data rows: the grid fits the children rows actually carry ----------
+   Hallmark signed-in SI-2: the legacy template has 4 columns, but app,
+   target and test rows carry 5-6 children, so the arrow wrapped to a
+   second row at the bottom-left (owner's Your-apps screenshot). Extra
+   auto columns collapse when a row carries fewer children. */
+.data-row { grid-template-columns: 40px minmax(0, 1fr) repeat(4, auto); }
+@media (max-width: 760px) {
+  /* The legacy sheet hides the arrow and environment label at this width;
+     the visible children are icon, name, badge and action. */
+  .data-row { grid-template-columns: 38px minmax(0, 1fr) auto auto; }
+}
+
+/* ---------- Search fields: the wrapper owns the frame ----------
+   Hallmark signed-in SI-3: product-theme's global input border
+   (specificity 0-2-1) beat .search-field input's border:none (0-1-1),
+   so every filter box drew a second frame inside the first. */
+.mt-shell .search-field input { border: 0; background: transparent; border-radius: 0; }
+
+/* ---------- Inline notes: neutral by default, amber only for alerts ----------
+   Hallmark signed-in SI-5: .inline-note kept its legacy warning chrome
+   (amber tint + warning border) because no later layer reset the
+   background or border, so plain instructions rendered as warnings —
+   worst on the Testers page, where "Select a project to see its tests."
+   was a full-width amber band. True alerts carry role="alert" and keep
+   the amber treatment. */
+.inline-note { background: transparent; border: 0; border-radius: 0; padding: 0; }
+.inline-note[role="alert"] {
+  background: var(--couldnot-tint);
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--couldnot);
+}
+
+/* ---------- File picker: a drop field, not the browser's raw control ----------
+   Hallmark signed-in SI-11: the ingestion file input was the native
+   control sitting in the global input border. It stays a real labelled
+   file input; it now presents as a dashed drop field with a proper
+   button face. */
+.mt-shell input.file-input {
+  width: 100%;
+  border: 1.5px dashed var(--mt-border-strong);
+  border-radius: 10px;
+  background: var(--notchecked-tint);
+  padding: 16px 18px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.mt-shell input.file-input::file-selector-button {
+  background: var(--card);
+  border: 1px solid var(--mt-border-strong);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-right: 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+.mt-shell input.file-input:hover:not(:disabled)::file-selector-button { background: var(--notchecked-tint); }
+.mt-shell input.file-input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ---------- Ingestion help blocks: a zone, not a card in a card ----------
+   Hallmark signed-in SI-13: the two help blocks were full bordered
+   cards nested inside the form card, dressed in inline styles. Flat
+   tinted zones now; the words are unchanged. */
+.info-card-flat { border: 0; border-radius: 8px; padding: 14px 16px; }
+.info-card-title { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+.info-card-title svg { color: var(--evidence); }
+.info-card-flat .form-help { margin: 6px 0 0; font-size: 13px; line-height: 1.6; }
+.info-card-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-3); line-height: 1.6; }
+
+/* ---------- Knowledge rows: one actions rhythm (SI-14) ---------- */
+.knowledge-row-actions { gap: 14px; }
+.ingestion-progress { justify-items: end; text-align: right; }
+
+/* ---------- Data rows: one height (SI-16) ----------
+   The legacy grid said 70px, base.css said 88px; the unified layer
+   settles the row height once. Taller content still grows the row. */
+.data-row { min-height: 72px; }
+
+/* ---------- Badge size variant: one small pill (SI-17) ----------
+   Hand-inlined 11px shrinks in knowledge/target pages become a single
+   named size on the shared badge. */
+.status-badge-sm { font-size: 12px; line-height: 16px; padding: 2px 9px; min-height: 22px; }

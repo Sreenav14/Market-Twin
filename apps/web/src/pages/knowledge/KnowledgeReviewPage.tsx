@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, ExternalLink, FileCheck, ShieldCheck } from "lucid
 import { PageHeader } from "../../components/ui/PageHeader";
 import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { Button } from "../../components/ui/button";
+import { StatusPill } from "../../components/ui/StatusBadge";
 import { ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
 import { api, type IngestionEntry } from "../../lib/api";
 import { canWriteWorkspace } from "../../lib/permissions";
@@ -166,16 +167,14 @@ export function KnowledgeReviewPage() {
             {entry.roles.map((role) => sourceRoles.find(([value]) => value === role)?.[1] ?? role).join(", ")}
           </strong>
         </p>
-        <span className="status-badge status-neutral" style={{ fontSize: "11px", padding: "1px 7px" }}>
-          {isLink ? "Public Link" : "Document"}
-        </span>
+        <StatusPill tone="neutral" size="sm">{isLink ? "Public Link" : "Document"}</StatusPill>
       </div>
 
       {pending ? (
         <section className="panel section-block">
           <div className="section-heading">
             <h2>Ingestion in progress</h2>
-            <span className="status-badge status-warning">In progress</span>
+            <StatusPill tone="warning">In progress</StatusPill>
           </div>
           <IngestionProgress entry={entry} />
           <div
@@ -220,7 +219,7 @@ export function KnowledgeReviewPage() {
         <section className="panel section-block">
           <div className="section-heading">
             <h2>Processing failed</h2>
-            <span className="status-badge status-danger">Failed</span>
+            <StatusPill tone="danger">Failed</StatusPill>
           </div>
           <p className="form-error" role="alert">{entry.processing_error || "Knowledge processing failed."}</p>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
@@ -253,7 +252,7 @@ export function KnowledgeReviewPage() {
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <h2 style={{ margin: 0, fontSize: "16px" }}>Knowledge Status</h2>
-                    <span className="status-badge status-success">Available for tests</span>
+                    <StatusPill tone="success">Available for tests</StatusPill>
                   </div>
                   <p className="knowledge-approved-status" style={{ margin: 0, fontSize: "13px", color: "var(--text-2)" }}>
                     This knowledge set has been approved and is available for inclusion in tests across your workspace.

@@ -16,7 +16,7 @@ export function UnexpectedErrorPage() {
           </Button>
           <Link to="/dashboard" className="primary-button">
             <Home size={15} aria-hidden="true" />
-            <span>Return to Dashboard</span>
+            <span>Return to Home</span>
           </Link>
         </div>
       </div>

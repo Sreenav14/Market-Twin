@@ -49,8 +49,9 @@ it("uses actual workspace tests and sends contract approval to its owner review 
   ].map(test => ({ ...test, workspace_id: workspace.id, application_id: app.id, target_id: "target", created_by_user_id: user.id, target_snapshot: {} })) as TestRun[];
   vi.spyOn(api, "listRuns").mockResolvedValue(tests);
   mount("/overview");
-  await screen.findByRole("heading", { name: "Dashboard", level: 1 });
-  expect(screen.getByRole("link", { name: /Approve the tests/ })).toHaveAttribute("href", "/runs/review/contract");
+  await screen.findByRole("heading", { name: "Home", level: 1 });
+  // The heading renders during loading since SI-8; wait for the data row.
+  expect(await screen.findByRole("link", { name: /Approve the tests/ })).toHaveAttribute("href", "/runs/review/contract");
   expect(screen.getByRole("link", { name: /Watch live/ })).toHaveAttribute("href", "/runs/live/watch");
   expect(screen.getByRole("link", { name: /See test results/ })).toHaveAttribute("href", "/runs/done/results");
   expect(within(screen.getByRole("region", { name: "Needs your help" })).getByRole("link", { name: /Run approved tests/ })).toHaveAttribute("href", "/runs/replay/contract");
@@ -69,7 +70,7 @@ it("keeps the empty dashboard read-only for viewers", async () => {
   vi.spyOn(api, "listWorkspaces").mockResolvedValue([{ ...workspace, role: "viewer" }]);
   vi.spyOn(api, "listApplications").mockResolvedValue([]);
   mount("/dashboard");
-  await screen.findByText("Your dashboard will live here.");
+  await screen.findByText("Your home will live here.");
   expect(screen.queryByRole("link", { name: "Add an app" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Start a test" })).not.toBeInTheDocument();
 });

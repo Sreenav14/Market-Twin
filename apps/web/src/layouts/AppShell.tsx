@@ -108,10 +108,10 @@ export function AppShell({
     <nav className="topnav-links" aria-label="Primary navigation">
       <NavLink
         to="/dashboard"
-        aria-label="Dashboard"
+        aria-label="Home"
         className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
       >
-        Dashboard
+        Home
       </NavLink>
       <Link
         to="/applications"
@@ -200,7 +200,7 @@ export function AppShell({
             <Link
               to="/dashboard"
               className="mt-topbar-brand"
-              aria-label="MarketTwin — Dashboard"
+              aria-label="MarketTwin — Home"
             >
               <BrandMark />
               <span className="mt-topbar-wordmark">MarketTwin</span>
@@ -315,8 +315,8 @@ export function AppShell({
 
           {/* Drawer primary nav (same links, but with icons for context) */}
           <nav className="drawer-nav" aria-label="Primary navigation">
-            <NavLink to="/dashboard" aria-label="Dashboard" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
-              <Icon name="home" /><span>Dashboard</span>
+            <NavLink to="/dashboard" aria-label="Home" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              <Icon name="home" /><span>Home</span>
             </NavLink>
             <Link
               to="/applications"

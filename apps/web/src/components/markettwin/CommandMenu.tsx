@@ -6,7 +6,7 @@ import { Input } from "../ui/input";
 
 const destinations = [
   {
-    title: "Dashboard",
+    title: "Home",
     description: "Applications and test activity",
     href: "/dashboard",
   },

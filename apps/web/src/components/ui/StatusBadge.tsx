@@ -42,9 +42,46 @@ const info = new Set([
   "low",
 ]);
 
+export type BadgeTone = "success" | "danger" | "warning" | "info" | "neutral";
+
+/**
+ * The one badge primitive (Hallmark signed-in SI-17): every pill in the
+ * product renders through here — same markup, same tones, two sizes.
+ * `glyph` renders inside the dot span (pass "" for the plain CSS dot);
+ * omit it for a word-only pill.
+ */
+export function StatusPill({
+  tone,
+  glyph,
+  size,
+  title,
+  role,
+  children,
+}: {
+  tone: BadgeTone;
+  glyph?: string;
+  size?: "sm";
+  title?: string;
+  role?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`status-badge status-${tone}${size === "sm" ? " status-badge-sm" : ""}`}
+      title={title}
+      role={role}
+    >
+      {glyph !== undefined ? (
+        <span className="status-dot" aria-hidden="true">{glyph}</span>
+      ) : null}
+      {children}
+    </span>
+  );
+}
+
 export function StatusBadge({ status }: { status: string }) {
   const value = status.toLowerCase();
-  const tone = success.has(value)
+  const tone: BadgeTone = success.has(value)
     ? "success"
     : danger.has(value)
       ? "danger"
@@ -56,10 +93,9 @@ export function StatusBadge({ status }: { status: string }) {
   const symbol = tone === "success" ? "✓" : tone === "danger" ? "×"
     : tone === "warning" ? "?" : tone === "info" ? "•" : "–";
   return (
-    <span className={`status-badge status-${tone}`}>
-      <span className="status-dot" aria-hidden="true">{symbol}</span>
+    <StatusPill tone={tone} glyph={symbol}>
       {statusLabel(status)}
-    </span>
+    </StatusPill>
   );
 }
 
