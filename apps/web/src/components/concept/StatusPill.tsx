@@ -1,12 +1,16 @@
 import React from "react";
 
+// Renamed in Phase 2b: the canonical `StatusPill` is the signed-in
+// primitive in components/ui/StatusBadge.tsx. This concept/demo pill
+// keeps its own name so an import can never be ambiguous.
+
 export type ConceptStatus =
   | "Worked"
   | "Broken"
   | "Could not check"
   | "Not checked";
 
-interface StatusPillProps {
+interface ConceptStatusPillProps {
   status: ConceptStatus;
   className?: string;
 }
@@ -41,7 +45,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export const StatusPill: React.FC<StatusPillProps> = ({ status, className = "" }) => {
+export const ConceptStatusPill: React.FC<ConceptStatusPillProps> = ({ status, className = "" }) => {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG["Not checked"];
 
   return (

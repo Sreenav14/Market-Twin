@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { VoiceCard } from "../../components/ui/VoiceCard";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
 import type { AppShellContext } from "../../layouts/AppShell";
@@ -16,7 +17,9 @@ import { statusEntry } from "../../lib/status";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { useWorkspaceTests } from "../../lib/useWorkspaceTests";
 import { ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { splitMetrics } from "../runs/ContractReport";
 import { CANONICAL_DEMO_DATA } from "../../lib/concept-dataset";
 import {
@@ -200,7 +203,7 @@ function truncateWords(text: string, limit: number): string {
 
 type RecentFilter = "all" | "completed" | "failed" | "cancelled";
 
-const APP_TILE_TINTS = ["#E8E2D6", "#DCE5DD", "#E4E0F5", "#F3D9C8", "#D8E2E8", "#EFE3E3"];
+const APP_TILE_TINTS = ["#E6F2F5", "#FEF3C7", "#E6F4EA", "#FDECEC", "#F3E8EE", "#E8F1F8"];
 function tileTint(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
@@ -360,7 +363,7 @@ export function WorkspaceDashboardPage() {
     <h1 className="font-h1-workspace">Home</h1>
     <div className="desk-heading-actions">
       <button type="button" className="secondary-button" onClick={openCommandMenu}>
-        Start a test · Go to… <kbd className="desk-kbd">⌘K</kbd>
+        Start a test · Go to… <kbd className="kbd">⌘K</kbd>
       </button>
       {writable && applications.length > 0 ? <Link className="primary-button" to={newTestPath}>+ New test</Link> : null}
     </div>
@@ -536,10 +539,7 @@ export function WorkspaceDashboardPage() {
   const voicesSection = voices.length && !latestFailed ? <section className="desk-voices contract-feeling-band" aria-labelledby="desk-voices-heading">
     <h2 id="desk-voices-heading" className="desk-section-label">VOICES</h2>
     {voices.map((voice) => (
-      <blockquote className="desk-voice" key={`${voice.name}-${voice.quote.slice(0, 24)}`}>
-        <p>“{voice.quote}”</p>
-        <cite>— {voice.name}, simulated tester</cite>
-      </blockquote>
+      <VoiceCard key={`${voice.name}-${voice.quote.slice(0, 24)}`} name={voice.name} quote={voice.quote} />
     ))}
   </section> : null;
 
@@ -642,15 +642,18 @@ export function WorkspaceDashboardPage() {
   };
   const archive = <section className="desk-archive" aria-labelledby="desk-archive-heading">
     <h2 id="desk-archive-heading" className="desk-section-label">RECENT TESTS</h2>
-    {finishedRuns.length > 1 ? <div className="segmented-control concept-live-filter" role="group" aria-label="Filter recent tests">
-      {(["all", "completed", "failed", "cancelled"] as RecentFilter[])
+    {finishedRuns.length > 1 ? <SegmentedControl
+      className="concept-live-filter"
+      label="Filter recent tests"
+      options={(["all", "completed", "failed", "cancelled"] as RecentFilter[])
         .filter((status) => status === "all" || recentCounts(status) > 0)
-        .map((status) => <button key={status} type="button" aria-pressed={recentFilter === status}
-          className={`segmented-control-item${recentFilter === status ? " active" : ""}`}
-          onClick={() => changeFilter(status)}>
-          {status === "all" ? `All · ${recentCounts("all")}` : `${statusEntry("run", status)?.word ?? status} · ${recentCounts(status)}`}
-        </button>)}
-    </div> : null}
+        .map((status) => ({
+          value: status,
+          label: status === "all" ? `All \u00b7 ${recentCounts("all")}` : `${statusEntry("run", status)?.word ?? status} \u00b7 ${recentCounts(status)}`,
+        }))}
+      value={recentFilter}
+      onChange={changeFilter}
+    /> : null}
     <div ref={archiveRowsRef}>
       {renderedArchiveRows.length ? renderedArchiveRows.map(archiveRow)
         : <p className="font-body-small">{recentFilter === "all" ? "No other tests to show." : `No ${statusEntry("run", recentFilter)?.word.toLowerCase() ?? recentFilter} tests to show.`}</p>}
@@ -677,7 +680,7 @@ export function WorkspaceDashboardPage() {
     return <DeskMotionContext.Provider value={motion}>
     <div className={deskClass}>
       {header}
-      {state.isError ? <p role="alert">Could not refresh your home page. Showing the last loaded data. <button className="text-link" onClick={() => void state.refetch()}>Try again</button></p> : null}
+      {state.isError ? <InlineAlert severity="warning" title="Could not refresh your home page" role="alert" action={<button className="text-link" onClick={() => void state.refetch()}>Try again</button>}>Showing the last loaded data.</InlineAlert> : null}
       <section className="desk-welcome">
         <h2 className="font-h2-marketing">Your briefing desk.</h2>
         <p className="font-body">Add an app and the Lead Agent will test it like a person would, then brief you here: what worked, what broke, and what it could not check.</p>
@@ -693,10 +696,7 @@ export function WorkspaceDashboardPage() {
           <p className="desk-evidence-title">{demo.problems[0].title}</p>
           <p className="desk-evidence-detail">{demo.problems[0].description} Reproduced in a fresh browser.</p>
         </div>
-        <blockquote className="desk-voice">
-          <p>“{demo.feelings[0].quote}”</p>
-          <cite>— {demo.testers.find((tester) => tester.id === demo.feelings[0].tester)?.name ?? "Maya"}, simulated tester · {demo.feelings[0].task}</cite>
-        </blockquote>
+        <VoiceCard name={demo.testers.find((tester) => tester.id === demo.feelings[0].tester)?.name ?? "Maya"} quote={demo.feelings[0].quote} role={`Simulated tester · ${demo.feelings[0].task}`} />
       </section>
       <p className="desk-footer-line">MarketTwin only counts defects reproduced in a fresh browser.</p>
     </div>
@@ -708,7 +708,7 @@ export function WorkspaceDashboardPage() {
   return <DeskMotionContext.Provider value={motion}>
   <div className={deskClass} ref={deskRef}>
     {header}
-    {state.isError ? <p role="alert">Could not refresh your home page. Showing the last loaded data. <button className="text-link" onClick={() => void state.refetch()}>Try again</button></p> : null}
+    {state.isError ? <InlineAlert severity="warning" title="Could not refresh your home page" role="alert" action={<button className="text-link" onClick={() => void state.refetch()}>Try again</button>}>Showing the last loaded data.</InlineAlert> : null}
     {blockedLayout ? tray : null}
     <DeskZone show={blockedLayout}>{masthead(true)}</DeskZone>
     <DeskZone show={!blockedLayout && showMasthead}>{masthead(false)}</DeskZone>

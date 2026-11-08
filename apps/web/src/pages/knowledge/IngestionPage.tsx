@@ -3,8 +3,12 @@ import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Globe, Info } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { Button } from "../../components/ui/button";
 import { EmptyState, ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
+import { ErrorSummary, FieldError, RequiredLegend, RequiredMark } from "../../components/ui/Field";
+import { FileDropZone } from "../../components/ui/FileUploader";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { api } from "../../lib/api";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { type AppShellContext } from "../../layouts/AppShell";
@@ -35,6 +39,31 @@ export function IngestionPage() {
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Punish late, reward early (Spec 3 §6.2): field errors show on blur
+  // or submit and clear instantly once fixed (derived from values).
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [submitted, setSubmitted] = useState(false);
+  const blur = (field: string) => setTouched((prev) => new Set(prev).add(field));
+  const show = (field: string) => submitted || touched.has(field);
+  const urlError = sourceType === "link" && show("url")
+    ? (!url.trim()
+      ? "Enter a public source link, for example https://example.com/docs."
+      : !/^https?:\/\//i.test(url.trim())
+        ? "Enter a link starting with http:// or https://."
+        : null)
+    : null;
+  const [dropError, setDropError] = useState<string | null>(null);
+  const fileError = sourceType === "file"
+    ? (dropError ?? (show("file") && !file ? "Select a source file to upload." : null))
+    : null;
+  const nameError = show("name") && !name.trim() ? "Enter a knowledge set name." : null;
+  const roleError = show("role") && !role ? "Choose a source purpose." : null;
+  const summaryErrors = [
+    ...(sourceType === "file" && fileError ? [{ targetId: "source-file", message: fileError }] : []),
+    ...(sourceType === "link" && urlError ? [{ targetId: "source-url", message: urlError }] : []),
+    ...(!name.trim() ? [{ targetId: "knowledge-name", message: "Enter a knowledge set name." }] : []),
+    ...(!role ? [{ targetId: "source-role", message: "Choose a source purpose." }] : []),
+  ];
   const sources = useQuery({
     queryKey: ["ingestion", user.id, workspace.id],
     queryFn: () => api.listIngestion(workspace.id),
@@ -44,7 +73,8 @@ export function IngestionPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if ((sourceType === "file" ? !file : !url.trim()) || !name.trim() || !role || busy) return;
+    setSubmitted(true);
+    if ((sourceType === "file" ? !file : !url.trim() || urlError) || !name.trim() || !role || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -68,61 +98,28 @@ export function IngestionPage() {
         description="Upload a file or research a public link to generate draft knowledge and skills. Review and approve them before using them in a test."
       />
       {canWrite ? (
-        <form className="panel form-grid form-card" onSubmit={(event) => void submit(event)} aria-busy={busy}>
+        <form className="panel form-grid form-card" onSubmit={(event) => void submit(event)} aria-busy={busy} noValidate>
           <h2>Add a source</h2>
+          {submitted && summaryErrors.length ? <ErrorSummary errors={summaryErrors} /> : null}
+          <RequiredLegend />
 
           <div className="source-choice-group">
             <span className="field-label" id="source-type-label">Source type</span>
-            <div
-              className="segmented-control"
-              role="tablist"
-              aria-labelledby="source-type-label"
-              onKeyDown={(event) => {
-                if (busy) return;
-                const next = event.key === "Home" ? "file" : event.key === "End" ? "link"
-                  : ["ArrowLeft", "ArrowRight"].includes(event.key)
-                    ? sourceType === "file" ? "link" : "file" : null;
-                if (!next) return;
-                event.preventDefault();
-                setSourceType(next);
-                setError(null);
-                event.currentTarget.querySelector<HTMLButtonElement>(`#tab-${next}`)?.focus();
-              }}
-            >
-              <button
-                type="button"
-                role="tab"
-                id="tab-file"
-                aria-selected={sourceType === "file"}
-                aria-controls="source-panel"
-                tabIndex={sourceType === "file" ? 0 : -1}
-                className={`segmented-control-item ${sourceType === "file" ? "active" : ""}`}
-                onClick={() => { setSourceType("file"); setError(null); }}
-                disabled={busy}
-              >
-                <FileText size={16} aria-hidden="true" />
-                <span>Upload a file</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="tab-link"
-                aria-selected={sourceType === "link"}
-                aria-controls="source-panel"
-                tabIndex={sourceType === "link" ? 0 : -1}
-                className={`segmented-control-item ${sourceType === "link" ? "active" : ""}`}
-                onClick={() => { setSourceType("link"); setError(null); }}
-                disabled={busy}
-              >
-                <Globe size={16} aria-hidden="true" />
-                <span>Research a link</span>
-              </button>
-            </div>
-          </div>
+            <SegmentedControl
+              label="Source type"
+              size="lg"
+              disabled={busy}
+              options={[
+                { value: "file", label: (<><FileText size={16} aria-hidden="true" /><span>Upload a file</span></>) },
+                { value: "link", label: (<><Globe size={16} aria-hidden="true" /><span>Research a link</span></>) },
+              ]}
+              value={sourceType}
+              onChange={(next) => { setSourceType(next); setError(null); }}
+            />          </div>
 
           {sourceType === "link" ? (
-            <div role="tabpanel" id="source-panel" aria-labelledby="tab-link" className="form-grid">
-              <label className="field-label" htmlFor="source-url">Public source link</label>
+            <div className="form-grid">
+              <label className="field-label" htmlFor="source-url">Public source link <RequiredMark required /></label>
               <input
                 key="source-url"
                 id="source-url"
@@ -130,18 +127,21 @@ export function IngestionPage() {
                 className="text-input"
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
+                onBlur={() => blur("url")}
                 placeholder="https://example.com/docs"
                 maxLength={2048}
                 required
                 disabled={busy}
-                aria-describedby="link-help"
+                aria-invalid={urlError ? true : undefined}
+                aria-describedby={urlError ? "link-help source-url-error" : "link-help"}
               />
+              {urlError ? <FieldError id="source-url-error">{urlError}</FieldError> : null}
               <div
                 className="info-card info-card-flat"
                 id="link-help"
               >
                 <strong className="info-card-title">
-                  <Info size={15} aria-hidden="true" />
+                  <Info size={16} aria-hidden="true" />
                   Public Link Research Constraints
                 </strong>
                 <p className="form-help">
@@ -155,62 +155,54 @@ export function IngestionPage() {
               </div>
             </div>
           ) : (
-            <div role="tabpanel" id="source-panel" aria-labelledby="tab-file" className="form-grid">
-              <label className="field-label" htmlFor="source-file">Source file</label>
-              <input
-                key="source-file"
+            <div className="form-grid">
+              <label className="field-label" htmlFor="source-file">Source file <RequiredMark required /></label>
+              <FileDropZone
                 id="source-file"
-                type="file"
-                className="file-input"
                 disabled={busy}
-                required
-                onChange={(event) => {
-                  const selected = event.target.files?.[0] ?? null;
+                file={file}
+                invalid={Boolean(fileError)}
+                describedBy={fileError ? "source-file-constraints source-file-error" : "source-file-constraints"}
+                onPick={(selected) => {
                   setFile(selected);
-                  if (selected && !name) setName(selected.name.replace(/\.[^.]+$/, ""));
+                  setDropError(null);
+                  if (!name) setName(selected.name.replace(/\.[^.]+$/, ""));
                   setError(null);
                 }}
-                aria-describedby="source-help"
+                onInvalid={(message) => setDropError(message)}
+                onRemove={() => { setFile(null); setDropError(null); }}
               />
-              <div
-                className="info-card info-card-flat"
-                id="source-help"
-              >
-                <strong className="info-card-title">
-                  <Info size={15} aria-hidden="true" />
-                  File Specifications & Limits
-                </strong>
-                <p className="form-help">
-                  Choose one document, image, or video. Processing continues in the background after the upload finishes.
-                </p>
-                <ul className="info-card-list">
-                  <li>Maximum file size: 50 MB based on backend configuration.</li>
-                  <li>Supported formats: Documents (PDF, Markdown, TXT), Images (PNG, JPEG, WebP), and Media (MP4, WebM).</li>
-                  <li>One file per ingestion entry. Large multi-file suites should be uploaded individually.</li>
-                </ul>
-              </div>
+              {fileError ? <FieldError id="source-file-error">{fileError}</FieldError> : null}
+              <p className="form-help">
+                Choose one document, image, or video. Processing continues in the background after the upload finishes.
+              </p>
             </div>
           )}
 
-          <label className="field-label" htmlFor="knowledge-name">Knowledge set name</label>
+          <label className="field-label" htmlFor="knowledge-name">Knowledge set name <RequiredMark required /></label>
           <input
             id="knowledge-name"
             className="text-input"
             value={name}
             onChange={(event) => setName(event.target.value)}
+            onBlur={() => blur("name")}
             maxLength={200}
             required
             disabled={busy}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? "knowledge-name-error" : undefined}
           />
+          {nameError ? <FieldError id="knowledge-name-error">{nameError}</FieldError> : null}
 
-          <label className="field-label" htmlFor="source-role">Source purpose</label>
-          <select id="source-role" value={role} onChange={(event) => setRole(event.target.value)} required disabled={busy}>
+          <label className="field-label" htmlFor="source-role">Source purpose <RequiredMark required /></label>
+          <select id="source-role" value={role} onChange={(event) => setRole(event.target.value)} onBlur={() => blur("role")} required disabled={busy} aria-invalid={roleError ? true : undefined} aria-describedby={roleError ? "source-role-help source-role-error" : "source-role-help"}>
             <option value="">Choose a purpose</option>
             {sourceRoles.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
           </select>
-          <p className="form-help">This helps MarketTwin understand how to use the source. You’ll confirm it during review.</p>
+          <p className="form-help" id="source-role-help">This helps MarketTwin understand how to use the source. You’ll confirm it during review.</p>
+          {roleError ? <FieldError id="source-role-error">{roleError}</FieldError> : null}
 
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          {error ? <InlineAlert severity="error" title="Could not add this source" role="alert">{error}</InlineAlert> : null}
           {busy ? (
             <p className="form-note" role="status">
               {sourceType === "link" ? "Saving the link. Research continues on the review page." : "Uploading source."} Knowledge and skill generation will continue in the background.
@@ -218,7 +210,7 @@ export function IngestionPage() {
           ) : null}
 
           <div className="form-actions">
-            <Button type="submit" disabled={(sourceType === "file" ? !file : !url.trim()) || !name.trim() || !role || busy}>
+            <Button type="submit" disabled={busy}>
               {busy ? <><Spinner /> Saving source…</> : "Add knowledge"}
             </Button>
           </div>
@@ -242,9 +234,9 @@ export function IngestionPage() {
               <div className="data-row knowledge-list-row" key={source.id}>
                 <span className="row-icon" aria-hidden="true">
                   {source.source_name.endsWith("-link.txt") || source.source_name.startsWith("http://") || source.source_name.startsWith("https://") ? (
-                    <Globe size={18} />
+                    <Globe size={20} />
                   ) : (
-                    <FileText size={18} />
+                    <FileText size={20} />
                   )}
                 </span>
                 <div className="row-primary">

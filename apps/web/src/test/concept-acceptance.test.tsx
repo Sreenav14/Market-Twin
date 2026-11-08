@@ -4,12 +4,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CANONICAL_DEMO_DATA } from "../lib/concept-dataset";
 import {
-  CoverageBar,
+  OutcomeCoverageBar,
   MegaMenu,
   NeedsYouRow,
   ProofChip,
   ProofTrail,
-  StatusPill,
+  ConceptStatusPill,
   StepList,
   TakeoverPanel,
   UrlIntakeForm,
@@ -166,7 +166,10 @@ describe("MarketTwin Arize-Inspired Concept Acceptance (§15, §15A)", () => {
 
       await user.click(trigger);
       expect(trigger).toHaveAttribute("aria-expanded", "true");
-      expect(screen.getAllByRole("menu")[0]).toBeInTheDocument();
+      // Phase 2c: the MegaMenu is navigation, not a menu (Spec 2 \u00a71.1)
+      // \u2014 disclosure semantics: no menu role, items are plain buttons.
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /Test results/ }).length).toBeGreaterThan(0);
 
       await user.keyboard("{Escape}");
       expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -260,26 +263,26 @@ describe("MarketTwin Arize-Inspired Concept Acceptance (§15, §15A)", () => {
   });
 
   describe("Components & Accessibility (A1–A5, §10A)", () => {
-    it("StatusPill renders symbol, word and tint", () => {
-      const { rerender } = render(<StatusPill status="Worked" />);
+    it("ConceptStatusPill renders symbol, word and tint", () => {
+      const { rerender } = render(<ConceptStatusPill status="Worked" />);
       expect(screen.getByText("✓")).toBeInTheDocument();
       expect(screen.getByText("Worked")).toBeInTheDocument();
 
-      rerender(<StatusPill status="Broken" />);
+      rerender(<ConceptStatusPill status="Broken" />);
       expect(screen.getByText("✕")).toBeInTheDocument();
       expect(screen.getByText("Broken")).toBeInTheDocument();
 
-      rerender(<StatusPill status="Could not check" />);
+      rerender(<ConceptStatusPill status="Could not check" />);
       expect(screen.getByText("?")).toBeInTheDocument();
       expect(screen.getByText("Could not check")).toBeInTheDocument();
 
-      rerender(<StatusPill status="Not checked" />);
+      rerender(<ConceptStatusPill status="Not checked" />);
       expect(screen.getByText("–")).toBeInTheDocument();
       expect(screen.getByText("Not checked")).toBeInTheDocument();
     });
 
-    it("CoverageBar carries proper aria-label and accessible image role", () => {
-      render(<CoverageBar totals={CANONICAL_DEMO_DATA.totals} />);
+    it("OutcomeCoverageBar carries proper aria-label and accessible image role", () => {
+      render(<OutcomeCoverageBar totals={CANONICAL_DEMO_DATA.totals} />);
       const barWrapper = screen.getByRole("img", {
         name: "11 of the 14 attempts we could check worked. 2 broken, 1 could not be checked, 4 not checked.",
       });

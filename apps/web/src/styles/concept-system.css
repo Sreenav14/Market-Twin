@@ -29,12 +29,14 @@
   html { scroll-behavior: smooth; }
 }
 .primary-button, .secondary-button, .danger-button, .ui-button, .mt-button,
-.text-link, .tab-link, .topnav-link, .nav-link, .data-row, .study-row,
+.text-link, .tab-link, .nav-link, .data-row, .study-row,
 .settings-nav a, .back-link, .icon-button, .mt-text-link {
   transition: background-color 120ms ease, border-color 120ms ease,
     color 120ms ease, opacity 120ms ease;
 }
-.status-badge, .tab-count, .monospace, .font-mono-data {
+.status-badge, .tab-count, .monospace, .font-mono-data,
+.metric-card strong, .result-metrics, .count-axis, .desk-updated,
+.concept-live-stat, .font-stat-numeral, time, .live-browser-caption {
   font-variant-numeric: tabular-nums;
 }
 
@@ -45,7 +47,7 @@
 .mt-shell .eyebrow,
 .mt-shell .section-label,
 .eyebrow, .section-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   line-height: 16px;
   font-weight: 500;
@@ -71,14 +73,7 @@
 .page-description { color: var(--ink-2); font-size: 15px; line-height: 24px; max-width: 68ch; }
 
 /* ---------- Cards / panels: white, hairline, soft shadow ---------- */
-.mt-shell .panel,
-.panel {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--mt-radius-lg);
-  box-shadow: var(--shadow-soft);
-  padding: 24px;
-}
+/* Card/panel skin removed — canonical recipe in display.css (Phase 2b). */
 .mt-shell .panel h2, .panel h2,
 .mt-shell .section-heading h2, .section-heading h2 {
   font-family: var(--font-sans);
@@ -93,44 +88,118 @@
 }
 .panel-note, .inline-note { color: var(--ink-2); font-size: 14px; line-height: 22px; }
 
-/* ---------- Buttons: one primary action colour (flame-deep) ---------- */
-.mt-shell .primary-button, .primary-button,
-.mt-shell .ui-button[data-variant="default"], .start-test-button {
-  background: var(--flame-deep);
-  border: 1px solid var(--flame-deep);
-  color: #fff;
-  border-radius: var(--mt-radius-md);
-  min-height: 44px;
-  padding: 0 20px;
-  font-size: 14px;
-  font-weight: 600;
+/* ---------- Buttons: ONE recipe (sidebar/buttons round) ----------
+   The reference's geometry in the warm theme: every button — primary,
+   secondary, danger, ghost, the Button primitive (.ui-button + variant
+   class), and the two legacy aliases (.mt-button = secondary,
+   .start-test-button = primary) — takes height, padding, radius,
+   label weight and shadow from the --btn-* tokens in tokens.css.
+   Hover is colour-only at the motion register's quick duration; press
+   is the register's 0.98 scale; focus stays the locked X-10 ring
+   (concept-tokens.css). Older layers must not restate this geometry. */
+.primary-button, .start-test-button { border-radius: var(--mt-radius-pill); }
+.primary-button, .secondary-button, .danger-button, .ghost-button,
+.ui-button, .mt-button, .start-test-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--btn-height);
+  padding: 0 var(--btn-pad-x);
+  border: 1px solid transparent;
+  border-radius: var(--btn-radius);
+  font-family: var(--font-ui);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-change),
+    border-color var(--dur-quick) var(--ease-change),
+    color var(--dur-quick) var(--ease-change),
+    transform var(--dur-quick) var(--ease-change);
 }
-.mt-shell .primary-button:hover:not(:disabled), .primary-button:hover:not(:disabled),
+.primary-button, .start-test-button {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  box-shadow: var(--shadow-soft);
+}
+.primary-button:hover:not(:disabled),
 .start-test-button:hover:not(:disabled) {
-  background: var(--flame-deep-hover);
-  border-color: var(--flame-deep-hover);
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
-.mt-shell .secondary-button, .secondary-button, .mt-button {
+.secondary-button, .mt-button {
   background: var(--card);
-  border: 1px solid var(--line);
+  border-color: var(--field-border);
   color: var(--ink);
-  border-radius: var(--mt-radius-md);
-  min-height: 44px;
-  padding: 0 18px;
-  font-size: 14px;
-  font-weight: 500;
+  box-shadow: var(--shadow-soft);
 }
-.mt-shell .secondary-button:hover:not(:disabled), .secondary-button:hover:not(:disabled),
-.mt-button:hover { background: var(--notchecked-tint); }
+.secondary-button:hover:not(:disabled), .mt-button:hover:not(:disabled) {
+  background: var(--notchecked-tint);
+  border-color: var(--field-border-hover);
+}
 .danger-button {
   background: var(--card);
-  border: 1px solid var(--danger-border);
+  border-color: var(--danger-border);
   color: var(--broken);
-  border-radius: var(--mt-radius-md);
-  min-height: 44px;
-  font-weight: 600;
+  box-shadow: var(--shadow-soft);
 }
 .danger-button:hover:not(:disabled) { background: var(--broken-tint); }
+.ghost-button {
+  background: transparent;
+  color: var(--ink-2);
+}
+.ghost-button:hover:not(:disabled) {
+  background: var(--notchecked-tint);
+  color: var(--ink);
+}
+/* Small size (Button size="sm"): the same recipe, compact geometry. */
+.compact {
+  min-height: var(--btn-height-sm);
+  padding: 0 var(--btn-pad-x-sm);
+  font-size: var(--btn-font-size-sm);
+}
+/* Square size (Button size="icon"): the recipe's height as width. */
+.button-square { width: var(--btn-height); padding: 0; }
+/* Icon-only buttons: the recipe's radius, a real hover fill. */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: var(--btn-icon-size);
+  height: var(--btn-icon-size);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--btn-radius);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-change),
+    color var(--dur-quick) var(--ease-change),
+    transform var(--dur-quick) var(--ease-change);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--notchecked-tint);
+  color: var(--ink);
+}
+/* Touch targets stay 44px on coarse pointers (the base layer's rule,
+   restated here so this layer's geometry cannot shrink it). */
+@media (pointer: coarse) {
+  .icon-button, .compact { min-height: 44px; min-width: 44px; }
+}
+/* Press: the motion register's one press treatment, never under
+   reduced motion (transitions are zeroed there, so a scale would
+   arrive as a jump). */
+@media (prefers-reduced-motion: no-preference) {
+  .primary-button:active:not(:disabled), .secondary-button:active:not(:disabled),
+  .danger-button:active:not(:disabled), .ghost-button:active:not(:disabled),
+  .ui-button:active:not(:disabled), .mt-button:active:not(:disabled),
+  .start-test-button:active:not(:disabled), .icon-button:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
 /* One disabled recipe for every button (examination X-3): reduced
    opacity + not-allowed cursor, whatever the variant — a disabled
    control must never read as an enabled neutral button. */
@@ -153,57 +222,9 @@
 }
 
 /* ---------- Status badges: one status language, pill shape ---------- */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: var(--mt-radius-pill);
-  padding: 4px 12px;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-  white-space: nowrap;
-  border: 1px solid transparent;
-}
-.status-badge .status-dot { width: 7px; height: 7px; border-radius: var(--mt-radius-pill); background: currentColor; flex-shrink: 0; }
-.status-success { background: var(--works-tint); color: var(--works); border-color: #bcdcc6; }
-.status-danger { background: var(--broken-tint); color: var(--broken); border-color: var(--danger-border); }
-.status-warning { background: var(--couldnot-tint); color: var(--couldnot); border-color: var(--warning-border); }
-.status-info { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
-.status-neutral { background: var(--notchecked-tint); color: var(--notchecked); border-color: var(--mt-border-strong); }
+/* Status badges removed — canonical triad in display.css §4 (Phase 2b). */
 
-/* ---------- Tabs: one tab language (run pages, settings, everywhere) ---------- */
-.tab-strip {
-  display: flex;
-  gap: 24px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 24px;
-  overflow-x: auto;
-}
-.tab-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 0;
-  color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-}
-.tab-link:hover { color: var(--ink); }
-.tab-link.active { color: var(--ink); font-weight: 650; border-bottom-color: var(--ink); }
-.tab-count {
-  background: var(--notchecked-tint);
-  color: var(--ink-2);
-  border-radius: var(--mt-radius-pill);
-  padding: 1px 8px;
-  font-size: 12px;
-  font-weight: 600;
-}
+/* Tabs + section-nav strip: ONE recipe in overlays.css (Phase 2c). */
 
 /* ---------- Forms: same fields on every page ---------- */
 .field-label, .signin-label {
@@ -219,7 +240,7 @@
 .mt-shell input[type="url"], .mt-shell select, .mt-shell textarea {
   background: var(--card);
   /* The one field recipe (fields audit): the border is --field-border,
-     never --line. --line is the divider/card-edge hairline (#E4E0D6,
+     never --line. --line is the divider/card-edge hairline (now #E6E3DE,
      ~1.3:1 on paper and on white) — as a field border it read as no
      border at all, which is why fields looked borderless. The older
      layers (base, product-theme) always used the strong tone; this
@@ -227,10 +248,8 @@
      lists. Border-colour changes ride the motion register (110ms,
      colour only). */
   border: 1px solid var(--field-border);
-  border-radius: var(--mt-radius-md);
-  min-height: 44px;
-  padding: 8px 12px;
-  font-size: 15px;
+  /* Geometry (height/padding/radius/size) is owned by forms.css §3
+     (Phase 2d) — this rule owns the border recipe only. */
   color: var(--ink);
   transition: border-color var(--dur-quick) var(--ease-change);
 }
@@ -279,13 +298,13 @@
 }
 
 /* ---------- Lists & rows ---------- */
-.data-row, .study-row {
+.study-row {
   border-bottom: 1px solid var(--line);
   padding: 16px 8px;
   color: var(--ink);
 }
-a.data-row:hover, a.study-row:hover,
-.data-row:hover, .study-row:hover { background: var(--notchecked-tint); }
+.study-row:hover { background: var(--notchecked-tint); }
+/* .data-row removed — canonical recipe in display.css (Phase 2b). */
 .row-primary { font-weight: 600; color: var(--ink); }
 .muted { color: var(--ink-2); }
 
@@ -323,26 +342,9 @@ a.data-row:hover, a.study-row:hover,
 }
 
 /* ---------- States: empty / loading / error look like the product ---------- */
-.empty-state {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--mt-radius-lg);
-  box-shadow: var(--shadow-soft);
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--ink-2);
-}
-.error-panel {
-  background: var(--broken-tint);
-  border: 1px solid var(--danger-border);
-  border-radius: var(--mt-radius-lg);
-  color: var(--broken);
-  padding: 20px 24px;
-}
-.state-panel { text-align: center; color: var(--ink-2); }
+/* .empty-state removed — states.css (Phase 2e). */
 /* Hallmark signed-in SI-12: loading reserves a steady panel height and
    centres in it, so content lands without the page jumping. */
-.state-panel { min-height: 240px; justify-content: center; }
 .boot-screen {
   background: var(--paper);
   color: var(--ink);
@@ -360,16 +362,6 @@ a.data-row:hover, a.study-row:hover,
 .mt-topbar-wordmark {
   font-size: 18px; line-height: 24px; font-weight: 650; color: var(--ink);
 }
-.topnav-link {
-  color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-}
-.topnav-link:hover { color: var(--ink); }
-.topnav-link.active { color: var(--ink); font-weight: 650; }
 
 /* Closed accordions hide their body in every engine — some rendering
    shells lack the UA rule, which left the body text overflowing the
@@ -392,7 +384,6 @@ details:not([open]) > :not(summary) {
 .signin-layout .ui-button.primary-button {
   background: var(--flame-deep);
   border: 1px solid var(--flame-deep);
-  border-radius: 0;
   color: var(--ink-on-dark);
 }
 .signin-layout .ui-button.primary-button:hover:not(:disabled) {
@@ -417,55 +408,20 @@ details:not([open]) > :not(summary) {
 /* ---------- Segmented control (ingestion source type) ----------
    Hallmark signed-in SI-1: the control shipped with no stylesheet at all
    and rendered as jammed plain text. A track with one raised segment:
-   the selected option is a white card on the tint, never colour alone. */
+   the selected option is a white card on the tint, never colour alone.
+   Sidebar/buttons round: the track takes the reference treatment —
+   soft tint fill, NO border (this answers the fields round's open
+   question: the track reads by its tint, and now by the active pill's
+   raised shadow too), active segment a white raised pill. */
 .source-choice-group { display: grid; gap: 8px; justify-items: start; }
-.segmented-control {
-  display: inline-flex;
-  gap: 4px;
-  background: var(--notchecked-tint);
-  border: 1px solid var(--line);
-  border-radius: var(--mt-radius-lg);
-  padding: 4px;
-}
-.segmented-control-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 8px 16px;
-  border: 1px solid transparent;
-  border-radius: var(--mt-radius-md);
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.segmented-control-item:hover:not(:disabled) { color: var(--ink); }
-.segmented-control-item.active {
-  background: var(--card);
-  border-color: var(--line);
-  box-shadow: var(--shadow-soft);
-  color: var(--ink);
-  font-weight: 600;
-}
-.segmented-control-item:disabled { opacity: 0.55; cursor: not-allowed; }
-@media (max-width: 639px) {
-  .segmented-control { display: flex; width: 100%; }
-  .segmented-control-item { flex: 1; justify-content: center; padding: 8px; font-size: 13px; white-space: nowrap; }
-}
+/* Segmented control: ONE recipe in overlays.css (Phase 2c) -- reconciled inset-thumb / Prody track. */
 
 /* ---------- Data rows: the grid fits the children rows actually carry ----------
    Hallmark signed-in SI-2: the legacy template has 4 columns, but app,
    target and test rows carry 5-6 children, so the arrow wrapped to a
    second row at the bottom-left (owner's Your-apps screenshot). Extra
    auto columns collapse when a row carries fewer children. */
-.data-row { grid-template-columns: 40px minmax(0, 1fr) repeat(4, auto); }
-@media (max-width: 760px) {
-  /* The legacy sheet hides the arrow and environment label at this width;
-     the visible children are icon, name, badge and action. */
-  .data-row { grid-template-columns: 38px minmax(0, 1fr) auto auto; }
-}
+/* .data-row grid removed — display.css carries the SI-2 template (Phase 2b). */
 
 /* ---------- Search fields: the wrapper owns the frame ----------
    Hallmark signed-in SI-3: product-theme's global input border
@@ -489,34 +445,8 @@ details:not([open]) > :not(summary) {
   color: var(--couldnot);
 }
 
-/* ---------- File picker: a drop field, not the browser's raw control ----------
-   Hallmark signed-in SI-11: the ingestion file input was the native
-   control sitting in the global input border. It stays a real labelled
-   file input; it now presents as a dashed drop field with a proper
-   button face. */
-.mt-shell input.file-input {
-  width: 100%;
-  border: 1.5px dashed var(--mt-border-strong);
-  border-radius: var(--mt-radius-lg);
-  background: var(--notchecked-tint);
-  padding: 16px 18px;
-  font-size: 14px;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.mt-shell input.file-input::file-selector-button {
-  background: var(--card);
-  border: 1px solid var(--mt-border-strong);
-  border-radius: var(--mt-radius-md);
-  padding: 10px 16px;
-  margin-right: 14px;
-  font: inherit;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-}
-.mt-shell input.file-input:hover:not(:disabled)::file-selector-button { background: var(--notchecked-tint); }
-.mt-shell input.file-input:disabled { opacity: 0.55; cursor: not-allowed; }
+/* File picker removed — the real drop zone lives in forms.css §4
+   (Phase 2d): drag/drop + browse, accept wired, selected-file rows. */
 
 /* ---------- Ingestion help blocks: a zone, not a card in a card ----------
    Hallmark signed-in SI-13: the two help blocks were full bordered
@@ -532,15 +462,12 @@ details:not([open]) > :not(summary) {
 .knowledge-row-actions { gap: 14px; }
 .ingestion-progress { justify-items: end; text-align: right; }
 
-/* ---------- Data rows: one height (SI-16) ----------
-   The legacy grid said 70px, base.css said 88px; the unified layer
-   settles the row height once. Taller content still grows the row. */
-.data-row { min-height: 72px; }
+/* Data-row height (SI-16) now lives in display.css (Phase 2b). */
 
 /* ---------- Badge size variant: one small pill (SI-17) ----------
    Hand-inlined 11px shrinks in knowledge/target pages become a single
    named size on the shared badge. */
-.status-badge-sm { font-size: 12px; line-height: 16px; padding: 2px 9px; min-height: 22px; }
+/* .status-badge-sm removed — display.css §4 (Phase 2b). */
 
 /* Priya's panel is phone-narrow only while the three panels share a
    row; stacked, it is full width like its siblings — otherwise the

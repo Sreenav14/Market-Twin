@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, ExternalLink, FileCheck, ShieldCheck } from "lucid
 import { PageHeader } from "../../components/ui/PageHeader";
 import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { Button } from "../../components/ui/button";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { StatusPill } from "../../components/ui/StatusBadge";
 import { ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
 import { api, type IngestionEntry } from "../../lib/api";
@@ -122,13 +123,13 @@ export function KnowledgeReviewPage() {
             {statusPill}
             {entry.original_source_url ? (
               <a className="secondary-button" href={entry.original_source_url} target="_blank" rel="noreferrer">
-                <ExternalLink size={15} aria-hidden="true" />
+                <ExternalLink size={16} aria-hidden="true" />
                 <span>Open original public source</span>
               </a>
             ) : null}
             {source.data ? (
               <a className="secondary-button" href={source.data.url} target="_blank" rel="noreferrer">
-                <ExternalLink size={15} aria-hidden="true" />
+                <ExternalLink size={16} aria-hidden="true" />
                 <span>Open retained source evidence</span>
               </a>
             ) : null}
@@ -148,17 +149,11 @@ export function KnowledgeReviewPage() {
       />
 
       {state.isError ? (
-        <p className="inline-note" role="alert">
-          Could not refresh knowledge. Showing the last loaded data.{" "}
-          <Button variant="ghost" size="sm" onClick={() => void state.refetch()}>Try again</Button>
-        </p>
+        <InlineAlert severity="warning" title="Could not refresh knowledge" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void state.refetch()}>Try again</Button>}>Showing the last loaded data.</InlineAlert>
       ) : null}
 
       {source.isError ? (
-        <p className="form-error" role="alert">
-          Could not open retained source evidence.{" "}
-          <Button variant="ghost" size="sm" onClick={() => void source.refetch()}>Try again</Button>
-        </p>
+        <InlineAlert severity="error" title="Could not open retained source evidence" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void source.refetch()}>Try again</Button>} />
       ) : null}
 
       <div
@@ -231,8 +226,8 @@ export function KnowledgeReviewPage() {
             <h2>Processing failed</h2>
             <StatusPill tone="danger">Failed</StatusPill>
           </div>
-          <p className="form-error" role="alert">{entry.processing_error || "Knowledge processing failed."}</p>
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          <InlineAlert severity="error" title={entry.processing_error || "Knowledge processing failed."} role="alert" />
+          {error ? <InlineAlert severity="error" title="Could not retry processing" role="alert">{error}</InlineAlert> : null}
           <p className="muted" style={{ margin: "12px 0 16px" }}>
             The source could not be converted into testable knowledge. Check that the source is readable and matches the supported formats, or try again.
           </p>
@@ -317,13 +312,14 @@ export function KnowledgeReviewPage() {
                 <label className="knowledge-confirmation">
                   <input
                     type="checkbox"
+                    className="mt-checkbox"
                     checked={confirmed}
                     onChange={(event) => setConfirmedFor(event.target.checked ? reviewKey : null)}
                     disabled={busy || !hasKnowledge}
                   />
                   <span>I reviewed this knowledge against its source and confirmed the source purpose.</span>
                 </label>
-                {error ? <p className="form-error" role="alert">{error}</p> : null}
+                {error ? <InlineAlert severity="error" title="Could not approve knowledge" role="alert">{error}</InlineAlert> : null}
                 {!hasKnowledge ? <p className="form-note">{extractedUnlisted ? "The extracted items for this source could not be listed here, so there is nothing to review or approve yet." : "This source produced no knowledge to approve."}</p> : null}
                 <div className="form-actions">
                   <Button disabled={!confirmed || busy || !hasKnowledge} onClick={() => void approve()}>

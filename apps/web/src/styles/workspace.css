@@ -23,43 +23,7 @@
   color: var(--danger);
   background: var(--danger-bg);
 }
-.delete-dialog {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(460px, calc(100% - 32px));
-  max-height: 85dvh;
-  overflow-y: auto;
-  z-index: 61;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border);
-  border-radius: var(--mt-radius-lg);
-  padding: 28px;
-  box-shadow: var(--shadow-overlay);
-}
-.delete-dialog h2 {
-  margin: 0 0 12px;
-}
-.delete-description {
-  color: var(--text-2);
-  font-size: 14px;
-  line-height: 1.7;
-}
-.delete-item-name {
-  padding: 12px;
-  margin: 16px 0;
-  background: var(--surface-muted);
-  border-radius: var(--mt-radius-sm);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.delete-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-}
+/* Dialog geometry deleted \u2014 ONE primitive recipe in overlays.css (Phase 2c). */
 @media (max-width: 760px) {
   .deletable-row {
     padding-right: 6px;
@@ -205,83 +169,7 @@
   font-size: 12px;
   cursor: pointer;
 }
-.search-trigger kbd {
-  margin-left: 45px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-2);
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  padding: 1px 4px;
-  border-radius: var(--mt-radius-sm);
-}
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: var(--scrim);
-  animation: fade-in 120ms ease-out;
-}
-.command-dialog {
-  position: fixed;
-  left: 50%;
-  top: 18%;
-  transform: translateX(-50%);
-  width: min(520px, calc(100% - 32px));
-  max-height: 75dvh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  z-index: 61;
-  background: var(--surface-overlay);
-  padding: 24px;
-  border: 1px solid var(--border);
-  border-radius: var(--mt-radius-lg);
-  box-shadow: var(--shadow-overlay);
-}
-.dialog-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-}
-.dialog-heading h2 {
-  font-size: 20px;
-  margin: 0;
-}
-.command-dialog > p {
-  margin: 5px 0 18px;
-}
-.command-dialog .text-input {
-  width: 100%;
-}
-.command-results {
-  display: grid;
-  margin-top: 14px;
-}
-.command-results a {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 10px;
-  border-radius: var(--mt-radius-sm);
-}
-.command-results a:hover,
-.command-results a:focus {
-  background: var(--surface-muted);
-}
-.command-results strong,
-.command-results small {
-  display: block;
-}
-.command-results strong {
-  font-size: 14px;
-  font-weight: 600;
-}
-.command-results small {
-  font-size: 12px;
-  color: var(--text-3);
-}
+/* Overlay / palette geometry deleted \u2014 overlays.css owns it (Phase 2c). */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -490,7 +378,7 @@
   font-size: 12px;
   margin-bottom: 2px;
 }
-.brief-examples button {
+.brief-examples .brief-example-button {
   min-height: 34px;
   padding: 6px 10px;
   font-size: 12px;
@@ -500,7 +388,7 @@
   background: var(--surface);
   cursor: pointer;
 }
-.brief-examples button:hover {
+.brief-examples .brief-example-button:hover {
   border-color: var(--primary);
   color: var(--primary);
   background: var(--surface-hover);
@@ -673,7 +561,7 @@
   grid-template-columns: 83px minmax(0, 1fr) 19px;
   align-items: start;
   gap: 18px;
-  padding: 23px 24px;
+  padding: 12px 16px; /* list recipe heights — display.css §3 (Phase 2b) */
 }
 .finding-item > a:hover {
   background: var(--surface-hover);
@@ -744,7 +632,7 @@
   background: transparent;
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  /* height: forms.css §3 (44px, Phase 2d) */
   padding: 8px 0;
   font-size: 14px;
   color: var(--text);
@@ -766,7 +654,7 @@
   background: var(--surface);
 }
 .filter-select select {
-  min-height: 40px;
+  /* height: forms.css §3 (44px, Phase 2d) */
   font-size: 13px;
   border: 0;
   background: var(--surface);
@@ -893,21 +781,7 @@
   padding-left: 26px;
 }
 
-.artifact-preview-link {
-  display: block;
-  width: min(100%, 720px);
-}
 
-.artifact-preview {
-  display: block;
-  width: 100%;
-  max-height: 520px;
-  object-fit: contain;
-  object-position: top left;
-  border: 1px solid var(--border);
-  border-radius: var(--mt-radius-sm);
-  background: var(--surface);
-}
 .provenance-panel {
   border-left: 1px solid var(--border);
   padding-left: 25px;
@@ -1160,10 +1034,7 @@
     padding: 8px;
   }
   .search-trigger span,
-  .search-trigger kbd {
-    display: none;
-  }
-  .page-container {
+    .page-container {
     padding: 24px 0 64px;
   }
   .page-header {
@@ -1277,16 +1148,12 @@
   .danger-button,
   .ghost-button,
   .text-link,
-  .brief-examples button {
+  .brief-examples .brief-example-button {
     min-height: 44px;
   }
   .text-link {
     display: inline-flex;
     align-items: center;
-  }
-  .command-dialog {
-    top: 10%;
-    padding: 20px;
   }
   .auth-header {
     gap: 10px;
@@ -1304,8 +1171,8 @@
   width: min(300px, calc(100vw - 32px)); height: 100dvh;
   display: flex; flex-direction: column; gap: 0;
   overflow-y: auto; overscroll-behavior: contain;
-  padding: 28px 16px max(20px, env(safe-area-inset-bottom));
-  background: var(--surface); border-right: 1px solid var(--border);
+  padding: 20px 14px max(20px, env(safe-area-inset-bottom));
+  background: var(--notchecked-tint); border-right: 1px solid var(--line);
 }
 .navigation-close { position: absolute; right: 10px; top: 10px; }
 .navigation-drawer .sidebar-brand { display: flex; padding-right: 28px; }
@@ -1314,9 +1181,9 @@
 .navigation-drawer .workspace-copy, .navigation-drawer .user-copy { display: block; }
 .navigation-drawer .sidebar-nav { display: grid; margin-top: 24px; }
 .navigation-drawer .sidebar-nav-secondary { margin-top: auto; padding-top: 24px; }
-.navigation-drawer .nav-link { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 0 12px; text-align: left; font-size: 14px; min-height: 44px; }
-.navigation-drawer .nav-link span { display: inline; }
-.navigation-drawer .nav-link.active { background: var(--mt-accent-subtle); box-shadow: inset 3px 0 var(--primary); }
+/* The drawer's nav is the sidebar's list (ShellNav): the workspace
+   card above already carries the bottom spacing. */
+.navigation-drawer .shell-nav { margin-top: 0; }
 .navigation-drawer .sidebar-brand .brand-mark { color: var(--text); }
 .navigation-drawer .sidebar-footer { display: flex; padding-top: 18px; margin-top: 20px; }
 .navigation-drawer .sidebar-footer > .user-avatar { display: grid; }

@@ -34,15 +34,18 @@ it.each([
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Create test" });
   if (requested === "missing") {
-    expect(screen.getByRole("combobox", { name: "Application target" })).toHaveValue("");
-    expect(screen.getByRole("alert")).toHaveTextContent("requested target is unavailable");
+    expect(screen.getByRole("combobox", { name: /^Application target/ })).toHaveValue("");
+    // Phase 2d: a field's own message is a FieldError linked by
+    // aria-describedby, not a role="alert" (the summary owns alerts).
+    expect(screen.getByText(/requested target is unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /^Application target/ })).toHaveAttribute("aria-describedby", "test-target-error");
     expect(create).not.toHaveBeenCalled();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Application target" }), "second");
-  } else expect(screen.getByRole("combobox", { name: "Application target" })).toHaveValue(requested);
+    await user.selectOptions(screen.getByRole("combobox", { name: /^Application target/ }), "second");
+  } else expect(screen.getByRole("combobox", { name: /^Application target/ })).toHaveValue(requested);
   expect(screen.queryByLabelText(/marker|account reference|authentication origin|Enable verified/i)).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Authentication assistance" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("Testing mode")).toHaveValue(mode);
-  fireEvent.change(screen.getByLabelText("Your testing goal"), { target: { value: "Check the protected account page" } });
+  fireEvent.change(screen.getByLabelText(/^Your testing goal/), { target: { value: "Check the protected account page" } });
   await user.click(screen.getByRole("button", { name: "Create test" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]?.[1]).toBe(requested === "missing" ? "second" : requested);
@@ -73,14 +76,14 @@ it("defaults new tests to exploration and opens contract review after starting d
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Explore the app" });
   expect(screen.getByLabelText("Testing mode")).toHaveValue("discovery_contract_v1");
-  const app = screen.getByRole("combobox", { name: "App" });
+  const app = screen.getByRole("combobox", { name: /^App \(required\)/ });
   const appUrl = screen.getByRole("textbox", { name: "App URL" });
   expect(appUrl).toHaveValue("https://fixture.test");
   expect(appUrl).toHaveAttribute("readonly");
   expect(appUrl).toHaveClass("text-input");
   expect(appUrl.closest(".composer-target")).toBeNull();
   expect(app.compareDocumentPosition(appUrl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  fireEvent.change(screen.getByLabelText("What is this app and who is it for?"), { target: { value: "A storefront for local shoppers." } });
+  fireEvent.change(screen.getByLabelText(/^What is this app and who is it for/), { target: { value: "A storefront for local shoppers." } });
   await user.click(screen.getByRole("button", { name: "Explore the app" }));
   expect(await screen.findByText("Review discovered tests")).toBeInTheDocument();
   expect(create).toHaveBeenCalledOnce();
@@ -133,7 +136,7 @@ it("posts harness_v1 when the harness mode is preselected", async () => {
   await screen.findByRole("button", { name: "Create test" });
   expect(screen.getByLabelText("Testing mode")).toHaveValue("harness_v1");
   expect(screen.getByText("The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it.")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Your testing goal"), { target: { value: "Check the protected account page" } });
+  fireEvent.change(screen.getByLabelText(/^Your testing goal/), { target: { value: "Check the protected account page" } });
   await user.click(screen.getByRole("button", { name: "Create test" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]?.[6]).toBe("harness_v1");

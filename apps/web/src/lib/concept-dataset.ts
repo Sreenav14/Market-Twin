@@ -140,9 +140,9 @@ export const CANONICAL_DEMO_DATA: ConceptPayload = {
   testDate: "2026-10-31",
   testDateLabel: "Sat 31 Oct 2026",
   testers: [
-    { id: "tom", name: "Tom", label: "Expert", colour: "#6842D6" },
-    { id: "maya", name: "Maya", label: "First-time user", colour: "#0F766E" },
-    { id: "priya", name: "Priya", label: "Impatient mobile user", colour: "#96521F" },
+    { id: "tom", name: "Tom", label: "Expert", colour: "#0072B2" },
+    { id: "maya", name: "Maya", label: "First-time user", colour: "#E69F00" },
+    { id: "priya", name: "Priya", label: "Impatient mobile user", colour: "#009E73" },
   ],
   verdict: {
     word: "Not ready yet",

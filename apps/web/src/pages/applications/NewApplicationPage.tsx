@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Spinner } from "../../components/ui/StateViews";
+import { ErrorSummary, FieldError, RequiredLegend, RequiredMark } from "../../components/ui/Field";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { api } from "../../lib/api";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { AppShellContext } from "../../layouts/AppShell";
@@ -13,7 +15,10 @@ export function NewApplicationPage() {
   const { workspace } = useOutletContext<AppShellContext>();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // Punish late, reward early (Spec 3 §6.2): show on blur or submit,
+  // clear instantly once fixed (the error is derived from the value).
   const [touched, setTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -26,31 +31,28 @@ export function NewApplicationPage() {
     return (
       <>
         <PageHeader eyebrow="Your apps" title="Add an app" />
-        <div className="error-panel" role="alert">
-          <div>
-            <strong>Read-only workspace</strong>
-            <span>Your workspace role ({workspace.role}) cannot create applications.</span>
-          </div>
-          <div>
-            <Link className="secondary-button" to="/applications">
+        <InlineAlert severity="warning" title="Read-only workspace" action={<Link className="secondary-button" to="/applications">
               Back to your apps
-            </Link>
-          </div>
-        </div>
+            </Link>}>Your workspace role ({workspace.role}) cannot create applications.</InlineAlert>
       </>
     );
   }
 
-  const nameError = touched && !name.trim()
-    ? "Application name is required."
+  const nameError = (touched || submitted) && !name.trim()
+    ? "Enter an application name."
     : name.length > 200
-      ? "Application name cannot exceed 200 characters."
+      ? "Enter an application name of 200 characters or fewer."
       : null;
+  const summaryErrors = [
+    ...(!name.trim() ? [{ targetId: "app-name", message: "Enter an application name." }] : []),
+    ...(name.length > 200 ? [{ targetId: "app-name", message: "Enter an application name of 200 characters or fewer." }] : []),
+  ];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setTouched(true);
+    setSubmitted(true);
     if (!name.trim() || name.length > 200) return;
 
     setBusy(true);
@@ -84,9 +86,11 @@ export function NewApplicationPage() {
       />
       <div className="two-column-layout">
         <form className="panel form-grid form-card" onSubmit={submit} noValidate>
+          {submitted && summaryErrors.length ? <ErrorSummary errors={summaryErrors} /> : null}
+          <RequiredLegend />
           <div>
             <label className="field-label" htmlFor="app-name">
-              Name <span aria-hidden="true" style={{ color: "var(--danger)" }}>*</span>
+              Name <RequiredMark required />
             </label>
             <input
               id="app-name"
@@ -102,24 +106,15 @@ export function NewApplicationPage() {
               required
               maxLength={200}
               autoFocus
-              aria-invalid={nameError ? "true" : "false"}
+              aria-invalid={nameError ? true : undefined}
               aria-describedby={nameError ? "app-name-error" : undefined}
             />
-            {nameError ? (
-              <p
-                id="app-name-error"
-                className="form-error"
-                role="alert"
-                style={{ marginTop: "4px" }}
-              >
-                {nameError}
-              </p>
-            ) : null}
+            {nameError ? <FieldError id="app-name-error">{nameError}</FieldError> : null}
           </div>
 
           <div>
             <label className="field-label" htmlFor="app-description">
-              Description <span>Optional</span>
+              Description <RequiredMark required={false} />
             </label>
             <textarea
               id="app-description"
@@ -133,9 +128,9 @@ export function NewApplicationPage() {
           </div>
 
           {error ? (
-            <p className="form-error" role="alert">
+            <InlineAlert severity="error" title="Could not create application" role="alert">
               {error}
-            </p>
+            </InlineAlert>
           ) : null}
 
           <div className="form-actions">
@@ -145,7 +140,7 @@ export function NewApplicationPage() {
             <button
               className="primary-button"
               type="submit"
-              disabled={busy || !name.trim()}
+              disabled={busy}
             >
               {busy ? (
                 <>

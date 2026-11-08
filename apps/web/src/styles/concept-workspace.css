@@ -8,32 +8,29 @@
 /* The concept palette is the product theme now: it lives in tokens.css
    as the base token values, so no per-shell remap is needed here. */
 .concept-workspace .mt-topbar-inner { min-height: 56px; }
-.concept-workspace .topnav-link { height: 56px; }
-.concept-workspace .topnav-link:hover, .concept-workspace .topnav-link.active { background: var(--notchecked-tint); }
 .concept-workspace .mt-page-content { max-width: 1200px; }
 .concept-workspace .page-header { align-items: flex-start; gap: 24px; margin-bottom: 32px; }
 .concept-workspace .page-header h1 { font-family: var(--font-ui); font-weight: 650; font-size: 28px; line-height: 36px; letter-spacing: 0; }
 .concept-workspace .page-description { color: var(--ink-2); max-width: 68ch; line-height: 1.6; }
-.concept-workspace :is(.panel, .empty-state, .state-panel, .error-panel, .run-create-zone) { background: var(--card); border: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.concept-workspace :is(.empty-state, .state-panel, .run-create-zone) { background: var(--card); border: 1px solid var(--line); border-radius: var(--mt-radius-lg); box-shadow: var(--shadow-soft); } /* .panel skin: display.css (Phase 2b) */
 .concept-workspace :is(.panel, .empty-state) h2 { color: var(--ink); font-family: var(--font-ui); font-size: 22px; line-height: 30px; font-weight: 650; }
 .concept-workspace .panel :is(.panel, .state-panel) { border: 0; background: transparent; }
 .concept-workspace :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { color: var(--ink); background: var(--card); border-color: var(--field-border); border-radius: 0; box-shadow: none; font-family: var(--font-ui); }
 .concept-workspace :where(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.concept-workspace :where(.primary-button, .secondary-button, .danger-button) { border-radius: 0; min-height: 44px; box-shadow: none; font-family: var(--font-ui); }
-.concept-workspace :is(.text-input, .text-select, .text-area, .primary-button, .secondary-button, .danger-button), .concept-workspace .study-composer :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: 0; box-shadow: none; }
+/* Buttons are NOT squared here any more (sidebar/buttons round):
+   they take the shared recipe's radius/geometry from
+   concept-system.css. Fields keep this layer's square treatment —
+   that is the field recipe's recorded stance (radius untouched). */
+.concept-workspace :is(.text-input, .text-select, .text-area), .concept-workspace .study-composer :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: 0; box-shadow: none; }
 /* Hallmark signed-in SI-6: badges keep their tone border in the
    workspace — border:0 here plus a fill identical to the row hover
    tint made neutral pills melt into tinted rows. */
-.concept-workspace .status-badge { min-height: 24px; padding: 4px 12px; gap: 6px; font-size: 13px; line-height: 18px; border-radius: var(--mt-radius-pill); }
-.concept-workspace .status-badge .status-dot { display: inline; width: auto; height: auto; background: none; border-radius: 0; font-size: 12px; line-height: 1; }
-.concept-workspace .status-success { color: var(--works); background: var(--works-tint); }
-.concept-workspace .status-danger { color: var(--broken); background: var(--broken-tint); }
-.concept-workspace .status-warning { color: var(--couldnot); background: var(--couldnot-tint); }
-.concept-workspace :where(.status-info, .status-neutral) { color: var(--notchecked); background: var(--notchecked-tint); }
+/* .status-badge: display.css §4 (Phase 2b) */
+
 .concept-workspace :where(.data-table, table) { color: var(--ink); }
 .concept-workspace :where(th, td) { border-color: var(--line); overflow-wrap: anywhere; }
 .concept-workspace :where(th) { color: var(--ink-2); background: transparent; }
-.concept-workspace :is(.data-row, .deletable-row) { border-radius: 0; box-shadow: none; border-color: var(--line); }
+.concept-workspace .deletable-row { border-radius: 0; box-shadow: none; border-color: var(--line); } /* .data-row: display.css */
 /* Hallmark signed-in SI-15: lists take the panel radius (10px), ending
    the square-list / round-panel mix. The list already clips overflow. */
 .concept-workspace .data-list { border-radius: var(--mt-radius-lg); box-shadow: none; border-color: var(--line); }
@@ -148,7 +145,7 @@
   .mt-task-table td:nth-child(4)::before {
     display: block;
     margin-bottom: 2px;
-    font-family: "IBM Plex Mono", monospace;
+    font-family: var(--font-sans);
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.08em;
@@ -167,16 +164,16 @@
 .desk-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .desk-heading h1 { margin: 0; }
 .desk-heading-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.desk-kbd { font-family: var(--font-mono, monospace); font-size: 11px; border: 1px solid var(--line); border-radius: var(--mt-radius-sm); padding: 1px 5px; background: var(--surface-muted); }
-.desk-section-label { font-family: var(--font-mono, monospace); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 14px; }
-.desk-eyebrow { font-family: var(--font-mono, monospace); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 10px; }
+/* .desk-kbd removed — states.css .kbd (Phase 2e). */
+.desk-section-label { font-family: var(--font-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 14px; }
+.desk-eyebrow { font-family: var(--font-sans); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 10px; }
 
 /* Masthead */
 .desk-masthead { border-top: 2px solid var(--ink); padding-top: 22px; }
 .desk-masthead-ready { background: var(--works-tint); border: 1px solid var(--line); border-top: 3px solid var(--works); border-radius: var(--mt-radius-lg); padding: 22px; }
 .desk-masthead-failed { border-top-color: var(--ink-2); }
 .desk-masthead-compact .desk-verdict-word { font-size: 30px; }
-.desk-verdict-word { font-family: var(--font-display, serif); font-size: 56px; line-height: 1.05; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 14px; color: var(--ink); }
+.desk-verdict-word { font-family: var(--font-sans); font-size: 56px; line-height: 1.05; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 14px; color: var(--ink); }
 .desk-outcome-bar { display: flex; gap: 3px; margin: 6px 0 14px; }
 .desk-outcome-segment { position: relative; display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 9px 12px; border-radius: var(--mt-radius-md); font-size: 13px; font-weight: 550; color: var(--ink); text-decoration: none; white-space: nowrap; overflow: hidden; }
 .desk-outcome-fill { position: absolute; inset: 0; border-radius: var(--mt-radius-md); transform-origin: left center; }
@@ -196,7 +193,7 @@
 /* Needs-you tray */
 .desk-tray-cards { display: grid; gap: 12px; }
 .desk-speech-card { position: relative; border: 1px solid var(--line); border-radius: var(--mt-radius-lg); background: var(--card); padding: 16px 18px; display: grid; gap: 8px; justify-items: start; }
-.desk-card-eyebrow { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0; }
+.desk-card-eyebrow { font-family: var(--font-sans); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0; }
 .desk-card-quote { font-size: 16px; line-height: 1.5; margin: 0; }
 blockquote.desk-card-quote { quotes: "“" "”"; }
 .desk-card-context { font-size: 13px; color: var(--ink-2); margin: 0; }
@@ -225,9 +222,6 @@ blockquote.desk-card-quote { quotes: "“" "”"; }
 
 /* Voices */
 .desk-voices { border-radius: var(--mt-radius-lg); padding: 18px; display: grid; gap: 14px; }
-.desk-voice { margin: 0; }
-.desk-voice p { font-family: var(--font-display, serif); font-size: 18px; line-height: 1.45; margin: 0 0 4px; }
-.desk-voice cite { font-style: normal; font-size: 13px; color: var(--ink-2); }
 
 /* Apps rail + archive */
 .desk-app-row, .desk-archive-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -242,7 +236,7 @@ blockquote.desk-card-quote { quotes: "“" "”"; }
 .desk-welcome { border: 1px solid var(--line); border-radius: var(--mt-radius-lg); padding: 24px; display: grid; gap: 12px; justify-items: start; }
 .desk-welcome h2, .desk-welcome p { margin: 0; }
 .desk-example { border: 1px dashed var(--line); border-radius: var(--mt-radius-lg); padding: 20px; }
-.desk-example-label { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 16px; }
+.desk-example-label { font-family: var(--font-sans); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-2); margin: 0 0 16px; }
 .desk-example .desk-verdict-word { font-size: 40px; }
 .desk-footer-line { font-size: 13px; color: var(--ink-2); margin: 0; }
 

@@ -1,13 +1,13 @@
 import React from "react";
 import { ConceptTotals, formatCoverageAriaLabel, formatCoverageHeadline } from "../../lib/concept-dataset";
 
-interface CoverageBarProps {
+interface OutcomeCoverageBarProps {
   totals: ConceptTotals;
   headline?: string;
   className?: string;
 }
 
-export const CoverageBar: React.FC<CoverageBarProps> = ({
+export const OutcomeCoverageBar: React.FC<OutcomeCoverageBarProps> = ({
   totals,
   headline,
   className = "",
@@ -39,60 +39,18 @@ export const CoverageBar: React.FC<CoverageBarProps> = ({
         {displayHeadline}
       </div>
 
-      <div
-        aria-hidden="true"
-        style={{
-          height: "14px",
-          borderRadius: "7px",
-          width: "100%",
-          display: "flex",
-          overflow: "hidden",
-          marginBottom: "12px",
-        }}
-      >
-        {pctWorked > 0 && (
-          <div
-            style={{
-              width: `${pctWorked}%`,
-              backgroundColor: "var(--works)",
-              height: "100%",
-            }}
-          />
-        )}
-        {pctBroken > 0 && (
-          <div
-            style={{
-              width: `${pctBroken}%`,
-              backgroundColor: "var(--broken)",
-              height: "100%",
-            }}
-          />
-        )}
-        {pctCouldNot > 0 && (
-          <div
-            style={{
-              width: `${pctCouldNot}%`,
-              backgroundColor: "var(--couldnot)",
-              height: "100%",
-            }}
-          />
-        )}
-        {pctNotChecked > 0 && (
-          <div
-            style={{
-              width: `${pctNotChecked}%`,
-              backgroundColor: "var(--notchecked)",
-              height: "100%",
-            }}
-          />
-        )}
+      <div className="rf-bar" aria-hidden="true" style={{ marginBottom: "12px" }}>
+        {pctWorked > 0 && <div className="rf-seg rf-seg-works" style={{ flexGrow: totals.worked }} />}
+        {pctBroken > 0 && <div className="rf-seg rf-seg-broken" style={{ flexGrow: totals.broken }} />}
+        {pctCouldNot > 0 && <div className="rf-seg rf-seg-couldnot" style={{ flexGrow: totals.couldNotCheck }} />}
+        {pctNotChecked > 0 && <div className="rf-seg rf-seg-info" style={{ flexGrow: totals.notChecked }} />}
       </div>
 
       {/* One signal per state in the legend: the status glyph in its status
           colour plus the word and count. The bar above already carries the
           colour blocks; squares and dot separators here only repeated it. */}
       <div
-        className="flex flex-wrap items-center gap-x-5 gap-y-2 font-grid-cell"
+        className="rf-labels font-grid-cell"
         style={{ fontSize: "13px", color: "var(--ink)" }}
         aria-hidden="true"
       >

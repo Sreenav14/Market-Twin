@@ -66,7 +66,7 @@ p {
 }
 code,
 .monospace {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -218,13 +218,10 @@ h3[id] {
 .form-grid input,
 .form-grid select,
 .form-grid textarea {
-  min-height: 44px;
-  padding: 10px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--mt-radius-sm);
   background: var(--surface);
   color: var(--text);
-  font-size: 15px;
+  /* Geometry owned by forms.css §3 (Phase 2d). */
 }
 .field-label,
 .form-grid label {
@@ -252,7 +249,7 @@ h3[id] {
 .knowledge-choice label, .knowledge-confirmation { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
 .knowledge-choice label > span { display: grid; gap: 4px; }
 .knowledge-choice label > span > span { font-size: 13px; }
-.knowledge-choice input[type="checkbox"], .knowledge-confirmation input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0; flex-shrink: 0; accent-color: var(--primary); margin-top: 2px; }
+/* Checkbox geometry removed — ONE recipe in forms.css §2 (.mt-checkbox), Phase 2d. */
 .form-grid input[type="file"] { width: 100%; max-width: 100%; }
 .form-grid input[type="file"]::file-selector-button { border: 1px solid var(--border-strong); border-radius: var(--mt-radius-sm); padding: 6px 10px; margin-right: 12px; color: var(--text); background: var(--surface-muted); font: inherit; cursor: pointer; }
 @media (max-width: 700px) {
@@ -260,92 +257,9 @@ h3[id] {
   .knowledge-choice { align-items: flex-start; }
   .knowledge-row-actions { flex-direction: column; align-items: flex-end; gap: 6px; }
 }
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  padding: 4px 9px;
-  min-height: 26px;
-  border-radius: var(--mt-radius-sm);
-  font-size: 12px;
-  line-height: 1.3;
-  font-weight: 550;
-  text-transform: none;
-  white-space: nowrap;
-}
-.status-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.status-success {
-  color: var(--success);
-  background: var(--success-bg);
-  border-color: var(--success-border);
-}
-.status-danger {
-  color: var(--danger);
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
-}
-.status-warning {
-  color: var(--warning);
-  background: var(--warning-bg);
-  border: 1px solid var(--warning-border);
-}
-.status-info {
-  color: var(--info);
-  background: var(--info-bg);
-  border-color: var(--info-border);
-}
-.status-neutral {
-  color: var(--text-2);
-  background: var(--surface-muted);
-  border-color: var(--border);
-}
-.empty-state {
-  min-height: 220px;
-  border-style: solid;
-  border-radius: var(--mt-radius-md);
-  box-shadow: none;
-}
-.empty-mark {
-  display: flex;
-  justify-content: center;
-  color: var(--text-3);
-  margin-bottom: 10px;
-}
-.empty-state h2 {
-  font-size: 22px;
-}
-.empty-state p {
-  font-size: 15px;
-  color: var(--text-3);
-}
-.error-panel {
-  font-size: 14px;
-  padding: 20px;
-}
-.error-panel strong,
-.error-panel span {
-  display: block;
-}
-.error-panel span {
-  margin-top: 4px;
-}
-.state-panel {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 130px;
-  color: var(--text-3);
-}
-.panel {
-  border-radius: var(--mt-radius-md);
-  padding: 24px;
-}
+/* .status-badge removed — display.css §4 (Phase 2b). */
+/* empty/state recipes removed — states.css (Phase 2e). */
+/* .panel geometry removed — canonical recipe in display.css (Phase 2b). */
 .panel h2,
 .section-heading h2 {
   font-size: 20px;
@@ -362,10 +276,7 @@ h3[id] {
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.data-row {
-  min-height: 88px;
-  padding: 18px;
-}
+/* .data-row geometry removed — display.css (Phase 2b). */
 .row-primary {
   min-width: 0;
 }
@@ -377,13 +288,7 @@ h3[id] {
 .environment-label {
   font-size: 13px;
 }
-.data-list {
-  border-radius: var(--mt-radius-md);
-  box-shadow: none;
-}
-.data-row:hover {
-  background: var(--surface-hover);
-}
+/* .data-list skin removed — display.css (Phase 2b). */
 .product-icon {
   background: var(--info-bg);
   color: var(--info);
@@ -409,38 +314,10 @@ h3[id] {
   font-size: 14px;
   line-height: 1.6;
 }
-.tab-strip {
-  gap: 28px;
-  margin-top: 0;
-}
-.tab-link {
-  font-size: 14px;
-  color: var(--text-3);
-  min-height: 48px;
-  gap: 8px;
-}
-.tab-link.active {
-  color: var(--primary);
-}
-.tab-count {
-  font-size: 11px;
-  background: var(--surface-muted);
-  border-radius: var(--mt-radius-sm);
-  padding: 1px 6px;
-  color: var(--text-2);
-}
-.tooltip {
-  padding: 7px 11px;
-  background: var(--surface-overlay);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--mt-radius-sm);
-  font-size: 12px;
-  z-index: 100;
-}
-.tooltip svg {
-  fill: var(--surface-overlay);
-}
+/* Tab strip: ONE recipe in overlays.css (Phase 2c). */
+/* (tab-link/tab-count copies deleted -- overlays.css + display.css own them.) */
+/* Tooltip recipe moved to overlays.css (Phase 2c) \u2014 inverse surface, one definition. */
+
 .copy-control {
   display: inline-flex;
   align-items: center;

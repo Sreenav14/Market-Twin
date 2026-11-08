@@ -8,7 +8,7 @@ import {
   ErrorPanel,
   LoadingPanel,
 } from "../../components/ui/StateViews";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { NeutralTag, StatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, api } from "../../lib/api";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
 import { isAuthorizationActive } from "../../lib/targetAuthorization";
@@ -151,13 +151,13 @@ export function TargetsPage() {
               <div className="deletable-row" key={target.id} role="listitem">
                 <Link className="data-row" to={`/targets/${target.id}`}>
                   <span className="row-icon">
-                    <Icon name="target" size={17} />
+                    <Icon name="target" size={20} />
                   </span>
                   <div className="row-primary">
                     <strong>{target.name}</strong>
                     <span style={{ wordBreak: "break-all" }}>{target.base_url}</span>
                   </div>
-                  <span className="environment-label">{target.environment}</span>
+                  <NeutralTag>{target.environment}</NeutralTag>
                   <StatusBadge status={authStatus} />
                   <Icon name="arrow" size={16} />
                 </Link>

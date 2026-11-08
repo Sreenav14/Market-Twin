@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { StepList } from "./StepList";
+import { Avatar } from "../ui/Avatar";
 import { TakeoverPanel } from "./TakeoverPanel";
 
 export interface TesterCardData {
@@ -21,7 +22,6 @@ interface TesterCardProps {
 }
 
 export const TesterCard: React.FC<TesterCardProps> = ({ tester, className = "" }) => {
-  const initial = tester.name.charAt(0);
   const [inOwnerControl, setInOwnerControl] = useState(false);
 
   return (
@@ -39,24 +39,7 @@ export const TesterCard: React.FC<TesterCardProps> = ({ tester, className = "" }
       <div>
         {/* Header row */}
         <div className="flex items-center gap-3" style={{ marginBottom: "12px" }}>
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "50%",
-              backgroundColor: tester.colour,
-              color: "#FFFFFF",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "14px",
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-            aria-hidden="true"
-          >
-            {initial}
-          </div>
+          <Avatar kind="persona" name={tester.name} tint={tester.colour} />
           <div>
             <h3 className="font-h3" style={{ color: "var(--ink)", margin: 0 }}>
               {tester.name}

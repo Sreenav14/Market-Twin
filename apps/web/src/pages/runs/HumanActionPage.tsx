@@ -1,3 +1,4 @@
+import { Banner, InlineAlert } from "../../components/ui/Feedback";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -32,11 +33,7 @@ export function HumanAssistanceHost({ context, children }: { context: RunContext
     if (!showing && !container.parentElement) fallback.current?.append(container);
   }, [showing, container]);
   return <HumanAssistanceContainer.Provider value={container}>
-    {control && !showing ? <section className="run-action-required" role="status">
-      <div><h2>You still control the test browser</h2><p>The tester is paused. Return to the browser or finish the handoff.</p></div>
-      <Link className="secondary-button" to={`/runs/${context.run.id}/watch`}>Return to browser control</Link>
-      <button type="button" className="primary-button" onClick={control.done}>Hand back</button>
-    </section> : null}
+    {control && !showing ? <Banner severity="info" titleAs="h2" title="You still control the test browser" action={<span style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><Link className="secondary-button" to={`/runs/${context.run.id}/watch`}>Return to browser control</Link><button type="button" className="primary-button" onClick={control.done}>Hand back</button></span>}>The tester is paused. Return to the browser or finish the handoff.</Banner> : null}
     {children}
     <div ref={fallback} hidden={showing || !control} className="human-assistance-fallback" />
     {createPortal(<HumanActionPanel context={context} inline={inline} onControlChange={setControl} />, container)}
@@ -212,7 +209,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       <section className="human-action-group human-auth-group" aria-label="Login and protected interaction requests">
 
       {actions.isPending ? <p role="status">Checking for a human action request…</p> : null}
-      {actions.isError ? <p role="alert">Human action status is unavailable. Retry this page in a moment.</p> : null}
+      {actions.isError ? <InlineAlert severity="error" role="alert" title="Human action status is unavailable. Retry this page in a moment." /> : null}
       {actions.isSuccess && actions.data.length === 0 ? (
         <div className="empty-state">
           <Clock3 aria-hidden="true" />
@@ -229,7 +226,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
             <h2>{action.instructions ?? "The tester needs your help"}</h2>
             <p>The tester is paused. Taking control opens the same supervised browser context.</p>
             <RequestContext action={action} runId={run.id} />
-            {action.browser_state && action.browser_state !== "open" ? <p role="alert">This browser is no longer available for interaction. Review the request status or skip this work.</p> : null}
+            {action.browser_state && action.browser_state !== "open" ? <InlineAlert severity="error" role="alert" title="This browser is no longer available for interaction. Review the request status or skip this work." /> : null}
             <p className="muted">Request expires {action.expires_at ? new Date(action.expires_at).toLocaleString() : "when the run ends"}.</p>
           </div>
           <div className="button-row">
@@ -241,7 +238,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
         </article>
       ))}
 
-      {claim.isError ? <p role="alert">Browser control could not be claimed. The request remains available until it expires.</p> : null}
+      {claim.isError ? <InlineAlert severity="error" role="alert" title="Browser control could not be claimed. The request remains available until it expires." /> : null}
       {activeLease && activeRequestId ? (
         <div className="hbv-active-section">
           <div className="hbv-active-header">
@@ -268,13 +265,13 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
                 return grant;
               }} />
           ) : (
-            <p role="alert">The browser owner did not provide a secure viewer. Control remains unavailable.</p>
+            <InlineAlert severity="error" role="alert" title="The browser owner did not provide a secure viewer. Control remains unavailable." />
           )}
         </div>
       ) : null}
-      {release.isError ? <p role="alert">Resume delivery failed. Retry Done to notify the worker. Tester control remains blocked until the handoff is verified.</p> : null}
+      {release.isError ? <InlineAlert severity="error" role="alert" title="Resume delivery failed. Retry Done to notify the worker. Tester control remains blocked until the handoff is verified." /> : null}
 
-      {skip.isError ? <p role="alert">Skip could not be confirmed. Retry Skip; the tester remains paused until browser control is safely revoked.</p> : null}
+      {skip.isError ? <InlineAlert severity="error" role="alert" title="Skip could not be confirmed. Retry Skip; the tester remains paused until browser control is safely revoked." /> : null}
 
       {leased.map((action) => (
         <article className="study-summary" key={action.id}>
@@ -305,7 +302,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       </div>
       <p className="muted">Each decision applies to one recorded action. Approval does not authorize similar actions elsewhere.</p>
       {decisionMessage ? <p role="status" aria-live="polite">{decisionMessage}</p> : null}
-      {approvals.isError ? <p role="alert">Approval requests could not be loaded.</p> : null}
+      {approvals.isError ? <InlineAlert severity="error" role="alert" title="Approval requests could not be loaded." /> : null}
       {pendingApprovals.map((item) => (
         <article className="study-summary" key={item.id}>
           <ShieldCheck aria-hidden="true" />
@@ -328,7 +325,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
         </div>
       </article>)}
       {approvals.data?.length === 0 ? <p className="muted">No sensitive action is awaiting approval.</p> : null}
-      {decision.isError ? <p role="alert">That approval is no longer available; refresh the page.</p> : null}
+      {decision.isError ? <InlineAlert severity="error" role="alert" title="That approval is no longer available; refresh the page." /> : null}
       </section>
       </> : null}
 

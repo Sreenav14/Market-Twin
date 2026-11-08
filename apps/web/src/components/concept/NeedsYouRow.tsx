@@ -1,4 +1,5 @@
 import React from "react";
+import { Avatar } from "../ui/Avatar";
 
 interface NeedsYouRowProps {
   testerName?: string;
@@ -17,7 +18,6 @@ export const NeedsYouRow: React.FC<NeedsYouRowProps> = ({
   onHelpClick,
   className = "",
 }) => {
-  const initial = testerName.charAt(0);
 
   return (
     <div
@@ -32,24 +32,7 @@ export const NeedsYouRow: React.FC<NeedsYouRowProps> = ({
     >
       <div className="flex items-center gap-3">
         {/* Avatar 24px */}
-        <div
-          style={{
-            width: "24px",
-            height: "24px",
-            borderRadius: "50%",
-            backgroundColor: testerColour,
-            color: "var(--ink-on-dark)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "11px",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        >
-          {initial}
-        </div>
+        <Avatar kind="persona" name={testerName} size="sm" tint={testerColour} />
 
         {/* Text block */}
         <div>

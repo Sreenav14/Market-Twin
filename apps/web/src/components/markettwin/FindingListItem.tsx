@@ -29,18 +29,18 @@ export function FindingListItem({
           <p>{finding.summary}</p>
           <div className="finding-meta">
             <span>
-              <Route size={14} aria-hidden="true" />
+              <Route size={16} aria-hidden="true" />
               {finding.journey_ids.length} affected{" "}
               {finding.journey_ids.length === 1 ? "journey" : "journeys"}
             </span>
             <span>
-              <Paperclip size={14} aria-hidden="true" />
+              <Paperclip size={16} aria-hidden="true" />
               {referenceCount}{" "}
               {referenceCount === 1 ? "reference" : "references"}
             </span>
           </div>
         </div>
-        <ArrowUpRight className="finding-arrow" size={19} aria-hidden="true" />
+        <ArrowUpRight className="finding-arrow" size={20} aria-hidden="true" />
       </Link>
     </li>
   );

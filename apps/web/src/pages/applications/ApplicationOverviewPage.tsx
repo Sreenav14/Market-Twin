@@ -8,7 +8,7 @@ import {
   ErrorPanel,
   LoadingPanel,
 } from "../../components/ui/StateViews";
-import { StatusBadge, TestStatusBadge } from "../../components/ui/StatusBadge";
+import { NeutralTag, StatusBadge, TestStatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, api } from "../../lib/api";
 import { testTitle, textValue } from "../../lib/format";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
@@ -140,7 +140,7 @@ export function ApplicationOverviewPage() {
               className="primary-button compact"
               to={`/applications/${application.id}/targets/new`}
             >
-              <Icon name="plus" size={14} /> Add target
+              <Icon name="plus" size={16} /> Add target
             </Link>
           ) : null}
         </div>
@@ -192,13 +192,13 @@ export function ApplicationOverviewPage() {
                     to={`/targets/${target.id}`}
                   >
                     <span className="row-icon">
-                      <Icon name="target" size={17} />
+                      <Icon name="target" size={20} />
                     </span>
                     <div className="row-primary">
                       <strong>{target.name}</strong>
                       <span>{target.base_url}</span>
                     </div>
-                    <span className="environment-label">{target.environment}</span>
+                    <NeutralTag>{target.environment}</NeutralTag>
                     <StatusBadge status={authStatus} />
                     <Icon name="arrow" size={16} />
                   </Link>

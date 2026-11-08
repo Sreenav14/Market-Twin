@@ -1,6 +1,6 @@
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { RunContext } from "../../layouts/RunLayout";
-import { ArtifactEvidence } from "./FindingDetailPage";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 export function EvidenceDetailPage() {
   const { run } = useOutletContext<RunContext>();
   const { artifactId = "" } = useParams();

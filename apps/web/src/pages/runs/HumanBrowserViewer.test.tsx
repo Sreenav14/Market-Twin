@@ -144,7 +144,8 @@ describe("HumanBrowserViewer", () => {
     fireEvent.keyDown(canvas, { key: "Escape", shiftKey: true });
     const leave = screen.getByRole("button", { name: "Leave browser keyboard control" });
     expect(leave).toHaveFocus();
-    expect(screen.getByText(/Press Shift\+Escape to leave browser keyboard control/)).toBeInTheDocument();
+    expect(document.getElementById("viewer-keyboard-help")?.textContent).toContain("Press Shift+Escape to leave browser keyboard control.");
+    expect(document.querySelectorAll("#viewer-keyboard-help kbd.kbd")).toHaveLength(2);
     await user.tab();
     expect(screen.getByRole("button", { name: "Release control for verification" })).toHaveFocus();
   });

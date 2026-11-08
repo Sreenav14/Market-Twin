@@ -5,6 +5,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { ExecutionBadge, OutcomeBadge } from "../../components/ui/StatusBadge";
 import { Button } from "../../components/ui/button";
+import { InlineAlert } from "../../components/ui/Feedback";
 import type { AppShellContext } from "../../layouts/AppShell";
 import { agentPrompts, type AgentPrompt } from "../../lib/agentPrompts";
 import { AgentTree } from "../../components/markettwin/AgentTree";
@@ -86,7 +87,7 @@ function PromptEditor({ agent, runId, writable, onSaved }: { agent: AgentPrompt;
       <p className="inline-note">{supported ? <>Edit <code>instruction</code>, <code>runtime_prompt</code>, and <code>rerun_configuration</code> in YAML, then save. Names, temperature, approved tools, and additional testers are configured only in YAML. Testers execute in their listed order. Model, tools, tester and goal identify the original instructions and are read-only. Testing again creates a new draft for you to start, using the currently configured model.</> : "Recorded context for this runtime is read-only. New test drafts are available for planning and tester instructions."}</p>
       <label className="field" htmlFor="agent-yaml">Prompt YAML</label>
       <textarea id="agent-yaml" className="text-input agent-yaml-input" value={yaml} onChange={(event) => setYaml(event.target.value)} spellCheck={false} readOnly={!writable || !supported} />
-      {error ? <p className="error-text" role="alert">{error}</p> : null}
+      {error ? <InlineAlert severity="error" title="Could not save the prompt" role="alert">{error}</InlineAlert> : null}
       <div className="agent-prompt-actions">
         <Button variant="secondary" disabled={pending || !dirty} onClick={() => { setYaml(savedYaml); setError(""); }}>Reset edits</Button>
         {writable && supported ? <>

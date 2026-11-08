@@ -1,9 +1,10 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import { Dialog } from "../ui/Dialog";
+import { InlineAlert, useToast } from "../ui/Feedback";
 import { api } from "../../lib/api";
 
 export function DeleteAction({
@@ -25,6 +26,7 @@ export function DeleteAction({
   const pending = useRef(false);
   const cancel = useRef<HTMLButtonElement>(null);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   async function remove() {
     if (pending.current) return;
@@ -74,6 +76,7 @@ export function DeleteAction({
     setOpen(false);
     setBusy(false);
     pending.current = false;
+    toast({ title: `${kind[0].toUpperCase()}${kind.slice(1)} deleted`, body: name });
     onDeleted();
   }
 
@@ -104,7 +107,7 @@ export function DeleteAction({
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open={open}
       onOpenChange={(value) => {
         if (!pending.current) {
@@ -112,53 +115,41 @@ export function DeleteAction({
           setError(null);
         }
       }}
+      trigger={trigger}
+      title={`Delete ${kind}: ${name}?`}
+      size="sm"
+      alert
+      busy={busy}
+      initialFocusRef={cancel}
+      description={
+        kind === "knowledge"
+          ? "This removes the set from your knowledge library and future test selection. Existing tests keep their saved knowledge and source history."
+          : kind === "test"
+            ? "This permanently removes the test and its results and evidence records. This cannot be undone."
+            : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its tests first." : "Delete its tests and targets first."} This cannot be undone.`
+      }
+      footer={
+        <>
+          <button
+            ref={cancel}
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => setOpen(false)}
+          >
+            Keep {kind}
+          </button>
+          <Button variant="destructive" onClick={() => void remove()} disabled={busy}>
+            {busy ? "Deleting\u2026" : `Delete ${kind}`}
+          </Button>
+        </>
+      }
     >
-      <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content
-          className="delete-dialog"
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            cancel.current?.focus();
-          }}
-        >
-          <Dialog.Title>Delete {kind}?</Dialog.Title>
-          <Dialog.Description className="delete-description">
-            {kind === "knowledge"
-              ? "This removes the set from your knowledge library and future test selection. Existing tests keep their saved knowledge and source history."
-              : kind === "test"
-              ? "This permanently removes the test and its results and evidence records."
-              : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its tests first." : "Delete its tests and targets first."}`}
-            {kind !== "knowledge" ? " This cannot be undone." : null}
-          </Dialog.Description>
-          <p className="delete-item-name">{name}</p>
-          {error ? (
-            <p role="alert" className="form-error">
-              {error}
-            </p>
-          ) : null}
-          <div className="delete-dialog-actions">
-            <Dialog.Close asChild>
-              <button
-                ref={cancel}
-                type="button"
-                className="secondary-button"
-                disabled={busy}
-              >
-                Cancel
-              </button>
-            </Dialog.Close>
-            <Button
-              variant="destructive"
-              onClick={() => void remove()}
-              disabled={busy}
-            >
-              {busy ? "Deleting…" : `Delete ${kind}`}
-            </Button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      {error ? (
+        <InlineAlert severity="error" title="Could not delete" role="alert">
+          {error}
+        </InlineAlert>
+      ) : null}
+    </Dialog>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
+import { InlineAlert } from "../../components/ui/Feedback";
 import { Icon } from "../../components/ui/Icon";
 import { PageHeader } from "../../components/ui/PageHeader";
 import {
@@ -108,7 +109,7 @@ export function ApplicationRunsPage() {
         />
       ) : (
         <>
-        {runsState.isError ? <p role="alert" className="inline-note">Could not refresh tests. Showing the last loaded data. <button className="text-link" onClick={() => void runsState.refetch()}>Try again</button></p> : null}
+        {runsState.isError ? <InlineAlert severity="warning" title="Could not refresh tests" role="alert" action={<button className="text-link" onClick={() => void runsState.refetch()}>Try again</button>}>Showing the last loaded data.</InlineAlert> : null}
         <div className="filter-bar">
           <div className="search-field"><input type="search" aria-label="Find a test"
             placeholder="Find a test…" value={search} onChange={(event) => filter("q", event.target.value)} /></div>

@@ -193,12 +193,12 @@ it("filters the recent list by finished status and never repeats the masthead ru
   expect(within(section).getByText(/Failed test/)).toBeInTheDocument();
   expect(within(section).getByText(/Stopped test/)).toBeInTheDocument();
   expect(within(section).queryByText(/Finished test/)).not.toBeInTheDocument();
-  fireEvent.click(within(section).getByRole("button", { name: /Failed · 1/ }));
+  fireEvent.click(within(section).getByRole("radio", { name: /Failed · 1/ }));
   // Motion (home-motion §4e): a filtered-out row fades over the 150ms
   // exit duration before it is removed — it does not vanish instantly.
   expect(within(section).getByText(/Stopped test/).closest("article")).toHaveClass("desk-row-leaving");
   await waitFor(() => expect(within(section).queryByText(/Stopped test/)).not.toBeInTheDocument());
-  fireEvent.click(within(section).getByRole("button", { name: /All · 3/ }));
+  fireEvent.click(within(section).getByRole("radio", { name: /All · 3/ }));
   expect(within(section).getByText(/Stopped test/)).toBeInTheDocument();
 });
 

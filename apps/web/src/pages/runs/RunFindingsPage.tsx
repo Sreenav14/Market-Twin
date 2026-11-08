@@ -70,7 +70,7 @@ export function RunFindingsPage() {
           <>
             <div className="filter-bar">
               <div className="search-field">
-                <Search size={17} aria-hidden="true" />
+                <Search size={20} aria-hidden="true" />
                 <label className="visually-hidden" htmlFor="finding-search">
                   Search findings
                 </label>
@@ -83,7 +83,7 @@ export function RunFindingsPage() {
                 />
               </div>
               <label className="filter-select">
-                <SlidersHorizontal size={15} aria-hidden="true" />
+                <SlidersHorizontal size={16} aria-hidden="true" />
                 <span className="visually-hidden">Severity</span>
                 <select
                   aria-label="Severity"

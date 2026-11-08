@@ -287,7 +287,7 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
   };
 
   return (
-    <div className="human-browser-viewer">
+    <div className="human-browser-viewer evidence-stage">
 
       {/* ── Top toolbar: status line + connect/reconnect button ── */}
       <div className="hbv-toolbar">
@@ -353,10 +353,10 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
         />
       </div>
       <div className="hbv-scroll-controls" role="group" aria-label="Live website scrolling">
-        <button type="button" aria-label="Scroll live website up" disabled={!readyRef.current}
+        <button type="button" className="hbv-scroll-button" aria-label="Scroll live website up" disabled={!readyRef.current}
           onClick={() => send({ event: "scroll", delta: -400 })}>↑</button>
         <span aria-hidden="true">Scroll</span>
-        <button type="button" aria-label="Scroll live website down" disabled={!readyRef.current}
+        <button type="button" className="hbv-scroll-button" aria-label="Scroll live website down" disabled={!readyRef.current}
           onClick={() => send({ event: "scroll", delta: 400 })}>↓</button>
       </div>
       </div>
@@ -403,7 +403,7 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
       </div>
 
       <p className="viewer-keyboard-help" id="viewer-keyboard-help">
-        When connected, browser Tab navigation is forwarded to the test page. Press Shift+Escape to leave browser keyboard control. When disconnected, Tab moves through workspace controls.
+        When connected, browser Tab navigation is forwarded to the test page. Press <kbd className="kbd">Shift</kbd>+<kbd className="kbd">Escape</kbd> to leave browser keyboard control. When disconnected, Tab moves through workspace controls.
       </p>
     </div>
   );

@@ -19,3 +19,21 @@ Object.defineProperty(window, "matchMedia", {
 // Concurrent Chromium/backend checks can delay React transitions on development
 // machines; keep asserting completion, with time for the scheduled render.
 configure({ asyncUtilTimeout: 5000 });
+
+// Phase 2c: Radix popper surfaces (Menu/Popover/Tooltip) use
+// ResizeObserver and pointer capture, which jsdom does not
+// implement. Inert stubs — layout is not asserted in jsdom.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+Object.defineProperty(window, "ResizeObserver", { writable: true, value: ResizeObserverStub });
+if (!HTMLElement.prototype.hasPointerCapture) {
+  HTMLElement.prototype.hasPointerCapture = () => false;
+  HTMLElement.prototype.releasePointerCapture = () => {};
+  HTMLElement.prototype.setPointerCapture = () => {};
+}
+if (!HTMLElement.prototype.scrollIntoView) {
+  HTMLElement.prototype.scrollIntoView = () => {};
+}

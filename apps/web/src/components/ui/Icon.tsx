@@ -34,7 +34,7 @@ const icons = {
   knowledge: BookOpenCheck,
 };
 export type IconName = keyof typeof icons;
-export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const Component = icons[name];
   return <Component size={size} strokeWidth={1.7} aria-hidden="true" />;
 }

@@ -22,9 +22,9 @@ export function CopyButton({
     <span className="copy-control">
       <Button variant="secondary" size="sm" onClick={() => void copy()}>
         {state === "copied" ? (
-          <Check size={15} aria-hidden="true" />
+          <Check size={16} aria-hidden="true" />
         ) : (
-          <Copy size={15} aria-hidden="true" />
+          <Copy size={16} aria-hidden="true" />
         )}
         {state === "copied" ? "Copied" : label}
       </Button>

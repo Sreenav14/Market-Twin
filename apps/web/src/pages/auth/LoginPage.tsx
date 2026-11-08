@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { Spinner } from "../../components/ui/StateViews";
+import { RequiredMark } from "../../components/ui/Field";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ConceptFooter, ConceptHeader, TriptychSignature } from "../../components/concept";
@@ -16,7 +18,7 @@ export function LoginPage({
   const [error, setError] = useState<string | null>(null);
   const submitting = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const errorRef = useRef<HTMLParagraphElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -114,7 +116,7 @@ export function LoginPage({
             >
               <form onSubmit={submit} aria-busy={busy}>
                 <label htmlFor="email" className="field-label">
-                  Work email
+                  Work email <RequiredMark required />
                 </label>
                 <Input
                   id="email"
@@ -132,6 +134,7 @@ export function LoginPage({
                   spellCheck={false}
                   required
                   autoFocus
+                  aria-invalid={error ? true : undefined}
                   aria-describedby={error ? "signin-help signin-error" : "signin-help"}
                   style={{ width: "100%" }}
                 />
@@ -139,20 +142,9 @@ export function LoginPage({
                   Use the email address authorized for your workspace.
                 </p>
 
-                <div aria-live="assertive" style={{ minHeight: "8px" }}>
-                  {error ? (
-                    <p
-                      id="signin-error"
-                      ref={errorRef}
-                      tabIndex={-1}
-                      className="form-error"
-                      role="alert"
-                      style={{ margin: "12px 0 0" }}
-                    >
-                      {error}
-                    </p>
-                  ) : null}
-                </div>
+                {error ? (
+                  <InlineAlert severity="error" title={error} role="alert" ref={errorRef} tabIndex={-1} />
+                ) : null}
 
                 <Button
                   type="submit"

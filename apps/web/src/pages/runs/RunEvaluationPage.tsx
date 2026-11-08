@@ -1,3 +1,4 @@
+import { InlineAlert } from "../../components/ui/Feedback";
 import { Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Info, Cpu } from "lucide-react";
@@ -54,7 +55,7 @@ export function RunEvaluationPage() {
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
             <span>View findings</span>
-            <ArrowUpRight size={14} aria-hidden="true" />
+            <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
 
@@ -228,7 +229,7 @@ export function RunEvaluationPage() {
                               }}
                             >
                               <span>{id.slice(0, 8)}</span>
-                              <ArrowUpRight size={11} aria-hidden="true" />
+                              <ArrowUpRight size={16} aria-hidden="true" />
                             </Link>
                           ))}
                         </div>
@@ -341,9 +342,9 @@ export function RunEvaluationPage() {
                 ))}
               </div>
             ) : agents.isError ? (
-              <p className="error-text" role="alert">
-                Could not load evaluation details: {agents.error.message}
-              </p>
+              <InlineAlert severity="error" title="Could not load evaluation details" role="alert">
+                {agents.error.message}
+              </InlineAlert>
             ) : (
               <p style={{ fontSize: 13, color: "var(--text-3)" }}>No evaluation model details recorded.</p>
             )}

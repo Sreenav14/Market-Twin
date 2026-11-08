@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { Icon } from "../../components/ui/Icon";
+import { Avatar } from "../../components/ui/Avatar";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
+import { EmptyState, ErrorPanel, LoadingPanel, SkeletonPanel } from "../../components/ui/StateViews";
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
 import { api, type TestRun } from "../../lib/api";
 import { testTitle } from "../../lib/format";
@@ -29,7 +30,7 @@ function StatusRunsView({ filterKey }: { filterKey: string }) {
   const state = useWorkspaceTests(user.id, workspace.id);
   const filter = STATUS_FILTERS[filterKey];
   const clearFilter = () => setParams({}, { replace: true });
-  if (state.isPending) return <LoadingPanel label="Loading tests" />;
+  if (state.isPending) return <SkeletonPanel label="Loading tests" rows={4} />;
   if (!state.data) return <ErrorPanel message={state.error?.message || "Could not load tests."}
     action={<button className="secondary-button" onClick={() => void state.refetch()}>Try again</button>} />;
   const appNames = new Map(state.data.applications.map((app) => [app.id, app.name]));
@@ -44,7 +45,7 @@ function StatusRunsView({ filterKey }: { filterKey: string }) {
           const action = testDestination(test);
           return <div role="listitem" key={test.id}>
             <Link className="data-row" to={action.to}>
-              <span className="product-icon small" aria-hidden="true">{(appNames.get(test.application_id) ?? "?").slice(0, 2).toUpperCase()}</span>
+              <Avatar kind="app" name={appNames.get(test.application_id) ?? "?"} size="lg" />
               <div className="row-primary"><strong>{testTitle(test)}</strong><span>{appNames.get(test.application_id) ?? "Application"}</span></div>
               <TestStatusBadge status={test.status} />
               <span className="text-link">{action.label}</span><Icon name="arrow" size={16} />
@@ -95,7 +96,7 @@ function ApplicationPicker() {
           {filtered.length ? <div className="data-list" role="list" aria-label="Applications with tests">
             {filtered.map((app) => <div role="listitem" key={app.id}>
               <Link className="data-row" to={`/applications/${app.id}/runs`}>
-                <span className="product-icon small" aria-hidden="true">{app.name.slice(0, 2).toUpperCase()}</span>
+                <Avatar kind="app" name={app.name} size="lg" />
                 <div className="row-primary"><strong>{app.name}</strong><span>{app.description || "View tests for this application"}</span></div>
                 <span className="text-link">View tests</span><Icon name="arrow" size={16} />
               </Link>

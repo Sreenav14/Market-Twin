@@ -211,9 +211,7 @@
 .signin-input,
 .signin-form .text-input {
   width: 100%;
-  min-height: 48px;
-  padding: 12px 14px;
-  font-size: 15px;
+  /* Geometry owned by forms.css §3 (Phase 2d): the one 44px field. */
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--field-border);

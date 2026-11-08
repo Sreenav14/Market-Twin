@@ -316,9 +316,9 @@ it("archive rows entering on a filter change fade in (no stagger)", async () => 
   };
   await mount(sources);
   const section = screen.getByRole("region", { name: "RECENT TESTS" });
-  fireEvent.click(within(section).getByRole("button", { name: /Failed · 1/ }));
+  fireEvent.click(within(section).getByRole("radio", { name: /Failed · 1/ }));
   await waitFor(() => expect(within(section).queryByText(/Stopped test/)).not.toBeInTheDocument());
-  fireEvent.click(within(section).getByRole("button", { name: /All · 3/ }));
+  fireEvent.click(within(section).getByRole("radio", { name: /All · 3/ }));
   const entering = within(section).getByText(/Stopped test/).closest("article") as HTMLElement;
   expect(entering.className).toContain("desk-enter");
   expect(entering).toHaveAttribute("data-desk-enter");

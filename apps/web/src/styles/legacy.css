@@ -49,20 +49,6 @@ a:focus-visible {
   color: var(--primary);
   flex: 0 0 auto;
 }
-.spinner {
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: var(--mt-radius-pill);
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 .boot-screen {
   min-height: 100vh;
   display: grid;
@@ -331,10 +317,8 @@ a:focus-visible {
   gap: 14px;
 }
 .metric-card,
-.panel,
 .product-card,
-.data-list,
-.run-progress {
+.data-list {
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: var(--shadow);
@@ -419,37 +403,12 @@ a:focus-visible {
   color: var(--text-3);
   font-size: 11px;
 }
-.panel {
-  padding: 22px;
-  border-radius: var(--mt-radius-xl);
-}
-.state-panel {
-  min-height: 170px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--text-3);
-}
+/* .panel geometry removed — the one card/panel recipe lives in display.css (Phase 2b). */
 .data-list {
   overflow: hidden;
   border-radius: var(--mt-radius-xl);
 }
-.data-row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 14px;
-  min-height: 70px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-}
-.data-row:last-child {
-  border-bottom: 0;
-}
-.data-row:hover {
-  background: var(--surface-muted);
-}
+/* .data-row geometry removed — canonical recipe in display.css (Phase 2b). */
 .row-icon {
   display: grid;
   place-items: center;
@@ -475,37 +434,7 @@ a:focus-visible {
   color: var(--text-3);
   font-size: 11px;
 }
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 25px;
-  padding: 0 9px;
-  border-radius: var(--mt-radius-pill);
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: capitalize;
-}
-.status-success {
-  color: var(--success);
-  background: var(--success-bg);
-  border: 1px solid var(--success-border);
-}
-.status-info {
-  color: var(--info);
-  background: var(--info-bg);
-  border: 1px solid var(--info-border);
-}
-.status-danger {
-  color: var(--danger);
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
-}
-.status-neutral {
-  color: var(--text-2);
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-}
+/* .status-badge removed — display.css §4 (Phase 2b). */
 .form-grid {
   display: grid;
   gap: 12px;
@@ -544,7 +473,6 @@ a:focus-visible {
   gap: 9px;
   margin-top: 6px;
 }
-.toggle-row,
 .confirmation-row {
   display: flex;
   align-items: center;
@@ -558,34 +486,9 @@ a:focus-visible {
 .confirmation-row {
   justify-content: flex-start;
 }
-/* Toggle rows (Add target's protected-experience row) share the
-   confirmation band's recipe, with the label on its own line and the
-   description beneath it — this class previously had no styles at all,
-   so the label and description ran together (examination, Add target). */
-.toggle-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--mt-radius-lg);
-  background: var(--surface-muted);
-  cursor: pointer;
-}
-.toggle-row strong {
-  display: block;
-}
-.toggle-row small {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-2);
-  line-height: 1.5;
-}
-.toggle-row input {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
+/* .toggle-row removed (Phase 2d): the switch-shaped row on Add target
+   was a checkbox in costume — its value is saved with the form — and
+   now renders the checkbox recipe (forms.css §2). */
 .two-column-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
@@ -749,58 +652,8 @@ a:focus-visible {
   border-radius: 50%;
   background: var(--primary);
 }
-.tab-strip {
-  display: flex;
-  gap: 22px;
-  min-height: 42px;
-  margin-top: -10px;
-  margin-bottom: 24px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--border);
-}
-.tab-link {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 42px;
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-.tab-link.active {
-  color: var(--primary);
-}
-.tab-link.active:after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: var(--primary);
-}
-.tab-link.disabled {
-  color: var(--text-3);
-  cursor: not-allowed;
-}
-.run-progress {
-  padding: 20px;
-  border-radius: var(--mt-radius-xl);
-}
-.run-progress-track {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 7px;
-}
-.run-progress-track span {
-  height: 5px;
-  border-radius: var(--mt-radius-pill);
-  background: var(--surface-muted);
-}
-.run-progress-track span.complete {
-  background: var(--primary);
-}
+/* Tab strip copies deleted -- overlays.css owns the recipe (Phase 2c). */
+/* .run-progress* deleted — dead CSS, zero TSX uses; progress recipe is display.css §8 (Phase 2b). */
 .run-stage-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -841,36 +694,6 @@ a:focus-visible {
 .danger-actions {
   display: flex;
   gap: 9px;
-}
-.empty-state {
-  display: grid;
-  place-items: center;
-  min-height: 240px;
-  padding: 34px;
-  border: 1px dashed var(--border);
-  border-radius: var(--mt-radius-xl);
-  text-align: center;
-  background: var(--surface);
-}
-.empty-state p {
-  max-width: 440px;
-  color: var(--text-3);
-  font-size: 11px;
-}
-.empty-action {
-  margin-top: 17px;
-}
-.error-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 16px;
-  border: 1px solid var(--danger-border);
-  border-radius: var(--mt-radius-lg);
-  color: var(--danger);
-  background: var(--danger-bg);
-  font-size: 11px;
 }
 .settings-layout {
   display: grid;

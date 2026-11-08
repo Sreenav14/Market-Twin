@@ -1,0 +1,288 @@
+/* ============================================================
+   STATES & MICRO — Phase 2e. ONE recipe per family, resolved
+   against Soft Proof tokens. Spec: COMPONENT_SPEC_4_STATES_MICRO.md.
+   §1 Loading · §2 Skeletons (STATIC only) · §3 Empty · §4 Errors
+   §5 Icons (stroke/sizes live in code) · §6 Dividers & spacing
+   §7 Scrollbars & selection · §8 Kbd & code/mono · Timeline ·
+   Voice cards · Evidence frames.
+   Imported after forms.css: this layer owns these families;
+   older sheets must not restate them.
+   Motion: register only; the spinner rotation (1000ms linear)
+   is the system's ONLY loop, and it stops under reduced motion.
+   ============================================================ */
+
+/* ---------- §6 Spacing consumption ----------
+   The Carbon scale is real via --mt-space-* tokens (tokens.css).
+   Shared recipes consume the tokens, never literals, for their
+   internal rhythm. */
+
+/* ---------- §1 Loading: the spinner, re-registered ----------
+   Sole permitted loop: 1000ms linear (Spec 4 §1.4). Sizes
+   16/20/32 on the icon ladder. Track = border-strong tone; arc =
+   petrol-deep (interactive-primary-deep), ≥3:1 on surfaces. */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-strong-c);
+  border-top-color: var(--accent-deep);
+  border-radius: var(--mt-radius-pill);
+  animation: mt-spin 1000ms linear infinite;
+  flex: 0 0 auto;
+}
+.spinner-lg { width: 32px; height: 32px; }
+.spinner-sm { width: 16px; height: 16px; }
+@keyframes mt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* LoadingPanel: panel + spinner + words naming the real task.
+   The show-delay / minimum-display law (300ms / 500ms, adopted
+   interim Q10/Q11) is implemented in ui/StateViews
+   (useDelayedLoading) — CSS never holds content back. */
+.state-panel {
+  display: flex;
+  align-items: center;
+  gap: var(--mt-space-4);
+  min-height: 240px;
+  justify-content: center;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+/* ---------- §2 Skeletons — STATIC, always ----------
+   A wireframe of the real layout: bars/blocks only, no text, no
+   numbers, no fake rows. No shimmer, no pulse, no fade loop —
+   animated skeletons are prohibited programme-wide (Spec 4
+   §1.5 verdict: the perceived-speed benefit does not replicate,
+   Viget 2017 n=136). Fill sits 1.15–1.6:1 off the page bg. */
+.skeleton {
+  display: grid;
+  gap: var(--mt-space-4);
+  padding: var(--mt-space-6);
+}
+.skeleton-bar {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+}
+.skeleton-bar-short { width: 65%; }
+.skeleton-bar-title { height: 16px; width: 40%; }
+.skeleton-block {
+  border-radius: var(--mt-radius-md);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  min-height: 96px;
+}
+.skeleton-row { display: flex; gap: var(--mt-space-4); align-items: center; }
+.skeleton-avatar { width: 32px; height: 32px; border-radius: var(--mt-radius-sm); background: var(--sunken); border: 1px solid var(--line); flex: 0 0 auto; }
+.skeleton-row .skeleton-bar { flex: 1 1 auto; }
+
+/* ---------- §3 Empty states: ONE recipe ----------
+   Optional 32px icon + positive-statement title + 1–2 line body
+   + at most ONE action, only where a real action exists (Spec 4
+   §3; illustration ban per adopted Q12 interim). Panel padding
+   24, page padding 32 (the .empty-state-page variant). */
+.empty-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--mt-space-3);
+  padding: var(--mt-space-6);
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+.empty-state-page { padding: var(--mt-space-7); justify-items: center; text-align: center; }
+.empty-mark {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.empty-state h2 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ink); margin: 0; }
+.empty-state p { font-size: 14px; line-height: 20px; color: var(--ink-2); margin: 0; max-width: 52ch; }
+.empty-action { margin-top: var(--mt-space-4); }
+/* Compact inline empty (inside a populated page): words only. */
+.empty-inline { font-size: 13px; line-height: 20px; color: var(--ink-2); margin: 0; }
+
+/* ---------- §4 Error pages: ONE L4 anatomy ----------
+   Centred column ≤480px, 32px status icon, plain-language
+   heading, one body line, primary + secondary actions,
+   diagnostic line in evidence mono. Used by the system pages
+   and the root render boundary. */
+.error-page {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--mt-space-3);
+  min-height: 60vh;
+  padding: var(--mt-space-7) var(--mt-space-6);
+  text-align: center;
+}
+.error-page h1 { font-size: 20px; line-height: 28px; font-weight: 650; color: var(--ink); margin: 0; }
+.error-page p { font-size: 14px; line-height: 20px; color: var(--ink-2); margin: 0; max-width: 480px; }
+.error-page-actions { display: flex; gap: var(--mt-space-3); margin-top: var(--mt-space-4); flex-wrap: wrap; justify-content: center; }
+.error-diagnostic { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+
+/* ---------- §6 Dividers: ONE recipe ----------
+   1px only (2px is the focus outline / stepper connector).
+   Subtle = --line within groups; strong = --border-strong-c
+   between sections. A divider carries no margin of its own. */
+.mt-divider { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.mt-divider-strong { border-top-color: var(--border-strong-c); }
+
+/* ---------- §7 Scrollbars & selection ----------
+   ONE treatment app-wide: thin, token-coloured, no custom
+   arrows, never hidden while overflow exists. Gutter reserved
+   so content does not shift when bars appear. */
+html { scrollbar-gutter: stable; }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong-c) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong-c); border-radius: var(--mt-radius-pill); }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-button { display: none; }
+@media (forced-colors: active) {
+  * { scrollbar-color: auto; }
+  ::selection { background: Highlight; color: HighlightText; }
+}
+
+/* ---------- §8 Kbd chips: ONE recipe ----------
+   Keycap cue = 1px border + 2px bottom edge (survives Forced
+   Colors; no shadow stacks, no gradients). Evidence mono at
+   body−1, nowrap. The Desk chip and the shell trigger both
+   render this class. */
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--ink-2);
+  background: var(--card);
+  border: 1px solid var(--border-strong-c);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* ---------- §8 Code / mono: evidence only ----------
+   JetBrains Mono is the evidence face: literal IDs, code,
+   traces, timestamps, counts. Inline code = sunken chip, no
+   border (kbd has the border; code does not — the difference
+   encodes input vs system text). */
+code, .monospace {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+:not(pre) > code {
+  background: var(--sunken);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---------- Timeline / activity rows: ONE recipe ----------
+   Ordered steps/events with a status: time in evidence mono,
+   title in Hanken, status via the 2b StatusPill. Density =
+   the display data-row rhythm (12px vertical padding). The
+   connector is the §6 divider token, never a bespoke line. */
+.mt-timeline { list-style: none; margin: 0; padding: 0; }
+.mt-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: var(--mt-space-4);
+  width: 100%;
+  padding: var(--mt-space-3) var(--mt-space-4);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+}
+li:last-child > .mt-timeline-row, .mt-timeline > li:last-child { border-bottom: 0; }
+.mt-timeline-time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mt-timeline-title { font-weight: 600; font-size: 14px; }
+.mt-timeline-meta { color: var(--ink-2); font-size: 13px; margin-left: auto; white-space: nowrap; }
+button.mt-timeline-row { cursor: pointer; transition: background-color var(--dur-quick) var(--ease-change); }
+button.mt-timeline-row:hover { background: var(--sunken); }
+button.mt-timeline-row[aria-pressed="true"] { background: var(--accent-tint); }
+
+/* ---------- Voice cards: ONE recipe, two lawful surfaces ----------
+   A verbatim quote is Newsreader italic (2a type rule) with a
+   SQUARE persona avatar (2b shape rule). Impressions render on
+   the sunken band surface (2a re-expression); checks-side
+   quotes render on the plain surface. A quote from a CHECK
+   never wears the band, and vice versa (two-track rule). */
+.voice-card {
+  display: grid;
+  gap: var(--mt-space-3);
+  padding: var(--mt-space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+}
+.voice-card-band { background: var(--sunken); box-shadow: none; }
+.voice-card-head { display: flex; align-items: center; gap: var(--mt-space-3); }
+.voice-card-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.voice-card-role { font-size: 12px; color: var(--ink-2); }
+.voice-card blockquote, .voice-quote {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* ---------- Evidence & media frames: ONE recipe ----------
+   ONE preview-size rule: frame max-width 720px, image
+   max-height 520px, contain, top-left — on every surface
+   (the 320px ancestor shrink is retired). Light surfaces stay
+   light; the dark stage belongs to the live viewer alone. */
+.evidence-frame, .artifact-preview-link {
+  display: block;
+  max-width: 720px;
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-md);
+  background: var(--card);
+  overflow: hidden;
+}
+.evidence-frame img, .artifact-preview, .journey-screenshot-box img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  object-position: top left;
+  border: 0;
+  border-radius: 0;
+}
+.journey-screenshot-box {
+  max-width: 720px;
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-md);
+  background: var(--card);
+  overflow: hidden;
+  padding: 0;
+}
+.evidence-artifact .artifact-preview { max-width: 100%; }

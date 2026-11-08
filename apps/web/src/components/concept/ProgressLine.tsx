@@ -26,7 +26,6 @@ export const ProgressLine: React.FC<ProgressLineProps> = ({
       : `Checked ${checkedAttempts} of ${totalAttempts} attempts`);
 
   const fraction = totalAttempts > 0 ? Math.min(1, checkedAttempts / totalAttempts) : 0;
-  const pct = Math.round(fraction * 100);
 
   const content = (
     <div
@@ -50,26 +49,13 @@ export const ProgressLine: React.FC<ProgressLineProps> = ({
         )}
       </div>
 
-      {/* Same bar family as the results-page CoverageBar: 14px rounded bar,
-          neutral not-checked tone for the portion done (its outcome split is
-          not published mid-run, so no outcome colour is claimed). */}
-      <div
-        aria-hidden="true"
-        style={{
-          height: "14px",
-          borderRadius: "7px",
-          backgroundColor: "var(--notchecked-tint)",
-          width: "100%",
-          overflow: "hidden",
-        }}
-      >
+      {/* Progress recipe (display.css §8): the portion done in the neutral
+          not-checked tone — its outcome split is not published mid-run,
+          so no outcome colour is claimed. Fill by scaleX, not width. */}
+      <div className="progress" aria-hidden="true" style={{ height: "14px" }}>
         <div
-          style={{
-            height: "100%",
-            width: `${pct}%`,
-            backgroundColor: "var(--notchecked)",
-            borderRadius: "7px",
-          }}
+          className="progress-fill"
+          style={{ transform: `scaleX(${fraction})`, backgroundColor: "var(--notchecked)" }}
         />
       </div>
     </div>

@@ -33,9 +33,9 @@ export function ResultsBoundary({ children }: { children: ReactNode }) {
       <section className="waiting-state">
         <span className="state-icon">
           {completed ? (
-            <FileSearch size={28} aria-hidden="true" />
+            <FileSearch size={32} aria-hidden="true" />
           ) : (
-            <Clock3 size={28} aria-hidden="true" />
+            <Clock3 size={32} aria-hidden="true" />
           )}
         </span>
         <h2>

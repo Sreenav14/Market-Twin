@@ -79,7 +79,7 @@ export function RunMissionsPage() {
                 <div style={{ paddingBottom: 16, borderBottom: "1px solid var(--border)", marginBottom: 18 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Target size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                      <Target size={20} style={{ color: "var(--primary)" }} aria-hidden="true" />
                       <span
                         style={{
                           fontSize: 11,
@@ -114,7 +114,7 @@ export function RunMissionsPage() {
                   {first.success_criteria.length > 0 ? (
                     <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 6, background: "var(--surface-muted)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                        <ListChecks size={14} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                        <ListChecks size={16} style={{ color: "var(--primary)" }} aria-hidden="true" />
                         <strong style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-3)" }}>
                           Planned Success Criteria ({first.success_criteria.length})
                         </strong>
@@ -213,7 +213,7 @@ export function RunMissionsPage() {
                             to={`/runs/${run.id}/journeys/${journey.id}`}
                           >
                             <span>Inspect ({journey.step_count} steps)</span>
-                            <ArrowUpRight size={12} aria-hidden="true" />
+                            <ArrowUpRight size={16} aria-hidden="true" />
                           </Link>
                         </div>
                       </div>

@@ -31,7 +31,7 @@ it("merges cursor history by stable IDs and refreshes mutable statuses without d
   vi.spyOn(api, "listActionApprovals").mockResolvedValue([]);
   const client = mount();
   await screen.findByText("Browser action recorded");
-  await user.click(await screen.findByRole("button", { name: "Load older activity" }));
+  await user.click(await screen.findByRole("button", { name: "Load more activity" }));
   await screen.findByText("Planning recorded");
   expect(screen.getAllByText("Browser action recorded")).toHaveLength(1);
   latest = { ...latest, activity: { items: [{ ...item, status: "completed" }], next_cursor: "new-latest-cursor" } };
@@ -39,7 +39,7 @@ it("merges cursor history by stable IDs and refreshes mutable statuses without d
   await waitFor(() => expect(screen.getByRole("button", { name: /Browser action recorded/ })).toHaveTextContent("completed"));
   expect(screen.getAllByText("Browser action recorded")).toHaveLength(1);
   expect(screen.getByText("Planning recorded")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Load older activity" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Load more activity" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /Browser action recorded/ }));
   expect(screen.getByRole("link", { name: "Inspect step 1 and supporting evidence" })).toHaveAttribute("href", "/runs/run/journeys/journey?step=1");
   expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain("blob:");

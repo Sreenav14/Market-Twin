@@ -1,4 +1,5 @@
 import React from "react";
+import { Avatar } from "../ui/Avatar";
 
 interface TriptychSignatureProps {
   compact?: boolean;
@@ -38,23 +39,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
           }}
         >
           <div className="flex items-center gap-3" style={{ marginBottom: compact ? "8px" : "16px" }}>
-            <div
-              style={{
-                width: compact ? "24px" : "40px",
-                height: compact ? "24px" : "40px",
-                borderRadius: "50%",
-                backgroundColor: "var(--tom)",
-                color: "#FFFFFF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 600,
-                fontSize: compact ? "11px" : "16px",
-                flexShrink: 0,
-              }}
-            >
-              T
-            </div>
+            <Avatar kind="persona" name="Tom" size={compact ? "sm" : "lg"} tint="var(--tom)" />
             <div>
               <div className="font-h3" style={{ fontSize: compact ? "15px" : "18px", color: "var(--ink)" }}>
                 Tom
@@ -87,7 +72,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
                   padding: "8px 16px",
                   display: "inline-block",
                   fontSize: "13px",
-                  fontFamily: "IBM Plex Mono, monospace",
+                  fontFamily: "Hanken Grotesk, sans-serif",
                   fontWeight: 600,
                   color: "var(--ink)",
                 }}
@@ -130,23 +115,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
           }}
         >
           <div className="flex items-center gap-3" style={{ marginBottom: compact ? "8px" : "16px" }}>
-            <div
-              style={{
-                width: compact ? "24px" : "40px",
-                height: compact ? "24px" : "40px",
-                borderRadius: "50%",
-                backgroundColor: "var(--maya)",
-                color: "#FFFFFF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 600,
-                fontSize: compact ? "11px" : "16px",
-                flexShrink: 0,
-              }}
-            >
-              M
-            </div>
+            <Avatar kind="persona" name="Maya" size={compact ? "sm" : "lg"} tint="var(--maya)" />
             <div>
               <div className="font-h3" style={{ fontSize: compact ? "15px" : "18px", color: "var(--ink)" }}>
                 Maya
@@ -179,7 +148,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
                   padding: "8px 16px",
                   display: "inline-block",
                   fontSize: "13px",
-                  fontFamily: "IBM Plex Mono, monospace",
+                  fontFamily: "Hanken Grotesk, sans-serif",
                   fontWeight: 600,
                   color: "var(--ink)",
                 }}
@@ -223,23 +192,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
           }}
         >
           <div className="flex items-center gap-3" style={{ marginBottom: compact ? "8px" : "16px" }}>
-            <div
-              style={{
-                width: compact ? "24px" : "40px",
-                height: compact ? "24px" : "40px",
-                borderRadius: "50%",
-                backgroundColor: "var(--priya)",
-                color: "#FFFFFF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 600,
-                fontSize: compact ? "11px" : "16px",
-                flexShrink: 0,
-              }}
-            >
-              P
-            </div>
+            <Avatar kind="persona" name="Priya" size={compact ? "sm" : "lg"} tint="var(--priya)" />
             <div>
               <div className="font-h3" style={{ fontSize: compact ? "15px" : "18px", color: "var(--ink)" }}>
                 Priya
@@ -272,7 +225,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
                   padding: "8px 16px",
                   display: "inline-block",
                   fontSize: "13px",
-                  fontFamily: "IBM Plex Mono, monospace",
+                  fontFamily: "Hanken Grotesk, sans-serif",
                   fontWeight: 600,
                   color: "var(--ink)",
                 }}

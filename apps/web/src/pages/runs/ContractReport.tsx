@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { StatusPill } from "../../components/ui/StatusBadge";
-import { CoverageBar, JourneyMeter, StackedBar } from "../../components/markettwin/ResultFigures";
-import { ArtifactEvidence } from "./FindingDetailPage";
+import { CoverageProgress, JourneyMeter, StackedBar } from "../../components/markettwin/ResultFigures";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function rows(value: unknown): Record<string, unknown>[] { return Array.isArray(value) ? value.map(object) : []; }
@@ -129,7 +129,7 @@ export function ContractReport({ runId, payload }: { runId: string; payload: Rec
     <section className="panel" aria-labelledby="contract-coverage-title">
       <h2 id="contract-coverage-title">{coverageTitle}</h2>
       <p className="contract-coverage" role="status">Coverage: tested {count(coverage.tested_features)} of {count(coverage.discovered_features)} discovered features.</p>
-      {testedFeatures !== null && discoveredFeatures !== null && discoveredFeatures > 0 ? <CoverageBar tested={testedFeatures} discovered={discoveredFeatures} /> : null}
+      {testedFeatures !== null && discoveredFeatures !== null && discoveredFeatures > 0 ? <CoverageProgress tested={testedFeatures} discovered={discoveredFeatures} /> : null}
       {hasCases && notTestedJourneys.length ? <p className="rf-named-remainder">Not tested: {notTestedJourneys.map(j => `${string(j.title)} (${string(j.feature_key).replaceAll("_", " ")})`).join("; ")}.</p> : null}
       {anonymousRemainder > 0 ? <p className="rf-named-remainder">Plus {anonymousRemainder} more discovered {anonymousRemainder === 1 ? "feature" : "features"} that no approved test covers.</p> : null}
     </section>
@@ -210,7 +210,7 @@ export function ContractReport({ runId, payload }: { runId: string; payload: Rec
             const score = object(scores[dimension]);
             const justification = typeof score.justification === "string" && score.justification.trim() ? splitMetrics(score.justification) : null;
             return <div key={dimension}><dt>{dimension.replaceAll("_", " ")}</dt><dd>{justification ? <>
-              <blockquote className="tester-quote"><p>{justification.clean}</p><cite>— {name}, simulated tester</cite></blockquote>
+              <blockquote className="tester-quote voice-quote"><p>{justification.clean}</p><cite>— {name}, simulated tester</cite></blockquote>
               {justification.metrics.length ? <p className="tester-evidence-line">Evidence · {justification.metrics.join(" · ")}</p> : null}
             </> : "Unavailable — no supported assessment"}</dd></div>;
           })}</dl> : <p>Experience assessment unavailable. The recorded activity above is still available.</p>}

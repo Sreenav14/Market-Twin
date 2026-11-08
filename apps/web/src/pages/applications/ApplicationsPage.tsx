@@ -3,6 +3,7 @@ import { Link, useOutletContext } from "react-router-dom";
 import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { Icon } from "../../components/ui/Icon";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { Avatar } from "../../components/ui/Avatar";
 import {
   EmptyState,
   ErrorPanel,
@@ -155,15 +156,13 @@ export function ApplicationsPage() {
                       to={`/applications/${application.id}`}
                       className="data-row"
                     >
-                      <span className="product-icon small">
-                        {application.name.slice(0, 2).toUpperCase()}
-                      </span>
+                      <Avatar kind="app" name={application.name} size="lg" />
                       <div className="row-primary">
                         <strong>{application.name}</strong>
                         <span>{application.description || "No description"}</span>
                       </div>
                       {targetCount !== null && targetCount !== undefined ? (
-                        <span className="environment-label">
+                        <span className="muted">
                           {targetCount === 1 ? "1 target" : `${targetCount} targets`}
                         </span>
                       ) : null}

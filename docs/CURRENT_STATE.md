@@ -1,5 +1,66 @@
 # Current MarketTwin state
 
+## Soft Proof theme adoption — Components Programme Phase 2a — 2026-11-07 (this session)
+
+Candidate C "Soft Proof" adopted app-wide through the token layer. Ten itemised
+commits on top of `1d48bd6` (local only, NOT pushed; all files under `apps/web`,
+no backend changes): `36dfa60` colour+surface tokens · `c8082fe` radius+elevation ·
+`d54f343` fonts (Hanken Grotesk + JetBrains Mono self-hosted) · `a44a8f0`
+quotes-only serif · `db9d090` evidence mono · `c5f02ab` Okabe-Ito chart tokens ·
+`914ef7b` dark evidence stage (scoped to the live viewer) · `a740edf` impression
+band on sunken · `edc323b` token-contract tests · docs commit (this entry +
+LandingPage stale-comment cleanup).
+
+- Type rule live: Hanken = system, JetBrains Mono = evidence, Newsreader italic
+  = verbatim quotes only. Semantics recoloured (Pass #1A7F37, Fail #CF222E,
+  Warning #B54708 on #FFFAEB, Info #475467); canonical words unchanged.
+- Blockers: contrast lint 37/37 asserted pairs PASS (script + output in the
+  proof folder). CVD simulation (Machado matrices on real captures): petrol vs
+  pass-green lightness delta is SMALL (ΔL 0.011 normal / 0.010 deuteranopia /
+  0.004 protanopia) — separation rests on icon+label + petrol never carrying
+  status meaning; flagged for the owner in the Phase 2a write-up.
+- Gates in the separate test env: typecheck 0 · web 248/248 (baseline 239;
+  delta +9 = the new token-contract test file, no existing assertion changed) ·
+  production build OK. Sweep: zero overflow; error renders 32/50, comparable
+  baseline-13 identical, 19 no-baseline — zero flips.
+- Owner-upload gap: hanken-grotesk-var.woff2 + jetbrains-mono-var.woff2 join
+  inter-var.woff2 as binaries Sreenav must upload to GitHub by hand.
+- Proof + write-up: `~/workspace/your_files/markettwin-hallmark-audit/screenshots-theme-soft-proof/`
+  and the Phase 2a section of COMPONENTS_PROGRAMME.md.
+
+## Sidebar + buttons — the Prody round — 2026-11-07 (this session)
+
+Sidebar and all buttons rebuilt on the owner-chosen "Prody" reference pattern.
+Commits `57ae5ac`, `5c3b8df`, `72815ab`, `d3560e1` on top of `2ea81ce` (local only,
+NOT pushed; 9 files, all `apps/web`, no backend changes).
+
+- One button recipe in the shared layer (concept-system.css): geometry tokens
+  (38px height, 16px padding, 10px radius, 14px/600), primary = `--primary`
+  (flame-deep) + soft shadow, secondary = card + `--field-border`, danger in the
+  same geometry, ghost with quiet tint hover, press scale(0.98), X-10 focus
+  unchanged. Segmented controls adopt the reference's track treatment (transparent
+  track border, raised white active pill via the new `--shadow-raised` token) —
+  this answers the fields round's open track-border question.
+- Sidebar: desktop rail ≥1280px (brand → CommandMenu field-variant search trigger
+  that opens the real ⌘K palette → workspace card → one ShellNav list shared with
+  the mobile drawer → account footer). Active nav row = raised white pill;
+  active-state semantics unchanged. Mobile keeps a slim top bar + the drawer as
+  the rail's form. No nav counts or badges shipped (no honest workspace-level
+  source — see write-up); the reference's decorative counts, "New" badge,
+  notifications badge, upsell card and collapse affordance were deliberately not
+  imported.
+- Theme note: the warm-theme lock was lifted mid-round by the owner; every
+  colour/type choice in this round is token-layer only, no palette/type values
+  swapped. Theme research decided "Soft Proof" (Candidate C) the same day; its
+  adoption is a later token-value swap, and this round's geometry matches its spec.
+- Gates in the separate test env @ `d3560e1`: typecheck 0, web 239/239 (baseline,
+  no test deltas), production build OK. All-route sweep: zero overflow; error
+  renders 32/50 under the generic fixtures — the 13 with a pre-round baseline
+  are the identical set (zero flips), the other 19 have no baseline (the same
+  32/13/19 split the fields round verified pre-round). Proof +
+  write-up: `~/workspace/your_files/markettwin-hallmark-audit/SIDEBAR_BUTTONS.md`
+  and `screenshots-sidebar-buttons/`.
+
 ## Test results redesign — figures, not a text wall — 2026-11-06
 
 Owner verdict on a real run's export (MT-000113 · Sup_13, discovery-contract

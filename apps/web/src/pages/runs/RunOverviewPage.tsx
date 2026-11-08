@@ -1,3 +1,4 @@
+import { Banner } from "../../components/ui/Feedback";
 import { Link, useOutletContext } from "react-router-dom";
 import { Check, FileText, ArrowUpRight } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
@@ -42,10 +43,7 @@ export function RunOverviewPage() {
     <>
       {run.status_reason ? <p className="panel" role="status">{run.status_reason}</p> : null}
       {!["draft", "failed", "cancelled"].includes(run.status) ? (
-        <section className={`run-action-required${awaitingApproval || pausedForHuman ? "" : " run-action-required--calm"}`}>
-          <div>
-            <h2>
-              {awaitingApproval ? "Approve the tests" : pausedForHuman
+        <Banner titleAs="h2" severity={awaitingApproval || pausedForHuman ? "warning" : "info"} title={awaitingApproval ? "Approve the tests" : pausedForHuman
                 ? "Human assistance required"
                 : run.status === "completed"
                 ? ready
@@ -55,21 +53,7 @@ export function RunOverviewPage() {
                 ? "Waiting to start"
                 : run.status === "planning"
                 ? "Planning the test"
-                : "Watch this test execute"}
-            </h2>
-            <p>
-              {awaitingApproval ? "Exploration is complete. Review the journeys and checks before testing begins." : pausedForHuman
-                ? "Open the requesting journey and protected browser. The tester waits while you assist."
-                : run.status === "completed"
-                ? ready
-                  ? "Review confirmed issues, observations, and supporting visual evidence."
-                  : "Evaluation is currently compiling recorded journeys and step assertions."
-                : run.status === "queued" || run.status === "planning"
-                ? "The Watch page shows the test browser and recorded actions as soon as execution starts."
-                : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}
-            </p>
-          </div>
-          <Link
+                : "Watch this test execute"} action={<Link
             className="primary-button"
             to={
               awaitingApproval ? `/runs/${run.id}/contract` : pausedForHuman
@@ -90,8 +74,15 @@ export function RunOverviewPage() {
               : run.status === "queued" || run.status === "planning"
               ? "Open Watch"
               : "Watch live"}
-          </Link>
-        </section>
+          </Link>}>{awaitingApproval ? "Exploration is complete. Review the journeys and checks before testing begins." : pausedForHuman
+                ? "Open the requesting journey and protected browser. The tester waits while you assist."
+                : run.status === "completed"
+                ? ready
+                  ? "Review confirmed issues, observations, and supporting visual evidence."
+                  : "Evaluation is currently compiling recorded journeys and step assertions."
+                : run.status === "queued" || run.status === "planning"
+                ? "The Watch page shows the test browser and recorded actions as soon as execution starts."
+                : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}</Banner>
       ) : null}
       {pausedForHuman && !awaitingApproval ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
       <ol className="lifecycle-rail" aria-label="Test lifecycle">
@@ -109,7 +100,7 @@ export function RunOverviewPage() {
             }
           >
             <span className="stage-marker" aria-hidden="true">
-              {!stopped && index < stage ? <Check size={13} /> : index + 1}
+              {!stopped && index < stage ? <Check size={16} /> : index + 1}
             </span>
             <span>
               {label}

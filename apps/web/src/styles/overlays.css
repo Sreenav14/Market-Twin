@@ -1,0 +1,339 @@
+/* ============================================================
+   OVERLAYS — Phase 2c. ONE recipe per overlay family, resolved
+   against Soft Proof tokens. Spec: COMPONENT_SPEC_2_OVERLAYS.md.
+   §1 Tabs & segmented · §2 Menus & palette · §3 Dialogs & drawers
+   §4 Tooltips & popovers
+   Motion: register only (110/150/240/250ms, colour/transform).
+   Focus: 2px #155E75 outline at 2px offset (global rule) — never
+   a box-shadow-only ring in this file.
+   ============================================================ */
+
+/* ---------- §1a Tabs (APG: tablist / tab / tabpanel) ---------- */
+.mt-tabs-list {
+  display: flex;
+  gap: 8px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.mt-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: color var(--dur-quick) ease;
+}
+.mt-tab:hover { color: var(--ink); }
+.mt-tab[data-state="active"] {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent-deep);
+}
+.mt-tabpanel { padding-top: 24px; }
+.mt-tabpanel--flush { padding-top: 0; }
+
+/* Section-navigation strip: the SAME visual language as tabs, but
+   plain navigation semantics (NavLink + aria-current) — navigation
+   is not a tablist (APG; Spec 2 §1.1/§7.9). One definition here;
+   the base/legacy/concept-system copies are deleted at source. */
+.tab-strip {
+  display: flex;
+  gap: 24px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+.tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: var(--mt-space-3) 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color var(--dur-quick) ease;
+}
+.tab-link:hover { color: var(--ink); }
+.tab-link.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent-deep); }
+
+/* ---------- §1b Segmented control (APG radio group) ----------
+   ONE form, reconciling the spec's adopted inset-thumb (§7.5)
+   with the Prody round's track treatment: sunken track, raised
+   white active pill — not a third treatment. Track padding 2px,
+   radius 8, segments radius 6, selected also carries an inset
+   border-strong ring + 600 weight (never colour alone). */
+.segmented-control {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--sunken);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 2px;
+}
+.segmented-control-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dur-quick) ease, background-color var(--dur-quick) ease;
+}
+.segmented-control--lg .segmented-control-item { min-height: 40px; padding: 8px 16px; }
+.segmented-control-item:hover:not(:disabled) { color: var(--ink); }
+.segmented-control-item.active {
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--border-strong-c), var(--shadow-raised);
+  color: var(--ink);
+  font-weight: 600;
+}
+.segmented-control-item:disabled { opacity: 0.55; cursor: not-allowed; }
+@media (max-width: 639px) {
+  .segmented-control { display: flex; width: 100%; }
+  .segmented-control-item { flex: 1; padding: 8px; font-size: 13px; }
+}
+
+/* ---------- §2 Menus (APG menu, via Radix DropdownMenu) ---------- */
+.mt-menu-content {
+  min-width: 192px;
+  max-width: 320px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(28 25 23 / 0.20);
+  padding: 4px;
+  z-index: 60;
+}
+.mt-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+.mt-menu-item[data-highlighted] { background: var(--sunken); }
+.mt-menu-item[data-disabled] { color: var(--ink-faint); cursor: default; }
+.mt-menu-item--danger { color: var(--fail); }
+.mt-menu-item--danger[data-highlighted] { background: var(--broken-tint, #fdecec); }
+.mt-menu-label {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.mt-menu-separator { height: 1px; background: var(--border); margin: 4px 0; }
+.mt-menu-shortcut { margin-left: auto; padding-left: 12px; color: var(--ink-faint); font-size: 12px; }
+
+/* Disclosure navigation panel (APG Disclosure — navigation lists
+   are NOT menus): the RunLayout "More" panel + MegaMenu panels. */
+.mt-disclosure-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(28 25 23 / 0.20);
+  padding: 4px;
+}
+
+/* ---------- §2b Command palette ---------- */
+.mt-dialog.command-dialog {
+  top: min(12vh, 96px);
+  transform: translateX(-50%);
+  width: 640px;
+  max-width: calc(100vw - 32px);
+  max-height: min(480px, 80vh);
+  display: flex;
+  flex-direction: column;
+}
+.command-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.command-input-row input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--ink);
+  outline: none;
+}
+.command-results { overflow-y: auto; padding: 4px; }
+.command-group-label {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.command-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+.command-row[data-active="true"] { background: var(--sunken); }
+.command-row small { color: var(--ink-2); margin-left: auto; padding-left: 12px; text-align: right; }
+.command-empty { padding: 32px 16px; text-align: center; }
+.command-empty strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.command-empty span { font-size: 12.5px; color: var(--ink-2); }
+.command-footer {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+@media (max-width: 639px) {
+  .command-dialog { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; top: 0; transform: none; }
+}
+
+/* ---------- §3 Dialogs & drawers (ONE primitive) ---------- */
+@keyframes mt-overlay-fade { from { opacity: 0; } to { opacity: 1; } }
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(28 25 23 / 0.50);
+  animation: mt-overlay-fade var(--dur-enter) ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialog-overlay { animation: none; }
+}
+.mt-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 61;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgb(28 25 23 / 0.20);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+.mt-dialog--sm { width: 360px; }
+.mt-dialog--md { width: 560px; }
+.mt-dialog--lg { width: 720px; }
+.mt-dialog { max-width: calc(100vw - 48px); }
+.mt-dialog-header { padding: 20px 24px 16px; }
+.mt-dialog-title { font-size: 20px; line-height: 26px; font-weight: 600; color: var(--ink); margin: 0; }
+.mt-dialog-description { margin-top: 4px; color: var(--ink-2); font-size: 14px; line-height: 22px; }
+.mt-dialog-body { padding: 0 24px 24px; overflow-y: auto; }
+.mt-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid transparent;
+}
+.mt-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.mt-dialog-close:hover { color: var(--ink); background: var(--sunken); }
+@media (max-width: 639px) {
+  .mt-dialog--form { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .mt-dialog--confirm { border-radius: 16px 16px 0 0; }
+}
+/* Legacy class aliases kept for surfaces not yet migrated onto the
+   primitive's markup — same recipe, one definition (was a separate
+   .delete-dialog geometry in workspace.css, deleted at source). */
+.delete-dialog { }
+.delete-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 0 0; }
+.delete-description { color: var(--ink-2); font-size: 14px; line-height: 22px; }
+.delete-item-name { font-weight: 600; margin-top: 12px; overflow-wrap: anywhere; padding: 12px; background: var(--sunken); border-radius: 8px; }
+
+/* Drawer (mobile navigation): flush right/left panel on the
+   navigation side, radius 0 on the viewport edge (Spec §4). */
+.navigation-drawer { border-radius: 0; }
+
+/* ---------- §4 Tooltips & popovers ---------- */
+.tooltip {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgb(28 25 23 / 0.20);
+  padding: var(--mt-space-3);
+  font-size: 12.5px;
+  line-height: 17px;
+  max-width: 240px;
+  z-index: 80;
+}
+.tooltip [data-radix-tooltip-arrow], .tooltip svg { fill: var(--ink); }
+.mt-popover {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(28 25 23 / 0.20);
+  padding: 16px;
+  z-index: 60;
+}
+.mt-popover--wide { width: 400px; }
+.mt-popover-title { font-size: 14px; font-weight: 600; margin: 0 24px 8px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mt-tab, .tab-link, .segmented-control-item { transition: none; }
+}

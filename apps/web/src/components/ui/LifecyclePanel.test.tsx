@@ -27,9 +27,9 @@ describe("LifecyclePanel", () => {
     await user.click(
       screen.getByRole("button", { name: "Delete application: Acme Checkout" }),
     );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep application" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Keep application" }));
     expect(remove).not.toHaveBeenCalled();
     remove.mockRestore();
   });

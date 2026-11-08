@@ -2,7 +2,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { api, type ArtifactAccess } from "../../lib/api";
-import { ArtifactEvidence } from "./FindingDetailPage";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

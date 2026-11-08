@@ -1,0 +1,490 @@
+/* ============================================================
+   FORMS & FEEDBACK — Phase 2d. ONE recipe per family, resolved
+   against Soft Proof tokens. Spec: COMPONENT_SPEC_3_FORMS_FEEDBACK.md.
+   §1 Labels/help/error · §2 Choice controls · §3 Field geometry
+   §4 File drop zone · §5 Feedback ladder (alerts/toasts/banners)
+   Imported after overlays.css: this layer owns these families;
+   older sheets must not restate them. The landed field-BORDER
+   recipe's structure is untouched (border at rest via
+   --field-border = ink-3 #79716B, hover deepens, error border,
+   focus = 2px #155E75 outline at 2px offset via the global rule).
+   Motion: register only (110/150ms colour/transform), no loops,
+   no arrival animation.
+   ============================================================ */
+
+/* ---------- §1 Labels, help text, error text ---------- */
+/* Spec §0.2/§1.2: label 12px above the field, 8px gap; help and
+   error 12px, 4px below the field. Sentence case, Hanken Grotesk. */
+.field-label, .signin-label, .form-grid label.field-label {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.field-requirement {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.form-required-legend {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+  margin: 0 0 16px;
+}
+.form-help {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+/* Field error: text recipe (not the form-level box). Icon + text in
+   the Fail colour; the field's border carries the same state via
+   the landed [aria-invalid] rule. */
+.field-error-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--fail);
+  margin: 4px 0 0;
+}
+.field-error-text svg { flex: none; margin-top: 0; }
+/* Group error (checkbox/radio group, drop zone): same text recipe
+   under the group, tied to the group with aria-describedby. */
+.group-error-text { margin-top: 8px; }
+
+/* Error summary (Spec §6.4): danger border + Fail tint, 16px
+   padding, heading 16/600, one link per error in field order. */
+.error-summary {
+  border: 1px solid var(--fail);
+  background: var(--broken-tint);
+  border-radius: var(--mt-radius-sm);
+  padding: 16px;
+  margin-bottom: 24px;
+}
+.error-summary:focus { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+.error-summary-heading {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.error-summary-list { margin: 0; padding-left: 20px; }
+.error-summary-list li { margin: 4px 0; }
+.error-summary-list a {
+  color: var(--fail);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- §3 Field geometry: ONE size for every field ---------- */
+/* Census: three geometries drifted — the 44px recipe, 48px sign-in
+   fields, ~30–40px filter/Watch inputs — plus native chevrons and
+   pickers rendering per-browser. Canonical geometry (this layer is
+   the only definition; the border recipe's STRUCTURE and colours
+   are untouched — border still --field-border, hover deepens,
+   error border, focus outline below):
+   height 44px · padding 10px 12px · radius 8 (controls) · 15px text.
+   Textarea height comes from its rows; it shares padding/radius.
+   Named variant: NONE for height — dense contexts use the same 44px
+   (the data-table's 40px compact row is a table density, not a
+   field). The mobile 16px font rule in product-theme (zoom
+   prevention) is a font behaviour, not a geometry variant, and
+   stays. */
+.text-input, .signin-input, input.text-input,
+.mt-shell input[type="text"], .mt-shell input[type="email"],
+.mt-shell input[type="url"], .mt-shell input[type="password"],
+.mt-shell input[type="search"], .mt-shell input[type="number"],
+.mt-shell input[type="date"], .mt-shell input[type="time"],
+.mt-shell input[type="datetime-local"],
+.mt-shell select {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--mt-radius-sm);
+  font-size: 15px;
+}
+.mt-shell textarea, textarea.text-input, .text-area, .composer-body textarea {
+  padding: 10px 12px;
+  border-radius: var(--mt-radius-sm);
+  font-size: 15px;
+}
+/* Sign-in joins the one geometry (was 48px / 12px 14px). */
+.signin-input, .signin-form .text-input { min-height: 44px; padding: 10px 12px; }
+/* Report filter fields join it too (was a private 6px radius and a
+   non-field border colour). */
+.report-filter-bar input, .report-filter-bar select {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--mt-radius-sm);
+  font-size: 14px;
+}
+/* Search/filter shells: the wrapper owns the frame; its inner field
+   fills the same 44px height (was 40px). */
+.search-field { min-height: 44px; }
+.search-field input { min-height: 44px; }
+.filter-select select { min-height: 44px; }
+/* Watch page work selector (was ~30px via legacy select styling). */
+.live-work-choice select { min-height: 44px; padding: 10px 36px 10px 12px; }
+/* Chevron: ONE drawn chevron for every select (native arrows render
+   differently per browser/OS). The picker indicator on date/time
+   inputs stays native — it is the control's own affordance — with
+   a consistent muted tone. */
+.mt-shell select, select.text-input, .report-filter-bar select, .live-work-choice select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2357534E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+}
+.mt-shell select:disabled, select.text-input:disabled { background-image: none; }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  opacity: 0.55;
+  cursor: pointer;
+}
+/* Focus for fields: the locked recipe — 2px #155E75 at 2px offset.
+   (Older layers variously used ink or --primary on :focus; this is
+   the one statement, matching the global :focus-visible ring.) */
+.text-input:focus, .signin-input:focus,
+.mt-shell input:focus, .mt-shell select:focus, .mt-shell textarea:focus {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}
+
+/* ---------- §4 File drop zone (Carbon uploader anatomy) ---------- */
+/* Spec §5.2: min-height 120, 24px padding, dashed border that still
+   meets the 3:1 boundary floor (ink-3, not the card border tone),
+   drag-over = 2px solid petrol + tint, file rows 48px with a
+   32px remove target. Rows appear instantly (no arrival motion);
+   the drag-over change is colour only, 110ms. */
+.dropzone {
+  position: relative;
+  min-height: 120px;
+  padding: 24px;
+  border: 1px dashed var(--ink-faint);
+  border-radius: var(--mt-radius-sm);
+  background: var(--sunken);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  transition: border-color var(--dur-quick) var(--ease-change),
+    background-color var(--dur-quick) var(--ease-change);
+}
+.dropzone[data-dragging] {
+  border: 2px solid var(--accent);
+  background: var(--accent-tint);
+}
+.dropzone[data-invalid] { border-color: var(--fail); }
+.dropzone:focus-within { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+.dropzone-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.dropzone-input:disabled { cursor: not-allowed; }
+.dropzone-icon { color: var(--ink-2); }
+.dropzone-primary { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ink); margin: 0; }
+.dropzone-secondary { font-size: 14px; line-height: 20px; color: var(--ink-2); margin: 0; }
+.dropzone-browse {
+  position: relative;
+  z-index: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dropzone-constraints { font-size: 12px; line-height: 16px; color: var(--ink-2); margin: 0; max-width: 560px; }
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-sm);
+  font-size: 14px;
+  color: var(--ink);
+}
+.file-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row-meta { font-size: 12px; color: var(--ink-2); flex: none; margin-left: auto; }
+.file-row-remove {
+  flex: none;
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--mt-radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.file-row-remove:hover { background: var(--sunken); color: var(--ink); }
+
+/* ---------- §5 Feedback ladder: inline alerts, banners, toasts ---------- */
+/* Spec §8.4/§7.2 (Carbon notification anatomy): 3px left accent in
+   the severity role, severity tint background (text stays ink-1,
+   ≥4.5:1 on every tint), icon 16px, title 14/600, body 14/400,
+   min-height 48px. Appearance is instant everywhere — no arrival
+   animation; toasts move only when the stack shifts or on exit. */
+.mt-inline-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--info);
+  border-radius: var(--mt-radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+.mt-inline-alert--info { border-left-color: var(--info); background: var(--info-bg); }
+.mt-inline-alert--success { border-left-color: var(--pass); background: var(--success-bg); }
+.mt-inline-alert--warning { border-left-color: var(--warn); background: var(--warning-bg); }
+.mt-inline-alert--error { border-left-color: var(--fail); background: var(--danger-bg); }
+.mt-alert-icon { flex: none; margin-right: 16px; margin-top: 2px; display: inline-flex; }
+.mt-inline-alert--info .mt-alert-icon { color: var(--info); }
+.mt-inline-alert--success .mt-alert-icon { color: var(--pass); }
+.mt-inline-alert--warning .mt-alert-icon { color: var(--warn); }
+.mt-inline-alert--error .mt-alert-icon { color: var(--fail); }
+.mt-alert-text { flex: 1 1 auto; min-width: 0; }
+.mt-alert-title { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; }
+.mt-alert-body { font-size: 14px; line-height: 20px; margin: 2px 0 0; }
+.mt-alert-action { margin-top: 8px; }
+.mt-alert-close {
+  flex: none;
+  width: 32px; height: 32px;
+  margin: -6px -8px 0 8px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--mt-radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.mt-alert-close:hover { background: rgba(28, 25, 23, 0.06); color: var(--ink); }
+
+/* Banner: same severity grammar, page-level placement — full
+   content width, no radius against the top chrome's flow, never
+   dismissible (no close control exists in the recipe). */
+.mt-banner {
+  display: flex;
+  align-items: flex-start;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--info);
+  border-radius: var(--mt-radius-sm);
+  color: var(--ink);
+  margin-bottom: 24px;
+}
+.mt-banner .mt-alert-icon { flex: none; margin-right: 16px; margin-top: 2px; display: inline-flex; }
+
+/* Toasts: fixed 288px, top-right, stack gap 8, newest last in DOM
+   (visually bottom of the stack list is capped at 3 by the
+   provider). Close target is Carbon's 48px on the overlay surface. */
+.mt-toast-region {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 288px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.mt-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  padding: 16px 8px 16px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--pass);
+  border-radius: var(--mt-radius-sm);
+  background: var(--card);
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+  transition: transform var(--dur-exit) var(--ease-exit);
+}
+.mt-toast .mt-alert-icon { flex: none; margin-right: 12px; margin-top: 2px; display: inline-flex; }
+.mt-toast-action {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.mt-toast-close {
+  flex: none;
+  width: 48px; height: 48px;
+  margin: -14px -4px -14px 4px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--mt-radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.mt-toast-close:hover { background: var(--sunken); color: var(--ink); }
+@media (max-width: 640px) {
+  .mt-toast-region { left: 16px; width: auto; }
+}
+
+/* ---------- §2 Choice controls: checkbox / radio / switch ---------- */
+/* Spec §2.2/§3.2/§4.2 (M3 box, Carbon radio/switch): checkbox 18px
+   radius 2, radio 20px with an 8px dot, switch 48x24 track with an
+   18px thumb travelling 26px. Borders are ink-3 #79716B (4.35:1 on
+   white — the 3:1 non-text floor); the checked fill is petrol-deep.
+   The whole row (box + label) is the target, min-height 32px. */
+.mt-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.mt-choice-text { display: grid; gap: 2px; }
+.mt-choice-hint { font-size: 12px; line-height: 16px; color: var(--ink-2); font-weight: 400; }
+.mt-shell input.mt-checkbox, input.mt-checkbox,
+.mt-shell input.mt-radio, input.mt-radio {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  padding: 0;
+  margin: 1px 0 0;
+  background: var(--card);
+  border: 1.5px solid var(--ink-faint);
+  cursor: pointer;
+  position: relative;
+  transition: border-color var(--dur-quick) var(--ease-change),
+    background-color var(--dur-quick) var(--ease-change);
+}
+.mt-shell input.mt-checkbox, input.mt-checkbox {
+  width: 18px; height: 18px; min-height: 18px; border-radius: 2px;
+}
+.mt-shell input.mt-radio, input.mt-radio {
+  width: 20px; height: 20px; min-height: 20px; border-radius: 50%;
+}
+input.mt-checkbox:hover:not(:disabled), input.mt-radio:hover:not(:disabled) {
+  border-color: var(--ink-2);
+}
+input.mt-checkbox:checked, input.mt-checkbox:indeterminate {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+input.mt-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px; top: 2px;
+  width: 5px; height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input.mt-checkbox:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 3px; top: 7px;
+  width: 10px; height: 2px;
+  background: #fff;
+}
+input.mt-radio:checked { border-color: var(--ink); }
+input.mt-radio:checked::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-deep);
+  transform: translate(-50%, -50%);
+}
+input.mt-checkbox:disabled, input.mt-radio:disabled { opacity: 0.55; cursor: not-allowed; }
+.mt-choice:has(input:disabled) { cursor: not-allowed; color: var(--ink-2); }
+.mt-group-label, .mt-radio-group > legend {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 8px;
+  padding: 0;
+}
+.mt-radio-group { border: 0; margin: 0; padding: 0; }
+.mt-radio-items { display: grid; gap: 8px; }
+.mt-radio-items .mt-choice { min-height: 32px; }
+
+/* Switch (Spec §4): label above in the anatomy Carbon publishes;
+   rendered here as a settings row — label + hint on the left,
+   track + state word on the right. State is ALWAYS the word
+   "On"/"Off" beside the track, never position/colour alone. */
+.mt-switch-row { display: grid; gap: 2px; padding: 8px 0; }
+.mt-switch-label { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink); }
+.mt-switch-control { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; }
+.mt-switch {
+  width: 48px; height: 24px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--ink-faint);
+  background: var(--sunken);
+  padding: 0;
+  position: relative;
+  cursor: pointer;
+  transition: background-color var(--dur-exit) var(--ease-change),
+    border-color var(--dur-exit) var(--ease-change);
+}
+.mt-switch-thumb {
+  position: absolute;
+  left: 2px; top: 50%;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--ink-faint);
+  transform: translate(0, -50%);
+  transition: transform var(--dur-exit) var(--ease-change);
+}
+.mt-switch[data-state="on"] { background: var(--accent-deep); border-color: var(--accent-deep); }
+.mt-switch[data-state="on"] .mt-switch-thumb { transform: translate(26px, -50%); border-color: var(--accent-deep); }
+.mt-switch:disabled { opacity: 0.55; cursor: not-allowed; }
+.mt-switch-state { font-size: 14px; line-height: 20px; color: var(--ink); }

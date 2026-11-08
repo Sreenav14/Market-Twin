@@ -1,3 +1,4 @@
+import { InlineAlert } from "../../components/ui/Feedback";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
 import { ArrowUpRight, Compass, ShieldCheck, FileCheck2 } from "lucide-react";
@@ -67,7 +68,7 @@ export function RunJourneysPage() {
         </div>
         <Link to={`/runs/${run.id}/evaluation`} className="text-link" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
           <span>View evaluation</span>
-          <ArrowUpRight size={14} aria-hidden="true" />
+          <ArrowUpRight size={16} aria-hidden="true" />
         </Link>
       </div>
 
@@ -80,9 +81,9 @@ export function RunJourneysPage() {
           {" "}Evaluation uses these saved outputs and their visual evidence.
         </p>
       ) : collection.isError ? (
-        <p className="error-text" role="alert" style={{ marginBottom: 20 }}>
-          Could not load recorded collection: {collection.error.message}
-        </p>
+        <InlineAlert severity="error" title="Could not load recorded collection" role="alert">
+          {collection.error.message}
+        </InlineAlert>
       ) : null}
 
       {journeys.isPending ? (
@@ -117,7 +118,7 @@ export function RunJourneysPage() {
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                <Compass size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                <Compass size={20} style={{ color: "var(--primary)" }} aria-hidden="true" />
                 <h3 id="discovery-stage-heading" style={{ fontSize: 16, margin: 0, fontWeight: 650 }}>
                   01 / Target Discovery Stage
                 </h3>
@@ -165,7 +166,7 @@ export function RunJourneysPage() {
                         to={`/runs/${run.id}/journeys/${journey.id}`}
                       >
                         Inspect recorded steps and evidence
-                        <ArrowUpRight size={13} aria-hidden="true" />
+                        <ArrowUpRight size={16} aria-hidden="true" />
                       </Link>
                       <Link className="text-link" to={`/runs/${run.id}/human-action`}>
                         Human assistance history
@@ -208,7 +209,7 @@ export function RunJourneysPage() {
                 borderBottom: "1px solid var(--border)",
               }}
             >
-              <FileCheck2 size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+              <FileCheck2 size={20} style={{ color: "var(--primary)" }} aria-hidden="true" />
               <h3 id="planned-cases-heading" style={{ fontSize: 16, margin: 0, fontWeight: 650 }}>
                 02 / Planned Feature Cases
               </h3>
@@ -275,7 +276,7 @@ export function RunJourneysPage() {
                         to={`/runs/${run.id}/journeys/${journey.id}`}
                       >
                         Inspect recorded steps and evidence
-                        <ArrowUpRight size={13} aria-hidden="true" />
+                        <ArrowUpRight size={16} aria-hidden="true" />
                       </Link>
                       <Link className="text-link" to={`/runs/${run.id}/human-action`}>
                         Human assistance history
@@ -330,7 +331,7 @@ export function RunJourneysPage() {
                 <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <ShieldCheck size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                      <ShieldCheck size={20} style={{ color: "var(--primary)" }} aria-hidden="true" />
                       <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>
                         Testing Goal
                       </span>
@@ -422,7 +423,7 @@ export function RunJourneysPage() {
                           to={`/runs/${run.id}/journeys/${journey.id}`}
                         >
                           Inspect recorded steps and evidence
-                          <ArrowUpRight size={13} aria-hidden="true" />
+                          <ArrowUpRight size={16} aria-hidden="true" />
                         </Link>
                         <Link className="text-link" to={`/runs/${run.id}/human-action`}>
                           Human assistance history

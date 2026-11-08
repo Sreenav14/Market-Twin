@@ -1,11 +1,12 @@
 import React from "react";
+import { Avatar } from "../../components/ui/Avatar";
 import {
   CANONICAL_DEMO_DATA,
   ConceptPayload,
 } from "../../lib/concept-dataset";
 import {
   ContextTabs,
-  CoverageBar,
+  OutcomeCoverageBar,
   ProofChip,
   ProofTrail,
   StepList,
@@ -59,6 +60,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                 const isActive = item === "Tests";
                 return (
                   <button
+                    className="concept-section-nav-button"
                     key={item}
                     type="button"
                     onClick={() => onNavigate && onNavigate(item)}
@@ -80,23 +82,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
           </nav>
         </div>
 
-        <div
-          style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "50%",
-            backgroundColor: "var(--ink)",
-            color: "var(--ink-on-dark)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "12px",
-            fontWeight: 600,
-          }}
-          aria-label="Alex Morgan"
-        >
-          AM
-        </div>
+        <Avatar kind="person" name="Alex Morgan" />
       </header>
 
       {/* In-test Context Row + Tabs */}
@@ -155,7 +141,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
               boxShadow: "var(--shadow-soft)",
             }}
           >
-            <CoverageBar totals={data.totals} />
+            <OutcomeCoverageBar totals={data.totals} />
           </div>
         </section>
 
@@ -188,22 +174,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                   </th>
                   <th style={{ padding: "16px 20px" }}>
                     <div className="flex items-center gap-2">
-                      <span
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          backgroundColor: "var(--tom)",
-                          color: "var(--ink-on-dark)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        T
-                      </span>
+                      <Avatar kind="persona" name="Tom" size="sm" tint="var(--tom)" />
                       <div>
                         <div style={{ fontWeight: 600, color: "var(--ink)" }}>Tom</div>
                         <div className="font-body-small" style={{ fontSize: "12px", color: "var(--ink-2)" }}>Expert</div>
@@ -212,22 +183,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                   </th>
                   <th style={{ padding: "16px 20px" }}>
                     <div className="flex items-center gap-2">
-                      <span
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          backgroundColor: "var(--maya)",
-                          color: "var(--ink-on-dark)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        M
-                      </span>
+                      <Avatar kind="persona" name="Maya" size="sm" tint="var(--maya)" />
                       <div>
                         <div style={{ fontWeight: 600, color: "var(--ink)" }}>Maya</div>
                         <div className="font-body-small" style={{ fontSize: "12px", color: "var(--ink-2)" }}>First-time user</div>
@@ -236,22 +192,7 @@ export const TestResultsPage: React.FC<TestResultsPageProps> = ({
                   </th>
                   <th style={{ padding: "16px 20px" }}>
                     <div className="flex items-center gap-2">
-                      <span
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          backgroundColor: "var(--priya)",
-                          color: "var(--ink-on-dark)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        P
-                      </span>
+                      <Avatar kind="persona" name="Priya" size="sm" tint="var(--priya)" />
                       <div>
                         <div style={{ fontWeight: 600, color: "var(--ink)" }}>Priya</div>
                         <div className="font-body-small" style={{ fontSize: "12px", color: "var(--ink-2)" }}>Impatient mobile user</div>

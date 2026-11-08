@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../lib/api";
-import { ArtifactEvidence } from "../../pages/runs/FindingDetailPage";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 import { ErrorPanel, LoadingPanel } from "../ui/StateViews";
 import { statusLabel } from "../../lib/format";
 

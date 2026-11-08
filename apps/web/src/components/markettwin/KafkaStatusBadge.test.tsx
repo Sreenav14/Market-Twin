@@ -53,7 +53,10 @@ describe("KafkaStatusBadge", () => {
   it("explains a missing health endpoint without claiming the broker is down", async () => {
     vi.spyOn(api, "kafkaHealth").mockRejectedValue(new ApiError("Not Found", 404));
     renderBadge();
-    expect(await screen.findByText("Kafka status unknown"))
-      .toHaveAttribute("title", expect.stringContaining("Restart the Control API"));
+    // Phase 2c: the explanation left native title= for the governed
+    // Tooltip primitive; its focusable trigger carries the same words
+    // as its accessible description.
+    expect(await screen.findByText("Kafka status unknown")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Restart the Control API/)).toBeInTheDocument();
   });
 });

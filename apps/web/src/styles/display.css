@@ -1,0 +1,258 @@
+/* MarketTwin DISPLAY family — Phase 2b canonical recipes.
+   Imported after concept-system.css on purpose: this layer is the ONE
+   definition for each display family (cards, tables/rows, lists, badges,
+   avatars, breadcrumbs/headers, pagination, progress, chart chrome).
+   Older sheets must not restate these geometries — a recipe that lives
+   in two places is not a recipe. Values come only from the Soft Proof
+   tokens (concept-tokens.css / tokens.css): surface #FFF, border
+   #E6E3DE (--line), radius 12 cards, soft two-stop shadow, petrol
+   accent, accent tint #E6F2F5 for SELECTION ONLY (never status).
+   Motion: register only (110/150ms colour here), no arrival animation. */
+
+/* ---------- 1. Cards & panels: ONE recipe ----------
+   Spec 1 §1: outlined card = surface-1, 1px border-subtle, radius 12,
+   16px padding; panel (layout region) = same skin, 24px padding.
+   Named variants only: .panel-sunken (filled well inside a panel),
+   .card-clickable (whole surface is one link/button), .card-selected. */
+.mt-shell .panel, .panel,
+.mt-shell .card, .card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 24px;
+}
+.mt-shell .card, .card { padding: 16px; }
+.panel-sunken, .card-sunken {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-lg);
+  padding: 16px;
+  box-shadow: none;
+}
+/* Static cards never change on hover — hover promises interactivity. */
+a.card-clickable, button.card-clickable, .card-clickable {
+  transition: background-color var(--dur-quick) var(--ease-change),
+    border-color var(--dur-quick) var(--ease-change);
+}
+.card-clickable:hover { background: var(--notchecked-tint); border-color: var(--border-strong-c); }
+.card-selected {
+  box-shadow: inset 0 0 0 2px var(--accent-deep), var(--shadow-soft);
+}
+
+/* ---------- 2. Tables & data rows: ONE recipe ----------
+   Spec 1 §2 (Carbon density): header row height = body row height;
+   lg 48px default, md 40px compact (.table-compact). Cell padding 16px.
+   Numeric columns right-aligned, tabular figures (.num). Selected row =
+   accent tint #E6F2F5 + a non-colour cue (bold primary text) — the tint
+   is for selection only, never for status. */
+.data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+.data-table th, .data-table td {
+  height: 48px; padding: 0 16px; vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+.table-compact th, .table-compact td { height: 40px; }
+.data-table thead th {
+  background: var(--sunken); color: var(--ink);
+  font-size: 12px; font-weight: 600; line-height: 16px;
+  border-bottom: 1px solid var(--border-strong-c); white-space: nowrap;
+}
+.data-table .num, .data-table td.num, .data-table th.num {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.data-table tbody tr { transition: background-color var(--dur-quick) var(--ease-change); }
+.data-table tbody tr:hover { background: var(--notchecked-tint); }
+.data-table tr[data-selected="true"] { background: var(--accent-tint); }
+.data-table tr[data-selected="true"] th, .data-table tr[data-selected="true"] td:first-child { font-weight: 600; }
+.report-task-table tr[data-selected="true"] { background: var(--accent-tint); }
+
+/* The de-facto table of the signed-in app: the entity row. One geometry
+   (SI-2 grid: icon + primary + up to 4 auto slots; SI-16 height) stated
+   here once. Two-line entity rows are 72px — the M3 two-line list
+   height (§3) — because the row carries name + metadata, not one line. */
+.data-list { border: 1px solid var(--line); border-radius: var(--mt-radius-lg); background: var(--card); box-shadow: var(--shadow-soft); overflow: hidden; }
+.data-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) repeat(4, auto);
+  align-items: center;
+  gap: var(--mt-space-4);
+  min-height: 72px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--dur-quick) var(--ease-change);
+}
+.data-row:last-child { border-bottom: 0; }
+a.data-row:hover, .data-row:hover { background: var(--notchecked-tint); }
+.data-row[data-selected="true"], .data-row[aria-current="page"] { background: var(--accent-tint); }
+.data-row[data-selected="true"] .row-primary strong, .data-row[aria-current="page"] .row-primary strong { font-weight: 700; }
+@media (max-width: 760px) {
+  .data-row { grid-template-columns: 38px minmax(0, 1fr) auto auto; }
+}
+
+/* ---------- 3. Lists: ONE recipe ----------
+   Spec 1 §3 (M3 heights): one-line 56 / two-line 72 (default) /
+   three-line 88. Items are NOT mini-cards: no radius, no per-item
+   border box; a full-width rule inside the container separates them,
+   inset to the text start when a leading tile is present. Interactive
+   items hover at 110ms; selected = accent tint + bold headline (the
+   non-colour cue); focus draws INSIDE the item (the one documented
+   exception to the +2px offset, because the container clips). */
+.mt-list { list-style: none; margin: 0; padding: 0; }
+.mt-list-item {
+  display: flex; align-items: center; gap: 16px;
+  min-height: 72px; padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  transition: background-color var(--dur-quick) var(--ease-change);
+}
+.mt-list-item:last-child { border-bottom: 0; }
+.mt-list-item[data-lines="1"] { min-height: 56px; }
+.mt-list-item[data-lines="3"] { min-height: 88px; }
+a.mt-list-item, button.mt-list-item { text-decoration: none; }
+a.mt-list-item:hover, button.mt-list-item:hover { background: var(--notchecked-tint); }
+a.mt-list-item:focus-visible, button.mt-list-item:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: -2px; }
+.mt-list-item[data-selected="true"], .mt-list-item[aria-current="page"] { background: var(--accent-tint); }
+.mt-list-item[data-selected="true"] .mt-list-headline { font-weight: 700; }
+.mt-list-headline { font-size: 14px; font-weight: 600; line-height: 20px; color: var(--ink); }
+.mt-list-support { font-size: 12px; font-weight: 400; line-height: 16px; color: var(--ink-2); }
+/* The findings list — the signed-in app's other entity list — rides the
+   same heights/divider/hover instead of its own measurements. */
+.finding-item > a { min-height: 72px; transition: background-color var(--dur-quick) var(--ease-change); }
+
+/* ---------- 4. Badges / pills / tags: the triad, ONE definition ----------
+   Spec 1 §4. Status pill = canonical word only, filled semantic tint,
+   NEVER interactive (no hover/focus states exist for it, by design).
+   md 24px / lg 32px (verdict headers). Neutral tag = category, OUTLINED,
+   never tinted. Count badge = number only, 16px, capped 99+ by the
+   CountBadge component. This block is the only .status-badge /
+   .status-* definition in the product. */
+.status-badge {
+  display: inline-flex; align-items: center; gap: var(--mt-space-2);
+  min-height: 24px; padding: 2px 8px;
+  border-radius: var(--mt-radius-pill);
+  border: 1px solid transparent;
+  font-size: 12px; line-height: 16px; font-weight: 600;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.status-badge .status-dot { display: inline; font-size: 12px; line-height: 1; background: none; flex-shrink: 0; }
+.status-badge-lg { min-height: 32px; padding: 4px 12px; font-size: 14px; line-height: 20px; }
+.status-badge-sm { min-height: 22px; padding: 2px var(--mt-space-3); font-size: 12px; line-height: 16px; }
+.status-success { background: var(--works-tint); color: var(--works); border-color: var(--success-border); }
+.status-danger { background: var(--broken-tint); color: var(--broken); border-color: var(--danger-border); }
+.status-warning { background: var(--couldnot-tint); color: var(--couldnot); border-color: var(--warning-border); }
+.status-info { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
+.status-neutral { background: var(--notchecked-tint); color: var(--notchecked); border-color: var(--mt-border-strong); }
+.tag-neutral {
+  display: inline-flex; align-items: center; gap: var(--mt-space-2);
+  min-height: 24px; padding: 2px 8px;
+  border-radius: var(--mt-radius-pill);
+  border: 1px solid var(--border-strong-c);
+  background: transparent; color: var(--ink);
+  font-size: 12px; line-height: 16px; font-weight: 400;
+  white-space: nowrap;
+}
+.count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 16px; min-width: 16px; padding: 0 4px;
+  border-radius: var(--mt-radius-pill);
+  background: var(--notchecked-tint); color: var(--ink-2);
+  font-size: 12px; line-height: 16px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 5. Avatars & identity tiles: ONE primitive ----------
+   Spec 1 §5 ladder: 16/24/32/40/48. People circle; personas and apps
+   square 6px (4px at xs). Fallback fill is the sunken well with ink
+   initials; a persona may carry its deterministic series tint. */
+.avatar {
+  display: inline-grid; place-items: center; flex-shrink: 0;
+  background: var(--sunken); color: var(--ink);
+  overflow: hidden; font-weight: 600; line-height: 1;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-person { border-radius: 50%; }
+.avatar-persona, .avatar-app { border-radius: 6px; }
+.avatar-xs { width: 16px; height: 16px; border-radius: 4px; }
+.avatar-person.avatar-xs { border-radius: 50%; }
+.avatar-sm { width: 24px; height: 24px; }
+.avatar-md { width: 32px; height: 32px; }
+.avatar-lg { width: 40px; height: 40px; }
+.avatar-xl { width: 48px; height: 48px; }
+.avatar-sm .avatar-initials { font-size: 10px; }
+.avatar-md .avatar-initials { font-size: 12px; }
+.avatar-lg .avatar-initials { font-size: 14px; }
+.avatar-xl .avatar-initials { font-size: 16px; }
+/* Legacy tile classes ride the same ladder/geometry until their last
+   call sites migrate: app monograms are squares, the user tile a circle. */
+.product-icon { border-radius: 6px; }
+.user-avatar { border-radius: 50%; }
+
+/* ---------- 6. Breadcrumbs + page headers: ONE recipe each ----------
+   Breadcrumbs exist only where a real parent path exists. Page header:
+   eyebrow (Hanken, petrol-deep, uppercase label) + 28/36 Hanken title +
+   muted description + right action — the PageHeader component is the
+   recipe; Desk masthead and RunLayout header are named variants for
+   their surfaces, not separate inventions. */
+.breadcrumbs { margin-bottom: 16px; }
+.breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.breadcrumbs li { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; line-height: 20px; }
+.breadcrumbs a { color: var(--accent-deep); font-weight: 500; text-decoration: none; }
+.breadcrumbs a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.breadcrumbs [aria-current="page"] { color: var(--ink); font-weight: 600; }
+.breadcrumb-sep { color: var(--ink-faint); }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+
+/* ---------- 7. Pagination & load-more: ONE recipe ----------
+   Spec 1 §6: bar height 48 (matches the table row it serves), page
+   buttons 40px, current page filled + aria-current and NOT a link,
+   ellipsis non-interactive, Prev/Next carry their word. LoadMore is
+   centred under its list with the count in words. */
+.pagination { display: flex; align-items: center; gap: 4px; min-height: 48px; }
+.pagination-page, .pagination-step {
+  min-width: 40px; height: 40px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 8px; background: transparent;
+  color: var(--ink); font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums;
+  cursor: pointer; transition: background-color var(--dur-quick) var(--ease-change);
+}
+.pagination-page:hover, .pagination-step:hover:not(:disabled) { background: var(--notchecked-tint); }
+.pagination-current { background: var(--accent-deep); color: #fff; font-weight: 600; cursor: default; }
+.pagination-step:disabled { color: var(--ink-faint); cursor: not-allowed; }
+.pagination-gap { padding: 0 4px; color: var(--ink-faint); }
+.load-more { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 16px; }
+.load-more-count { margin: 0; font-size: 12px; line-height: 16px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- 8. Progress: ONE recipe ----------
+   Track 8px on the sunken well, fill petrol-deep, full radius, length
+   by scaleX transform only (300ms register). Indeterminate work uses
+   the spinner (the system's only loop) or the native indeterminate
+   <progress> in IngestionProgress — never a fake determinate bar. */
+.progress {
+  height: 8px; border-radius: var(--mt-radius-pill);
+  background: var(--sunken); overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: var(--mt-radius-pill);
+  background: var(--accent-deep);
+  transform-origin: left center;
+  transition: transform var(--dur-bar) var(--ease-change);
+}
+
+/* ---------- 9. Chart chrome: ONE treatment ----------
+   Spec 1 §7: direct series labels by default (legend only when labels
+   would collide), swatches 12x12 SQUARE, every numeral tabular, bars
+   flat with at most a 2px outer-end radius (never pill bars, never
+   rounded at the baseline), axis text 12px muted but AA, no chart
+   animation. Colours are the Phase 2a tokens: outcome charts use the
+   status tones, categorical charts use --chart-1..6 in order. */
+.rf-labels, .rf-label, .rf-label-button, .count-bar, .count-bar strong,
+.count-axis, .desk-outcome-bar, .chart-value { font-variant-numeric: tabular-nums; }
+.rf-swatch { width: 12px; height: 12px; border-radius: 0; }
+.rf-bar { border-radius: 2px; }
+.rf-bar-sm { border-radius: 2px; }
+.count-bar-track { border-radius: 2px; }
+.count-bar-track > span { border-radius: 2px; }
+.count-axis { font-family: var(--font-mono); }
+.chart-title { font-size: 16px; font-weight: 600; line-height: 24px; color: var(--ink); }

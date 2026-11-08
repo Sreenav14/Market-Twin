@@ -344,9 +344,14 @@ export class ApiError extends Error {
   }
 }
 
+export const FETCH_CEILING_MS = 30_000;
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const timeout = AbortSignal.timeout(FETCH_CEILING_MS);
+  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   const response = await fetch(path, {
     ...init,
+    signal,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

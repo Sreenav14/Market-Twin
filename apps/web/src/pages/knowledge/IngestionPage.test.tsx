@@ -42,8 +42,8 @@ function renderPage(role = "member", path = "/ingestion", knowledge = entry) {
 
 async function selectSource() {
   const user = userEvent.setup();
-  await user.upload(await screen.findByLabelText("Source file"), new File(["source"], "source.txt", { type: "text/plain" }));
-  await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
+  await user.upload(await screen.findByLabelText(/^Source file/), new File(["source"], "source.txt", { type: "text/plain" }));
+  await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
   // jsdom does not validate a FileList populated by userEvent; real clicks are covered by Playwright.
   await act(async () => {
     fireEvent.submit(screen.getByRole("button", { name: "Add knowledge" }).closest("form")!);
@@ -52,29 +52,34 @@ async function selectSource() {
 }
 
 describe("workspace ingestion", () => {
-  it("switches source tabs with arrows, Home and End without duplicate tab stops", async () => {
+  it("switches source types with arrows, Home and End without duplicate tab stops", async () => {
     renderPage();
     const user = userEvent.setup();
-    const fileTab = await screen.findByRole("tab", { name: "Upload a file" });
-    const linkTab = screen.getByRole("tab", { name: "Research a link" });
-    expect(screen.queryByRole("combobox", { name: "Source type" })).not.toBeInTheDocument();
-    fileTab.focus();
+    // Phase 2c: the source choice is ONE segmented recipe \u2014 a radio
+    // group (Spec 2 \u00a77.6), not a tablist. Radios move AND check.
+    const fileOption = await screen.findByRole("radio", { name: "Upload a file" });
+    const linkOption = screen.getByRole("radio", { name: "Research a link" });
+    expect(screen.getByRole("radiogroup", { name: "Source type" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    fileOption.focus();
     await user.keyboard("{ArrowRight}");
-    expect(linkTab).toHaveFocus();
-    expect(linkTab).toHaveAttribute("aria-selected", "true");
-    expect(fileTab).toHaveAttribute("tabindex", "-1");
-    expect(screen.getByRole("tabpanel", { name: "Research a link" })).toHaveAttribute("id", linkTab.getAttribute("aria-controls"));
+    expect(linkOption).toHaveFocus();
+    expect(linkOption).toHaveAttribute("aria-checked", "true");
+    expect(fileOption).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByLabelText(/^Public source link/)).toBeInTheDocument();
     await user.tab();
-    expect(screen.getByLabelText("Public source link")).toHaveFocus();
+    expect(screen.getByLabelText(/^Public source link/)).toHaveFocus();
     await user.tab({ shift: true });
-    expect(linkTab).toHaveFocus();
+    expect(linkOption).toHaveFocus();
     await user.keyboard("{Home}");
-    expect(fileTab).toHaveFocus();
-    expect(screen.getByRole("tabpanel", { name: "Upload a file" })).toBeInTheDocument();
-    await user.keyboard("{End}{ArrowRight}");
-    expect(fileTab).toHaveFocus();
+    expect(fileOption).toHaveFocus();
+    expect(fileOption).toHaveAttribute("aria-checked", "true");
+    await user.keyboard("{End}");
+    expect(linkOption).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(fileOption).toHaveFocus();
     await user.keyboard("{ArrowLeft}");
-    expect(linkTab).toHaveFocus();
+    expect(linkOption).toHaveFocus();
   });
 
   it("keeps the original public link distinct from retained research and displays research stage", async () => {
@@ -96,11 +101,11 @@ describe("workspace ingestion", () => {
     const ingest = vi.spyOn(api, "ingestKnowledgeLink").mockResolvedValue(entry);
     renderPage();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("tab", { name: "Research a link" }));
+    await user.click(await screen.findByRole("radio", { name: "Research a link" }));
     expect(screen.queryByLabelText("Source file")).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
-    await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
-    await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
+    await user.type(screen.getByLabelText(/^Public source link/), "https://example.com/docs");
+    await user.type(screen.getByLabelText(/^Knowledge set name/), "Product docs");
+    await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
     await user.click(screen.getByRole("button", { name: "Add knowledge" }));
     expect(ingest).toHaveBeenCalledWith("workspace", "https://example.com/docs", "Product docs", ["product_knowledge"]);
     expect(await screen.findByText("A documented feature")).toBeInTheDocument();
@@ -118,10 +123,10 @@ describe("workspace ingestion", () => {
     renderPage();
     vi.mocked(api.getIngestion).mockResolvedValue(queued);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("tab", { name: "Research a link" }));
-    await user.type(screen.getByLabelText("Public source link"), "https://example.com/docs");
-    await user.type(screen.getByLabelText("Knowledge set name"), "Product docs");
-    await user.selectOptions(screen.getByLabelText("Source purpose"), "product_knowledge");
+    await user.click(await screen.findByRole("radio", { name: "Research a link" }));
+    await user.type(screen.getByLabelText(/^Public source link/), "https://example.com/docs");
+    await user.type(screen.getByLabelText(/^Knowledge set name/), "Product docs");
+    await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
     await user.click(screen.getByRole("button", { name: "Add knowledge" }));
     expect(await screen.findByRole("progressbar", { name: "Ingestion progress" })).toBeInTheDocument();
     expect(screen.getByText("Researching public pages — 0 inspected, 0 inaccessible.")).toBeInTheDocument();
@@ -170,7 +175,7 @@ describe("workspace ingestion", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Delete knowledge: Product context" }));
     expect(screen.getByText(/Existing tests keep their saved knowledge and source history/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Keep knowledge" }));
     expect(remove).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Delete knowledge: Product context" }));
     await user.click(screen.getByRole("button", { name: "Delete knowledge" }));
@@ -214,8 +219,8 @@ describe("workspace ingestion", () => {
     vi.mocked(api.listApplications).mockResolvedValue([{ id: "app", workspace_id: "workspace", created_by_user_id: "user", name: "Demo application", description: null, status: "active", latest_run_summary: null }]);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Rename" }));
-    await user.clear(screen.getByLabelText("Knowledge set name"));
-    await user.type(screen.getByLabelText("Knowledge set name"), "Shared product rules");
+    await user.clear(screen.getByLabelText(/^Knowledge set name/));
+    await user.type(screen.getByLabelText(/^Knowledge set name/), "Shared product rules");
     await user.click(screen.getByRole("button", { name: "Save name" }));
     expect(await screen.findByRole("heading", { name: "Shared product rules" })).toBeInTheDocument();
     expect(rename).toHaveBeenCalledWith("workspace", "entry", "Shared product rules");

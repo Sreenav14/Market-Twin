@@ -11,11 +11,11 @@ export function UnexpectedErrorPage() {
         <p>MarketTwin encountered an issue while displaying this view. Reload the page to try again. If the problem continues, return to Home.</p>
         <div className="concept-system-actions">
           <Link to="/dashboard" className="primary-button">
-            <Home size={15} aria-hidden="true" />
+            <Home size={16} aria-hidden="true" />
             <span>Return to Home</span>
           </Link>
           <Button variant="secondary" onClick={() => window.location.reload()}>
-            <RotateCcw size={14} aria-hidden="true" />
+            <RotateCcw size={16} aria-hidden="true" />
             <span>Reload page</span>
           </Button>
         </div>

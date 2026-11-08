@@ -1,6 +1,6 @@
-export * from "./StatusPill";
+export * from "./StatusPill"; // exports ConceptStatusPill (Phase 2b rename)
 export * from "./VerdictBlock";
-export * from "./CoverageBar";
+export * from "./CoverageBar"; // exports OutcomeCoverageBar (Phase 2b rename)
 export * from "./VerdictStrip";
 export * from "./ProofChip";
 export * from "./ProofTrail";

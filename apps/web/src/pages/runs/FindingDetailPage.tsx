@@ -1,107 +1,17 @@
 import { statusLabel } from "../../lib/format";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ArrowLeft, Paperclip, Route, ScanSearch } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { SeverityBadge, StatusBadge } from "../../components/ui/StatusBadge";
+import { Breadcrumbs } from "../../components/ui/Breadcrumbs";
 import { EmptyState } from "../../components/ui/StateViews";
 import { findingClassification } from "../../lib/results";
 import { api, type ArtifactAccess } from "../../lib/api";
-
-export function ArtifactEvidence({
-  runId, artifactId, autoLoad = false,
-}: { runId: string; artifactId: string; autoLoad?: boolean }) {
-  return <ArtifactPreview key={`${runId}:${artifactId}`} runId={runId} artifactId={artifactId} autoLoad={autoLoad} />;
-}
-
-function ArtifactPreview({
-  runId,
-  artifactId,
-  autoLoad = false,
-}: {
-  runId: string;
-  artifactId: string;
-  autoLoad?: boolean;
-}) {
-  const [access, setAccess] = useState<ArtifactAccess | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (autoLoad) void loadEvidence(); }, [autoLoad, runId, artifactId]);
-
-  async function loadEvidence() {
-    setLoading(true);
-    setError(null);
-    setAccess(null);
-
-    try {
-      const result = await api.getArtifactAccess(runId, artifactId);
-
-      setAccess(result);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Evidence could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const isImage = access?.content_type.startsWith("image/") ?? false;
-
-  return (
-    <div className="artifact-evidence">
-      <button
-        type="button"
-        className="secondary-button compact"
-        onClick={loadEvidence}
-        disabled={loading}
-      >
-        {loading
-          ? "Loading evidence…"
-          : access
-            ? "Refresh evidence"
-            : "View evidence"}
-      </button>
-
-      {error ? (
-        <span className="form-error" role="alert">
-          {error}
-        </span>
-      ) : null}
-
-      {access && isImage ? (
-        <a
-          className="artifact-preview-link"
-          href={access.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <img
-            className="artifact-preview"
-            src={access.url}
-            alt={`Recorded ${access.artifact_type} evidence`}
-            onError={() => { setAccess(null); setError("Evidence unavailable. Refresh access to try again."); }}
-          />
-        </a>
-      ) : null}
-
-      {access && !isImage ? (
-        <a
-          className="text-link"
-          href={access.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open artifact
-        </a>
-      ) : null}
-    </div>
-  );
-}
 
 export function FindingDetailPage() {
   const { run, results } = useOutletContext<RunContext>();
@@ -114,10 +24,14 @@ export function FindingDetailPage() {
     <ResultsBoundary>
       {finding ? (
         <>
-          <Link className="back-link" to={`/runs/${run.id}/findings`}>
-            <ArrowLeft size={15} aria-hidden="true" />
-            All findings
-          </Link>
+          <Breadcrumbs
+            items={[
+              { label: "Tests", to: "/runs" },
+              { label: "Run overview", to: `/runs/${run.id}/overview` },
+              { label: "Findings", to: `/runs/${run.id}/findings` },
+              { label: finding.title },
+            ]}
+          />
           <div className="finding-detail-grid">
             <article className="finding-article">
               <div className="finding-title-meta">
@@ -144,7 +58,7 @@ export function FindingDetailPage() {
               </section>
               <section>
                 <h3>
-                  <Paperclip size={18} aria-hidden="true" />
+                  <Paperclip size={20} aria-hidden="true" />
                   Supporting references
                 </h3>
                 <p className="muted">
@@ -186,7 +100,7 @@ export function FindingDetailPage() {
               </section>
               <section>
                 <h3>
-                  <Route size={18} aria-hidden="true" />
+                  <Route size={20} aria-hidden="true" />
                   Affected journeys
                 </h3>
                 <p className="muted">

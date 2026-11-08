@@ -1,3 +1,4 @@
+import { InlineAlert } from "../ui/Feedback";
 import { useId, useLayoutEffect, useRef } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -5,9 +6,10 @@ import { api, request, type Finding, type JourneyDetail, type JourneyExecution, 
 import { asRecord, findingClassification, isConfirmedFinding, severityOrder, sortFindings } from '../../lib/results';
 import { assertionObservation, journeyBlocker } from '../../lib/journeyPresentation';
 import { countCategories, findingStepHref, outcomeCounts, outcomeLabels, recordedTasks, taskOutcome, taskOutcomes, verificationGroup } from '../../lib/reportIntelligence';
-import { ArtifactEvidence } from '../../pages/runs/FindingDetailPage';
+import { ArtifactEvidence } from '../../components/markettwin/ArtifactEvidence';
 import { EmptyState, ErrorPanel, LoadingPanel } from '../ui/StateViews';
 import { StatusBadge } from '../ui/StatusBadge';
+import { LoadMore } from '../ui/Pagination';
 import { statusLabel } from '../../lib/format';
 
 export type ReportView = 'overview' | 'usefulness' | 'inspection';
@@ -46,7 +48,7 @@ export function CountBars({title,rows,selected,onSelect,tone='blue',denominator}
   return <section className="report-count-chart" aria-labelledby={id}><h3 id={id}>{title}</h3>
     <p className="chart-help">Recorded count · axis 0–{max.toLocaleString()} · select a row to inspect</p>
     <ul>{rows.map(row=><li key={row.key}><button type="button" className={`count-bar count-${tone} outcome-${row.key}`} aria-pressed={selected===row.key}
-      onClick={()=>onSelect(row.key)} title={`${row.label}: ${row.count} recorded ${row.count===1?'item':'items'}`}>
+      onClick={()=>onSelect(row.key)}>
       <span className="count-bar-label">{row.label}</span>{' '}<strong>{row.count.toLocaleString()}</strong>
       <span className="count-bar-track" aria-hidden="true"><span style={{width:`${max?row.count/max*100:0}%`}} /></span>
     </button></li>)}</ul><div className="count-axis" aria-hidden="true"><span>0</span><span>{max.toLocaleString()}</span></div>
@@ -70,12 +72,12 @@ function RecordedFlow({runId,userId,journey}: {runId:string;userId:string;journe
     {detail.isPending?<LoadingPanel label="Loading recorded steps"/>:detail.isError?<ErrorPanel message="Recorded steps could not be loaded."
       action={<button className="secondary-button" onClick={()=>void detail.refetch()}>Retry recorded steps</button>}/>:!steps.length?<p>No executed steps were recorded. Planned steps are not inferred.</p>:<>
       <p className="chart-help">{steps.length} loaded steps{detail.hasNextPage?' · Partial sequence':''}. Nodes are recorded actions, not a sitemap.</p>
-      {requestedStep&&!selected?<p className="report-data-limit">The requested step is not in the loaded records.{detail.hasNextPage?' Load more recorded steps to continue.':' Select an available step below.'}</p>:null}
-      <ol className="report-step-flow" aria-label="Recorded workflow steps">{steps.map(step=><li key={step.id}><button type="button" aria-pressed={selected?.id===step.id}
+      {requestedStep&&!selected?<p className="report-data-limit">The requested step is not in the loaded records.{detail.hasNextPage?' Load more steps to continue.':' Select an available step below.'}</p>:null}
+      <ol className="report-step-flow" aria-label="Recorded workflow steps">{steps.map(step=><li key={step.id}><button type="button" className="report-step-button" aria-pressed={selected?.id===step.id}
         onClick={()=>setParams(previous=>{const next=new URLSearchParams(previous);next.set('reportStep',String(step.id));return next;},{replace:true})}>
         <span>Step {step.step_number}</span><strong>{step.action_summary}</strong><span>{step.status.replaceAll('_',' ')}</span>
       </button></li>)}</ol>
-      {detail.hasNextPage?<button className="secondary-button" disabled={detail.isFetchingNextPage} onClick={()=>void detail.fetchNextPage()}>{detail.isFetchingNextPage?'Loading steps…':'Load more recorded steps'}</button>:null}
+       {detail.hasNextPage?<LoadMore noun="steps" loaded={steps.length} loading={detail.isFetchingNextPage} onLoad={()=>void detail.fetchNextPage()}/>:null}
       {selected?<section className="report-step-detail" data-assertion={assertion?.status} aria-label="Selected recorded step" aria-live="polite"><div className="section-heading"><h4>{selected.action_summary}</h4><StatusBadge status={selected.status} source="journeyExecution"/></div>
         {assertion?<dl className="report-value-comparison"><div><dt>Expected</dt><dd>{assertion.expected}</dd></div><div><dt>Observed</dt><dd>{assertion.observed}</dd></div></dl>
           :<p>{selected.observation_summary||'No observation was recorded for this step.'}</p>}
@@ -110,7 +112,7 @@ function FindingInspection({run,results,tasks}: {run:TestRun;results:RunResults;
       <label>Prioritize by<select value={sort} onChange={event=>set('findingSort',event.target.value)}><option value="severity">Recorded severity</option><option value="journeys">Linked journey count</option></select></label>
       <button className="secondary-button" onClick={clear}>Reset finding filters</button></div>
     <p role="status" className="report-filter-result">{filtered.length} matching {filtered.length===1?'finding':'findings'} · {category==='all'?'All categories':category.replaceAll('_',' ')} · {severity==='all'?'All severities':severity}</p>
-    <div className="report-inspection-workbench"><ul className="report-finding-index" aria-label="Filtered findings">{filtered.map(finding=><li key={finding.id}><button type="button" aria-pressed={selected?.id===finding.id}
+    <div className="report-inspection-workbench"><ul className="report-finding-index" aria-label="Filtered findings">{filtered.map(finding=><li key={finding.id}><button type="button" className="report-finding-button" aria-pressed={selected?.id===finding.id}
       onClick={()=>setParams(previous=>{const next=new URLSearchParams(previous);next.set('finding',finding.id);return next;},{replace:true})}><span>{finding.severity} · {finding.category.replaceAll('_',' ')}</span><strong>{finding.title}</strong><span>{statusLabel(findingClassification(finding))}</span></button></li>)}</ul>
       {selected?<FindingDetail key={selected.id} finding={selected} runId={run.id} tasks={tasks}/>:<p>No findings match these filters. Reset the filters to review all recorded findings.</p>}
     </div><details className="report-method-note"><summary>Page coverage, priority and evidence limits</summary><p>The report has no authoritative page-inspection inventory. Findings are filtered by their recorded category, severity and linked tasks. A visited page is not proof of a completed inspection.</p><p>Linked journey count measures recorded reach, not real user impact. Implementation effort and impact-versus-effort scores were not recorded. Screenshot regions are not inferred.</p></details>
@@ -142,7 +144,7 @@ export function ReportAnalytics({run,results,userId,view}: {run:TestRun;results:
   const individual=assessment.status==='completed'&&Array.isArray(assessment.individual_results)?assessment.individual_results.map(asRecord):[];
   const selectedAssessment=selected?.execution_status==='completed'?individual.find(item=>item.journey_id===selected.id):undefined;
   const counts=outcomeCounts(tasks);
-  if(view==='inspection')return <>{journeys.isError?<p className="report-data-limit" role="alert">Related task labels could not be loaded. Saved findings and their evidence remain available. <button className="text-link" onClick={()=>void journeys.refetch()}>Retry related tasks</button></p>:null}<FindingInspection run={run} results={results} tasks={tasks}/></>;
+  if(view==='inspection')return <>{journeys.isError?<InlineAlert severity="warning" title="Related task labels could not be loaded" role="alert" action={<button className="text-link" onClick={()=>void journeys.refetch()}>Retry related tasks</button>}>Saved findings and their evidence remain available.</InlineAlert>:null}<FindingInspection run={run} results={results} tasks={tasks}/></>;
   return <section className={`report-analytics report-analytics-${view}`} aria-label={view==='overview'?'Report outcome analysis':'Application usefulness analysis'}>
     {journeys.isPending?<LoadingPanel label="Loading recorded task outcomes"/>:journeys.isError?<ErrorPanel message="Recorded task outcomes are unavailable. Saved findings remain available."
       action={<button className="secondary-button" onClick={()=>void journeys.refetch()}>Retry task outcomes</button>}/>:view==='overview'?<>

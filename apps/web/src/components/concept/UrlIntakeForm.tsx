@@ -87,7 +87,7 @@ export const UrlIntakeForm: React.FC<UrlIntakeFormProps> = ({
           disabled={isSubmitting}
           className="font-body flex-1"
           style={{
-            height: "48px",
+            height: "44px",
             padding: "0 16px",
             borderRadius: 0,
             border: hasError

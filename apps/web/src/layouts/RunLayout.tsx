@@ -11,16 +11,18 @@ import {
 } from "react-router-dom";
 import { ArrowLeft, Play, RefreshCw } from "lucide-react";
 import { PageHeader } from "../components/ui/PageHeader";
+import { Banner, InlineAlert } from "../components/ui/Feedback";
 import {
   ErrorPanel,
   LoadingPanel,
   Spinner,
 } from "../components/ui/StateViews";
-import { StatusBadge, TestStatusBadge } from "../components/ui/StatusBadge";
+import { CountBadge, StatusBadge, TestStatusBadge } from "../components/ui/StatusBadge";
 import { DeleteAction } from "../components/markettwin/DeleteAction";
 import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
 import { canManageLifecycle } from "../lib/permissions";
 import { Button } from "../components/ui/button";
+import { NavDisclosure } from "../components/ui/Menu";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
 import { CONTRACT_STAGE_STATUS, MODE_STATUS, statusEntry } from "../lib/status";
 import { testTitle, testReference, textValue } from "../lib/format";
@@ -136,7 +138,7 @@ export function RunLayout() {
     <>
       <div className="study-utility">
         <Link className="back-link" to={`/applications/${run.application_id}/runs`}>
-          <ArrowLeft size={15} aria-hidden="true" />
+          <ArrowLeft size={16} aria-hidden="true" />
           Application tests
         </Link>
         <span className="monospace">{testReference(run)}</span>
@@ -187,27 +189,20 @@ export function RunLayout() {
               onClick={refresh}
               disabled={runQuery.isFetching || resultsQuery.isFetching}
             >
-              <RefreshCw size={17} aria-hidden="true" />
+              <RefreshCw size={20} aria-hidden="true" />
             </Button>
           </div>
         }
       />
       {startError ? (
-        <p className="composer-error" role="alert">
+        <InlineAlert severity="error" title="Could not start the test" role="alert">
           {startError}
-        </p>
+        </InlineAlert>
       ) : null}
       {run.status === "draft" ? <RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /> : null}
       {run.configuration_snapshot.discovery_stage === "awaiting_approval" && !location.pathname.endsWith("/contract") ? <section className="panel"><h2>Approve the tests</h2><p>Exploration is complete. Review the journeys and checks before testing begins.</p><Link to={`/runs/${run.id}/contract`}>Review the tests</Link></section> : null}
       {run.status === "awaiting_human" && run.configuration_snapshot.discovery_stage !== "awaiting_approval" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") && !location.pathname.endsWith("/watch") ? (
-        <section className="run-action-required" aria-labelledby="run-action-required-title" style={{ background: "var(--couldnot-tint)" }}>
-          <div>
-            <p className="section-label">{statusEntry("run", run.status).word}</p>
-            <h2 id="run-action-required-title" style={{ color: "var(--flame-deep)" }}>{statusEntry("run", run.status).word} — the tester is paused</h2>
-            {run.status_reason ? <p>{run.status_reason}</p> : <p>The tester is paused until you complete or skip the affected work.</p>}
-          </div>
-          <Link className="primary-button" to={`/runs/${run.id}/human-action`}>Help this tester</Link>
-        </section>
+        <Banner severity="warning" titleAs="h2" title={<>{statusEntry("run", run.status).word} — the tester is paused</>} action={<Link className="primary-button" to={`/runs/${run.id}/human-action`}>Help this tester</Link>}>{run.status_reason ? <p>{run.status_reason}</p> : <p>The tester is paused until you complete or skip the affected work.</p>}</Banner>
       ) : null}
       <div className="run-workspace">
       <div className="run-workspace-content">
@@ -221,12 +216,15 @@ export function RunLayout() {
           >
             {tab === "overview" ? "Summary" : tab === "watch" ? (run.status === "running" || run.status === "awaiting_human" ? "Watch live" : "Watch") : tab === "results" ? "Test results" : tab[0].toUpperCase() + tab.slice(1)}
             {tab === "findings" && results.status === "ready" ? (
-              <span className="tab-count">{results.data.findings.length}</span>
+              <CountBadge count={results.data.findings.length} label="findings" />
             ) : null}
           </NavLink>
         ))}
-        <details className="run-more-nav">
-          <summary>More</summary>
+        <NavDisclosure
+          label="More test sections"
+          buttonClassName="run-more-button tab-link"
+          buttonContent={<span>More</span>}
+        >
           <div className="run-more-menu" aria-label="More test sections">
             {["human-action", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
               <NavLink key={tab} to={`/runs/${run.id}/${tab}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>
@@ -234,7 +232,7 @@ export function RunLayout() {
               </NavLink>
             ))}
           </div>
-        </details>
+        </NavDisclosure>
       </nav>
       <HumanAssistanceHost key={`${appContext.user.id}:${appContext.workspace.id}:${appContext.workspace.role}:${run.id}`}
         context={{ ...appContext, run, results, refresh }}><Outlet

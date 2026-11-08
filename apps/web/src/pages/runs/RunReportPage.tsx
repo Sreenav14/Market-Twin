@@ -9,6 +9,7 @@ import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
 import { SeverityBadge } from "../../components/ui/StatusBadge";
+import { ProgressBar } from "../../components/ui/Progress";
 import { RunAssessmentView } from "../../components/markettwin/RunAssessmentView";
 import { FeatureCases } from "../../components/markettwin/FeatureCases";
 import { ReportAnalytics, ReportNavigation, reportView } from "../../components/markettwin/ReportIntelligence";
@@ -58,7 +59,7 @@ function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string
       <h4>
         <Link to={`/runs/${runId}/findings/${finding.id}`}>
           {finding.title}
-          <ArrowUpRight size={15} aria-hidden="true" />
+          <ArrowUpRight size={16} aria-hidden="true" />
         </Link>
       </h4>
       <p>{finding.summary}</p>
@@ -307,16 +308,11 @@ export function RunReportPage() {
                     <strong className="ledger-rate">{completed} of {journeyTotal}</strong>
                     <span className="ledger-fineprint">{featureRun ? "executed" : "finished"}</span>
                   </div>
-                  <div
-                    className="ledger-progress"
-                    role="progressbar"
-                    aria-valuenow={completionRate}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${completed} of ${journeyTotal} ${verdict.unit} ${featureRun ? "executed" : "finished"}`}
-                  >
-                    <span style={{ width: `${completionRate}%` }} />
-                  </div>
+                  <ProgressBar
+                    value={completed ?? 0}
+                    max={journeyTotal ?? 0}
+                    label={`${completed} of ${journeyTotal} ${verdict.unit} ${featureRun ? "executed" : "finished"}`}
+                  />
                   <p className="ledger-fineprint">
                     Execution completion is an operational measure, not a product pass rate.
                   </p>
@@ -340,7 +336,7 @@ export function RunReportPage() {
                 </p>
               )}
               <Link to={`/runs/${run.id}/journeys`} className="ledger-aside-cta">
-                Inspect Journeys <ArrowUpRight size={14} aria-hidden="true" />
+                Inspect Journeys <ArrowUpRight size={16} aria-hidden="true" />
               </Link>
             </aside>
           </div>

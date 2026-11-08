@@ -1,4 +1,8 @@
-/* ── Top-navigation shell (replaces sidebar grid) ── */
+/* ── Shell (sidebar/buttons round): a left rail on desktop, a top
+   bar + drawer below the shell breakpoint. The rail's anatomy follows
+   the reference: brand, palette search field, workspace card, icon
+   nav with a raised white active pill, account footer. Colours and
+   type resolve only through the token layer. ── */
 .mt-shell {
   --page-max-width: 1480px;
   --page-gutter: 24px;
@@ -7,6 +11,14 @@
   min-height: 100vh;
   background: var(--page);
   color: var(--text);
+}
+
+.mt-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
 }
 
 .mt-topbar {
@@ -55,56 +67,6 @@
   letter-spacing: -0.015em;
 }
 
-.mt-topbar-nav {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-}
-
-.topnav-links {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.topnav-link {
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  height: 64px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--mt-topbar-fg);
-  opacity: 0.82;
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  transition: color 120ms, border-color 120ms, opacity 120ms, background-color 120ms;
-  white-space: nowrap;
-}
-
-.topnav-link:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--mt-topbar-fg);
-}
-
-.topnav-link.active,
-.topnav-link[aria-current="page"] {
-  opacity: 1;
-  color: var(--mt-topbar-fg);
-  border-bottom-color: var(--mt-accent);
-}
-
-:root[data-theme="dark"] .topnav-link.active,
-:root.dark .topnav-link.active,
-[data-theme="dark"] .topnav-link.active {
-  color: var(--mt-accent);
-  border-bottom-color: var(--mt-accent);
-}
-
 .mt-topbar-end {
   display: flex;
   align-items: center;
@@ -114,61 +76,30 @@
   min-width: 0;
 }
 
-.mt-topbar-workspace {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--mt-radius-sm);
-  font-size: 14px;
-}
-
-.topnav-workspace-select {
-  background: transparent;
-  border: 0;
-  color: var(--mt-topbar-fg);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  outline: none;
-}
-
-.topnav-workspace-select option {
-  color: var(--mt-ink);
-  background: var(--mt-surface);
-}
-
-.topnav-workspace-name {
-  font-weight: 500;
-  color: var(--mt-topbar-fg);
-}
-
-.mt-topbar-role {
-  color: var(--mt-topbar-fg);
-  opacity: 0.7;
-  font-size: 12px;
-}
-
 .mt-topbar-menu-trigger {
   gap: 8px;
-  width: auto;
-  padding-inline: 12px;
   display: none;
   color: var(--mt-topbar-fg);
+}
+
+/* The trigger carries a text label, so it takes the recipe's height
+   at auto width instead of the icon-only square. */
+.mt-topbar .mt-topbar-menu-trigger {
+  width: auto;
+  height: 40px;
+  padding: 0 12px;
 }
 
 .mt-topbar .icon-button {
   color: var(--mt-topbar-fg);
   opacity: 0.85;
-  border-radius: var(--mt-radius-sm);
+  border-radius: var(--btn-radius);
 }
 
 .mt-topbar .icon-button:hover {
   opacity: 1;
   color: var(--mt-topbar-fg);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--notchecked-tint);
 }
 
 .theme-toggle-btn {
@@ -199,32 +130,209 @@
   outline-color: var(--mt-topbar-fg);
 }
 
-.mt-topbar .search-trigger {
-  min-height: 44px;
-  white-space: nowrap;
-}
-.mt-topbar-role { white-space: nowrap; }
-
-.mt-topbar-workspace {
+.mt-page-content > *,
+.mt-page-content .panel {
   min-width: 0;
-  max-width: 240px;
 }
 
-.topnav-workspace-name {
+/* ── Sidebar (desktop rail) ── */
+.mt-sidebar {
+  display: none;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 8px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sidebar-brand .brand-mark {
+  color: var(--primary);
+}
+
+.sidebar-wordmark {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+/* The palette's search field: a white field on the tinted rail. It
+   opens the command dialog (CommandMenu) — it is not decoration. */
+.mt-sidebar .search-trigger--field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 18px;
+  padding: 0 8px 0 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--btn-radius);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink-faint);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-change);
+}
+
+.mt-sidebar .search-trigger--field:hover {
+  border-color: var(--field-border);
+}
+
+.mt-sidebar .search-trigger--field span {
+  flex: 1;
+}
+
+.mt-sidebar .search-trigger--field kbd {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--notchecked-tint);
+  border: 1px solid var(--line);
+  border-radius: var(--mt-radius-sm);
+  padding: 1px 6px;
+}
+
+.sidebar-workspace {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--btn-radius);
+  box-shadow: var(--shadow-soft);
+}
+
+.sidebar-workspace-select {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sidebar-workspace-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Below ~1500px the role text yields so the workspace name is not the
-   thing that truncates (examination, Shell). */
-@media (max-width: 1500px) {
-  .mt-topbar-role { display: none; }
+.sidebar-workspace-role {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-2);
 }
 
-.mt-page-content > *,
-.mt-page-content .panel {
+/* Nav rows: quiet text on the rail; the active row is a raised white
+   pill. One list, shared by the sidebar and the drawer. (Named
+   shell-nav: .mt-nav belongs to the public header.) */
+.shell-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 20px;
+}
+
+.shell-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--mt-radius-pill);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--dur-quick) var(--ease-change),
+    color var(--dur-quick) var(--ease-change);
+}
+
+.shell-nav-link svg {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+}
+
+.shell-nav-link:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+}
+
+.shell-nav-link.active {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-raised);
+}
+
+.shell-nav-link.active svg {
+  color: var(--primary);
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.sidebar-user .user-copy {
+  flex: 1;
   min-width: 0;
+}
+
+.sidebar-user .user-copy strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.sidebar-user .user-copy span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 1280px) {
+  .mt-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+  .mt-sidebar {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    padding: 20px 14px;
+    background: var(--notchecked-tint);
+    border-right: 1px solid var(--line);
+  }
+
+  .mt-topbar {
+    display: none;
+  }
 }
 
 /* Drawer-specific styles */
@@ -252,9 +360,10 @@
 
 .drawer-workspace {
   padding: 12px 14px;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--mt-radius-sm);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--btn-radius);
+  box-shadow: var(--shadow-soft);
   margin-bottom: 20px;
 }
 
@@ -319,16 +428,11 @@
   white-space: nowrap;
 }
 
-/* Responsive: hide desktop nav, show menu trigger on mobile */
+/* Responsive: below the shell breakpoint the rail is gone and the
+   top bar carries the menu trigger (the drawer is the rail's form). */
 @media (max-width: 1279px) {
-  .mt-topbar-nav {
-    display: none;
-  }
   .mt-topbar-menu-trigger {
     display: flex;
-  }
-  .mt-topbar-workspace {
-    display: none;
   }
 }
 
@@ -384,25 +488,18 @@ button, input, select, textarea {
   color: var(--text-3);
 }
 
-.mt-shell .panel,
+/* .panel override removed — canonical recipe in display.css (Phase 2b).
+   .study-composer keeps its own rules elsewhere. */
 .mt-shell .study-composer {
   border-radius: var(--mt-radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: none;
 }
 
-.mt-shell .primary-button,
-.mt-shell .secondary-button,
-.mt-shell .danger-button,
-.mt-shell .ui-button,
-.mt-button {
-  min-height: 44px;
-  border-radius: var(--mt-radius-sm);
-  font-size: 14px;
-  font-weight: 500;
-  padding: 0 18px;
-}
+/* Button geometry lives in ONE place: the recipe in
+   concept-system.css (--btn-* tokens). This layer must not restate
+   it — an earlier block here (44px height, small radius) silently
+   out-specified the shared recipe inside the shell. */
 
 .icon-button {
   min-height: 44px;
@@ -410,13 +507,7 @@ button, input, select, textarea {
   border-radius: var(--mt-radius-sm);
 }
 
-.status-badge {
-  border-radius: var(--mt-radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 3px 10px;
-  box-shadow: none;
-}
+/* .status-badge removed — display.css §4 (Phase 2b). */
 
 .product-icon {
   border-radius: var(--mt-radius-sm);
@@ -731,7 +822,7 @@ button, input, select, textarea {
   gap: 8px 16px;
 }
 
-.brief-examples button {
+.brief-examples .brief-example-button {
   min-height: 44px;
   border: 0;
   border-radius: 0;
@@ -1626,9 +1717,6 @@ select {
   }
   .mt-topbar-end {
     gap: 4px;
-  }
-  .mt-topbar .search-trigger {
-    display: none;
   }
   .mt-shell input:not([type="checkbox"]):not([type="radio"]),
   .mt-shell textarea,

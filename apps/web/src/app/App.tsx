@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { BrandMark } from "../components/ui/BrandMark";
+import { ToastProvider } from "../components/ui/Feedback";
 import { ErrorPanel, Spinner } from "../components/ui/StateViews";
 import { ApiError, CurrentUser, api } from "../lib/api";
 import { AsyncState } from "../lib/useAsync";
@@ -183,7 +184,9 @@ function AppRoot() {
 export function App() {
   return (
     <BrowserRouter>
-      <AppRoot />
+      <ToastProvider>
+        <AppRoot />
+      </ToastProvider>
     </BrowserRouter>
   );
 }

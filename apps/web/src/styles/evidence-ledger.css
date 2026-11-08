@@ -438,21 +438,7 @@
   color: var(--li);
 }
 
-.evidence-ledger .ledger-progress {
-  height: 10px;
-  background: var(--border);
-  overflow: hidden;
-  border-radius: var(--mt-radius-sm);
-  margin-top: 8px;
-}
-
-.evidence-ledger .ledger-progress span {
-  display: block;
-  height: 100%;
-  background: var(--la);
-  border-radius: var(--mt-radius-sm);
-  transition: width 300ms ease;
-}
+/* .ledger-progress removed — ProgressBar component, display.css §8 (Phase 2b). Its width transition was outside the motion register. */
 
 .evidence-ledger .ledger-fineprint {
   font: 12px/1.4 var(--font-sans);

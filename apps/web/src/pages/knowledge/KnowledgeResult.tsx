@@ -128,7 +128,7 @@ function Grounding({ item }: { item: ApplicationKnowledgeDraft | GeneratedSkillD
                   textDecoration: "none",
                 }}
               >
-                <span aria-hidden="true" style={{ fontFamily: "monospace", color: "var(--text-3)", fontSize: "11px" }}>#{ordinal}</span>
+                <span aria-hidden="true" style={{ fontFamily: "var(--font-mono)", color: "var(--text-3)", fontSize: "11px" }}>#{ordinal}</span>
                 <span>Evidence {ordinal}</span>
               </a>
             ))
@@ -383,7 +383,7 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
                 border: "1px solid var(--warning-border)",
               }}
             >
-              <AlertTriangle size={18} style={{ color: "var(--warning)", flexShrink: 0, marginTop: "2px" }} />
+              <AlertTriangle size={20} style={{ color: "var(--warning)", flexShrink: 0, marginTop: "2px" }} />
               <div>
                 <p style={{ margin: 0 }}>
                   <strong>{locatorLabel(issue.source_locator)}:</strong> {issue.message}

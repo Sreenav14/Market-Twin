@@ -10,10 +10,10 @@ export class RenderErrorBoundary extends Component<{ children: ReactNode }, { fa
 
   render() {
     if (this.state.failed) {
-      return <main className="boot-screen" role="alert">
+      return <main className="boot-screen error-page" role="alert">
         <h1>Something went wrong</h1>
         <p>MarketTwin could not display this view. Reload to try again.</p>
-        <button type="button" onClick={() => window.location.reload()}>Reload MarketTwin</button>
+        <button type="button" className="primary-button" onClick={() => window.location.reload()}>Reload MarketTwin</button>
       </main>;
     }
     return this.props.children;

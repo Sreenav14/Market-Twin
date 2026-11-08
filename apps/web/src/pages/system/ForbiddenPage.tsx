@@ -10,7 +10,7 @@ export function ForbiddenPage() {
         <p>You do not have permission to view this resource or perform this action. Permissions in MarketTwin are enforced by the server according to your workspace role.</p>
         <div className="concept-system-actions">
           <Link to="/dashboard" className="primary-button">
-            <Home size={15} aria-hidden="true" />
+            <Home size={16} aria-hidden="true" />
             <span>Return to Home</span>
           </Link>
           <Link to="/runs" className="secondary-button">See tests</Link>

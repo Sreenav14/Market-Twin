@@ -70,12 +70,12 @@ it("requires check wording review after its expected result changes", async () =
   const update = vi.spyOn(api, "updateContractJourney").mockResolvedValue({ ...draft(), version: 2 });
   renderPage();
   await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
-  const expected = screen.getByLabelText("Expected result");
+  const expected = screen.getByLabelText(/^Expected result/);
   await userEvent.clear(expected);
   await userEvent.type(expected, "Billing");
   expect(screen.getByRole("button", { name: "Save check" })).toBeDisabled();
   expect(screen.getByRole("status")).toHaveTextContent("Update the wording above");
-  const wording = screen.getByLabelText("What should happen?");
+  const wording = screen.getByLabelText(/^What should happen/);
   await userEvent.clear(wording);
   await userEvent.type(wording, "After searching, the title is Billing.");
   await userEvent.click(screen.getByRole("button", { name: "Save check" }));

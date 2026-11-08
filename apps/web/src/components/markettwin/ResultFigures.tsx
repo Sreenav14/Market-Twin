@@ -45,7 +45,10 @@ export function StackedBar({
               className={`rf-seg rf-seg-${segment.tone}${interactive ? " rf-seg-button" : ""}${selected === segment.key ? " rf-seg-selected" : ""}`}
               style={{ flexGrow: segment.count }}
               onClick={interactive ? () => onSelect(selected === segment.key ? null : segment.key) : undefined}
-              title={interactive ? `${segment.word}: ${segment.count} of ${total} ${unit}. Activate to ${selected === segment.key ? "clear the filter" : `show only ${segment.word.toLowerCase()}`}.` : undefined}
+              /* No native title here (Phase 2c): this bar is aria-hidden
+                 decoration; the same words are visible in the labels
+                 below, and a tooltip repeating them is pollution
+                 (Spec 2 \u00a78.1). */
             >
               {!small && share >= 0.3 ? (
                 <span className="rf-seg-label">{segment.word} · {segment.count}</span>
@@ -86,7 +89,7 @@ export function StackedBar({
 }
 
 /** Coverage: tested length against the full discovered length, counts on both parts. */
-export function CoverageBar({ tested, discovered }: { tested: number; discovered: number }) {
+export function CoverageProgress({ tested, discovered }: { tested: number; discovered: number }) {
   return (
     <StackedBar
       total={discovered}

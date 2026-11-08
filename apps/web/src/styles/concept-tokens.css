@@ -2,42 +2,74 @@
 /* Exact specification from §2, §2A, §2B, §2C, §11A.3 */
 
 :root {
-  --paper: #FAF7F1;
+  /* Soft Proof (Phase 2a, Candidate C): warm-neutral light theme.
+     Canonical names first; the legacy concept names below them are
+     aliases re-pointed at the same values so every existing consumer
+     resolves to Soft Proof. */
+  --bg: #F5F4F2;
+  --sidebar-bg: #ECECE9;
+  --surface-raised: #FFFFFF;
+  --sunken: #EFEDEA;
+  --border-soft: #E6E3DE;
+  --border-strong-c: #D6D1CB;
+  --ink-1-c: #1C1917;
+  --ink-2-c: #57534E;
+  --ink-3-c: #79716B;
+  --accent: #0E7490;
+  --accent-deep: #155E75;
+  --accent-deep-hover: #0E7490;
+  --accent-tint: #E6F2F5;
+  --pass: #1A7F37;
+  --fail: #CF222E;
+  --warn: #B54708;
+  --warn-bg: #FFFAEB;
+  --info-c: #475467;
+
+  --paper: var(--bg);
   --card: #FFFFFF;
-  --ink: #111111;
+  --ink: var(--ink-1-c);
   --ink-on-dark: #FFFFFF;
-  --ink-2: #5F5C52;
-  --ink-faint: #6E6A5E;
-  --line: #E4E0D6;
-  --plum: #221244;
-  --footer-deep: #17102E;
-  --band-lilac: #E4E0F5;
-  --band-peach: #FCE8D8;
-  --band-rose: #F9DEE4;
-  --flame: #E4572E;
-  --flame-deep: #BC4218;
-  --flame-deep-hover: #A83A15;
-  /* Label colour on tinted bands (peach/lilac): flame-deep measures ~4.1:1
-     there at label size; this deeper step clears 4.5:1 on both bands. */
-  --flame-label-band: #A83A15;
-  --works: #1F7A3D;
+  --ink-2: var(--ink-2-c);
+  --ink-faint: var(--ink-3-c);
+  --line: var(--border-soft);
+  --plum: #1C1917;
+  --footer-deep: #141210;
+  --band-lilac: var(--sunken);
+  --band-peach: var(--sunken);
+  --band-rose: var(--sunken);
+  --flame: var(--accent);
+  --flame-deep: var(--accent-deep);
+  --flame-deep-hover: var(--accent-deep-hover);
+  --flame-label-band: var(--accent-deep);
+  --works: var(--pass);
   --works-tint: #EAF6EE;
-  --broken: #C62F3B;
+  --broken: var(--fail);
   --broken-tint: #FDECEC;
-  --couldnot: #8A5F00;
-  --couldnot-tint: #FFF4D6;
-  --notchecked: #62625C;
-  --notchecked-tint: #F0EEE7;
-  --tom: #6842D6;
-  --maya: #0F766E;
-  --priya: #96521F;
-  --tester-4: #1D64C8;
-  --tester-5: #AE2F7D;
-  --tester-6: #667A12;
-  --focus-ring: 2px solid #111111;
+  --couldnot: var(--warn);
+  --couldnot-tint: var(--warn-bg);
+  --notchecked: var(--info-c);
+  --notchecked-tint: #F0EEE9;
+  /* Chart categorical (Okabe-Ito, applied in this order, direct labels):
+     sequential data uses the cividis/viridis ramp. Tester colours ARE
+     chart series 1-6 so a tester reads identically in every chart. */
+  --chart-1: #0072B2;
+  --chart-2: #E69F00;
+  --chart-3: #009E73;
+  --chart-4: #D55E00;
+  --chart-5: #CC79A7;
+  --chart-6: #56B4E9;
+  --chart-yellow: #F0E442;
+  --tom: var(--chart-1);
+  --maya: var(--chart-2);
+  --priya: var(--chart-3);
+  --tester-4: var(--chart-4);
+  --tester-5: var(--chart-5);
+  --tester-6: var(--chart-6);
+  --focus-ring: 2px solid #155E75;
   --focus-ring-dark: 2px solid #FFFFFF;
-  --shadow-soft: 0 1px 2px rgba(17,17,17,.05);
-  --shadow-panel: 0 8px 24px rgba(17,17,17,.08);
+  --shadow-soft: 0 1px 2px rgba(28,25,23,.05), 0 8px 24px -12px rgba(28,25,23,.10);
+  --shadow-panel: 0 4px 8px rgba(28,25,23,.06), 0 16px 40px -12px rgba(28,25,23,.16);
+  --shadow-raised: 0 1px 2px rgba(28,25,23,.07), 0 4px 14px rgba(28,25,23,.06);
 }
 
 /* Accessibility: Focus Rings */
@@ -64,7 +96,7 @@
 
 /* Typography Scale (§2B) */
 .font-display {
-  font-family: "Newsreader", Georgia, serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 56px;
   line-height: 64px;
   font-weight: 500;
@@ -80,7 +112,7 @@
 }
 
 .font-h1-workspace {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 28px;
   line-height: 36px;
   font-weight: 650;
@@ -95,7 +127,7 @@
 }
 
 .font-verdict-word {
-  font-family: "Newsreader", Georgia, serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 48px;
   line-height: 52px;
   font-weight: 550;
@@ -110,7 +142,7 @@
 }
 
 .font-h2-marketing {
-  font-family: "Newsreader", Georgia, serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 36px;
   line-height: 44px;
   font-weight: 500;
@@ -119,7 +151,7 @@
 }
 
 .font-h2-workspace {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 22px;
   line-height: 30px;
   font-weight: 650;
@@ -127,7 +159,7 @@
 }
 
 .font-h3 {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 18px;
   line-height: 26px;
   font-weight: 600;
@@ -135,7 +167,7 @@
 }
 
 .font-body {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 16px;
   line-height: 26px;
   font-weight: 400;
@@ -143,7 +175,7 @@
 }
 
 .font-body-small {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 14px;
   line-height: 22px;
   font-weight: 400;
@@ -151,7 +183,7 @@
 }
 
 .font-meta-label {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 11px;
   line-height: 16px;
   font-weight: 500;
@@ -160,7 +192,7 @@
 }
 
 .font-button-label {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 13px;
   line-height: 16px;
   font-weight: 600;
@@ -177,21 +209,23 @@
 }
 
 .font-stat-numeral {
-  font-family: "Newsreader", Georgia, serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 40px;
   line-height: 44px;
   font-weight: 500;
 }
 
 .font-grid-cell {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Hanken Grotesk", "IBM Plex Sans", system-ui, sans-serif;
   font-size: 14px;
   line-height: 20px;
   font-weight: 400;
 }
 
 .font-mono-data {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   line-height: 18px;
   font-weight: 400;

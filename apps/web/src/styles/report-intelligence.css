@@ -38,7 +38,7 @@
 .report-usefulness-layout { display:grid; grid-template-columns:260px minmax(0,1fr); gap:32px; align-items:start; }
 .report-filter-bar { display:flex; flex-wrap:wrap; align-items:end; gap:16px; margin:20px 0; }
 .report-filter-bar label { display:grid; gap:8px; font-size:13px; color:var(--text-2); flex:1 1 155px; min-width:0; }
-.report-filter-bar input, .report-filter-bar select { min-height:44px; width:100%; max-width:100%; min-width:0; padding:9px 12px; color:var(--text); background:var(--surface); border:1px solid var(--border-strong); border-radius:6px; font-size:14px; }
+.report-filter-bar input, .report-filter-bar select { width:100%; max-width:100%; min-width:0; color:var(--text); background:var(--surface); /* geometry + field border: forms.css §3 (Phase 2d) */ }
 .report-filter-bar button { min-height:44px; }
 .report-filter-result { margin-bottom:18px; color:var(--text-2); font-size:14px; }
 .report-table-scroll { overflow-x:auto; margin-top:16px; }
@@ -60,9 +60,9 @@
 .report-step-flow { display:flex; gap:24px; list-style:none; padding:16px 4px 20px; overflow-x:auto; scroll-snap-type:x proximity; }
 .report-step-flow li { position:relative; flex:0 0 220px; scroll-snap-align:start; }
 .report-step-flow li:not(:last-child)::after { content:'→'; position:absolute; right:-21px; top:50%; color:var(--text-3); }
-.report-step-flow button { display:grid; align-content:start; gap:12px; width:100%; height:100%; min-height:132px; padding:20px; border:1px solid var(--border); border-radius:10px; background:var(--surface); text-align:left; color:var(--text); }
-.report-step-flow button:hover { background:var(--surface-hover); border-color:var(--primary); }
-.report-step-flow button[aria-pressed="true"] { border:2px solid var(--primary); padding:19px; background:var(--mt-accent-subtle); }
+.report-step-flow .report-step-button { display:grid; align-content:start; gap:12px; width:100%; height:100%; min-height:132px; padding:20px; border:1px solid var(--border); border-radius:10px; background:var(--surface); text-align:left; color:var(--text); }
+.report-step-flow .report-step-button:hover { background:var(--surface-hover); border-color:var(--primary); }
+.report-step-flow .report-step-button[aria-pressed="true"] { border:2px solid var(--primary); padding:19px; background:var(--mt-accent-subtle); }
 .report-step-flow button > span { font-size:12px; color:var(--text-2); }
 .report-step-flow strong { overflow-wrap:anywhere; font-size:15px; }
 .report-step-detail { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:24px; margin-top:16px; }
@@ -77,10 +77,10 @@
 .report-value-comparison dd { margin:0; overflow-wrap:anywhere; font-size:17px; }
 .report-inspection-workbench { display:grid; grid-template-columns:minmax(230px,.7fr) minmax(0,1.3fr); gap:24px; align-items:start; }
 .report-finding-index { list-style:none; padding:0; margin:0; display:grid; gap:12px; max-height:750px; overflow-y:auto; }
-.report-finding-index button { display:grid; gap:10px; padding:20px; width:100%; text-align:left; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px; }
-.report-finding-index button > span { font-size:12px; color:var(--text-2); }
-.report-finding-index button:hover { background:var(--surface-hover); border-color:var(--primary); }
-.report-finding-index button[aria-pressed="true"] { background:var(--mt-accent-subtle); border-color:var(--primary); box-shadow:inset 3px 0 var(--primary); }
+.report-finding-index .report-finding-button { display:grid; gap:10px; padding:20px; width:100%; text-align:left; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+.report-finding-index .report-finding-button > span { font-size:12px; color:var(--text-2); }
+.report-finding-index .report-finding-button:hover { background:var(--surface-hover); border-color:var(--primary); }
+.report-finding-index .report-finding-button[aria-pressed="true"] { background:var(--mt-accent-subtle); border-color:var(--primary); box-shadow:inset 3px 0 var(--primary); }
 .report-finding-index strong { font-size:16px; overflow-wrap:anywhere; }
 .report-finding-detail { padding:28px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:0; overflow-wrap:anywhere; }
 .report-finding-detail h3 { font-size:24px; line-height:1.3; margin-bottom:24px; }
@@ -104,7 +104,7 @@
  .report-usefulness-layout > .report-count-chart ul { display:block; }
  .report-finding-index { display:flex; overflow-x:auto; max-height:none; padding-bottom:8px; }
  .report-finding-index li { flex:0 0 260px; }
- .report-finding-index button { height:100%; }
+ .report-finding-index .report-finding-button { height:100%; }
  .report-step-detail, .report-finding-detail { padding:20px; }
  .report-value-comparison { grid-template-columns:minmax(0,1fr); }
  .report-task-table th, .report-task-table td { padding:12px 8px; }

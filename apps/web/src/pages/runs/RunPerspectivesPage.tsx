@@ -89,7 +89,7 @@ export function RunPerspectivesPage() {
                 >
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <Users size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                      <Users size={20} style={{ color: "var(--primary)" }} aria-hidden="true" />
                       <span
                         style={{
                           fontSize: 11,
@@ -211,7 +211,7 @@ export function RunPerspectivesPage() {
                             aria-label={`Inspect ${journey.mission_title}`}
                           >
                             <span>Inspect</span>
-                            <ArrowUpRight size={13} aria-hidden="true" />
+                            <ArrowUpRight size={16} aria-hidden="true" />
                           </Link>
                         </div>
                       </div>

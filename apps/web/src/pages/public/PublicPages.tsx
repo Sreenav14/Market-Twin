@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ConceptFooter, ConceptHeader, StatusPill, TriptychSignature } from "../../components/concept";
+import { ConceptFooter, ConceptHeader, ConceptStatusPill, TriptychSignature } from "../../components/concept";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -158,7 +158,7 @@ function HeroEvidenceSequence() {
                 >
                   <span className="mt-step-number">{item.stepNumber}</span>
                   <span className="mt-step-action-name">{item.action}</span>
-                  <ArrowRight size={14} aria-hidden="true" />
+                  <ArrowRight size={16} aria-hidden="true" />
                 </button>
               </li>
             );
@@ -176,7 +176,7 @@ function HeroEvidenceSequence() {
             <div className="mt-evidence-card-header">
               <span className="mt-kicker">Observation</span>
               <span className="mt-status-tag verified">
-                <CheckCircle2 size={12} aria-hidden="true" /> {step.statusText}
+                <CheckCircle2 size={16} aria-hidden="true" /> {step.statusText}
               </span>
             </div>
             <p className="mt-observation-text">{step.observation}</p>
@@ -222,10 +222,10 @@ export function HomePage() {
 
           <div className="mt-actions">
             <Link className="mt-button" to="/login">
-              Open workspace <ArrowRight size={18} aria-hidden="true" />
+              Open workspace <ArrowRight size={20} aria-hidden="true" />
             </Link>
             <Link className="mt-text-link" to="/how-it-works">
-              See how it works <ArrowUpRight size={17} aria-hidden="true" />
+              See how it works <ArrowUpRight size={20} aria-hidden="true" />
             </Link>
           </div>
 
@@ -241,13 +241,13 @@ export function HomePage() {
       {/* Principles Strip */}
       <section className="mt-principle-strip" aria-label="Core testing principles">
         <span>
-          <Route size={18} aria-hidden="true" /> Authorized Target Scope
+          <Route size={20} aria-hidden="true" /> Authorized Target Scope
         </span>
         <span>
-          <ScanLine size={18} aria-hidden="true" /> Observable Browser Execution
+          <ScanLine size={20} aria-hidden="true" /> Observable Browser Execution
         </span>
         <span>
-          <ShieldCheck size={18} aria-hidden="true" /> Evidence-First Triage
+          <ShieldCheck size={20} aria-hidden="true" /> Evidence-First Triage
         </span>
       </section>
 
@@ -316,7 +316,7 @@ export function HomePage() {
             evidence determines whether that pattern represents an actual product defect.
           </p>
           <Link className="mt-text-link" to="/how-it-works#results">
-            Understand the result categories <ArrowRight size={17} aria-hidden="true" />
+            Understand the result categories <ArrowRight size={20} aria-hidden="true" />
           </Link>
           <p className="mt-sample-disclaimer">
             Illustrative result categories. Your report reflects the evidence recorded for your test.
@@ -430,7 +430,7 @@ export function HomePage() {
         </h2>
         <div className="mt-actions-center">
           <Link className="mt-button" to="/login">
-            Open workspace <ArrowRight size={18} aria-hidden="true" />
+            Open workspace <ArrowRight size={20} aria-hidden="true" />
           </Link>
           <Link className="mt-text-link" to="/how-it-works">
             Read technical overview
@@ -671,10 +671,10 @@ export function HowPage() {
             screenshots from both attempts.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "28px" }}>
-            <StatusPill status="Worked" />
-            <StatusPill status="Broken" />
-            <StatusPill status="Could not check" />
-            <StatusPill status="Not checked" />
+            <ConceptStatusPill status="Worked" />
+            <ConceptStatusPill status="Broken" />
+            <ConceptStatusPill status="Could not check" />
+            <ConceptStatusPill status="Not checked" />
           </div>
           <TriptychSignature />
         </div>

@@ -1,4 +1,5 @@
 import React from "react";
+import { Avatar } from "../../components/ui/Avatar";
 import {
   CANONICAL_DEMO_DATA,
   ConceptPayload,
@@ -79,7 +80,7 @@ export const WatchLivePage: React.FC<WatchLivePageProps> = ({
             style={{
               padding: "8px 16px",
               border: "1px solid var(--ink)",
-              fontFamily: "IBM Plex Mono, monospace",
+              fontFamily: "Hanken Grotesk, sans-serif",
               fontSize: "12px",
               fontWeight: 600,
               display: "inline-block",
@@ -166,6 +167,7 @@ export const WatchLivePage: React.FC<WatchLivePageProps> = ({
                 const isActive = item === "Tests";
                 return (
                   <button
+                    className="concept-section-nav-button"
                     key={item}
                     type="button"
                     onClick={() => onNavigate && onNavigate(item)}
@@ -187,23 +189,7 @@ export const WatchLivePage: React.FC<WatchLivePageProps> = ({
           </nav>
         </div>
 
-        <div
-          style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "50%",
-            backgroundColor: "var(--ink)",
-            color: "var(--ink-on-dark)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "12px",
-            fontWeight: 600,
-          }}
-          aria-label="Alex Morgan"
-        >
-          AM
-        </div>
+        <Avatar kind="person" name="Alex Morgan" />
       </header>
 
       {/* In-test Context Row + Tabs */}

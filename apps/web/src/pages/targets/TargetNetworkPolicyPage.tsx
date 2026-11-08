@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { Icon } from "../../components/ui/Icon";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
@@ -273,7 +274,7 @@ export function TargetNetworkPolicyPage() {
                         to={`/targets/${rev.id}/authorization`}
                         className="secondary-button compact"
                       >
-                        <Icon name="shield" size={14} /> Review authorization status and scope
+                        <Icon name="shield" size={16} /> Review authorization status and scope
                       </Link>
                     </div>
                   </div>
@@ -350,6 +351,7 @@ export function TargetNetworkPolicyPage() {
               <label className="confirmation-row">
                 <input
                   type="checkbox"
+                  className="mt-checkbox"
                   checked={confirmed}
                   onChange={(event) => setConfirmed(event.target.checked)}
                 />
@@ -359,9 +361,9 @@ export function TargetNetworkPolicyPage() {
               </label>
 
               {error ? (
-                <p role="alert" className="form-error">
+                <InlineAlert severity="error" title="Could not save this scope" role="alert">
                   {error}
-                </p>
+                </InlineAlert>
               ) : null}
 
               <div className="form-actions">

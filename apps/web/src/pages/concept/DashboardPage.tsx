@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Avatar } from "../../components/ui/Avatar";
 import {
   CANONICAL_DEMO_DATA,
   ConceptPayload,
@@ -106,23 +107,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </nav>
         </div>
 
-        <div
-          style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "50%",
-            backgroundColor: "var(--ink)",
-            color: "var(--ink-on-dark)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "12px",
-            fontWeight: 600,
-          }}
-          aria-label="Alex Morgan"
-        >
-          AM
-        </div>
+        <Avatar kind="person" name="Alex Morgan" />
       </header>
 
       {/* Main Container */}
@@ -379,7 +364,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   overflowX: "auto",
                 }}
               >
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "560px" }}>
+                <table className="data-table" style={{ minWidth: "560px" }}>
                   <thead>
                     <tr>
                       {["App", "Date", "Status", "Attempts", "Verdict"].map((h) => (
@@ -387,13 +372,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           key={h}
                           scope="col"
                           className="font-meta-label"
-                          style={{
-                            textAlign: "left",
-                            padding: "12px 20px",
-                            color: "var(--ink-faint)",
-                            borderBottom: "1px solid var(--line)",
-                            whiteSpace: "nowrap",
-                          }}
                         >
                           {h}
                         </th>
@@ -402,20 +380,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   </thead>
                   <tbody className="font-grid-cell">
                     <tr style={{ color: "var(--ink)" }}>
-                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)" }}>{data.app.name}</td>
-                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>{data.testDateLabel}</td>
-                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)" }}>Testing now</td>
-                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>
+                      <td >{data.app.name}</td>
+                      <td >{data.testDateLabel}</td>
+                      <td >Testing now</td>
+                      <td >
                         {data.live.attemptsDone} of {data.totals.attempts} attempts
                       </td>
-                      <td style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", color: "var(--ink-2)" }}>—</td>
+                      <td style={{ color: "var(--ink-2)" }}>—</td>
                     </tr>
                     <tr style={{ color: "var(--ink-2)" }}>
-                      <td style={{ padding: "14px 20px" }}>{data.app.name}</td>
-                      <td style={{ padding: "14px 20px", whiteSpace: "nowrap" }}>{data.previousTest.dateLabel}</td>
-                      <td style={{ padding: "14px 20px" }}>{data.previousTest.status.split(" · ")[0]}</td>
-                      <td style={{ padding: "14px 20px", whiteSpace: "nowrap" }}>{data.previousTest.status.split(" · ")[1]}</td>
-                      <td style={{ padding: "14px 20px" }}>No verdict</td>
+                      <td >{data.app.name}</td>
+                      <td >{data.previousTest.dateLabel}</td>
+                      <td >{data.previousTest.status.split(" · ")[0]}</td>
+                      <td >{data.previousTest.status.split(" · ")[1]}</td>
+                      <td >No verdict</td>
                     </tr>
                   </tbody>
                 </table>

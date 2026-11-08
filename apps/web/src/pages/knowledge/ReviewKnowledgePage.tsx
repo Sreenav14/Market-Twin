@@ -4,6 +4,7 @@ import { FileText, Globe, Search, X } from "lucide-react";
 import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Button } from "../../components/ui/button";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { api } from "../../lib/api";
 import { canWriteWorkspace } from "../../lib/permissions";
@@ -90,15 +91,12 @@ export function ReviewKnowledgePage() {
       ) : state.data.length ? (
         <>
           {state.isError ? (
-            <p className="inline-note" role="alert">
-              Could not refresh knowledge. Showing the last loaded data.{" "}
-              <Button variant="ghost" size="sm" onClick={() => void state.refetch()}>Try again</Button>
-            </p>
+            <InlineAlert severity="warning" title="Could not refresh knowledge" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void state.refetch()}>Try again</Button>}>Showing the last loaded data.</InlineAlert>
           ) : null}
 
           <div className="filter-bar">
             <div className="search-field">
-              <Search size={17} aria-hidden="true" />
+              <Search size={20} aria-hidden="true" />
               <input
                 aria-label="Search knowledge"
                 placeholder="Find a knowledge set or source…"
@@ -153,7 +151,7 @@ export function ReviewKnowledgePage() {
                   onClick={() => setParams({})}
                   style={{ fontSize: "12px", height: "26px", padding: "0 6px" }}
                 >
-                  <X size={13} aria-hidden="true" />
+                  <X size={16} aria-hidden="true" />
                   <span>Clear</span>
                 </Button>
               </div>
@@ -172,7 +170,7 @@ export function ReviewKnowledgePage() {
                 return (
                   <div className="data-row knowledge-list-row" key={entry.id} role="listitem">
                     <span className="row-icon" aria-hidden="true">
-                      {isLink ? <Globe size={18} /> : <FileText size={18} />}
+                      {isLink ? <Globe size={20} /> : <FileText size={20} />}
                     </span>
                     <div className="row-primary">
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>

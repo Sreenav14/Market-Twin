@@ -5,11 +5,14 @@ export function PageHeader({
   title,
   description,
   action,
+  crumbs,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   action?: ReactNode;
+  /** A Breadcrumbs trail for pages with a real parent path (Phase 2b). */
+  crumbs?: ReactNode;
 }) {
   useEffect(() => {
     document.title = `${title} · MarketTwin`;
@@ -17,6 +20,7 @@ export function PageHeader({
 
   return (
     <header className="page-header">
+      {crumbs}
       <div className="page-header-copy">
         {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
         <h1>{title}</h1>

@@ -7,6 +7,9 @@ import { canWriteWorkspace } from "../../lib/permissions";
 import { Button } from "../../components/ui/button";
 import { ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { RunPreflightPanel } from "../../components/markettwin/RunPreflightPanel";
+import { RadioGroup } from "../../components/ui/Choice";
+import { RequiredMark } from "../../components/ui/Field";
+import { InlineAlert } from "../../components/ui/Feedback";
 
 function stepDescription(step: ContractJourney["steps"][number]) {
   const name = step.target?.name || step.target?.label || step.target?.text;
@@ -75,25 +78,25 @@ export function ContractApprovalPage() {
       <p>Testers explored your app and found {discovery?.features?.length ?? "an unknown number of"} features. They completed {completed} journeys. {loginBlocked > 0 ? `${loginBlocked} journeys need a login and were skipped.` : ""}</p>
       <p>These tests run against: {origins?.length ? origins.map(o => `${o.scheme}://${o.hostname}${o.port ? `:${o.port}` : ""}`).join(", ") : appUrl || "App address unavailable"}. Review each journey&apos;s checks before approving — approving does not grant access to other apps or approve sensitive actions.</p>
       <p>This run&apos;s {String(depth || "medium")} testing depth allows up to {journeyLimit} journeys; extra completed journeys start excluded.</p>
-      {includedJourneyCount > journeyLimit ? <p role="alert">You have included {includedJourneyCount} journeys, above this run's limit of {journeyLimit}. Exclude at least {includedJourneyCount - journeyLimit} before approval.</p> : null}
+      {includedJourneyCount > journeyLimit ? <InlineAlert severity="warning" role="alert" title={`You have included ${includedJourneyCount} journeys, above this run's limit of ${journeyLimit}.`}>Exclude at least {includedJourneyCount - journeyLimit} before approval.</InlineAlert> : null}
       {!canWrite ? <p>Your workspace role can review these tests but cannot change or approve them.</p> : null}
-      {error ? <p role="alert" className="form-error">{error}</p> : null}
+      {error ? <InlineAlert severity="error" title="Could not save the tests" role="alert">{error}</InlineAlert> : null}
       {completed === 0 ? <><p>No journeys were completed, so there is nothing to test.</p><div className="button-row"><Link className="secondary-button" to={`/applications/${run.application_id}/runs/new?target=${run.target_id}&mode=discovery_contract_v1`}>Explore again</Link></div></> : null}
     </section>
     {contract.journeys.map(journey => <section className="panel" key={journey.journey_key} aria-label={journey.title}>
       <h3>{journey.title}</h3><ol>{journey.steps.map((step, i) => <li key={i}>{stepDescription(step)}</li>)}</ol>
       {incomplete.has(journey.journey_key) ? <p>Exploration did not complete this journey. It is excluded from testing.</p> : null}
       {depthExcluded.has(journey.journey_key) ? <p>This completed journey is beyond the selected testing-depth limit and starts excluded.</p> : null}
-      <label><input type="checkbox" checked={journey.excluded} disabled={!editable || incomplete.has(journey.journey_key)} onChange={e => void update(journey, { excluded: e.target.checked })} /> Don&apos;t test this</label>
+      <label><input type="checkbox" className="mt-checkbox" checked={journey.excluded} disabled={!editable || incomplete.has(journey.journey_key)} onChange={e => void update(journey, { excluded: e.target.checked })} /> Don&apos;t test this</label>
       <ul className="contract-checks">{journey.assertions.map(check => <li key={check.assertion_id}>
-        <label><input type="checkbox" checked={!check.excluded} disabled={!editable || journey.excluded} onChange={e => void update(journey, { assertions: journey.assertions.map(a => a.assertion_id === check.assertion_id ? { ...a, excluded: !e.target.checked } : a) })} /> {check.plain_language}</label>{" "}
+        <label><input type="checkbox" className="mt-checkbox" checked={!check.excluded} disabled={!editable || journey.excluded} onChange={e => void update(journey, { assertions: journey.assertions.map(a => a.assertion_id === check.assertion_id ? { ...a, excluded: !e.target.checked } : a) })} /> {check.plain_language}</label>{" "}
         <Button variant="ghost" disabled={!editable || journey.excluded} onClick={() => { setWordingReviewed(true); setEditing({ journey, check: { ...check } }); }}>Edit</Button>
       </li>)}</ul>
     </section>)}
     {editing ? <section className="panel" aria-label="Edit check"><form onSubmit={saveEdit}>
       <h3>Edit check</h3>
-      <label htmlFor="check-wording">What should happen?</label><textarea id="check-wording" value={editing.check.plain_language} maxLength={500} onChange={e => { setWordingReviewed(true); setEditing({ ...editing, check: { ...editing.check, plain_language: e.target.value } }); }} required />
-      <label htmlFor="check-type">Type of check</label><select id="check-type" value={editing.check.oracle} onChange={e => {
+      <label htmlFor="check-wording">What should happen? <RequiredMark required /></label><textarea id="check-wording" value={editing.check.plain_language} maxLength={500} onChange={e => { setWordingReviewed(true); setEditing({ ...editing, check: { ...editing.check, plain_language: e.target.value } }); }} required />
+      <label htmlFor="check-type">Type of check <RequiredMark required /></label><select id="check-type" value={editing.check.oracle} onChange={e => {
         const oracle = e.target.value as ContractCheck["oracle"];
         const control = ["visible", "enabled", "count", "checked"].includes(oracle);
         setWordingReviewed(false);
@@ -102,14 +105,14 @@ export function ContractApprovalPage() {
         {Object.entries({ visible_text: "Text appears", visible: "Control is visible", enabled: "Control is enabled", url_path_v1: "Page address", title: "Page title", count: "Number of matching controls", checked: "Checkbox is checked" }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
       {["visible", "enabled", "count", "checked"].includes(editing.check.oracle) ? <>
-        <label htmlFor="check-role">Control type</label><input id="check-role" required maxLength={80} value={editing.check.target_role || ""} onChange={e => setEditing({ ...editing, check: { ...editing.check, target_role: e.target.value } })} />
-        <label htmlFor="check-name">Control name</label><input id="check-name" required maxLength={160} value={editing.check.target_name || ""} onChange={e => setEditing({ ...editing, check: { ...editing.check, target_name: e.target.value } })} />
+        <label htmlFor="check-role">Control type <RequiredMark required /></label><input id="check-role" required maxLength={80} value={editing.check.target_role || ""} onChange={e => setEditing({ ...editing, check: { ...editing.check, target_role: e.target.value } })} />
+        <label htmlFor="check-name">Control name <RequiredMark required /></label><input id="check-name" required maxLength={160} value={editing.check.target_name || ""} onChange={e => setEditing({ ...editing, check: { ...editing.check, target_name: e.target.value } })} />
       </> : null}
-      <label htmlFor="check-expected">Expected result</label>{["visible", "enabled", "checked"].includes(editing.check.oracle) ? <select id="check-expected" value={String(editing.check.expected_value)} onChange={e => setEditing({ ...editing, check: { ...editing.check, expected_value: e.target.value === "true" } })}><option value="true">Yes</option><option value="false">No</option></select> : <input id="check-expected" type={editing.check.oracle === "count" ? "number" : "text"} min={editing.check.oracle === "count" ? 0 : undefined} maxLength={500} required value={String(editing.check.expected_value ?? "")} onChange={e => {
+      {["visible", "enabled", "checked"].includes(editing.check.oracle) ? <RadioGroup legend={<>Expected result <RequiredMark required /></>} name="check-expected" value={String(editing.check.expected_value)} onChange={value => setEditing({ ...editing, check: { ...editing.check, expected_value: value === "true" } })} options={[{ value: "true", label: "Yes" }, { value: "false", label: "No" }]} /> : <><label htmlFor="check-expected">Expected result <RequiredMark required /></label><input id="check-expected" type={editing.check.oracle === "count" ? "number" : "text"} min={editing.check.oracle === "count" ? 0 : undefined} maxLength={500} required value={String(editing.check.expected_value ?? "")} onChange={e => {
         const value = ["visible", "enabled", "checked"].includes(editing.check.oracle) ? e.target.value === "true" : editing.check.oracle === "count" ? Number(e.target.value) : e.target.value;
         setWordingReviewed(false);
         setEditing({ ...editing, check: { ...editing.check, expected_value: value } });
-      }} />}
+      }} /></>}
       <p className="form-help">Review and update the wording so it matches the selected check and expected result.</p>
       {!wordingReviewed ? <p role="status">Update the wording above before saving this changed check.</p> : null}
       <Button type="submit" disabled={busy || !wordingReviewed}>Save check</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setEditing(null)}>Cancel</Button>

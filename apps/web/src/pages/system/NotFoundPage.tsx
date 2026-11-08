@@ -10,7 +10,7 @@ export function NotFoundPage() {
         <p>The requested page or resource could not be found. It may have moved, been archived, or may not exist in your active workspace.</p>
         <div className="concept-system-actions">
           <Link to="/dashboard" className="primary-button">
-            <Home size={15} aria-hidden="true" />
+            <Home size={16} aria-hidden="true" />
             <span>Return to Home</span>
           </Link>
           <Link to="/runs" className="secondary-button">See tests</Link>

@@ -1,6 +1,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Icon } from "../../components/ui/Icon";
+import { ErrorSummary, FieldError, RequiredLegend, RequiredMark } from "../../components/ui/Field";
+import { Checkbox } from "../../components/ui/Choice";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Spinner } from "../../components/ui/StateViews";
 import { api } from "../../lib/api";
@@ -9,12 +12,12 @@ import { AppShellContext } from "../../layouts/AppShell";
 
 function validateTargetUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
-  if (!trimmed) return "Base URL is required.";
+  if (!trimmed) return "Enter a base URL, for example https://staging.example.com.";
   if (trimmed.includes("*")) {
     return "Wildcards (e.g. *.example.com) are not supported. Enter an exact hostname.";
   }
   if (!/^https?:\/\//i.test(trimmed)) {
-    return "Base URL must start with http:// or https://.";
+    return "Enter a base URL starting with http:// or https://.";
   }
   try {
     const parsed = new URL(trimmed);
@@ -22,7 +25,7 @@ function validateTargetUrl(rawUrl: string): string | null {
       return "URL must contain a valid hostname or IP address.";
     }
   } catch {
-    return "Please enter a valid absolute URL (e.g. http://localhost:3000/ or https://staging.example.com).";
+    return "Enter a valid absolute URL, for example http://localhost:3000/ or https://staging.example.com.";
   }
   return null;
 }
@@ -36,7 +39,12 @@ export function NewTargetPage() {
   const [environment, setEnvironment] = useState("local");
   const [baseUrl, setBaseUrl] = useState(parameters.get("url") ?? "http://localhost:3000/");
   const [requiresAuth, setRequiresAuth] = useState(false);
-  const [touched, setTouched] = useState(false);
+  // Punish late, reward early (Spec 3 §6.2): errors show per-field on
+  // blur or on submit, and clear instantly once the value is fixed
+  // because they are derived from the current value.
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [submitted, setSubmitted] = useState(false);
+  const blur = (field: string) => setTouched((prev) => new Set(prev).add(field));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -49,26 +57,23 @@ export function NewTargetPage() {
     return (
       <>
         <PageHeader eyebrow="Target" title="Add target" />
-        <div className="error-panel" role="alert">
-          <div>
-            <strong>Read-only workspace</strong>
-            <span>Your workspace role ({workspace.role}) cannot create targets.</span>
-          </div>
-          <div>
-            <Link
+        <InlineAlert severity="warning" title="Read-only workspace" action={<Link
               className="secondary-button"
               to={`/applications/${applicationId}/targets`}
             >
               Back to targets
-            </Link>
-          </div>
-        </div>
+            </Link>}>Your workspace role ({workspace.role}) cannot create targets.</InlineAlert>
       </>
     );
   }
 
-  const nameError = touched && !name.trim() ? "Target name is required." : null;
-  const urlError = touched ? validateTargetUrl(baseUrl) : null;
+  const show = (field: string) => submitted || touched.has(field);
+  const nameError = show("name") && !name.trim() ? "Enter a target name." : null;
+  const urlError = show("url") ? validateTargetUrl(baseUrl) : null;
+  const summaryErrors = [
+    ...(name.trim() ? [] : [{ targetId: "target-name", message: "Enter a target name." }]),
+    ...(validateTargetUrl(baseUrl) ? [{ targetId: "base-url", message: validateTargetUrl(baseUrl)! }] : []),
+  ];
 
   let pathNotice: string | null = null;
   try {
@@ -83,7 +88,7 @@ export function NewTargetPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    setTouched(true);
+    setSubmitted(true);
 
     const validation = validateTargetUrl(baseUrl);
     if (!name.trim() || validation) {
@@ -120,9 +125,11 @@ export function NewTargetPage() {
       />
       <div className="two-column-layout">
         <form className="panel form-grid" onSubmit={submit} noValidate>
+          {submitted && summaryErrors.length ? <ErrorSummary errors={summaryErrors} /> : null}
+          <RequiredLegend />
           <div>
             <label className="field-label" htmlFor="target-name">
-              Target name <span aria-hidden="true" style={{ color: "var(--danger)" }}>*</span>
+              Target name <RequiredMark required />
             </label>
             <input
               id="target-name"
@@ -133,28 +140,19 @@ export function NewTargetPage() {
                 setName(event.target.value);
                 setError(null);
               }}
-              onBlur={() => setTouched(true)}
+              onBlur={() => blur("name")}
               placeholder="e.g. Local storefront or Staging cluster"
               required
               autoFocus
-              aria-invalid={nameError ? "true" : "false"}
+              aria-invalid={nameError ? true : undefined}
               aria-describedby={nameError ? "target-name-error" : undefined}
             />
-            {nameError ? (
-              <p
-                id="target-name-error"
-                className="form-error"
-                role="alert"
-                style={{ marginTop: "4px" }}
-              >
-                {nameError}
-              </p>
-            ) : null}
+            {nameError ? <FieldError id="target-name-error">{nameError}</FieldError> : null}
           </div>
 
           <div>
             <label className="field-label" htmlFor="environment">
-              Environment
+              Environment <RequiredMark required={false} />
             </label>
             <select
               id="environment"
@@ -174,7 +172,7 @@ export function NewTargetPage() {
 
           <div>
             <label className="field-label" htmlFor="base-url">
-              Base URL <span aria-hidden="true" style={{ color: "var(--danger)" }}>*</span>
+              Base URL <RequiredMark required />
             </label>
             <input
               id="base-url"
@@ -186,23 +184,14 @@ export function NewTargetPage() {
                 setBaseUrl(event.target.value);
                 setError(null);
               }}
-              onBlur={() => setTouched(true)}
+              onBlur={() => blur("url")}
               placeholder="https://staging.example.com/"
               required
               spellCheck={false}
-              aria-invalid={urlError ? "true" : "false"}
+              aria-invalid={urlError ? true : undefined}
               aria-describedby={urlError ? "base-url-error" : undefined}
             />
-            {urlError ? (
-              <p
-                id="base-url-error"
-                className="form-error"
-                role="alert"
-                style={{ marginTop: "4px" }}
-              >
-                {urlError}
-              </p>
-            ) : null}
+            {urlError ? <FieldError id="base-url-error">{urlError}</FieldError> : null}
             {pathNotice && !urlError ? (
               <p className="panel-note" style={{ marginTop: "4px" }}>
                 {pathNotice}
@@ -210,25 +199,21 @@ export function NewTargetPage() {
             ) : null}
           </div>
 
-          <label className="toggle-row">
-            <span>
-              <strong>Protected experience (requires login)</strong>
-              <small>
-                Enable this if test journeys must pass authentication screens. Testers will coordinate with human assistance or use configured credentials. Identity provider origins (e.g. OAuth/SSO) must still be authorized in network policy.
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={requiresAuth}
-              disabled={busy}
-              onChange={(event) => setRequiresAuth(event.target.checked)}
-            />
-          </label>
+          {/* Was a switch-shaped .toggle-row; the value is saved
+              with the form (createTarget), nothing applies on flip —
+              so it is a checkbox, not a switch (Spec 3 §4 ruling). */}
+          <Checkbox
+            checked={requiresAuth}
+            disabled={busy}
+            onChange={(event) => setRequiresAuth(event.target.checked)}
+            label={<strong>Protected experience (requires login)</strong>}
+            hint="Enable this if test journeys must pass authentication screens. Testers will coordinate with human assistance or use configured credentials. Identity provider origins (e.g. OAuth/SSO) must still be authorized in network policy."
+          />
 
           {error ? (
-            <p className="form-error" role="alert">
+            <InlineAlert severity="error" title="Could not create target" role="alert">
               {error}
-            </p>
+            </InlineAlert>
           ) : null}
 
           <div className="form-actions">
@@ -243,7 +228,7 @@ export function NewTargetPage() {
             <button
               className="primary-button"
               type="submit"
-              disabled={busy || !name.trim() || !baseUrl.trim()}
+              disabled={busy}
             >
               {busy ? (
                 <>
@@ -258,7 +243,7 @@ export function NewTargetPage() {
 
         <aside className="info-card">
           <span className="info-icon">
-            <Icon name="shield" size={18} />
+            <Icon name="shield" size={20} />
           </span>
           <h2>Two-step security boundary</h2>
           <p>

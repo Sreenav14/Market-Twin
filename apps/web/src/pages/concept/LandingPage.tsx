@@ -1,4 +1,6 @@
 import React, { useRef, useState } from "react";
+import { Tab, TabPanel, Tabs } from "../../components/ui/Tabs";
+import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   CANONICAL_DEMO_DATA,
   ConceptPayload,
@@ -6,7 +8,7 @@ import {
 import {
   ConceptFooter,
   ConceptHeader,
-  CoverageBar,
+  OutcomeCoverageBar,
   ProofChip,
   TriptychSignature,
   UrlIntakeForm,
@@ -47,7 +49,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         color: "var(--ink)",
       }}
     >
-      {/* 1. Announcement Bar 36px (Plum #221244) */}
+      {/* 1. Announcement Bar 36px (ink band) */}
       <div
         className="w-full flex items-center justify-center font-meta-label transition-colors"
         style={{
@@ -145,64 +147,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <TriptychSignature compact={true} />
           </div>
 
-          {/* Segmented Hero Control (Tablist) */}
+          {/* Hero tabs — ONE tabs recipe (ui/Tabs, APG via Radix) */}
           <div style={{ marginTop: "40px" }}>
-            <div
-              role="tablist"
-              aria-label="Getting started options"
-              className="flex items-center gap-2 border-b"
-              style={{ borderColor: "var(--line)", marginBottom: "16px", flexWrap: "wrap" }}
+            <Tabs
+              label="Getting started options"
+              value={heroTab}
+              onValueChange={(value) => setHeroTab(value as "app" | "example" | "how")}
+              tabs={<>
+                <Tab value="app">I have an app to test</Tab>
+                <Tab value="example">Show me an example</Tab>
+                <Tab value="how">How it works</Tab>
+              </>}
             >
-              {[
-                { id: "app", label: "I have an app to test" },
-                { id: "example", label: "Show me an example" },
-                { id: "how", label: "How it works" },
-              ].map((t) => {
-                const isSelected = heroTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    role="tab"
-                    aria-selected={isSelected}
-                    onClick={() => setHeroTab(t.id as "app" | "example" | "how")}
-                    className="font-button-label transition-colors"
-                    style={{
-                      minHeight: "44px",
-                      padding: "12px 16px",
-                      background: "none",
-                      border: "none",
-                      color: isSelected ? "var(--ink)" : "var(--ink-2)",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                      boxShadow: isSelected ? "inset 0 -2px 0 var(--ink)" : "none",
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Panel 1 */}
-            {heroTab === "app" && (
-              <p className="font-body-small" style={{ color: "var(--ink-2)" }}>
-                One address is enough. No setup, no scripts.
-              </p>
-            )}
-
-            {/* Panel 2 */}
-            {heroTab === "example" && (
-              <p className="font-body-small" style={{ color: "var(--ink-2)" }}>
-                See our Thread &amp; Co. test below with 18 attempts, 3 viewpoints, and 2 confirmed problems.
-              </p>
-            )}
-
-            {/* Panel 3 */}
-            {heroTab === "how" && (
-              <p className="font-body-small" style={{ color: "var(--ink-2)" }}>
-                1. Tell us the address. 2. Testers try it for real. 3. You get one honest answer.
-              </p>
-            )}
+              <TabPanel value="app">
+                <p className="font-body-small" style={{ color: "var(--ink-2)" }}>
+                  One address is enough. No setup, no scripts.
+                </p>
+              </TabPanel>
+              <TabPanel value="example">
+                <p className="font-body-small" style={{ color: "var(--ink-2)" }}>
+                  See our Thread &amp; Co. test below with 18 attempts, 3 viewpoints, and 2 confirmed problems.
+                </p>
+              </TabPanel>
+              <TabPanel value="how">
+                <p className="font-body-small" style={{ color: "var(--ink-2)" }}>
+                  1. Tell us the address. 2. Testers try it for real. 3. You get one honest answer.
+                </p>
+              </TabPanel>
+            </Tabs>
           </div>
         </div>
       </section>
@@ -276,50 +248,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               boxShadow: "var(--shadow-soft)",
             }}
           >
-            {/* WAI-ARIA tablist inside example card */}
-            <div
-              role="tablist"
-              aria-label="Example test views"
-              className="flex items-center gap-2 border-b"
-              style={{ borderColor: "var(--line)", marginBottom: "24px", overflowX: "auto", flexWrap: "nowrap" }}
-            >
-              <button
-                role="tab"
-                aria-selected={exampleCardTab === "results"}
-                onClick={() => setExampleCardTab("results")}
-                className="font-button-label transition-colors"
-                style={{
-                  minHeight: "44px",
-                  padding: "12px 16px",
-                  background: "none",
-                  border: "none",
-                  whiteSpace: "nowrap",
-                  color: exampleCardTab === "results" ? "var(--ink)" : "var(--ink-2)",
-                  cursor: "pointer",
-                  boxShadow: exampleCardTab === "results" ? "inset 0 -2px 0 var(--ink)" : "none",
-                }}
-              >
-                Test results
-              </button>
-              <button
-                role="tab"
-                aria-selected={exampleCardTab === "watch"}
-                onClick={() => setExampleCardTab("watch")}
-                className="font-button-label transition-colors"
-                style={{
-                  minHeight: "44px",
-                  padding: "12px 16px",
-                  background: "none",
-                  border: "none",
-                  whiteSpace: "nowrap",
-                  color: exampleCardTab === "watch" ? "var(--ink)" : "var(--ink-2)",
-                  cursor: "pointer",
-                  boxShadow: exampleCardTab === "watch" ? "inset 0 -2px 0 var(--ink)" : "none",
-                }}
-              >
-                Watch live
-              </button>
-            </div>
+            {/* Example views — same tabs recipe (Radix list; panels below) */}
+            <TabsPrimitive.Root value={exampleCardTab} onValueChange={(value) => setExampleCardTab(value as "results" | "watch")}>
+              <TabsPrimitive.List className="mt-tabs-list" aria-label="Example test views" style={{ marginBottom: "24px" }}>
+                <TabsPrimitive.Trigger value="results" className="mt-tab">Test results</TabsPrimitive.Trigger>
+                <TabsPrimitive.Trigger value="watch" className="mt-tab">Watch live</TabsPrimitive.Trigger>
+              </TabsPrimitive.List>
+            </TabsPrimitive.Root>
 
             {exampleCardTab === "results" ? (
               <div>
@@ -333,7 +268,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 />
 
                 <div style={{ marginBottom: "24px" }}>
-                  <CoverageBar totals={data.totals} />
+                  <OutcomeCoverageBar totals={data.totals} />
                 </div>
 
                 <div className="flex flex-col gap-4" style={{ marginBottom: "24px" }}>
@@ -398,7 +333,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 7. How It Works Section (Peach Band #FCE8D8) */}
+      {/* 7. How It Works Section (sunken band) */}
       <section style={{ padding: "88px 0", backgroundColor: "var(--band-peach)" }}>
         <div className="concept-marketing-container">
           <h2
@@ -457,7 +392,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 8. What You Get Section (Lilac Band #E4E0F5) */}
+      {/* 8. What You Get Section (sunken band) */}
       <section style={{ padding: "88px 0", backgroundColor: "var(--band-lilac)" }}>
         <div className="concept-marketing-container">
           <h2
@@ -535,7 +470,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 10. Final CTA Section (Rose Band #F9DEE4) — same two-column posture as the hero */}
+      {/* 10. Final CTA Section (sunken band) — same two-column posture as the hero */}
       <section style={{ padding: "88px 0", backgroundColor: "var(--band-rose)" }}>
         <div className="concept-marketing-container">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">

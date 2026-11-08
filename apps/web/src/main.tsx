@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { LucideProvider } from "lucide-react";
 import { queryClient } from "./lib/query";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 
@@ -17,7 +18,9 @@ if (rootElement === null) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RenderErrorBoundary><App /></RenderErrorBoundary>
+      <LucideProvider strokeWidth={1.7}>
+        <RenderErrorBoundary><App /></RenderErrorBoundary>
+      </LucideProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

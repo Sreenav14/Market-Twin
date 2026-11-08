@@ -16,6 +16,8 @@ import {
   Spinner,
 } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
+import { ErrorSummary, FieldError, RequiredMark } from "../../components/ui/Field";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { ApiError, api, type TestingDepth } from "../../lib/api";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { AppShellContext } from "../../layouts/AppShell";
@@ -64,6 +66,10 @@ export function NewRunPage() {
   const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Punish late, reward early (Spec 3 §6.2/§6.4): a failed submit
+  // produces an error summary plus per-field messages; each message
+  // clears the instant its value is fixed (derived, not stored).
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   const submitting = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -129,14 +135,21 @@ export function NewRunPage() {
       setHumanActionApprovals(false);
     }
   }, [approvalsEligible, executionMode]);
+  const briefError = submitAttempted && brief.trim().length < 10
+    ? "Describe your goal in at least 10 characters."
+    : null;
+  const targetError = submitAttempted && !target
+    ? "Choose an authorized target to continue."
+    : null;
+  const summaryErrors = [
+    ...(targetError ? [{ targetId: "test-target", message: targetError }] : []),
+    ...(briefError ? [{ targetId: "test-brief", message: briefError }] : []),
+  ];
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;
+    setSubmitAttempted(true);
     if (!target || brief.trim().length < 10) {
-      setError(
-        "Choose an authorized target and describe your goal in at least 10 characters.",
-      );
-      textarea.current?.focus();
       return;
     }
     submitting.current = true;
@@ -279,21 +292,24 @@ export function NewRunPage() {
     <>
       {header}
       <div className="study-create-layout">
-        <form className="study-composer" onSubmit={submit}>
+        <form className="study-composer" onSubmit={submit} noValidate>
+          {submitAttempted && summaryErrors.length ? <ErrorSummary errors={summaryErrors} /> : null}
           <section className="run-create-zone" aria-labelledby="what-to-test-heading">
             <h2 id="what-to-test-heading">What to test</h2>
           <div className="composer-knowledge form-grid">
-            <label htmlFor="test-name">Test name <span className="muted">Optional</span></label>
+            <label htmlFor="test-name">Test name <RequiredMark required={false} /></label>
             <input className="text-input" id="test-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} placeholder="For example, Pricing clarity" aria-describedby="test-name-help" />
             <p className="form-help" id="test-name-help">A short label for lists and activity. A unique incremental ID is assigned automatically. Your testing goal stays separate below.</p>
           </div>
           <div className="composer-knowledge form-grid">
-            <label htmlFor="test-target">{executionMode === "discovery_contract_v1" ? "App" : "Application target"}</label>
+            <label htmlFor="test-target">{executionMode === "discovery_contract_v1" ? "App" : "Application target"} <RequiredMark required /></label>
             <select
               id="test-target"
               name="target"
               value={target?.id || ""}
               onChange={(event) => setTargetId(event.target.value)}
+              aria-invalid={!target || targetError ? true : undefined}
+              aria-describedby={!target || targetError ? "test-target-error" : undefined}
             >
               {!target ? <option value="" disabled>Choose an authorized target</option> : null}
               {targets.map((item) => (
@@ -302,9 +318,9 @@ export function NewRunPage() {
                 </option>
               ))}
             </select>
-            {!target ? <p role="alert" className="form-error">The requested target is unavailable or not authorized. Choose an authorized target to continue.</p> : null}
+            {!target ? <FieldError id="test-target-error">The requested target is unavailable or not authorized. Choose an authorized target to continue.</FieldError> : targetError ? <FieldError id="test-target-error">{targetError}</FieldError> : null}
             <p className="form-help">
-              <ShieldCheck size={15} aria-hidden="true" />{" "}
+              <ShieldCheck size={16} aria-hidden="true" />{" "}
               {target ? "Authorized" : "Target required"}
             </p>
           </div>
@@ -317,7 +333,7 @@ export function NewRunPage() {
           </div> : null}
           <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
-              {executionMode === "discovery_contract_v1" ? "What is this app and who is it for?" : "Your testing goal"}
+              {executionMode === "discovery_contract_v1" ? "What is this app and who is it for?" : "Your testing goal"} <RequiredMark required />
             </label>
             <textarea
               ref={textarea}
@@ -331,8 +347,8 @@ export function NewRunPage() {
               placeholder="Can a first-time customer understand our pricing and choose the right plan?…"
               maxLength={4000}
               rows={6}
-              aria-describedby={error ? "brief-help brief-count brief-error" : "brief-help brief-count"}
-              aria-invalid={Boolean(error)}
+              aria-describedby={briefError ? "brief-help brief-count brief-error" : "brief-help brief-count"}
+              aria-invalid={briefError ? true : undefined}
             />
             <div className="composer-meta">
               <span id="brief-help">
@@ -347,6 +363,7 @@ export function NewRunPage() {
               {examples.map((example) => (
                 <button
                   key={example.title}
+                  className="brief-example-button"
                   type="button"
                   onClick={() => {
                     setBrief(example.brief);
@@ -385,12 +402,12 @@ export function NewRunPage() {
             <h2 id="test-knowledge-heading" className="visually-hidden">Knowledge for this test <span className="muted">Optional</span></h2>
             <p className="form-help">Select approved knowledge attached to this application before testers are created. You can select up to 10 sets.</p>
             {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
-              <p className="form-error" role="alert">Could not load knowledge. <Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button></p>
+              <InlineAlert severity="error" title="Could not load knowledge" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button>} />
             ) : knowledgeState.data.filter((entry) => entry.status === "approved").length ? (
               <fieldset className="knowledge-choices"><legend className="visually-hidden">Select approved knowledge sets</legend>
                 {knowledgeState.data.filter((entry) => entry.status === "approved").map((entry) => (
                   <div className="knowledge-choice" key={entry.id}>
-                    <label><input type="checkbox" checked={knowledgeIds.includes(entry.id)} disabled={busy || (knowledgeIds.length >= 10 && !knowledgeIds.includes(entry.id))} onChange={(event) => setKnowledgeIds((previous) => event.target.checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id))} /><span><strong>{entry.name}</strong><span className="muted">{entry.knowledge_count} knowledge items · {entry.artifact_count} artifacts · {entry.skill_count} Skills</span></span></label>
+                    <label><input type="checkbox" className="mt-checkbox" checked={knowledgeIds.includes(entry.id)} disabled={busy || (knowledgeIds.length >= 10 && !knowledgeIds.includes(entry.id))} onChange={(event) => setKnowledgeIds((previous) => event.target.checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id))} /><span><strong>{entry.name}</strong><span className="muted">{entry.knowledge_count} knowledge items · {entry.artifact_count} artifacts · {entry.skill_count} Skills</span></span></label>
                     <Link className="text-link" to={`/knowledge/review/${entry.id}`} target="_blank" rel="noreferrer">View<span className="visually-hidden"> {entry.name} in a new tab</span></Link>
                   </div>
                 ))}
@@ -409,7 +426,7 @@ export function NewRunPage() {
             <section className="composer-knowledge" aria-labelledby="action-approval-heading">
               <h2 id="action-approval-heading">Sensitive action approval</h2>
               <label className="knowledge-choice">
-                <input type="checkbox" checked={humanActionApprovals} disabled={busy} onChange={(event) => setHumanActionApprovals(event.target.checked)} />
+                <input type="checkbox" className="mt-checkbox" checked={humanActionApprovals} disabled={busy} onChange={(event) => setHumanActionApprovals(event.target.checked)} />
                 <span>Pause for owner/admin approval before eligible Save, Create, Update, Publish, or form Submit actions</span>
               </label>
               <p className="form-help">Each approval is bound to one exact action and authorized target, expires after ten minutes, and can be used once. Delete, payment, messaging, role, permission, and data-export actions stay blocked.</p>
@@ -424,7 +441,7 @@ export function NewRunPage() {
             <section className="composer-knowledge" aria-labelledby="fixture-approval-heading">
               <h2 id="fixture-approval-heading">Synthetic fixture assertions</h2>
               <label className="knowledge-choice">
-                <input type="checkbox" checked={syntheticFixtureApproval} disabled={busy} onChange={(event) => setSyntheticFixtureApproval(event.target.checked)} />
+                <input type="checkbox" className="mt-checkbox" checked={syntheticFixtureApproval} disabled={busy} onChange={(event) => setSyntheticFixtureApproval(event.target.checked)} />
                 <span>Enable the local registration fixture and its one-time Save approval</span>
               </label>
               <p className="form-help">This enables fixture-grounded assertions and the synthetic Save approval on an all-loopback local/test target.</p>
@@ -432,10 +449,11 @@ export function NewRunPage() {
           ) : null}
           </section>
           </details>
+          {briefError ? <FieldError id="brief-error">{briefError}</FieldError> : null}
           {error ? (
-            <p id="brief-error" className="composer-error" role="alert">
+            <InlineAlert severity="error" title="Could not create the test" role="alert">
               {error}
-            </p>
+            </InlineAlert>
           ) : null}
           <div className="composer-footer">
             <p>{executionMode === "discovery_contract_v1" ? "Testers explore first. You approve the tests before they run." : "Creates a draft. Start it when you're ready."}</p>

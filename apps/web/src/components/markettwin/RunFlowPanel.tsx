@@ -1,3 +1,4 @@
+import { InlineAlert } from "../ui/Feedback";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { request, type TestRunStatus } from "../../lib/api";
@@ -39,7 +40,7 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
         <summary><span>{isFeaturePlan ? "Feature execution" : "Test execution"}</span>{flow.data ? <span className="run-flow-count">{journeyCount} {isFeaturePlan ? "cases" : journeyCount === 1 ? "journey" : "journeys"}</span> : null}</summary>
         <div className="run-flow-body">
           {flow.isPending ? <p className="muted" role="status">Loading test execution…</p> : flow.isError ? (
-            <div><p className="error-text" role="alert">Could not load test execution: {flow.error.message}</p><button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button></div>
+            <InlineAlert severity="error" title="Could not load test execution" role="alert" action={<button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button>}>{flow.error.message}</InlineAlert>
           ) : flow.data ? (
             <>
               {isFeaturePlan ? <p className="run-flow-caption">Discovery prepares the authorized page before planning. Each planned feature case runs once; discovery is not counted as a case. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}

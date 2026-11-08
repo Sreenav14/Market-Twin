@@ -18,6 +18,11 @@ interface MegaMenuProps {
 }
 
 export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }) => {
+  /* Navigation, not a menu (Phase 2c, Spec 2 \u00a71.1): APG disclosure
+     semantics \u2014 aria-expanded trigger, plain nav panel, Esc returns
+     focus, click-outside closes, Tab moves through the items. The
+     role="menu"/menuitem model was removed: it promised arrow-key
+     menu behaviour this navigation list does not owe. */
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -142,7 +147,6 @@ export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }
       <button
         ref={triggerRef}
         type="button"
-        aria-haspopup="true"
         aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className="font-button-label inline-flex items-center gap-1.5 transition-colors"
@@ -172,9 +176,8 @@ export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }
       {/* Mega panel (desktop) */}
       {isOpen && (
         <div
-          role="menu"
           aria-label="Product navigation"
-          className="hidden md:grid grid-cols-3 absolute left-0 z-50"
+          className="hidden md:grid grid-cols-3 absolute left-0 z-50" data-nav-disclosure="true"
           style={{
             top: "calc(100% + 8px)",
             width: "880px",
@@ -200,7 +203,6 @@ export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }
                 <button
                   key={item.name}
                   type="button"
-                  role="menuitem"
                   onClick={item.onClick}
                   className="text-left w-full transition-colors flex flex-col p-2"
                   style={{
@@ -248,7 +250,6 @@ export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }
       {/* Accordion panel (mobile ≤900px) */}
       {isOpen && (
         <div
-          role="menu"
           aria-label="Product navigation"
           className="md:hidden flex flex-col gap-4 absolute left-0 z-50 p-4"
           style={{
@@ -272,7 +273,6 @@ export const MegaMenu: React.FC<MegaMenuProps> = ({ onNavigate, className = "" }
                 <button
                   key={item.name}
                   type="button"
-                  role="menuitem"
                   onClick={item.onClick}
                   className="text-left py-2 font-grid-cell"
                   style={{

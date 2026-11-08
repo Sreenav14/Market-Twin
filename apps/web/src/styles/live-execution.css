@@ -1,3 +1,22 @@
+/* Soft Proof (Phase 2a): the ONE scoped dark surface — the live evidence
+   stage. Stage tokens exist ONLY under .evidence-stage (the human browser
+   viewer root); nothing else in the app may consume them. No pure black.
+   Captions/chrome around the stage stay on the light theme. */
+.evidence-stage {
+  --stage-bg: #101214;
+  --stage-surface: #17191C;
+  --stage-border: #26292D;
+  --stage-ink: #F2F1ED;
+  --stage-ink-2: #B9BDB9;
+  --stage-accent: #4FB3C4;
+}
+.evidence-stage .hbv-canvas-wrap { background: var(--stage-bg); border-color: var(--stage-border); }
+.evidence-stage .hbv-toolbar { background: var(--stage-surface); border-color: var(--stage-border); color: var(--stage-ink); }
+.evidence-stage .hbv-status { color: var(--stage-ink-2); }
+.evidence-stage .hbv-scroll-controls { background: var(--stage-surface); border-color: var(--stage-border); }
+.evidence-stage .hbv-scroll-controls .hbv-scroll-button { color: var(--stage-ink); }
+.evidence-stage .hbv-scroll-controls span { color: var(--stage-ink-2); }
+
 .live-execution { min-width: 0; }
 .live-execution-heading { display: flex; justify-content: space-between; gap: 24px; padding: 8px 0 12px; }
 .live-execution-heading > div { min-width: 0; }
@@ -29,19 +48,18 @@
 .hbv-status { margin: 0; font-size: 13px; color: var(--text-2); flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
 .hbv-connect-btn { flex-shrink: 0; }
 .hbv-viewport { display: grid; grid-template-columns: minmax(0, 1fr) 32px; width: 100%; min-width: 0; }
-.hbv-canvas-wrap { position: relative; width: 100%; min-height: 480px; aspect-ratio: 16 / 10; background: #000; border-left: 1px solid var(--border); overflow: hidden; overscroll-behavior: contain; }
+.hbv-canvas-wrap { position: relative; width: 100%; min-height: 480px; aspect-ratio: 16 / 10; background: var(--stage-bg, #101214); border-left: 1px solid var(--border); overflow: hidden; overscroll-behavior: contain; }
 .hbv-canvas-wrap[data-ready="true"] { min-height: 0; aspect-ratio: var(--viewer-aspect-ratio, 16 / 10); }
 .hbv-canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; cursor: url("/cursors/browser-arrow.svg") 3 2, default; }
 .hbv-scroll-controls { display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; border-inline: 1px solid var(--border); background: var(--surface-muted); }
-.hbv-scroll-controls button { min-height: 44px; width: 100%; border: 0; background: transparent; color: var(--text); cursor: pointer; font-size: 18px; }
-.hbv-scroll-controls button:hover:not(:disabled) { background: var(--surface-hover); }
-.hbv-scroll-controls button:disabled { color: var(--text-3); cursor: default; }
+.hbv-scroll-controls .hbv-scroll-button { min-height: 44px; width: 100%; border: 0; background: transparent; color: var(--text); cursor: pointer; font-size: 18px; }
+.hbv-scroll-controls .hbv-scroll-button:hover:not(:disabled) { background: var(--surface-hover); }
+.hbv-scroll-controls .hbv-scroll-button:disabled { color: var(--text-3); cursor: default; }
 .hbv-scroll-controls span { writing-mode: vertical-rl; align-self: center; font-size: 11px; color: var(--text-2); }
 .hbv-text-input { flex: 1 1 200px; min-width: 0; padding: 6px 10px; border: 1px solid var(--field-border); border-radius: var(--mt-radius-sm); background: var(--surface); color: var(--text); font-size: 14px; }
 .hbv-text-input:disabled { opacity: 0.4; cursor: not-allowed; }
 .hbv-leave-btn { flex-shrink: 0; }
 .human-browser-viewer .viewer-keyboard-help { font-size: 12px; color: var(--text-2); margin: 4px 0 0; padding: 0 12px; }
-.human-browser-viewer .viewer-keyboard-help kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--mt-radius-sm); font-size: 11px; background: var(--surface-muted); }
 /* In the live-browser-column context, the viewer still takes full column width */
 .live-browser-column .human-browser-viewer { margin-top: 12px; }
 /* Active control section: full-width, not constrained by study-summary grid */
@@ -70,10 +88,7 @@
 @media (prefers-reduced-motion: reduce) {
   .live-activity-list > li { animation: none; }
 }
-.live-activity-list li + li { border-top: 1px solid var(--border); }
-.live-activity-list button { display: grid; gap: 5px; width: 100%; padding: 12px 8px; text-align: left; border: 0; background: transparent; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
-.live-activity-list button:hover, .live-activity-list button[aria-pressed="true"] { background: var(--surface-hover); }
-.live-activity-list time, .live-activity-list span { color: var(--text-2); font-size: 14px; }
+/* activity row geometry removed — states.css .mt-timeline-row (Phase 2e). */
 .live-step-inspector { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px; }
 .live-step-inspector p { font-size: 14px; }
 /* Hallmark signed-in SI-9: journeys are cards, not hairline rows — the

@@ -1,3 +1,4 @@
+import { InlineAlert } from "../../components/ui/Feedback";
 import { statusLabel } from "../../lib/format";
 import { useEffect } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -11,10 +12,12 @@ import {
   journeyBlocker,
   journeyIdentity,
 } from "../../lib/journeyPresentation";
-import { ArtifactEvidence } from "./FindingDetailPage";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 import { ExecutionBadge, OutcomeBadge, StatusBadge } from "../../components/ui/StatusBadge";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
+import { Breadcrumbs } from "../../components/ui/Breadcrumbs";
+import { LoadMore } from "../../components/ui/Pagination";
 
 export function JourneyDetailPage() {
   const { run, user } = useOutletContext<RunContext>();
@@ -96,9 +99,14 @@ export function JourneyDetailPage() {
 
   return (
     <section>
-      <Link className="back-link" to={`/runs/${run.id}/journeys`}>
-        ← All journeys
-      </Link>
+      <Breadcrumbs
+        items={[
+          { label: "Tests", to: "/runs" },
+          { label: "Run overview", to: `/runs/${run.id}/overview` },
+          { label: "Journeys", to: `/runs/${run.id}/journeys` },
+          { label: identity.discovery ? "Browser discovery" : journey.mission_title },
+        ]}
+      />
 
       <div className="journey-header-card">
         <div className="section-heading">
@@ -164,9 +172,7 @@ export function JourneyDetailPage() {
       </div>
 
       {journey.error_message ? (
-        <p className="error-text" role="alert">
-          {journey.error_message}
-        </p>
+        <InlineAlert severity="error" title={journey.error_message} />
       ) : null}
       {blocker ? (
         <p className="inline-note" role="status">
@@ -209,14 +215,12 @@ export function JourneyDetailPage() {
             />
           ) : null}
           {query.hasNextPage ? (
-            <Button
-              variant="secondary"
-              disabled={query.isFetchingNextPage}
-              onClick={() => void query.fetchNextPage()}
-              style={{ marginTop: "14px", width: "100%" }}
-            >
-              {query.isFetchingNextPage ? "Loading…" : "Load more steps"}
-            </Button>
+            <LoadMore
+              noun="steps"
+              loaded={steps.length}
+              loading={query.isFetchingNextPage}
+              onLoad={() => void query.fetchNextPage()}
+            />
           ) : null}
           {query.isFetchNextPageError ? (
             <ErrorPanel

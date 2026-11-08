@@ -304,11 +304,6 @@
   justify-items: end;
 }
 
-.evidence-artifact .artifact-preview {
-  max-width: min(100%, 320px);
-  max-height: 220px;
-  object-fit: contain;
-}
 
 .human-browser-viewer canvas:focus-visible {
   outline: 3px solid var(--primary);

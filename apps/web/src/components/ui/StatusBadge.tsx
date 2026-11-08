@@ -42,14 +42,14 @@ export function StatusPill({
 }: {
   tone: BadgeTone;
   glyph?: string;
-  size?: "sm";
+  size?: "sm" | "lg";
   title?: string;
   role?: string;
   children: React.ReactNode;
 }) {
   return (
     <span
-      className={`status-badge status-${tone}${size === "sm" ? " status-badge-sm" : ""}`}
+      className={`status-badge status-${tone}${size === "sm" ? " status-badge-sm" : size === "lg" ? " status-badge-lg" : ""}`}
       title={title}
       role={role}
     >
@@ -97,4 +97,21 @@ export function ExecutionBadge({ status }: { status: string }) {
 
 export function SeverityBadge({ severity }: { severity: FindingSeverity }) {
   return <StatusBadge status={severity} source="severity" />;
+}
+
+/**
+ * Badge triad, other two members (Spec 1 §4): a neutral tag is a
+ * CATEGORY — outlined, never tinted, so it can never be mistaken for a
+ * status pill. A count badge is a NUMBER only, capped at 99+.
+ */
+export function NeutralTag({ children }: { children: React.ReactNode }) {
+  return <span className="tag-neutral">{children}</span>;
+}
+
+export function CountBadge({ count, label }: { count: number; label: string }) {
+  return (
+    <span className="count-badge" role="img" aria-label={`${count} ${label}`}>
+      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
+    </span>
+  );
 }

@@ -8,6 +8,8 @@ import {
   Spinner,
 } from "../../components/ui/StateViews";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { ErrorSummary, FieldError, RequiredLegend, RequiredMark } from "../../components/ui/Field";
+import { InlineAlert } from "../../components/ui/Feedback";
 import { ApiError, TargetAuthorization, api } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
 import { isAuthorizationActive } from "../../lib/targetAuthorization";
@@ -42,6 +44,17 @@ export function TargetAuthorizationPage() {
 
   const [basis, setBasis] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [authSubmitted, setAuthSubmitted] = useState(false);
+  const basisError = authSubmitted && basis.trim().length < 10
+    ? "Enter the reason you are authorized to test this target, in at least 10 characters."
+    : null;
+  const confirmError = authSubmitted && !confirmed
+    ? "Confirm that you are authorized to test every destination in this scope."
+    : null;
+  const authSummaryErrors = [
+    ...(basisError ? [{ targetId: "basis", message: basisError }] : []),
+    ...(confirmError ? [{ targetId: "attest-confirm", message: confirmError }] : []),
+  ];
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +79,7 @@ export function TargetAuthorizationPage() {
 
   async function authorize(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAuthSubmitted(true);
     if (basis.trim().length < 10 || !confirmed || busy) return;
 
     setBusy(true);
@@ -203,31 +217,9 @@ export function TargetAuthorizationPage() {
                 </dl>
               </div>
             ) : expired ? (
-              <div className="error-panel" role="alert" style={{ margin: "12px 0 0" }}>
-                <div>
-                  <strong>Authorization has expired</strong>
-                  <span>
-                    The previous authorization for this target expired on{" "}
-                    {authorization?.expires_at
-                      ? new Date(authorization.expires_at).toLocaleString()
-                      : "an earlier date"}
-                    . Test execution is blocked until an Owner or Admin re-authorizes.
-                  </span>
-                </div>
-              </div>
+              <InlineAlert severity="error" title="Authorization has expired">The previous authorization for this target expired on {authorization?.expires_at ? new Date(authorization.expires_at).toLocaleString() : "an earlier date"}. Test execution is blocked until an Owner or Admin re-authorizes.</InlineAlert>
             ) : revoked ? (
-              <div className="error-panel" role="alert" style={{ margin: "12px 0 0" }}>
-                <div>
-                  <strong>Authorization was revoked</strong>
-                  <span>
-                    Authorization was revoked on{" "}
-                    {authorization?.revoked_at
-                      ? new Date(authorization.revoked_at).toLocaleString()
-                      : "record"}
-                    . Running tests cannot execute against this target.
-                  </span>
-                </div>
-              </div>
+              <InlineAlert severity="error" title="Authorization was revoked">Authorization was revoked on {authorization?.revoked_at ? new Date(authorization.revoked_at).toLocaleString() : "record"}. Running tests cannot execute against this target.</InlineAlert>
             ) : (
               <div className="panel-note" style={{ margin: "8px 0 0" }}>
                 No active authorization is on record for this target. Browser testers are strictly blocked from dispatching requests to this target.
@@ -277,9 +269,11 @@ export function TargetAuthorizationPage() {
               </div>
 
               <form className="form-grid" onSubmit={authorize} noValidate>
+                {authSubmitted && authSummaryErrors.length ? <ErrorSummary errors={authSummaryErrors} /> : null}
+                <RequiredLegend />
                 <div>
                   <label className="field-label" htmlFor="basis">
-                    Why are you authorized to test this target? <span aria-hidden="true" style={{ color: "var(--danger)" }}>*</span>
+                    Why are you authorized to test this target? <RequiredMark required />
                   </label>
                   <textarea
                     id="basis"
@@ -294,34 +288,44 @@ export function TargetAuthorizationPage() {
                     minLength={10}
                     maxLength={2000}
                     required
+                    aria-invalid={basisError ? true : undefined}
+                    aria-describedby={basisError ? "basis-help basis-error" : "basis-help"}
                   />
-                  <small style={{ color: "var(--text-3)", fontSize: "11px" }}>
+                  <p className="form-help" id="basis-help">
                     Minimum 10 characters required for audit compliance.
-                  </small>
+                  </p>
+                  {basisError ? <FieldError id="basis-error">{basisError}</FieldError> : null}
                 </div>
 
+                <div>
                 <label className="confirmation-row">
                   <input
+                    id="attest-confirm"
+                    className="mt-checkbox"
                     type="checkbox"
                     checked={confirmed}
                     onChange={(event) => setConfirmed(event.target.checked)}
+                    aria-invalid={confirmError ? true : undefined}
+                    aria-describedby={confirmError ? "attest-confirm-error" : undefined}
                   />
                   <span>
                     <strong>I formally attest</strong> that I own, operate, or have explicit organizational permission to execute browser tests on every destination in this execution scope.
                   </span>
                 </label>
+                {confirmError ? <FieldError id="attest-confirm-error">{confirmError}</FieldError> : null}
+                </div>
 
                 {error ? (
-                  <p className="form-error" role="alert">
+                  <InlineAlert severity="error" title="Could not authorize target" role="alert">
                     {error}
-                  </p>
+                  </InlineAlert>
                 ) : null}
 
                 <div className="form-actions">
                   <button
                     className="primary-button"
                     type="submit"
-                    disabled={busy || basis.trim().length < 10 || !confirmed}
+                    disabled={busy}
                   >
                     {busy ? (
                       <>
@@ -368,6 +372,7 @@ export function TargetAuthorizationPage() {
               <label className="confirmation-row" style={{ marginBottom: "14px" }}>
                 <input
                   type="checkbox"
+                  className="mt-checkbox"
                   checked={confirmRevoke}
                   onChange={(e) => setConfirmRevoke(e.target.checked)}
                 />
@@ -377,9 +382,9 @@ export function TargetAuthorizationPage() {
               </label>
 
               {error ? (
-                <p className="form-error" role="alert" style={{ marginBottom: "12px" }}>
+                <InlineAlert severity="error" title="Could not revoke authorization" role="alert">
                   {error}
-                </p>
+                </InlineAlert>
               ) : null}
 
               <button
@@ -403,7 +408,7 @@ export function TargetAuthorizationPage() {
         {/* Sidebar / Governance Explanation */}
         <aside className="info-card">
           <span className="info-icon">
-            <Icon name="shield" size={18} />
+            <Icon name="shield" size={20} />
           </span>
           <h2>Live authorization checks</h2>
           <p>

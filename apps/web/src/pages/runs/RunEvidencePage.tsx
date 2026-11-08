@@ -5,7 +5,7 @@ import { ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { Button } from "../../components/ui/button";
 import { RunContext } from "../../layouts/RunLayout";
 import { api, request, type JourneyDetail } from "../../lib/api";
-import { ArtifactEvidence } from "./FindingDetailPage";
+import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
 
 export function RunEvidencePage() {
   const { run, user } = useOutletContext<RunContext>();
