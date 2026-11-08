@@ -127,6 +127,9 @@ export function ApplicationOverviewPage() {
         <Link className="tab-link" to={`/applications/${application.id}/runs`}>
           Tests{runsState.status === "ready" ? ` (${runsState.data.length})` : ""}
         </Link>
+        <Link className="tab-link" to={`/applications/${application.id}/personas`}>
+          Personas
+        </Link>
       </div>
 
       <section className="section-block" aria-labelledby="app-targets-heading">

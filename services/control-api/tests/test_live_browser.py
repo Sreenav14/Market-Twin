@@ -1,6 +1,5 @@
 """Observation is authorized twice, read-only, bounded and never cached."""
 
-import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -14,7 +13,6 @@ from markettwin_control_api.persistence.repositories.live_browser_repository imp
     LiveBrowserRepository,
     decode_cursor,
 )
-from markettwin_control_api.services.hitl_worker_client import BrowserObservationUnavailable
 
 
 @pytest.fixture
@@ -45,9 +43,8 @@ def observation(monkeypatch):
     monkeypatch.setattr(live_browser, "ExecutionPauseRepository", lambda _: SimpleNamespace(
         latest=AsyncMock(return_value=None),
     ))
-    worker = SimpleNamespace(observe_frame=AsyncMock(return_value=b"\xff\xd8fixture\xff\xd9"))
+    worker = SimpleNamespace()
     monkeypatch.setattr(live_browser, "worker_client", lambda: worker)
-    monkeypatch.setattr(live_browser, "_frame_slots", asyncio.Semaphore(4))
     app = FastAPI()
     app.include_router(live_browser.router)
     return SimpleNamespace(app=app, run_id=run_id, actor=actor, browser=browser,
@@ -70,7 +67,6 @@ async def test_metadata_is_durable_identity_without_control_grant(observation):
         observation.browser["browser_session_id"],
     )
     assert "ticket" not in response.text and "lease" not in response.text
-    observation.worker.observe_frame.assert_not_awaited()
 
 
 async def test_no_open_browser_is_explicitly_null(observation):
@@ -78,82 +74,18 @@ async def test_no_open_browser_is_explicitly_null(observation):
     assert (await call(observation)).json()["browser"] is None
 
 
-async def test_unauthorized_run_hides_activity_and_frame(observation):
+async def test_unauthorized_run_hides_activity(observation):
     observation.repository.authorized_run.return_value = None
-    for suffix in ("", "/frame"):
-        response = await call(observation, suffix, {
-            "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-        })
-        assert response.status_code == 404
-        assert response.headers["cache-control"] == "no-store"
+    response = await call(observation, "", {
+        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
+    })
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
     observation.repository.activity.assert_not_awaited()
-    observation.worker.observe_frame.assert_not_awaited()
-
-
-@pytest.mark.parametrize("change", [None, {"generation": 1}, {"viewer_state": "suppressed"}])
-async def test_stale_closed_or_protected_browser_never_calls_worker(observation, change):
-    observation.repository.selected_browser.return_value = (
-        None if change is None else {**observation.browser, **change}
-    )
-    response = await call(observation, "/frame", {
-        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-    })
-    assert response.status_code == 409
-    observation.worker.observe_frame.assert_not_awaited()
-
-
-async def test_frame_binds_exact_identity_and_rechecks_after_capture(observation):
-    response = await call(observation, "/frame", {
-        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-    })
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/jpeg"
-    assert response.headers["cache-control"] == "no-store"
-    assert observation.repository.authorized_run.await_count == 2
-    observation.worker.observe_frame.assert_awaited_once_with(
-        actor_id=observation.actor,
-        browser_session_id=observation.browser["browser_session_id"],
-        execution_id=observation.browser["execution_id"],
-        journey_id=observation.browser["journey_id"], generation=0,
-    )
-
-
-@pytest.mark.parametrize("race", ["authorization", "generation", "control", "closed"])
-async def test_capture_races_discard_bytes(observation, race):
-    run = observation.repository.authorized_run.return_value
-    if race == "authorization":
-        observation.repository.authorized_run.side_effect = [run, None]
-    else:
-        selection = (None if race == "closed" else {**observation.browser,
-                     **({"generation": 1} if race == "generation"
-                        else {"viewer_state": "suppressed", "control_state": "human"})})
-        observation.repository.selected_browser.side_effect = [observation.browser, selection]
-    response = await call(observation, "/frame", {
-        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-    })
-    assert response.status_code in {404, 409}
-    assert b"fixture" not in response.content
-    assert response.headers["cache-control"] == "no-store"
-
-
-@pytest.mark.parametrize("failure,status", [
-    (BrowserObservationUnavailable("private secret"), 409), (RuntimeError("private secret"), 503),
-])
-async def test_worker_failure_is_safe_and_not_a_product_failure(observation, failure, status):
-    observation.worker.observe_frame.side_effect = failure
-    response = await call(observation, "/frame", {
-        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-    })
-    assert response.status_code == status
-    assert "secret" not in response.text
-    assert response.headers["cache-control"] == "no-store"
 
 
 async def test_no_input_endpoint_and_invalid_cursor_is_sanitized(observation):
     assert (await call(observation, method="POST")).status_code == 405
-    response = await call(observation, "/frame", {"browser_session_id": "SECRET_CANARY"})
-    assert response.status_code == 422
-    assert "SECRET_CANARY" not in response.text
     observation.repository.activity.side_effect = ValueError("SECRET_CANARY")
     response = await call(observation, params={"cursor": "bad"})
     assert response.status_code == 422 and "SECRET_CANARY" not in response.text
@@ -201,27 +133,6 @@ async def test_activity_is_redacted_stable_and_refreshed_without_a_watermark():
     assert all(run_id in query.compile().params.values() for query in queries)
 
 
-async def test_session_revocation_during_capture_discards_frame(observation, monkeypatch):
-    monkeypatch.setattr(live_browser, "get_authenticated_user_id", AsyncMock(side_effect=[
-        observation.actor, HTTPException(401, "Invalid or expired session."),
-    ]))
-    response = await call(observation, "/frame", {
-        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-    })
-    assert response.status_code == 401
-    assert b"fixture" not in response.content
-    assert response.headers["cache-control"] == "no-store"
-
-
-async def test_busy_observer_fails_without_stalling_execution(observation, monkeypatch):
-    monkeypatch.setattr(live_browser, "_frame_slots", asyncio.Semaphore(0))
-    response = await call(observation, "/frame", {
-        "browser_session_id": observation.browser["browser_session_id"], "generation": 0,
-    })
-    assert response.status_code == 429
-    observation.worker.observe_frame.assert_not_awaited()
-
-
 async def test_historical_cursor_never_filters_the_latest_refresh():
     import base64
     import json
@@ -248,3 +159,67 @@ async def test_historical_cursor_never_filters_the_latest_refresh():
     assert {item["id"] for item in second["items"]} == {"step:19", "step:20"}
     opaque = base64.urlsafe_b64encode(json.dumps([now.isoformat(), "step:20"]).encode()).decode()
     assert decode_cursor(opaque) == (now, "step:20")
+
+
+
+async def _post_grant(state) -> httpx.Response:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=state.app), base_url="http://local",
+    ) as client:
+        return await client.post(f"/api/v1/test-runs/{state.run_id}/live-grant")
+
+
+async def test_live_grant_issues_an_observer_ticket(observation) -> None:
+    observation.worker.issue_observer_grant = AsyncMock(
+        return_value=SimpleNamespace(
+            ticket="t" * 40, viewer_url="wss://viewer.example/hitl-viewer",
+        )
+    )
+    response = await _post_grant(observation)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ticket"] == "t" * 40
+    assert payload["viewer_url"].startswith("wss://")
+    assert payload["browser"]["browser_session_id"] == str(
+        observation.browser["browser_session_id"]
+    )
+    kwargs = observation.worker.issue_observer_grant.await_args.kwargs
+    assert kwargs["generation"] == 0
+    assert kwargs["actor_id"] == observation.actor
+
+
+async def test_live_grant_refuses_a_suppressed_browser(observation) -> None:
+    observation.repository.selected_browser = AsyncMock(
+        return_value={**observation.browser, "viewer_state": "suppressed"}
+    )
+    observation.worker.issue_observer_grant = AsyncMock()
+    response = await _post_grant(observation)
+    assert response.status_code == 409
+    observation.worker.issue_observer_grant.assert_not_awaited()
+
+
+async def test_live_grant_is_503_when_the_worker_is_unconfigured(
+    observation, monkeypatch,
+) -> None:
+    def unavailable():
+        raise HTTPException(503, "The supervised browser owner is unavailable.")
+
+    monkeypatch.setattr(live_browser, "worker_client", unavailable)
+    response = await _post_grant(observation)
+    assert response.status_code == 503
+
+
+def test_board_item_banner_reads_the_running_item() -> None:
+    run = SimpleNamespace(configuration_snapshot={
+        "harness_state": {
+            "items": {
+                "i1": {"name": "Save", "role": "button", "status": "worked"},
+                "i2": {"name": "Pay", "role": "button", "status": "running"},
+                "i3": {"name": "Help", "role": "link", "status": "pending"},
+            },
+        },
+    })
+    banner = LiveBrowserRepository._board_item(run)  # type: ignore[arg-type]
+    assert banner == {"index": 2, "total": 3, "label": "Pay (button)"}
+    run.configuration_snapshot["harness_state"]["items"]["i2"]["status"] = "worked"
+    assert LiveBrowserRepository._board_item(run) is None  # type: ignore[arg-type]

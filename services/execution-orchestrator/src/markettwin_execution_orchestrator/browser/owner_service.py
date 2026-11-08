@@ -13,7 +13,7 @@ from typing import Annotated, Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -21,7 +21,10 @@ from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHa
 from markettwin_execution_orchestrator.browser.owner import OwnerLease, ViewerRejectedError
 from markettwin_execution_orchestrator.browser.owner_registry import BrowserOwnerRegistry
 from markettwin_execution_orchestrator.browser.viewer_authority import DatabaseViewerAuthority
-from markettwin_execution_orchestrator.browser.viewer_gateway import ViewerGateway
+from markettwin_execution_orchestrator.browser.viewer_gateway import (
+    ObserverLease,
+    ViewerGateway,
+)
 
 _active_service: HITLWorkerService | None = None
 
@@ -70,8 +73,13 @@ class RevokeEnvelope(BaseModel):
     generation: Annotated[int, Field(ge=1)]
 
 
-class ObserveEnvelope(BaseModel):
-    """Exact read-only frame request; carries no input, URL, script or protocol method."""
+class ObserverGrantEnvelope(BaseModel):
+    """Exact read-only watch grant request (U-P3-01).
+
+    The worker issues a
+    single-use observer ticket only for this exact browser + generation
+    after the authority confirms the actor may observe it right now.
+    """
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -243,9 +251,9 @@ class HITLWorkerService:
                 raise HTTPException(status_code=409, detail="Browser handoff unavailable") from None
             return {"revoked": True}
 
-        async def observe(request: Request) -> Response:
-            envelope = await parse_signed(request, ObserveEnvelope)
-            assert isinstance(envelope, ObserveEnvelope)
+        async def observer_grant(request: Request) -> dict[str, str]:
+            envelope = await parse_signed(request, ObserverGrantEnvelope)
+            assert isinstance(envelope, ObserverGrantEnvelope)
             try:
                 handle = self._registry.handle(
                     session_id=envelope.browser_session_id,
@@ -256,25 +264,28 @@ class HITLWorkerService:
                     envelope.actor_id, handle, envelope.generation,
                 ):
                     raise ViewerRejectedError("Observation is unavailable.")
-                image = await self._registry.observe(handle, generation=envelope.generation)
-                if not await self._authority.observer_permitted(
-                    envelope.actor_id, handle, envelope.generation,
-                ):
-                    raise ViewerRejectedError("Observation is unavailable.")
+                lease = ObserverLease(
+                    handle=handle,
+                    actor_id=envelope.actor_id,
+                    generation=envelope.generation,
+                    # The gateway re-checks permission + expiry on every
+                    # frame; the lease bounds one watch session, and the
+                    # web client re-grants on reconnect.
+                    expires_at=datetime.now(UTC) + timedelta(minutes=15),
+                )
+                ticket = await self._gateway.issue_observer_ticket(
+                    envelope.actor_id, lease,
+                )
             except Exception:
                 raise HTTPException(
                     status_code=409, detail="Browser observation unavailable.",
                 ) from None
-            return Response(
-                content=image,
-                media_type="image/jpeg",
-                headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
-            )
+            return {"ticket": ticket, "viewer_url": self._viewer_url}
 
         router.add_api_route("/leases", attach, methods=["POST"])
         router.add_api_route("/leases/renew", renew, methods=["POST"])
         router.add_api_route("/leases/revoke", revoke, methods=["POST"])
-        router.add_api_route("/observe", observe, methods=["POST"])
+        router.add_api_route("/observer-grants", observer_grant, methods=["POST"])
         return router
 
     async def wait_for_revoke(self, request_id: UUID, timeout_seconds: float) -> None:

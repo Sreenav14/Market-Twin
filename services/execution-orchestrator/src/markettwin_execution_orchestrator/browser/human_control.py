@@ -21,7 +21,13 @@ async def begin_human_control(session: JourneyBrowserSession) -> None:
     session.control_mode = "quiescing"
     session.capture_enabled = False
     session.authenticated_session = True
-    session.event_buffer.clear_all()
+    # Unified Room sessions keep their event buffer (U-P4-03): the
+    # buffer holds agent-period console/page errors collected BEFORE
+    # the handover — evidence the run legitimately owns. The human's
+    # own period stays private because capture is disabled while the
+    # human drives. Legacy sessions keep the historical clear.
+    if not session.is_room:
+        session.event_buffer.clear_all()
     try:
         await stop_trace(session)
     except Exception:

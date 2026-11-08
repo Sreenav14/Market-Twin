@@ -57,12 +57,12 @@ it("uses actual workspace tests and sends contract approval to its owner review 
   await screen.findByRole("heading", { name: "Home", level: 1 });
   // The heading renders during loading since SI-8; wait for the data row.
   const trayRegion = await screen.findByRole("region", { name: /NEEDS YOU/ });
-  const trayLinks = within(trayRegion).getAllByRole("link", { name: /Review the tests/ })
+  const trayLinks = within(trayRegion).getAllByRole("link", { name: /Open the run/ })
     .map((link) => link.getAttribute("href"));
-  expect(trayLinks).toEqual(expect.arrayContaining(["/runs/review/contract", "/runs/replay/contract"]));
+  expect(trayLinks).toEqual(expect.arrayContaining(["/runs/review/overview", "/runs/replay/overview"]));
   expect(screen.getByRole("link", { name: /Watch live/ })).toHaveAttribute("href", "/runs/live/watch");
   expect(screen.getByRole("link", { name: /Read the full result/ })).toHaveAttribute("href", "/runs/done/results");
-  expect(screen.getAllByRole("link", { name: /Review the tests/ })).toHaveLength(2);
+  expect(screen.getAllByRole("link", { name: /Open the run/ })).toHaveLength(2);
   const drafts = within(screen.getByRole("region", { name: "RECENT TESTS" }));
   expect(drafts.getByRole("link", { name: /Review draft/ })).toHaveAttribute("href", "/runs/draft/overview");
   expect(drafts.queryByText(/Approved source replay/)).not.toBeInTheDocument();

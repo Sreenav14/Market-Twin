@@ -121,9 +121,81 @@ class LiveBrowserRepository:
                 return None
         return run
 
+    @staticmethod
+    def _board_item(run: TestRun) -> dict[str, object] | None:
+        """The Board item being worked right now (U-P3-03).
+
+        Position is the item's place in Board order; the banner reads
+        'Item N of M'. None when no item is running (between items, or
+        the run has no Board).
+        """
+
+        snapshot = run.configuration_snapshot or {}
+        board = snapshot.get("harness_state")
+        if not isinstance(board, dict):
+            return None
+        raw_items = board.get("items")
+        docs: list[dict[str, object]] = []
+        if isinstance(raw_items, dict):
+            docs = [v for v in raw_items.values() if isinstance(v, dict)]
+        elif isinstance(raw_items, list):
+            docs = [v for v in raw_items if isinstance(v, dict)]
+        for position, doc in enumerate(docs, start=1):
+            if doc.get("status") == "running":
+                name = str(doc.get("name", "")).strip()
+                role = str(doc.get("role", "")).strip()
+                label = f"{name} ({role})" if name and role else (name or role or "Item")
+                return {"index": position, "total": len(docs), "label": label}
+        return None
+
+    async def _room_browser(
+        self, *, run: TestRun, browser_session_id: UUID | None,
+    ) -> dict[str, object] | None:
+        """Select the run's Room browser (unified engine, U-P3-03).
+
+        The Room row points at its current borrowing execution (kept in
+        step by the driver), so one join to AgentExecution yields the
+        live identity; the PersonaJourney joins of the legacy path do
+        not apply to Room anchors.
+        """
+
+        statement = (
+            select(BrowserSession, AgentExecution)
+            .join(AgentExecution, AgentExecution.id == BrowserSession.execution_id)
+            .where(
+                BrowserSession.test_run_id == run.id,
+                BrowserSession.session_role == "room",
+                BrowserSession.state == "open",
+            )
+            .order_by(BrowserSession.created_at.desc(), BrowserSession.id.desc())
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+        if browser_session_id is not None:
+            statement = statement.where(BrowserSession.id == browser_session_id)
+        row = (await self.session.execute(statement)).one_or_none()
+        if row is None:
+            return None
+        browser, execution = row
+        active = run.status in {"planning", "running", "awaiting_human"}
+        available = (active and execution.status == "running"
+                     and browser.control_mode in {"agent", "human_pending"})
+        return {
+            "browser_session_id": browser.id, "execution_id": execution.id,
+            "journey_id": execution.journey_id, "generation": browser.control_generation,
+            "control_state": browser.control_mode,
+            "viewer_state": "available" if available else "suppressed",
+            "journey_title": "Live test session",
+            "requesting_agent": "Lead tester",
+            "board_item": self._board_item(run),
+        }
+
     async def selected_browser(
         self, *, run: TestRun, browser_session_id: UUID | None,
     ) -> dict[str, object] | None:
+        room = await self._room_browser(run=run, browser_session_id=browser_session_id)
+        if room is not None:
+            return room
         statement = (
             select(BrowserSession, AgentExecution, PersonaJourney,
                    RunMission.title, RunPersona.name)
@@ -152,6 +224,7 @@ class LiveBrowserRepository:
             "viewer_state": "available" if available else "suppressed",
             "journey_title": "Browser discovery" if discovery else title,
             "requesting_agent": "Browser discovery" if discovery else persona,
+            "board_item": None,
         }
 
     async def activity(

@@ -1,7 +1,7 @@
 """Test Run HTTP endpoints."""
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from ipaddress import ip_address
 from typing import Literal
 from urllib.parse import urlsplit
@@ -18,11 +18,10 @@ from markettwin_database.repositories import (
 )
 from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
-from markettwin_shared.discovery_contract import DiscoveryMap, TestContract
+from markettwin_shared.run_kind import resolve_run_kind
 from pydantic import (
     BaseModel,
     Field,
-    ValidationError,
     field_validator,
     model_validator,
 )
@@ -67,6 +66,10 @@ class CreateTestRunRequest(BaseModel):
     execution_mode: Literal[
         "legacy_persona", "deep_feature_v1", "discovery_contract_v1", "harness_v1",
     ] = "discovery_contract_v1"
+    # Unified run kind (U-P0-05): the only way to choose what a new
+    # run does. The execution_mode field above survives only as a
+    # rejection sentinel — sending it is a 422 (validator below, U-P8).
+    run_kind: Literal["explore_test", "persona", "slop"] | None = None
     frozen_contract_source_run_id: UUID | None = None
     knowledge_entry_ids: list[UUID] = Field(default_factory=list[UUID], max_length=10)
     auth_verification: AuthVerificationPolicy | None = None
@@ -77,6 +80,21 @@ class CreateTestRunRequest(BaseModel):
     sensitive_action_rules: list[SensitiveActionRule] = Field(
         default_factory=list[SensitiveActionRule], max_length=16,
     )
+
+    @model_validator(mode="after")
+    def retired_fields_are_rejected(self) -> "CreateTestRunRequest":
+        # U-P8: the execution_mode alias and frozen-contract replay
+        # were retired with the legacy engines. Sending either is a
+        # 422 — new runs are created with run_kind only.
+        if "execution_mode" in self.model_fields_set:
+            raise ValueError(
+                "execution_mode was retired; create runs with run_kind instead."
+            )
+        if self.frozen_contract_source_run_id is not None:
+            raise ValueError(
+                "Frozen contract replay was retired with the legacy engines."
+            )
+        return self
 
     @model_validator(mode="after")
     def authentication_mode_requires_policy(self) -> "CreateTestRunRequest":
@@ -142,6 +160,9 @@ class TestRunResponse(BaseModel):
     synthetic_fixture_approval_enabled: bool = False
     human_action_approvals_enabled: bool = False
     status_reason: str | None = None
+    # The run's unified kind, always resolved (column first, legacy
+    # snapshot translation as fallback) so clients never guess.
+    run_kind: str = "explore_test"
 
 
 def build_target_snapshot(
@@ -192,6 +213,10 @@ def test_run_response(
         ),
         synthetic_fixture_approval_enabled=test_run.synthetic_fixture_approval_enabled,
         human_action_approvals_enabled=test_run.human_action_approvals_enabled,
+        run_kind=resolve_run_kind(
+            run_kind_column=test_run.run_kind,
+            configuration_snapshot=test_run.configuration_snapshot,
+        ),
     )
 
 
@@ -325,10 +350,14 @@ async def create_test_run(
                         ),
                     )
 
+            # The unified kind for this run (U-P8: run_kind only; the
+            # legacy alias is rejected at validation above).
+            effective_run_kind = payload.run_kind or "explore_test"
+
             if payload.synthetic_fixture_approval:
                 loopback_origins = _all_origins_loopback(target)
                 if (
-                    payload.execution_mode not in {"deep_feature_v1", "discovery_contract_v1"}
+                    effective_run_kind != "explore_test"
                     or target.environment not in {"local", "test"}
                     or not loopback_origins
                 ):
@@ -341,9 +370,7 @@ async def create_test_run(
                     )
 
             if payload.human_action_approvals and (
-                payload.execution_mode not in {"deep_feature_v1", "discovery_contract_v1"}
-                or (payload.execution_mode == "discovery_contract_v1"
-                    and not payload.synthetic_fixture_approval)
+                effective_run_kind not in {"explore_test", "persona"}
                 or target.environment not in {"local", "development", "test", "staging"}
             ):
                 raise HTTPException(
@@ -364,8 +391,6 @@ async def create_test_run(
             }
             if payload.name is not None:
                 configuration_snapshot["test_name"] = payload.name
-            if payload.execution_mode in {"deep_feature_v1", "discovery_contract_v1", "harness_v1"}:
-                configuration_snapshot["execution_mode"] = payload.execution_mode
             if payload.auth_verification is not None:
                 configuration_snapshot["auth_mode"] = payload.auth_mode or "required"
                 configuration_snapshot["auth_verification"] = payload.auth_verification.model_dump(
@@ -411,80 +436,6 @@ async def create_test_run(
                 database_session
             )
 
-            source_contract: TestContract | None = None
-            source_hash: str | None = None
-            if payload.frozen_contract_source_run_id is not None:
-                if payload.execution_mode != "discovery_contract_v1":
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail="Frozen contract replay requires discovery_contract_v1 mode.",
-                    )
-                source_run = await repository.get_for_user(
-                    test_run_id=payload.frozen_contract_source_run_id,
-                    user_id=user_id,
-                )
-                if (
-                    source_run is None
-                    or source_run.created_by_user_id != user_id
-                    or source_run.workspace_id != workspace.workspace_id
-                    or source_run.application_id != application_id
-                    or source_run.target_id != target.target_id
-                ):
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="Frozen contract source run not found for this target.",
-                    )
-                source_snapshot = source_run.configuration_snapshot
-                try:
-                    source_contract = TestContract.model_validate(
-                        source_snapshot.get("frozen_contract")
-                    )
-                except ValidationError as exc:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Frozen contract source is invalid.",
-                    ) from exc
-                source_hash = source_contract.content_hash()
-                try:
-                    source_discovery = DiscoveryMap.model_validate(
-                        source_snapshot.get("discovery_map")
-                    )
-                except ValidationError as exc:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Frozen contract source has no valid discovery map.",
-                    ) from exc
-                if (
-                    source_run.status != "completed"
-                    or source_snapshot.get("execution_mode") != "discovery_contract_v1"
-                    or source_run.target_snapshot != target_snapshot
-                    or source_contract.status != "frozen"
-                    or source_contract.test_run_id != source_run.test_run_id
-                    or source_contract.approved_by_user_id != user_id
-                    or source_contract.approved_at is None
-                    or source_snapshot.get("frozen_contract_hash") != source_hash
-                    or any(
-                        not journey.excluded and not assertion.excluded
-                        and assertion.origin != "user_approved"
-                        for journey in source_contract.journeys
-                        for assertion in journey.assertions
-                    )
-                ):
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Frozen contract source failed integrity or approval checks.",
-                    )
-                configuration_snapshot["frozen_contract_source_run_id"] = str(
-                    source_run.test_run_id
-                )
-                configuration_snapshot["frozen_contract_source_hash"] = source_hash
-                configuration_snapshot["discovery_map"] = source_discovery.model_dump(
-                    mode="json"
-                )
-                configuration_snapshot["discovery_map_source_run_id"] = str(
-                    source_run.test_run_id
-                )
-
             test_run = await repository.create(
                 workspace_id=application.workspace_id,
                 application_id=application_id,
@@ -498,23 +449,8 @@ async def create_test_run(
                 human_action_approvals_enabled=(
                     payload.human_action_approvals or payload.synthetic_fixture_approval
                 ),
+                run_kind=effective_run_kind,
             )
-            if source_contract is not None and source_hash is not None:
-                replay_contract = source_contract.model_copy(
-                    update={"test_run_id": test_run.test_run_id, "status": "approved"}
-                )
-                configuration_snapshot["test_contract"] = replay_contract.model_dump(
-                    mode="json"
-                )
-                await repository.update_configuration_snapshot(
-                    test_run_id=test_run.test_run_id,
-                    configuration_snapshot=configuration_snapshot,
-                )
-                test_run = replace(
-                    test_run,
-                    configuration_snapshot=configuration_snapshot,
-                )
-
     return test_run_response(test_run)
 
 
@@ -652,6 +588,277 @@ async def get_test_run(
     return test_run_response(test_run, reason)
 
 
+class BoardItemResponse(BaseModel):
+    """One item on a run's Board (U-P1-07)."""
+
+    item_id: str
+    state_id: str
+    case_id: str
+    role: str
+    name: str
+    status: str
+    blocker: str | None = None
+    attempts: int = 0
+    page_url: str = ""
+
+
+class BoardResponse(BaseModel):
+    """A run's Board: counts plus every item, in Board order."""
+
+    run_id: UUID
+    run_status: str
+    run_kind: str
+    total: int
+    counts: dict[str, int]
+    items: list[BoardItemResponse]
+
+
+def _board_response(test_run: TestRunRecord) -> BoardResponse:
+    board = test_run.configuration_snapshot.get("harness_state")
+    if not isinstance(board, dict):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This run has no board.",
+        )
+    states = board.get("states")
+    state_urls: dict[str, str] = {}
+    if isinstance(states, dict):
+        for state_id, state_doc in states.items():
+            if isinstance(state_doc, dict):
+                state_urls[str(state_id)] = str(state_doc.get("url", ""))
+    raw_items = board.get("items")
+    item_docs: list[dict[str, object]] = []
+    if isinstance(raw_items, dict):
+        item_docs = [v for v in raw_items.values() if isinstance(v, dict)]
+    elif isinstance(raw_items, list):
+        item_docs = [v for v in raw_items if isinstance(v, dict)]
+    counts: dict[str, int] = {}
+    items: list[BoardItemResponse] = []
+    for doc in item_docs:
+        item_status = str(doc.get("status", "pending"))
+        counts[item_status] = counts.get(item_status, 0) + 1
+        items.append(BoardItemResponse(
+            item_id=str(doc.get("item_id", "")),
+            state_id=str(doc.get("state_id", "")),
+            case_id=str(doc.get("case_id", "")),
+            role=str(doc.get("role", "")),
+            name=str(doc.get("name", "")),
+            status=item_status,
+            blocker=(str(doc["blocker"]) if doc.get("blocker") else None),
+            attempts=int(doc.get("attempts", 0) or 0),
+            page_url=state_urls.get(str(doc.get("state_id", "")), ""),
+        ))
+    return BoardResponse(
+        run_id=test_run.test_run_id,
+        run_status=test_run.status,
+        run_kind=resolve_run_kind(
+            run_kind_column=test_run.run_kind,
+            configuration_snapshot=test_run.configuration_snapshot,
+        ),
+        total=len(items),
+        counts=counts,
+        items=items,
+    )
+
+
+async def _get_run_for_board(test_run_id: UUID, request: Request) -> TestRunRecord:
+    user_id = await get_authenticated_user_id(request=request)
+    database = get_database_runtime(request)
+    async with database.session_factory() as database_session:
+        async with database_session.begin():
+            repository = TestRunRepository(database_session)
+            test_run = await repository.get_for_user(
+                test_run_id=test_run_id, user_id=user_id,
+            )
+    if test_run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test run not found.",
+        )
+    return test_run
+
+
+@router.get(
+    "/api/v1/test-runs/{test_run_id}/board",
+    response_model=BoardResponse,
+)
+async def get_test_run_board(
+    test_run_id: UUID,
+    request: Request,
+) -> BoardResponse:
+    """Return the run's Board (the live work list of the unified engine)."""
+
+    test_run = await _get_run_for_board(test_run_id, request)
+    return _board_response(test_run)
+
+
+@router.post(
+    "/api/v1/test-runs/{test_run_id}/board/items/{item_id}/disable",
+    response_model=BoardResponse,
+)
+async def disable_board_item(
+    test_run_id: UUID,
+    item_id: str,
+    request: Request,
+) -> BoardResponse:
+    """Turn off one pending Board item (owner_disabled).
+
+    Only while the run is not testing: the engine owns Board writes
+    during a run, and a mid-run edit here would be overwritten by the
+    engine's next Board persist.
+    """
+
+    user_id = await get_authenticated_user_id(request=request)
+    database = get_database_runtime(request)
+    async with database.session_factory() as database_session:
+        async with database_session.begin():
+            repository = TestRunRepository(database_session)
+            test_run = await repository.get_for_user(
+                test_run_id=test_run_id, user_id=user_id,
+            )
+            if test_run is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Test run not found.",
+                )
+            if test_run.status == "running":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Items can be turned off only while the run "
+                        "is not testing."
+                    ),
+                )
+            snapshot = test_run.configuration_snapshot
+            board = snapshot.get("harness_state")
+            if not isinstance(board, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="This run has no board.",
+                )
+            # The GET path serves both stored shapes (dict keyed by
+            # item id, or a plain list); disabling must accept the
+            # same shapes and write back in the shape it found.
+            raw_items = board.get("items")
+            list_shaped = isinstance(raw_items, list)
+            if isinstance(raw_items, dict):
+                items = dict(raw_items)
+            elif list_shaped:
+                items = {
+                    str(doc.get("item_id", "")): doc
+                    for doc in raw_items
+                    if isinstance(doc, dict)
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="This run has no board.",
+                )
+            item_doc = items.get(item_id)
+            if not isinstance(item_doc, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Board item not found.",
+                )
+            if item_doc.get("status") != "pending":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Only a pending item can be turned off.",
+                )
+            updated_item = {**item_doc, "status": "owner_disabled"}
+            if list_shaped:
+                new_items: object = [
+                    updated_item
+                    if isinstance(doc, dict)
+                    and str(doc.get("item_id", "")) == item_id
+                    else doc
+                    for doc in raw_items
+                ]
+            else:
+                items[item_id] = updated_item
+                new_items = items
+            updated_snapshot = {
+                **snapshot, "harness_state": {**board, "items": new_items},
+            }
+            await repository.update_configuration_snapshot(
+                test_run_id=test_run_id,
+                configuration_snapshot=updated_snapshot,
+            )
+            test_run = replace(
+                test_run, configuration_snapshot=updated_snapshot,
+            )
+    return _board_response(test_run)
+
+
+class ParkResponse(BaseModel):
+    """A parked run's live-park window (U-P4)."""
+
+    parked_at: str
+    deadline_at: str
+
+
+@router.post(
+    "/api/v1/test-runs/{test_run_id}/park/extend",
+    response_model=ParkResponse,
+)
+async def extend_park(
+    test_run_id: UUID,
+    request: Request,
+) -> ParkResponse:
+    """Extend a parked run's deadline, up to 30 minutes from the park.
+
+    The window is owner time, not agent time: extending never resumes
+    the run and never changes any item — it only moves the deadline
+    the countdown shows.
+    """
+
+    user_id = await get_authenticated_user_id(request=request)
+    database = get_database_runtime(request)
+    async with database.session_factory() as database_session:
+        async with database_session.begin():
+            repository = TestRunRepository(database_session)
+            test_run = await repository.get_for_user(
+                test_run_id=test_run_id, user_id=user_id,
+            )
+            if test_run is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Test run not found.",
+                )
+            park = test_run.configuration_snapshot.get("harness_park")
+            if test_run.status != "awaiting_human" or not isinstance(park, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This run is not parked.",
+                )
+            try:
+                parked_at = datetime.fromisoformat(str(park["parked_at"]))
+            except (KeyError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This run is not parked.",
+                ) from None
+            cap = parked_at + timedelta(minutes=30)
+            now = datetime.now(UTC)
+            if now >= cap:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="The park window is exhausted; resume or end the run.",
+                )
+            new_deadline = min(now + timedelta(minutes=15), cap)
+            updated_park = {**park, "deadline_at": new_deadline.isoformat()}
+            updated_snapshot = {
+                **test_run.configuration_snapshot, "harness_park": updated_park,
+            }
+            await repository.update_configuration_snapshot(
+                test_run_id=test_run_id,
+                configuration_snapshot=updated_snapshot,
+            )
+    return ParkResponse(
+        parked_at=str(park["parked_at"]), deadline_at=new_deadline.isoformat(),
+    )
+
+
 @router.post(
     "/api/v1/test-runs/{test_run_id}/start",
     response_model=TestRunResponse,
@@ -693,11 +900,16 @@ async def start_test_run(
                 )
 
             if test_run.configuration_snapshot.get("frozen_contract_source_run_id"):
+                # The contract start endpoint this check once pointed
+                # to was retired with the legacy engines (U-P8); the
+                # honest answer now is that such a run can never be
+                # started, not a direction to a missing endpoint.
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        "Replay-created contract runs must be started through the "
-                        "contract start endpoint."
+                        "This run was created by the retired contract "
+                        "replay flow and can no longer be started. "
+                        "Create a new run instead."
                     ),
                 )
 

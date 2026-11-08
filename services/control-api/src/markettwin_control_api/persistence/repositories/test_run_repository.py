@@ -33,6 +33,7 @@ class TestRunRecord:
     test_number: int | None = None
     synthetic_fixture_approval_enabled: bool = False
     human_action_approvals_enabled: bool = False
+    run_kind: str | None = None
 
 
 def _to_record(
@@ -56,6 +57,7 @@ def _to_record(
         started_at=test_run.started_at,
         completed_at=test_run.completed_at,
         test_number=test_run.test_number,
+        run_kind=test_run.run_kind,
     )
 
 
@@ -79,6 +81,7 @@ class TestRunRepository:
         configuration_snapshot: dict[str, object],
         synthetic_fixture_approval_enabled: bool = False,
         human_action_approvals_enabled: bool = False,
+        run_kind: str | None = None,
     ) -> TestRunRecord:
         """Create a draft test run."""
 
@@ -92,6 +95,7 @@ class TestRunRepository:
             configuration_snapshot=configuration_snapshot,
             synthetic_fixture_approval_enabled=synthetic_fixture_approval_enabled,
             human_action_approvals_enabled=human_action_approvals_enabled,
+            run_kind=run_kind,
         )
 
         self._session.add(test_run)
@@ -202,21 +206,3 @@ class TestRunRepository:
             .values(configuration_snapshot=configuration_snapshot)
         )
         await self._session.execute(statement)
-
-    async def queue_if_awaiting_human_or_draft(
-        self,
-        *,
-        test_run_id: UUID,
-    ) -> TestRunRecord | None:
-        statement = (
-            update(TestRun)
-            .where(
-                TestRun.id == test_run_id,
-                TestRun.status.in_(["draft", "awaiting_human"]),
-            )
-            .values(status="queued")
-            .returning(TestRun)
-        )
-        result = await self._session.execute(statement)
-        test_run = result.scalar_one_or_none()
-        return None if test_run is None else _to_record(test_run)

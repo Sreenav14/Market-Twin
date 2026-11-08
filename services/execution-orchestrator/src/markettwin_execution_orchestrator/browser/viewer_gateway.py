@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import secrets
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -77,6 +78,11 @@ class ViewerGateway:
         self._local_ws = allow_local_ws
         self._tickets: dict[str, _Ticket] = {}
         self._observer_tickets: dict[str, _ObserverTicket] = {}
+        # Watch instrumentation (U-P3-04): frames actually sent per
+        # observed browser, so fps is measured, never assumed.
+        self._observer_frames: dict[UUID, int] = {}
+        self._observer_started_at: dict[UUID, float] = {}
+        self._last_observer_stats: dict[str, float | int] = {}
         self._connected: set[UUID] = set()
         self._observing: set[UUID] = set()
         self._attached: set[UUID] = set()
@@ -140,6 +146,27 @@ class ViewerGateway:
         )
         return token
 
+    def observer_stats(self) -> dict[str, float | int]:
+        """Frames/second of the live (or last) observer stream (U-P3-04).
+
+        With several streams observed over the gateway's life, the
+        live one is the most recently started; reporting the first
+        entry ever recorded would freeze the number on a dead stream.
+        """
+
+        if self._observer_started_at:
+            session_id, started = max(
+                self._observer_started_at.items(), key=lambda item: item[1],
+            )
+            seconds = max(time.monotonic() - started, 0.001)
+            frames = self._observer_frames.get(session_id, 0)
+            return {
+                "frames": frames,
+                "seconds": round(seconds, 3),
+                "fps": round(frames / seconds, 2),
+            }
+        return dict(self._last_observer_stats)
+
     async def _observer_permitted(self, actor_id: UUID, lease: ObserverLease) -> bool:
         if lease.expires_at <= datetime.now(UTC):
             return False
@@ -165,6 +192,8 @@ class ViewerGateway:
         ):
             raise ViewerRejectedError("Viewer authority is unavailable.")
         self._observing.add(lease.handle.session_id)
+        self._observer_frames[lease.handle.session_id] = 0
+        self._observer_started_at[lease.handle.session_id] = time.monotonic()
         try:
             await self._owner.start_screencast(lease.handle, generation=lease.generation)
             while True:
@@ -177,8 +206,18 @@ class ViewerGateway:
                     break
                 async with asyncio.timeout(5):
                     await websocket.send_bytes(frame)
+                self._observer_frames[lease.handle.session_id] += 1
             raise ViewerRejectedError("Viewer authority is unavailable.")
         finally:
+            started = self._observer_started_at.pop(lease.handle.session_id, None)
+            frames = self._observer_frames.pop(lease.handle.session_id, 0)
+            if started is not None:
+                seconds = max(time.monotonic() - started, 0.001)
+                self._last_observer_stats = {
+                    "frames": frames,
+                    "seconds": round(seconds, 3),
+                    "fps": round(frames / seconds, 2),
+                }
             self._observing.discard(lease.handle.session_id)
             try:
                 await self._owner.stop_screencast(lease.handle)
@@ -322,42 +361,71 @@ class ViewerGateway:
 
             async def send_frames() -> None:
                 previous_diagnostics: list[dict[str, str | int]] = []
-                while True:
-                    current = self._leases[lease.lease_id]
-                    if not await self._permitted(cookie, current):
-                        break
-                    frame = await self._owner.frame(current)
-                    if not await self._permitted(cookie, current):
-                        break
-                    async with asyncio.timeout(5):
-                        await websocket.send_bytes(frame)
-                    diagnostics = getattr(self._owner, "diagnostics", None)
-                    if callable(diagnostics):
-                        snapshot = await cast(
-                            Callable[[OwnerLease], Awaitable[tuple[dict[str, str | int], ...]]],
-                            diagnostics,
-                        )(current)
-                        # Rebuild the fixed schema here: no owner payload can leak
-                        # a URL, cookie, exception or private page content.
-                        safe_snapshot: list[dict[str, str | int]] = []
-                        for entry in snapshot[:18]:
-                            reason, destination, count = (
-                                entry.get("reason"), entry.get("destination"), entry.get("count")
-                            )
-                            if (reason in NETWORK_DIAGNOSTIC_REASONS
-                                    and destination in NETWORK_DIAGNOSTIC_DESTINATIONS
-                                    and type(count) is int and 1 <= count <= 128):
-                                safe_snapshot.append({
-                                    "reason": reason, "destination": destination, "count": count,
-                                })
+                # Human view rides the same CDP screencast as the
+                # observer (U-P3-05) instead of 2 fps screenshot polls,
+                # when the owner offers it and no observer already owns
+                # the stream for this browser.
+                start_screencast = getattr(self._owner, "start_screencast", None)
+                use_screencast = (
+                    callable(start_screencast)
+                    and callable(getattr(self._owner, "next_screencast_frame", None))
+                    and lease.handle.session_id not in self._observing
+                )
+                if use_screencast:
+                    await start_screencast(lease.handle, generation=lease.generation)
+                last_diagnostics_check = 0.0
+                try:
+                    while True:
+                        current = self._leases[lease.lease_id]
                         if not await self._permitted(cookie, current):
                             break
-                        if safe_snapshot != previous_diagnostics:
-                            async with asyncio.timeout(5):
-                                await websocket.send_json({"network_diagnostics": safe_snapshot})
-                            previous_diagnostics = safe_snapshot
-                    await asyncio.sleep(0.5)
-                raise ViewerRejectedError("Viewer authority is unavailable.")
+                        if use_screencast:
+                            frame = await self._owner.next_screencast_frame(
+                                current.handle, generation=current.generation,
+                            )
+                        else:
+                            frame = await self._owner.frame(current)
+                        if not await self._permitted(cookie, current):
+                            break
+                        async with asyncio.timeout(5):
+                            await websocket.send_bytes(frame)
+                        if use_screencast and time.monotonic() - last_diagnostics_check < 0.5:
+                            continue
+                        last_diagnostics_check = time.monotonic()
+                        diagnostics = getattr(self._owner, "diagnostics", None)
+                        if callable(diagnostics):
+                            snapshot = await cast(
+                                Callable[[OwnerLease], Awaitable[tuple[dict[str, str | int], ...]]],
+                                diagnostics,
+                            )(current)
+                            # Rebuild the fixed schema here: no owner payload can leak
+                            # a URL, cookie, exception or private page content.
+                            safe_snapshot: list[dict[str, str | int]] = []
+                            for entry in snapshot[:18]:
+                                reason, destination, count = (
+                                    entry.get("reason"), entry.get("destination"), entry.get("count")
+                                )
+                                if (reason in NETWORK_DIAGNOSTIC_REASONS
+                                        and destination in NETWORK_DIAGNOSTIC_DESTINATIONS
+                                        and type(count) is int and 1 <= count <= 128):
+                                    safe_snapshot.append({
+                                        "reason": reason, "destination": destination, "count": count,
+                                    })
+                            if not await self._permitted(cookie, current):
+                                break
+                            if safe_snapshot != previous_diagnostics:
+                                async with asyncio.timeout(5):
+                                    await websocket.send_json({"network_diagnostics": safe_snapshot})
+                                previous_diagnostics = safe_snapshot
+                        if not use_screencast:
+                            await asyncio.sleep(0.5)
+                    raise ViewerRejectedError("Viewer authority is unavailable.")
+                finally:
+                    if use_screencast:
+                        try:
+                            await self._owner.stop_screencast(lease.handle)
+                        except Exception:
+                            pass
 
             async def receive_input() -> None:
                 while True:

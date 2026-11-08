@@ -155,3 +155,49 @@ async def test_browser_controller_registers_only_its_live_exact_handle(tmp_path)
                 execution_id=handle.execution_id,
                 journey_id=handle.journey_id,
             )
+
+
+
+@pytest.mark.asyncio
+async def test_observer_grant_route_is_signed_and_rejects_unknown_browser() -> None:
+    """U-P3-01: the worker's observer-grant route exists, enforces the
+    signature discipline, and answers a sanitized 409 for a browser the
+    registry does not hold (the positive path needs a live browser and
+    is covered by the gateway + fps checks)."""
+    import json
+    from uuid import uuid4
+
+    service = build_service()
+    payload = {
+        "actor_id": str(uuid4()),
+        "browser_session_id": str(uuid4()),
+        "execution_id": str(uuid4()),
+        "journey_id": str(uuid4()),
+        "generation": 0,
+    }
+    body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    timestamp = str(int(time.time()))
+    nonce = "O" * 24
+    signature = hmac.new(
+        SECRET.encode(),
+        timestamp.encode() + b"." + nonce.encode() + b"." + body,
+        hashlib.sha256,
+    ).hexdigest()
+    headers = {
+        "X-MarketTwin-HITL-Timestamp": timestamp,
+        "X-MarketTwin-HITL-Nonce": nonce,
+        "X-MarketTwin-HITL-Signature": signature,
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=service.app),
+        base_url="http://worker",
+    ) as client:
+        response = await client.post(
+            "/internal/hitl/observer-grants", content=body, headers=headers,
+        )
+        unsigned = await client.post(
+            "/internal/hitl/observer-grants", content=body, headers={},
+        )
+    assert response.status_code == 409
+    assert unsigned.status_code == 401

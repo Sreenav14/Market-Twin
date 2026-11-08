@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { api, type LiveBrowser } from "../../lib/api";
+import { type LiveBrowser } from "../../lib/api";
 import { LiveBrowserObserver } from "./LiveBrowserObserver";
 
 const browser: LiveBrowser = { browser_session_id: "browser-1", execution_id: "execution-1", journey_id: "journey-1", generation: 1, control_state: "agent", viewer_state: "available", journey_title: "Check registration", requesting_agent: "Persona" };
@@ -55,7 +55,6 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("renders socket frames in watch mode without polling or sending input", async () => {
-  const frames = vi.spyOn(api, "getLiveBrowserFrame");
   render(<LiveBrowserObserver runId="run-1" browser={browser} identity="owner" permitted stream={stream} />);
   const socket = MockWebSocket.instances[0];
   expect(socket.url).toBe(stream.url);
@@ -67,7 +66,6 @@ it("renders socket frames in watch mode without polling or sending input", async
   expect(screen.getByText(/Frame delivered/)).toBeInTheDocument();
   expect(screen.queryByText(/fps/i)).not.toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-  expect(frames).not.toHaveBeenCalled();
 });
 
 it("switches to control chrome without restarting the stream", async () => {

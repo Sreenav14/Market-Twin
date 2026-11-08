@@ -180,8 +180,6 @@ def test_budget_trims_explicitly(budget: PlanBudget, reason: str) -> None:
 
 @pytest.mark.parametrize("max_steps,selected", [(3, 1), (4, 1), (5, 1), (6, 2)])
 def test_selection_reserves_initial_navigation_for_each_case(max_steps: int, selected: int) -> None:
-    from markettwin_execution_orchestrator.workflow.deep_run import skip_reason
-
     req = replace(request(), budget=PlanBudget(max_steps=max_steps))
     first = update(
         cases(req).cases[0], case_id="case_a",
@@ -201,7 +199,6 @@ def test_selection_reserves_initial_navigation_for_each_case(max_steps: int, sel
     assert candidates.model_dump_json() == original
     remaining = max_steps
     for case in plan.cases:
-        assert skip_reason(remaining_seconds=100, remaining_steps=remaining, case=case) is None
         remaining -= len(case.steps) + len(case.expected) + 1
     assert remaining >= 0
 

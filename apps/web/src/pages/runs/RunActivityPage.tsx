@@ -68,6 +68,22 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
     if (!pause) throw new Error("No acknowledged pause is available.");
     return api.resumeExecutionPause(run.id, pause.id);
   }, onSuccess: pauseSaved });
+  // Watch grant (U-P3-02): a single-use observer ticket for the exact
+  // browser + generation on screen. Re-granted when the browser
+  // identity changes, and on demand when the stream asks to reconnect.
+  const grant = useQuery({
+    queryKey: ["live-grant", user.id, workspace.id, run.id, chosenBrowser?.browser_session_id, chosenBrowser?.generation],
+    queryFn: ({ signal }) => api.getLiveGrant(run.id, chosenBrowser?.browser_session_id, signal),
+    enabled: permitted && !metadata.isError && chosenBrowser?.viewer_state === "available",
+    retry: false,
+    staleTime: Infinity,
+  });
+  const stream = grant.data ? { url: grant.data.viewer_url, ticket: grant.data.ticket } : null;
+  const reconnectStream = async () => {
+    const fresh = await grant.refetch();
+    if (!fresh.data) throw new Error("The live grant could not be renewed.");
+    return { url: fresh.data.viewer_url, ticket: fresh.data.ticket };
+  };
   const deep = run.configuration_snapshot.execution_mode === "deep_feature_v1";
   const event = events.find((item) => item.id === selectedEvent);
   const visibleEvents = events.filter((item) => {
@@ -117,7 +133,8 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
           {pause && pendingPause ? <p className="muted">Pause expires <time dateTime={pause.expires_at}>{new Date(pause.expires_at).toLocaleTimeString()}</time>.</p> : null}
           {requestPause.isError || resumePause.isError ? <InlineAlert severity="error" title="The pause transition could not be confirmed" role="alert">Refresh status before trying again; no action is replayed.</InlineAlert> : null}
         </section> : null}
-        {!live && selected ? <section className="live-browser-empty"><h3>Historical evidence, not a live browser</h3><p>This journey has {selected.step_count} recorded steps and {selected.artifact_count} artifacts. Nothing from another browser is shown here.</p><Link className="primary-button" to={`/runs/${run.id}/journeys/${selected.id}`}>Inspect recorded steps and evidence</Link></section> : <LiveBrowserObserver runId={run.id} browser={chosenBrowser} identity={`${user.id}:${workspace.id}:${workspace.role}`} permitted={permitted && !metadata.isError} />}
+        {chosenBrowser?.board_item ? <p className="live-board-banner" role="status">Item {chosenBrowser.board_item.index} of {chosenBrowser.board_item.total} — {chosenBrowser.board_item.label}</p> : null}
+        {!live && selected ? <section className="live-browser-empty"><h3>Historical evidence, not a live browser</h3><p>This journey has {selected.step_count} recorded steps and {selected.artifact_count} artifacts. Nothing from another browser is shown here.</p><Link className="primary-button" to={`/runs/${run.id}/journeys/${selected.id}`}>Inspect recorded steps and evidence</Link></section> : <LiveBrowserObserver runId={run.id} browser={chosenBrowser} identity={`${user.id}:${workspace.id}:${workspace.role}`} permitted={permitted && !metadata.isError} stream={stream} onReconnect={reconnectStream} />}
         <HumanActionPage />
         {chosenBrowser ? <details><summary>Browser identity</summary><dl className="definition-list"><div><dt>Session</dt><dd className="monospace">{chosenBrowser.browser_session_id}</dd></div><div><dt>Generation</dt><dd>{chosenBrowser.generation}</dd></div><div><dt>Executor</dt><dd>{chosenBrowser.requesting_agent}</dd></div></dl></details> : null}
       </div>

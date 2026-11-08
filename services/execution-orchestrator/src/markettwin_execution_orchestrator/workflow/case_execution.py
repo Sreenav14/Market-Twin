@@ -11,8 +11,10 @@ import json
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from uuid import UUID
 
 from markettwin_database.models import ExecutionSuspension
 from markettwin_shared.auth_verification import AuthVerificationPolicy
@@ -23,10 +25,12 @@ from markettwin_shared.deep_testing import (
     CaseExecutionResult,
     CaseExecutionStatus,
 )
+from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.feature_plan import ExpectedAssertion
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
 from markettwin_execution_orchestrator.agents.schemas.test_case import (
     CaseAction,
     FeatureScope,
@@ -42,8 +46,10 @@ from markettwin_execution_orchestrator.browser.auth_session_broker import (
     AuthSessionSnapshot,
 )
 from markettwin_execution_orchestrator.browser.contracts import (
+    AllowedOrigin,
     BrowserActionResult,
     BrowserSessionHandle,
+    NetworkPolicy,
 )
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserActionBlockedError,
@@ -64,9 +70,32 @@ from markettwin_execution_orchestrator.persistence import (
 )
 from markettwin_execution_orchestrator.persistence.models import Artifact
 from markettwin_execution_orchestrator.persistence.run_event_repository import RunEventRepository
-from markettwin_execution_orchestrator.workflow.journey_executor import (
-    PersonaJourneyExecutionRequest,
-)
+
+
+@dataclass(frozen=True, slots=True)
+class PersonaJourneyExecutionRequest:
+    """Everything required to execute one already-planned Journey."""
+
+    test_run_id: UUID
+    execution_id: UUID
+    journey_id: UUID
+    persona_id: UUID
+    mission_id: UUID
+
+    journey: PersonaJourneySpec
+
+    start_url: str
+    allowed_origins: tuple[AllowedOrigin, ...]
+
+    auth_verification: AuthVerificationPolicy | None = None
+    auth_session_scope: AuthSessionScope | None = None
+    auth_mode: Literal["required", "optional"] = "required"
+    runtime_human_assistance: bool = False
+    runtime_target_id: UUID | None = None
+    network_policy: NetworkPolicy = "public_only"
+    max_duration_seconds: int = 180
+    viewport_preset: Literal["mobile320", "desktop1280"] = "desktop1280"
+    fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
 
 
 class CaseActionLimitError(RuntimeError):
@@ -86,6 +115,9 @@ class SensitiveActionApprovalBlocked(BrowserPolicyError):
 
 
 MAX_HUMAN_LOGIN_WAIT_SECONDS = 10 * 60
+# Unified park (U-P4): the spec's live-park default — 15 minutes for
+# the human to log in while the Room stays open, in the same context.
+HARNESS_PARK_WAIT_SECONDS = 15 * 60
 OPAQUE_CONFIRMATION_REASON = "An opaque confirmation requires human browser takeover."
 
 
@@ -568,8 +600,23 @@ async def execute_test_case(
     auth_mode: Literal["required", "optional"] = "required",
     auth_session_scope: AuthSessionScope | None = None,
     reuse_auth_session: bool = False,
+    session_handle: BrowserSessionHandle | None = None,
 ) -> CaseExecutionResult:
-    """Caller persists AgentExecution first and consumes result for legacy readiness."""
+    """Caller persists AgentExecution first and consumes result for legacy readiness.
+
+    With session_handle (the unified Room, U-P2-03), the case borrows
+    the caller's live session: no browser is launched, no snapshot is
+    installed, no browser-session row is persisted, and the session is
+    NOT closed at the end — the Room's owner closes it. Trace/event
+    logs stay Room-level (written when the Room closes); step evidence
+    is recorded per item exactly as in the owned path.
+    """
+    # Unified Room executions park for the spec's 15 minutes (U-P4);
+    # owned legacy sessions keep the historical 10-minute wait.
+    login_wait_seconds = (
+        HARNESS_PARK_WAIT_SECONDS if session_handle is not None
+        else MAX_HUMAN_LOGIN_WAIT_SECONDS
+    )
     browser_controller = controller
     if case.feature_key != scope.feature_key:
         raise ValueError("Case must belong to the caller-owned feature.")
@@ -719,7 +766,10 @@ async def execute_test_case(
             case_timer = case_timeout
             initial_deadline = case_timeout.when()
             auth_snapshot: AuthSessionSnapshot | None = None
-            if auth_verification is not None and auth_session_scope is not None:
+            if session_handle is not None:
+                handle = session_handle
+                stage = "actions"
+            elif auth_verification is not None and auth_session_scope is not None:
                 if reuse_auth_session:
                     try:
                         auth_snapshot = browser_controller.take_auth_session_snapshot(
@@ -738,26 +788,27 @@ async def execute_test_case(
                     )
                 except AuthSessionReuseRejected:
                     pass
-            handle = await browser_controller.create_session(
-                execution_id=request.execution_id,
-                journey_id=request.journey_id,
-                allowed_origins=request.allowed_origins,
-                network_policy=request.network_policy,
-                auth_snapshot=auth_snapshot,
-                viewport_preset=request.viewport_preset,
-                fixture_action_rules=request.fixture_action_rules,
-                auth_only_origins=auth_verification.auth_only_origins if auth_verification else (),
-                authenticated_session=(
-                    auth_verification is not None or request.runtime_human_assistance
-                ),
-            )
-            stage = "browser_persistence"
-            await repository.create_browser_session(
-                browser_session_id=handle.session_id,
-                execution_id=request.execution_id,
-            )
-            await session.commit()
-            persisted_browser = True
+            if session_handle is None:
+                handle = await browser_controller.create_session(
+                    execution_id=request.execution_id,
+                    journey_id=request.journey_id,
+                    allowed_origins=request.allowed_origins,
+                    network_policy=request.network_policy,
+                    auth_snapshot=auth_snapshot,
+                    viewport_preset=request.viewport_preset,
+                    fixture_action_rules=request.fixture_action_rules,
+                    auth_only_origins=auth_verification.auth_only_origins if auth_verification else (),
+                    authenticated_session=(
+                        auth_verification is not None or request.runtime_human_assistance
+                    ),
+                )
+                stage = "browser_persistence"
+                await repository.create_browser_session(
+                    browser_session_id=handle.session_id,
+                    execution_id=request.execution_id,
+                )
+                await session.commit()
+                persisted_browser = True
             from markettwin_execution_orchestrator.workflow.cooperative_pause import (
                 cooperative_pause_checkpoint,
             )
@@ -781,7 +832,7 @@ async def execute_test_case(
                 async def request_login() -> None:
                     async with pause_case_deadline(
                         case_timeout,
-                        allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                        allowance_seconds=login_wait_seconds,
                     ):
                         await verify_or_request_login(
                             request=request,
@@ -790,7 +841,7 @@ async def execute_test_case(
                             policy=auth_verification,
                             auth_scope=auth_session_scope,
                             session=session,
-                            max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                            max_wait_seconds=login_wait_seconds,
                         )
 
                 browser_controller.bind_authentication_handler(handle, request_login)
@@ -799,7 +850,7 @@ async def execute_test_case(
                 async def request_encountered_help() -> None:
                     async with pause_case_deadline(
                         case_timeout,
-                        allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                        allowance_seconds=login_wait_seconds,
                     ):
                         await request_runtime_assistance(
                             request=request,
@@ -835,7 +886,7 @@ async def execute_test_case(
                 if verified is None:
                     async with pause_case_deadline(
                         case_timeout,
-                        allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                        allowance_seconds=login_wait_seconds,
                     ):
                         await verify_or_request_login(
                             request=request,
@@ -844,7 +895,7 @@ async def execute_test_case(
                             policy=auth_verification,
                             auth_scope=auth_session_scope,
                             session=session,
-                            max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                            max_wait_seconds=login_wait_seconds,
                         )
                 await event(
                     "test_case.authenticated",
@@ -956,7 +1007,7 @@ async def execute_test_case(
                         browser_controller.revoke_auth_session_snapshot(scope=auth_session_scope)
                         async with pause_case_deadline(
                             case_timeout,
-                            allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                            allowance_seconds=login_wait_seconds,
                         ):
                             await verify_or_request_login(
                                 request=request,
@@ -965,7 +1016,7 @@ async def execute_test_case(
                                 policy=auth_verification,
                                 auth_scope=auth_session_scope,
                                 session=session,
-                                max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                                max_wait_seconds=login_wait_seconds,
                             )
 
                 async def execute_case_action(
@@ -1036,7 +1087,7 @@ async def execute_test_case(
 
                             async with pause_case_deadline(
                                 case_timeout,
-                                allowance_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                                allowance_seconds=login_wait_seconds,
                             ):
                                 await verify_or_request_login(
                                     request=request,
@@ -1045,7 +1096,7 @@ async def execute_test_case(
                                     policy=auth_verification,
                                     auth_scope=auth_session_scope,
                                     session=session,
-                                    max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+                                    max_wait_seconds=login_wait_seconds,
                                     assistance_reason=reason,  # type: ignore[arg-type]
                                     continuation_verifier=verify_continuation,
                                     planned_step_index=action_index,
@@ -1165,7 +1216,7 @@ async def execute_test_case(
             },
         )
     finally:
-        if handle is not None:
+        if handle is not None and session_handle is None:
             try:
                 async with asyncio.timeout(10):
                     artifacts = await browser_controller.close_session(session_id=handle.session_id)

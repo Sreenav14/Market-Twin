@@ -200,14 +200,13 @@ export function RunLayout() {
         </InlineAlert>
       ) : null}
       {run.status === "draft" ? <RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /> : null}
-      {run.configuration_snapshot.discovery_stage === "awaiting_approval" && !location.pathname.endsWith("/contract") ? <section className="panel"><h2>Approve the tests</h2><p>Exploration is complete. Review the journeys and checks before testing begins.</p><Link to={`/runs/${run.id}/contract`}>Review the tests</Link></section> : null}
+      {run.configuration_snapshot.discovery_stage === "awaiting_approval" ? <section className="panel"><h2>Contract flow retired</h2><p>This run was created with the retired contract-approval flow and cannot be approved here. Its stored contract and results remain readable from the run overview.</p><Link to={`/runs/${run.id}/overview`}>Open the overview</Link></section> : null}
       {run.status === "awaiting_human" && run.configuration_snapshot.discovery_stage !== "awaiting_approval" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") && !location.pathname.endsWith("/watch") ? (
         <Banner severity="warning" titleAs="h2" title={<>{statusEntry("run", run.status).word} — the tester is paused</>} action={<Link className="primary-button" to={`/runs/${run.id}/human-action`}>Help this tester</Link>}>{run.status_reason ? <p>{run.status_reason}</p> : <p>The tester is paused until you complete or skip the affected work.</p>}</Banner>
       ) : null}
       <div className="run-workspace">
       <div className="run-workspace-content">
       <nav className="tab-strip" aria-label="Test sections">
-        {run.configuration_snapshot.execution_mode === "discovery_contract_v1" ? <NavLink className="tab-link" to={`/runs/${run.id}/contract`}>Approve the tests</NavLink> : null}
         {["overview", "watch", "journeys", "findings", "evidence", "results"].map((tab) => (
           <NavLink
             key={tab}
@@ -226,7 +225,7 @@ export function RunLayout() {
           buttonContent={<span>More</span>}
         >
           <div className="run-more-menu" aria-label="More test sections">
-            {["human-action", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
+            {["board", "human-action", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
               <NavLink key={tab} to={`/runs/${run.id}/${tab}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>
                 {tab === "human-action" ? "Human Assistance" : tab === "agents" ? "Testers & Agents" : tab[0].toUpperCase() + tab.slice(1)}
               </NavLink>

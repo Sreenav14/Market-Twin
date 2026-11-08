@@ -4,6 +4,10 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, status
+from markettwin_shared.persona_definitions import (
+    dump_definition_yaml,
+    parse_definition_yaml,
+)
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +22,7 @@ from markettwin_control_api.persistence.repositories import (
     ApplicationRecord,
     ApplicationRepository,
     LatestRunSummaryRecord,
+    PersonaDefinitionRepository,
     WorkspaceAccess,
     WorkspaceRepository,
 )
@@ -280,3 +285,100 @@ async def get_application(
         )
 
     return application_response(application)
+
+# --- Persona definitions (U-P5-03) -------------------------------------
+# Owners view and edit the application's persona definitions. Every
+# write is validated by the shared contract: canonical conditions are
+# enforced by the type, score-like keys are rejected, and unknown keys
+# fail — the API returns the validator's message as a 422 so the
+# editor can show exactly what is wrong.
+
+
+class PersonaDefinitionResponse(BaseModel):
+    persona_id: str
+    persona_type: str
+    name: str
+    enabled: bool
+    yaml: str
+
+
+class UpdatePersonaDefinitionRequest(BaseModel):
+    yaml: str = Field(min_length=1, max_length=20000)
+
+
+@router.get(
+    "/api/v1/applications/{application_id}/personas",
+    response_model=list[PersonaDefinitionResponse],
+)
+async def list_personas(
+    application_id: UUID, request: Request,
+) -> list[PersonaDefinitionResponse]:
+    user_id = await get_authenticated_user_id(request=request)
+    database = get_database_runtime(request)
+    async with database.session_factory() as database_session:
+        async with database_session.begin():
+            application = await ApplicationRepository(
+                database_session
+            ).get_for_user(application_id=application_id, user_id=user_id)
+            if application is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Application not found.",
+                )
+            rows = await PersonaDefinitionRepository(
+                database_session
+            ).list_for_application(application_id=application_id)
+    return [
+        PersonaDefinitionResponse(
+            persona_id=row.persona_id, persona_type=row.persona_type,
+            name=row.name, enabled=row.enabled, yaml=row.definition_yaml,
+        )
+        for row in rows
+    ]
+
+
+@router.put(
+    "/api/v1/applications/{application_id}/personas/{persona_id}",
+    response_model=PersonaDefinitionResponse,
+)
+async def update_persona(
+    application_id: UUID, persona_id: str,
+    payload: UpdatePersonaDefinitionRequest, request: Request,
+) -> PersonaDefinitionResponse:
+    # Authenticate first, like every other endpoint in this module:
+    # an unauthenticated request gets a 401 even when its YAML is
+    # also invalid, never a 422 that leaks validation behaviour.
+    user_id = await get_authenticated_user_id(request=request)
+    try:
+        definition = parse_definition_yaml(payload.yaml)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Invalid persona definition: {error}",
+        ) from error
+    if definition.persona_id != persona_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The definition's persona_id does not match the URL.",
+        )
+    database = get_database_runtime(request)
+    async with database.session_factory() as database_session:
+        async with database_session.begin():
+            application = await ApplicationRepository(
+                database_session
+            ).get_for_user(application_id=application_id, user_id=user_id)
+            if application is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Application not found.",
+                )
+            repository = PersonaDefinitionRepository(database_session)
+            rendered = dump_definition_yaml(definition)
+            await repository.upsert(
+                application_id=application_id,
+                definition=definition, definition_yaml=rendered,
+            )
+    return PersonaDefinitionResponse(
+        persona_id=definition.persona_id, persona_type=definition.type,
+        name=definition.name, enabled=definition.enabled, yaml=rendered,
+    )

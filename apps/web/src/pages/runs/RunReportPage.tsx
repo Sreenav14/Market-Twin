@@ -23,6 +23,8 @@ import {
 } from "../../lib/results";
 import type { Finding } from "../../lib/api";
 import { ContractReport } from "./ContractReport";
+import { PersonaImpressions, type PersonaImpressionsPayload } from "./PersonaImpressions";
+import { SlopReport, type SlopReportPayload } from "./SlopReport";
 import { statusLabel } from "../../lib/format";
 import { StackedBar, type BarSegment } from "../../components/markettwin/ResultFigures";
 import { statusEntry } from "../../lib/status";
@@ -104,6 +106,20 @@ export function RunReportPage() {
   }
   if (data.report.payload.mode === "discovery_contract_v1") {
     return <ResultsBoundary><ContractReport runId={run.id} payload={data.report.payload} /></ResultsBoundary>;
+  }
+  if (data.report.payload.run_kind === "slop") {
+    return (
+      <ResultsBoundary>
+        <SlopReport payload={data.report.payload as SlopReportPayload} />
+      </ResultsBoundary>
+    );
+  }
+  if (data.report.payload.run_kind === "persona") {
+    return (
+      <ResultsBoundary>
+        <PersonaImpressions payload={data.report.payload as PersonaImpressionsPayload} />
+      </ResultsBoundary>
+    );
   }
 
   // Findings Partitioning

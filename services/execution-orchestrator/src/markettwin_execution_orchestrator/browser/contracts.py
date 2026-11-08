@@ -169,9 +169,32 @@ def _failed_request_list() -> list[FailedRequestRecord]:
     return []
 
 
+@dataclass(frozen=True, slots=True)
+class JsErrorRecord:
+    """One structured JavaScript error (U-P6-03): kind, message,
+    stack, and the page URL — never page content or field values."""
+
+    kind: str  # console_error | uncaught | unhandled_rejection
+    message: str
+    stack: str | None
+    url: str
+
+
+def _js_record_list() -> list[JsErrorRecord]:
+    return []
+
+
 @dataclass(slots=True)
 class BrowserEventBuffer:
     """Per-session event buffers with incremental and cumulative views."""
+
+    js_records: list[JsErrorRecord] = field(default_factory=_js_record_list)
+
+    def record_js(self, record: JsErrorRecord) -> None:
+        # Hard cap per session: a pathological page must not grow the
+        # buffer without bound (plan: 1,000/item-scale cap).
+        if len(self.js_records) < 1000:
+            self.js_records.append(record)
 
     console_errors: list[str] = field(default_factory=_string_list)
     page_errors: list[str] = field(default_factory=_string_list)
@@ -205,6 +228,7 @@ class BrowserEventBuffer:
         self.all_console_errors.clear()
         self.all_page_errors.clear()
         self.all_failed_requests.clear()
+        self.js_records.clear()
 
 
 @dataclass(frozen=True, slots=True)

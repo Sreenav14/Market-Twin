@@ -16,9 +16,12 @@ function renderOverview(discoveryStage: string, status = "awaiting_human") {
   </Route></Routes></MemoryRouter>);
 }
 
-it("shows contract approval as the current discovery stage and links to the actual approval view", () => {
+it("shows the retired contract stage without an approval link", () => {
   renderOverview("awaiting_approval");
-  expect(screen.getByRole("link", { name: "Approve the tests" })).toHaveAttribute("href", "/runs/test/contract");
+  // The /contract route was deleted with the flow (U-P8): the banner
+  // names the retirement and links to the overview, never to /contract.
+  expect(screen.queryByRole("link", { name: "Approve the tests" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Open the overview" })).toHaveAttribute("href", "/runs/test/overview");
   const lifecycle = screen.getByRole("list", { name: "Test lifecycle" });
   expect(within(lifecycle).getByText("Approve the tests").closest("li")).toHaveClass("stage-current");
   expect(within(lifecycle).getByText("Check the journeys").closest("li")).not.toHaveClass("stage-done");

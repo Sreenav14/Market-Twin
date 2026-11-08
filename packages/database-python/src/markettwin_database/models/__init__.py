@@ -39,6 +39,7 @@ from .knowledge import (
 )
 from .testing import (
     Application,
+    ApplicationPersonaDefinition,
     ApplicationTarget,
     PersonaJourney,
     RunMission,
@@ -59,6 +60,7 @@ __all__ = [
     "AgentExecution",
     "AgentPromptDraft",
     "Application",
+    "ApplicationPersonaDefinition",
     "ApplicationTarget",
     "Artifact",
     "BrowserSession",

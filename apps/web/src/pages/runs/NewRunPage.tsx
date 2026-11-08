@@ -56,10 +56,12 @@ export function NewRunPage() {
   const [name, setName] = useState("");
   const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
   const requestedMode = params.get("mode");
-  // OWNER-CHECK 4: no capabilities key exists in any creation-payload source on
-  // the build line, so the harness option ships disabled (see OWNER-CHECK below).
-  const harnessAvailable = false;
-  const [executionMode, setExecutionMode] = useState(requestedMode === "legacy_persona" || requestedMode === "deep_feature_v1" || requestedMode === "harness_v1" ? requestedMode : "discovery_contract_v1");
+  // U-P8: one create flow, three run kinds. Legacy ?mode= values map
+  // onto their unified successor kinds.
+  const initialKind = requestedMode === "legacy_persona" || requestedMode === "persona"
+    ? "persona"
+    : requestedMode === "slop" ? "slop" : "explore_test";
+  const [runKind, setRunKind] = useState(initialKind);
   const [humanActionApprovals, setHumanActionApprovals] = useState(false);
   const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
   const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
@@ -70,7 +72,6 @@ export function NewRunPage() {
   // produces an error summary plus per-field messages; each message
   // clears the instant its value is fixed (derived, not stored).
   const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   const submitting = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const canWrite = canWriteWorkspace(workspace.role);
@@ -126,15 +127,15 @@ export function NewRunPage() {
     return target.allowed_origins.every((origin) => origin.scheme === "http" && !origin.include_subdomains && isLoopbackHost(origin.hostname));
   })());
   useEffect(() => {
-    if (!fixtureApprovalEligible || executionMode !== "deep_feature_v1") {
+    if (!fixtureApprovalEligible || runKind !== "explore_test") {
       setSyntheticFixtureApproval(false);
     }
-  }, [fixtureApprovalEligible, executionMode]);
+  }, [fixtureApprovalEligible, runKind]);
   useEffect(() => {
-    if (!approvalsEligible || executionMode !== "deep_feature_v1") {
+    if (!approvalsEligible || runKind !== "explore_test") {
       setHumanActionApprovals(false);
     }
-  }, [approvalsEligible, executionMode]);
+  }, [approvalsEligible, runKind]);
   const briefError = submitAttempted && brief.trim().length < 10
     ? "Describe your goal in at least 10 characters."
     : null;
@@ -163,20 +164,16 @@ export function NewRunPage() {
         knowledgeIds,
         testingDepth,
         name,
-        executionMode,
+        runKind,
         undefined,
-        humanActionApprovals && approvalsEligible && executionMode === "deep_feature_v1",
-        syntheticFixtureApproval && fixtureApprovalEligible && executionMode === "deep_feature_v1",
+        humanActionApprovals && approvalsEligible && runKind === "explore_test",
+        syntheticFixtureApproval && fixtureApprovalEligible && runKind === "explore_test",
         humanActionApprovals ? JSON.parse(sensitiveActionRules) as unknown[] : [],
         undefined,
-        executionMode !== "discovery_contract_v1",
+        true,
       );
       setBrief("");
-      if (executionMode === "discovery_contract_v1") {
-        setCreatedRunId(run.id);
-        await api.startRun(run.id);
-        navigate(`/runs/${run.id}/contract`);
-      } else navigate(`/runs/${run.id}/overview`);
+      navigate(`/runs/${run.id}/overview`);
     } catch (error) {
       setError(
         error instanceof Error
@@ -192,7 +189,7 @@ export function NewRunPage() {
     <PageHeader
       eyebrow="New test"
       title="Start a test"
-      description={executionMode === "discovery_contract_v1" ? "Choose your app and tell the testers who it is for." : "Choose a target and describe the task to test."}
+      description="Choose a target, pick the kind of test, and describe what matters."
     />
   );
   if (!canWrite)
@@ -302,7 +299,7 @@ export function NewRunPage() {
             <p className="form-help" id="test-name-help">A short label for lists and activity. A unique incremental ID is assigned automatically. Your testing goal stays separate below.</p>
           </div>
           <div className="composer-knowledge form-grid">
-            <label htmlFor="test-target">{executionMode === "discovery_contract_v1" ? "App" : "Application target"} <RequiredMark required /></label>
+            <label htmlFor="test-target">{runKind === "explore_test" ? "App" : "Application target"} <RequiredMark required /></label>
             <select
               id="test-target"
               name="target"
@@ -324,7 +321,7 @@ export function NewRunPage() {
               {target ? "Authorized" : "Target required"}
             </p>
           </div>
-          {executionMode === "discovery_contract_v1" ? <div className="composer-knowledge form-grid">
+          {runKind === "explore_test" ? <div className="composer-knowledge form-grid">
             <div className="composer-app-url">
               <label htmlFor="app-url">App URL</label>
               <input id="app-url" className="text-input" readOnly value={target?.base_url || ""} aria-describedby="app-url-help" />
@@ -333,7 +330,7 @@ export function NewRunPage() {
           </div> : null}
           <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
-              {executionMode === "discovery_contract_v1" ? "What is this app and who is it for?" : "Your testing goal"} <RequiredMark required />
+              {runKind === "explore_test" ? "What is this app and who is it for?" : "Your testing goal"} <RequiredMark required />
             </label>
             <textarea
               ref={textarea}
@@ -379,22 +376,22 @@ export function NewRunPage() {
           <section className="run-create-zone" aria-labelledby="how-to-execute-heading">
             <h2 id="how-to-execute-heading">How to execute</h2>
           <div className="composer-knowledge form-grid">
-            <label htmlFor="execution-mode">Testing mode</label>
-            <select id="execution-mode" value={executionMode} disabled={busy} onChange={(event) => setExecutionMode(event.target.value)}>
-              <option value="legacy_persona">Older exploratory journeys</option>
-              <option value="deep_feature_v1">Feature cases — experimental</option>
-              <option value="discovery_contract_v1">Explore, approve and test</option>
-              <option value="harness_v1" disabled={!harnessAvailable}>{harnessAvailable ? "Full test — checks every interaction" : "Full test — checks every interaction (not available yet)"}</option>
+            <label htmlFor="execution-mode">Kind of test</label>
+            <select id="execution-mode" value={runKind} disabled={busy} onChange={(event) => setRunKind(event.target.value)}>
+              <option value="explore_test">Explore &amp; Test — checks every interaction</option>
+              <option value="persona">Persona Test — how it feels to use</option>
+              <option value="slop">Check the look — design quality and JavaScript errors</option>
             </select>
-            {executionMode === "deep_feature_v1" ? <p className="form-help">Tests one bounded feature with recorded assertions. Undocumented expectations remain unconfirmed.</p> : null}
-            {executionMode === "harness_v1" ? <p className="form-help">The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it.</p> : null}
+            {runKind === "explore_test" ? <p className="form-help">The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it. This is the only kind that produces a ready / not-ready verdict.</p> : null}
+            {runKind === "persona" ? <p className="form-help">Testers with real conditions — slow phone, keyboard only, first visit — walk the app and report what they felt, in their own words. No scores, and it never changes a verdict.</p> : null}
+            {runKind === "slop" ? <p className="form-help">Measures how the pages look — placeholder text, broken images, contrast, generic wording — and catches JavaScript errors. Reports three separate numbers, never a verdict.</p> : null}
             <label htmlFor="testing-depth">Testing depth</label>
             <select id="testing-depth" value={testingDepth} disabled={busy} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
               <option value="low">Low — focused coverage</option>
               <option value="medium">Medium — balanced coverage</option>
               <option value="high">High — broader coverage</option>
             </select>
-            <p id="testing-depth-help" className="form-help">{executionMode === "discovery_contract_v1" ? <>Up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} approved journeys, each tested from three tester perspectives. Testers explore first; you approve the checks before testing begins. Broader coverage takes longer.</> : executionMode === "deep_feature_v1" ? <>Feature cases run up to {testingDepth === "low" ? "3" : testingDepth === "medium" ? "6" : "8"} cases. Broader coverage takes longer.</> : <>Three testers check up to {testingDepth === "low" ? "1 goal (3 journeys)" : testingDepth === "medium" ? "2 goals (6 journeys)" : "4 goals (12 journeys)"}. Broader coverage takes longer.</>}</p>
+            <p id="testing-depth-help" className="form-help">{runKind === "explore_test" ? <>The agent checks every interaction it finds, up to the item budget. Depth controls how far it explores beyond the starting pages. Broader coverage takes longer.</> : runKind === "persona" ? <>Each persona walks the main pages under its conditions. Depth controls how many pages each walk covers.</> : <>Every reachable page is measured once. Depth controls how far the crawl goes beyond the starting pages.</>}</p>
           </div>
           <details className="composer-disclosure">
             <summary>Knowledge for this test <span>Optional</span></summary>
@@ -422,7 +419,7 @@ export function NewRunPage() {
             <h2 id="run-security-heading" className="visually-hidden">Security and authorization</h2>
           <p className="form-help">Only controls permitted by the selected target and test mode are available here. Credentials never belong in the test brief or policy fields.</p>
           <p className="form-help">Testers start without login setup. If a login or protected interaction blocks execution, the tester pauses and asks for help. You can take control within approved origins or skip that case or journey.</p>
-          {approvalsEligible && executionMode === "deep_feature_v1" ? (
+          {approvalsEligible && runKind === "explore_test" ? (
             <section className="composer-knowledge" aria-labelledby="action-approval-heading">
               <h2 id="action-approval-heading">Sensitive action approval</h2>
               <label className="knowledge-choice">
@@ -437,7 +434,7 @@ export function NewRunPage() {
               </> : null}
             </section>
           ) : null}
-          {fixtureApprovalEligible && executionMode === "deep_feature_v1" ? (
+          {fixtureApprovalEligible && runKind === "explore_test" ? (
             <section className="composer-knowledge" aria-labelledby="fixture-approval-heading">
               <h2 id="fixture-approval-heading">Synthetic fixture assertions</h2>
               <label className="knowledge-choice">
@@ -456,9 +453,8 @@ export function NewRunPage() {
             </InlineAlert>
           ) : null}
           <div className="composer-footer">
-            <p>{executionMode === "discovery_contract_v1" ? "Testers explore first. You approve the tests before they run." : "Creates a draft. Start it when you're ready."}</p>
-            {createdRunId && error ? <Link to={`/runs/${createdRunId}/overview`}>Your test was created. Check readiness and start it here.</Link> : null}
-            <Button type="submit" disabled={busy || !target || Boolean(createdRunId)}>
+            <p>{"Creates a draft. Start it when you're ready."}</p>
+            <Button type="submit" disabled={busy || !target}>
               {busy ? (
                 <>
                   <Spinner />
@@ -466,7 +462,7 @@ export function NewRunPage() {
                 </>
               ) : (
                 <>
-                  {executionMode === "discovery_contract_v1" ? "Explore the app" : "Create test"} <ArrowRight size={16} aria-hidden="true" />
+                  {"Create test"} <ArrowRight size={16} aria-hidden="true" />
                 </>
               )}
             </Button>

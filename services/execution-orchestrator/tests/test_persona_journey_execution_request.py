@@ -9,7 +9,7 @@ from markettwin_execution_orchestrator.agents.schemas.mission import (
 from markettwin_execution_orchestrator.agents.schemas.persona import (
     PersonaSpec,
 )
-from markettwin_execution_orchestrator.workflow.journey_executor import (
+from markettwin_execution_orchestrator.workflow.case_execution import (
     PersonaJourneyExecutionRequest,
 )
 

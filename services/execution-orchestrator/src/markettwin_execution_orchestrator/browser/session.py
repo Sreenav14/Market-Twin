@@ -42,6 +42,18 @@ class JourneyBrowserSession:
     capture_enabled: bool = True
     auth_only_origins: tuple[str, ...] = ()
     authenticated_session: bool = False
+    # Unified Room (U-P2): a room session is the run's shared browser,
+    # rebound to one item execution at a time; a proof session is a
+    # fresh context inside the room's browser (shares_browser) whose
+    # close must not close the shared Chromium.
+    is_room: bool = False
+    shares_browser: bool = False
+    # JS capture enrichment (U-P6-03): slop sessions capture structured
+    # JS errors (message + stack + URL only) even on authenticated
+    # pages, and install the unhandled-rejection init hook.
+    js_capture: bool = False
+    rejections_harvested: int = 0
+    rejections_document: str = ""
     fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
     event_buffer: BrowserEventBuffer = field(default_factory=BrowserEventBuffer)
     human_network_diagnostics: HumanNetworkDiagnostics = field(

@@ -1,6 +1,6 @@
 """Harness driver mechanics: state round-trip, fixture board, dispatch, resume.
 
-These tests use the same doubles as test_contract_run.py: a Mock session,
+These tests use hand-built doubles in this file: a Mock session,
 Mock repositories, an AsyncMock browser controller, and a fake
 execute_test_case. They measure driver mechanics, not model quality.
 """
@@ -101,6 +101,18 @@ async def test_harness_state_round_trips_through_the_snapshot() -> None:
     assert loaded.counts()["broken"] == 1
     assert loaded.counts()["pending"] == 1
     assert loaded.budget_counters == board.budget_counters
+
+
+def test_harness_state_round_trips_an_owner_disabled_item() -> None:
+    document = _board().to_document()
+    items = document["items"]
+    assert isinstance(items, dict)
+    first = next(iter(items.values()))
+    assert isinstance(first, dict)
+    first["status"] = "owner_disabled"
+    loaded = HarnessState.from_document(document)
+    assert loaded.counts()["owner_disabled"] == 1
+    assert loaded.to_document() == document
 
 
 def test_harness_state_rejects_an_unknown_item_status() -> None:
@@ -218,7 +230,10 @@ def _install_driver_doubles(monkeypatch, *, twin, calls) -> Mock:
     monkeypatch.setattr(
         harness_run, "ExecutionRepository",
         lambda _: Mock(create_agent_execution=AsyncMock(),
-                       finish_agent_execution=AsyncMock()),
+                       finish_agent_execution=AsyncMock(),
+                       create_browser_session=AsyncMock(),
+                       mark_browser_session_closed=AsyncMock(),
+                       rebind_browser_session=AsyncMock()),
     )
     monkeypatch.setattr(
         harness_run, "RunStateRepository",
@@ -246,7 +261,7 @@ def _fixture_run(run_id):
         run_id=run_id, study_brief="Check the controlled benchmark fixture",
         target_snapshot={}, start_url=FIXTURE_URL,
         allowed_origins=(AllowedOrigin("http", "127.0.0.1", 5191),),
-        network_policy="local_development", execution_mode="harness_v1",
+        network_policy="local_development",
         fixture_truth=True,
     )
     return run, session, request
@@ -286,42 +301,72 @@ async def test_harness_mode_dispatches_through_the_executor(monkeypatch) -> None
         run_id=run_id, study_brief="Check the controlled benchmark fixture",
         target_snapshot={}, start_url=FIXTURE_URL,
         allowed_origins=(AllowedOrigin("http", "127.0.0.1", 5191),),
-        network_policy="local_development", execution_mode="harness_v1",
+        network_policy="local_development",
     )
     result = await run_executor.execute_markettwin_run(request, session=session)
     assert result == ()
     harness.assert_awaited_once_with(request=request, session=session)
 
 
-async def test_existing_modes_dispatch_exactly_as_before(monkeypatch) -> None:
-    from markettwin_execution_orchestrator.workflow import deep_run, discovery
-
+async def test_unified_native_explore_test_dispatches_to_the_board_engine(
+    monkeypatch,
+) -> None:
     run_id = uuid4()
     run = TestRun(id=run_id, status="queued", configuration_snapshot={})
     session = Mock(get=AsyncMock(return_value=run), flush=AsyncMock(),
                    commit=AsyncMock())
-    discovery_mock = AsyncMock(return_value="discovery-result")
-    deep_mock = AsyncMock(return_value="deep-result")
-    monkeypatch.setattr(discovery, "execute_discovery_run", discovery_mock)
-    monkeypatch.setattr(deep_run, "execute_deep_feature_run", deep_mock)
+    harness = AsyncMock(return_value=())
+    monkeypatch.setattr(harness_run, "execute_harness_run", harness)
+    request = MarketTwinRunRequest(
+        run_id=run_id, study_brief="Explore and test everything",
+        target_snapshot={}, start_url=FIXTURE_URL,
+        allowed_origins=(AllowedOrigin("http", "127.0.0.1", 5191),),
+        network_policy="local_development",
+        run_kind="explore_test", unified_native=True,
+    )
+    result = await run_executor.execute_markettwin_run(request, session=session)
+    assert result == ()
+    harness.assert_awaited_once_with(request=request, session=session)
+
+
+async def test_unified_dispatch_contract(monkeypatch) -> None:
+    """U-P8 dispatch: translated explore_test modes (discovery/deep/
+    harness) all run on the Board engine — the unified successor;
+    a legacy persona request refuses loudly."""
+
+    from markettwin_execution_orchestrator.workflow import harness_run
+    from markettwin_shared.run_kind import translate_execution_mode
+
+    run_id = uuid4()
+    session = Mock(get=AsyncMock(return_value=None), flush=AsyncMock(),
+                   commit=AsyncMock())
+    board_mock = AsyncMock(return_value="board-result")
+    monkeypatch.setattr(harness_run, "execute_harness_run", board_mock)
+    monkeypatch.setattr(
+        run_executor, "execute_harness_run", board_mock, raising=False,
+    )
     base = {
         "run_id": run_id, "study_brief": "Check the fixture", "target_snapshot": {},
         "start_url": FIXTURE_URL,
         "allowed_origins": (AllowedOrigin("http", "127.0.0.1", 5191),),
         "network_policy": "local_development",
     }
-    discovery_request = MarketTwinRunRequest(
-        **base, execution_mode="discovery_contract_v1",
+    for mode in ("discovery_contract_v1", "deep_feature_v1", "harness_v1"):
+        # build_run_request resolves each legacy mode to a kind before
+        # dispatch; the executor only ever sees the resolved kind.
+        request = MarketTwinRunRequest(
+            **base, run_kind=translate_execution_mode(mode),
+        )
+        assert await run_executor.execute_markettwin_run(
+            request, session=session,
+        ) == "board-result"
+    legacy_persona = MarketTwinRunRequest(
+        **base, run_kind="persona", unified_native=False,
     )
-    assert await run_executor.execute_markettwin_run(
-        discovery_request, session=session,
-    ) == "discovery-result"
-    discovery_mock.assert_awaited_once_with(request=discovery_request, session=session)
-    deep_request = MarketTwinRunRequest(**base, execution_mode="deep_feature_v1")
-    assert await run_executor.execute_markettwin_run(
-        deep_request, session=session,
-    ) == "deep-result"
-    deep_mock.assert_awaited_once_with(request=deep_request, session=session)
+    with pytest.raises(ValueError, match="retired"):
+        await run_executor.execute_markettwin_run(
+            legacy_persona, session=session,
+        )
 
 
 class _SimulatedKill(BaseException):
@@ -471,6 +516,58 @@ def test_generated_cases_stay_inside_the_schema_ceilings() -> None:
     assert len(moved.steps) == 2
 
 
+def test_item_budget_marks_overflow_pending_items_not_checked() -> None:
+    from markettwin_execution_orchestrator.workflow.harness_items import (
+        ingest_page_index,
+    )
+    from markettwin_execution_orchestrator.workflow.harness_run import (
+        _enforce_item_budget,
+    )
+
+    board = new_harness_state()
+    items = ingest_page_index(board, url=INDEX_URL, entries=INDEX_ENTRIES)
+    assert len(items) == 11
+    board.budget_counters["item_budget"] = 5
+    assert _enforce_item_budget(board) == 6
+    counts = board.counts()
+    assert counts["pending"] == 5
+    assert counts["not_checked"] == 6
+    overflow = [i for i in board.ordered_items() if i.status == "not_checked"]
+    assert all(i.blocker == "over item budget (5)" for i in overflow)
+    # Idempotent: a second pass marks nothing new.
+    assert _enforce_item_budget(board) == 0
+    # Under budget: nothing is marked.
+    board2 = new_harness_state()
+    ingest_page_index(board2, url=INDEX_URL, entries=INDEX_ENTRIES)
+    assert _enforce_item_budget(board2) == 0
+
+
+def test_checkable_items_get_an_outcome_assertion() -> None:
+    from markettwin_execution_orchestrator.workflow.harness_items import (
+        case_for_item,
+        ingest_page_index,
+    )
+
+    board = new_harness_state()
+    items = ingest_page_index(board, url=INDEX_URL, entries=INDEX_ENTRIES)
+    by_role: dict[str, object] = {}
+    for item in items:
+        by_role.setdefault(item.role, item)
+    checkbox_case = case_for_item(
+        item=by_role["checkbox"], state_url=INDEX_URL,
+        feature_key="selected_feature", start_url=INDEX_URL,
+    )
+    oracles = {a.assertion_id: a.oracle for a in checkbox_case.expected}
+    assert oracles.get("target_checked") == "checked"
+    button_case = case_for_item(
+        item=by_role["button"], state_url=INDEX_URL,
+        feature_key="selected_feature", start_url=INDEX_URL,
+    )
+    assert {a.assertion_id for a in button_case.expected} == {
+        "target_enabled", "target_visible",
+    }
+
+
 def test_safety_classification_follows_rule_3() -> None:
     from markettwin_execution_orchestrator.workflow.harness_items import (
         classify_action,
@@ -570,6 +667,31 @@ class _FakeInventoryController:
             journey_id=kwargs["journey_id"],
         )
 
+    # Room API (U-P2): the fake's room is its inventory session.
+    async def open_room_session(self, **kwargs):
+        self.room_handle = await self.create_session(
+            execution_id=kwargs["execution_id"],
+            journey_id=kwargs["journey_id"],
+        )
+        return self.room_handle
+
+    async def rebind_session(self, *, session_id, execution_id, journey_id):
+        return SimpleNamespace(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+
+    async def create_proof_session(self, *, room_session_id, execution_id, journey_id):
+        return SimpleNamespace(
+            session_id=uuid4(),
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+
+    async def close_room(self, *, run_id):
+        return None
+
     async def navigate(self, *, session_id, url, **kwargs):
         self.current_url = url
         return SimpleNamespace(observation=SimpleNamespace(url=url))
@@ -633,7 +755,9 @@ def _install_inventory_doubles(monkeypatch, *, controller, script, calls) -> Moc
         harness_run, "ExecutionRepository",
         lambda _: Mock(create_agent_execution=AsyncMock(),
                        finish_agent_execution=AsyncMock(),
-                       create_browser_session=AsyncMock()),
+                       create_browser_session=AsyncMock(),
+                       mark_browser_session_closed=AsyncMock(),
+                       rebind_browser_session=AsyncMock()),
     )
     monkeypatch.setattr(
         harness_run, "RunStateRepository",
@@ -667,7 +791,7 @@ def _inventory_run(run_id, *, start_url, target_id=None):
         target_snapshot={"target_id": str(target_id)} if target_id else {},
         start_url=start_url,
         allowed_origins=(AllowedOrigin("http", "127.0.0.1", 5199),),
-        network_policy="local_development", execution_mode="harness_v1",
+        network_policy="local_development",
         runtime_human_assistance=target_id is not None,
     )
     return run, session, request
@@ -867,6 +991,9 @@ async def test_login_wall_parks_then_resumes_the_same_session(monkeypatch) -> No
     await harness_run.execute_harness_run(request=request, session=session)
     assert run.status == "awaiting_human"
     assert run.configuration_snapshot["harness_stage"] == "needs_login"
+    # U-P4: the park carries its deadline for the countdown/Extend UI.
+    park_meta = run.configuration_snapshot["harness_park"]
+    assert park_meta["deadline_at"] > park_meta["parked_at"]
     parked = await load_harness_state(session, run_id)
     assert parked is not None
     by_name = {item.name: item for item in parked.ordered_items()}
@@ -901,6 +1028,61 @@ async def test_login_wall_parks_then_resumes_the_same_session(monkeypatch) -> No
     await harness_run.execute_harness_run(request=request2, session=session2)
     assert run2.status == "awaiting_human"
     assert run2.configuration_snapshot["harness_stage"] == "needs_login"
+
+
+async def test_live_login_recrawls_the_app_behind_the_wall_in_one_dispatch(
+    monkeypatch,
+) -> None:
+    """U-P4: when a human logs in DURING an item (the inline wait on
+    the Room), the driver re-crawls in the same session, authenticated
+    — the post-login items are discovered and checked in the SAME
+    dispatch, not deferred to a later run."""
+    login_entries = (
+        _entry(1, "link", "Sign in"),
+        _entry(2, "textbox", "Username"),
+        _entry(3, "textbox", "Password"),
+        _entry(4, "button", "Continue"),
+    )
+    dashboard_entries = (
+        _entry(1, "link", "Admin console"),
+        _entry(2, "textbox", "Display name"),
+        _entry(3, "button", "Save settings"),
+    )
+    controller = _FakeInventoryController(
+        pages={INVENTORY_URL: login_entries}, start_url=INVENTORY_URL,
+        dashboard_entries=dashboard_entries,
+    )
+
+    def continue_with_login(case, execution_id):
+        controller.logged_in = True
+        return _worked(case, execution_id).model_copy(
+            update={"human_wait_ms": 5000},
+        )
+
+    script = {
+        "Check Sign in": _worked,
+        "Check Username": _worked,
+        "Check Password": _worked,
+        "Check Continue": continue_with_login,
+        "Check Admin console": _worked,
+        "Check Display name": _worked,
+        "Check Save settings": _worked,
+    }
+    run_id = uuid4()
+    run, session, request = _inventory_run(
+        run_id, start_url=INVENTORY_URL, target_id=uuid4(),
+    )
+    calls: list[str] = []
+    _install_inventory_doubles(
+        monkeypatch, controller=controller, script=script, calls=calls,
+    )
+    await harness_run.execute_harness_run(request=request, session=session)
+    assert run.status != "awaiting_human"
+    final = await load_harness_state(session, run_id)
+    assert final is not None
+    assert len(final.items) == 7
+    assert final.counts()["worked"] == 7
+    assert True in controller.index_authenticated
 
 
 async def test_budget_exhausted_item_is_timed_out_on_the_record_and_could_not_check_on_the_board(
@@ -1031,6 +1213,49 @@ async def test_completed_harness_run_publishes_a_journey_result_for_every_journe
     assert bootstrap["payload"]["status"] == "skipped"
 
 
+async def test_completed_harness_run_publishes_a_board_result_for_every_item(
+    monkeypatch,
+) -> None:
+    """The unified contract: exactly one board.item.result per Board
+    item, carrying the item's final Board status (U-P1-04)."""
+    run_id = uuid4()
+    run, session, request = _fixture_run(run_id)
+    calls: list[str] = []
+    events = _install_driver_doubles(monkeypatch, twin="broken", calls=calls)
+    monkeypatch.setattr(
+        harness_run, "RunEventRepository", lambda _: events, raising=False,
+    )
+    record = PersistedJourneyRecord(
+        uuid4(), uuid4(), uuid4(),
+        "browser_discovery__observe_starting_page", 10000,
+    )
+    monkeypatch.setattr(
+        harness_run, "PlanRepository",
+        lambda _: Mock(create_auth_bootstrap=AsyncMock(return_value=record)),
+    )
+    await harness_run.execute_harness_run(request=request, session=session)
+    published = [
+        call.kwargs["payload"]
+        for call in events.create.await_args_list
+        if call.kwargs["event_type"] == "board.item.result"
+    ]
+    loaded = await load_harness_state(session, run_id)
+    assert loaded is not None
+    by_item = {p["board_item_id"]: p for p in published}
+    assert len(published) == len(loaded.items)
+    for item in loaded.ordered_items():
+        payload = by_item[item.item_id]
+        assert payload["run_kind"] == "explore_test"
+        assert payload["board_version"] == 2
+        assert payload["board_status"] == item.status
+        assert payload["state_id"] == item.state_id
+        assert payload["quotes"] == []
+        assert payload["verdict_rows"] == []
+        assert payload["js_errors"] == []
+        if item.status in {"worked", "broken"}:
+            assert payload["assertions"], item.case_id
+
+
 async def test_safety_skipped_items_publish_skipped_journey_results(
     monkeypatch,
 ) -> None:
@@ -1053,7 +1278,9 @@ async def test_safety_skipped_items_publish_skipped_journey_results(
     )
     executions = Mock(create_agent_execution=AsyncMock(),
                       finish_agent_execution=AsyncMock(),
-                      create_browser_session=AsyncMock())
+                      create_browser_session=AsyncMock(),
+                      mark_browser_session_closed=AsyncMock(),
+                      rebind_browser_session=AsyncMock())
     monkeypatch.setattr(harness_run, "ExecutionRepository", lambda _: executions)
     await harness_run.execute_harness_run(request=request, session=session)
     loaded = await load_harness_state(session, run_id)

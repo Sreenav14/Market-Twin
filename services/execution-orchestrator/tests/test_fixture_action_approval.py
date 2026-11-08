@@ -11,8 +11,8 @@ from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHa
 from markettwin_execution_orchestrator.browser.sensitive_action_policy import classify_click_action
 from markettwin_execution_orchestrator.persistence.step_recorder import ExecutionStepRecorder
 from markettwin_execution_orchestrator.workflow import case_execution
-from markettwin_execution_orchestrator.workflow.deep_run import case_journey
-from markettwin_execution_orchestrator.workflow.journey_executor import (
+from markettwin_execution_orchestrator.workflow.feature_scope import case_journey
+from markettwin_execution_orchestrator.workflow.case_execution import (
     PersonaJourneyExecutionRequest,
 )
 from markettwin_execution_orchestrator.workflow.test_case_planner import (

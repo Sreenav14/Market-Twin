@@ -25,12 +25,14 @@ STATE_ABSTRACTION_VERSION = "v1"
 DEFAULT_ITEM_BUDGET = 300
 
 ItemStatus = Literal["pending", "running", "worked", "broken", "could_not_check",
-                     "not_checked", "needs_human_login", "blocked"]
+                     "not_checked", "needs_human_login", "blocked",
+                     "owner_disabled"]
 ITEM_STATUSES: tuple[str, ...] = ("pending", "running", "worked", "broken",
                                   "could_not_check", "not_checked",
-                                  "needs_human_login", "blocked")
+                                  "needs_human_login", "blocked",
+                                  "owner_disabled")
 TERMINAL_STATUSES = frozenset({"worked", "broken", "could_not_check",
-                               "not_checked", "blocked"})
+                               "not_checked", "blocked", "owner_disabled"})
 HarnessStage = Literal["exploring", "testing", "needs_login", "evaluating", "done"]
 
 

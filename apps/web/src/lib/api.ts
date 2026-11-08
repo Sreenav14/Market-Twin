@@ -88,6 +88,12 @@ export interface LiveBrowser {
   viewer_state: "available" | "suppressed";
   journey_title: string;
   requesting_agent: string;
+  board_item?: { index: number; total: number; label: string } | null;
+}
+export interface LiveGrant {
+  ticket: string;
+  viewer_url: string;
+  browser: LiveBrowser;
 }
 
 export interface RunActivityItem {
@@ -268,33 +274,34 @@ export interface TestRun {
   target_snapshot: Record<string, unknown>;
   configuration_snapshot: Record<string, unknown>;
   human_action_approvals_enabled?: boolean;
+  run_kind?: string;
 }
-export interface ContractCheck {
-  assertion_id: string;
-  oracle: "visible_text" | "visible" | "enabled" | "url_path_v1" | "title" | "count" | "checked";
-  target_role: string | null;
-  target_name: string | null;
-  expected_value: string | boolean | number | null;
-  plain_language: string;
-  origin: "user_approved" | null;
-  source_step_ordinal: number;
-  excluded: boolean;
+export interface PersonaDefinitionSummary {
+  persona_id: string;
+  persona_type: string;
+  name: string;
+  enabled: boolean;
+  yaml: string;
 }
-export interface ContractJourney {
-  journey_key: string;
-  title: string;
-  feature_key: string;
-  steps: { action: string; target?: { role?: string | null; name?: string | null; label?: string | null; text?: string | null } | null; url?: string | null; test_value_key?: string | null }[];
-  assertions: ContractCheck[];
-  safe_test_data_keys: string[];
-  excluded: boolean;
+
+export interface BoardItem {
+  item_id: string;
+  state_id: string;
+  case_id: string;
+  role: string;
+  name: string;
+  status: string;
+  blocker: string | null;
+  attempts: number;
+  page_url: string;
 }
-export interface TestContract {
-  contract_id: string;
-  test_run_id: string;
-  version: number;
-  status: "draft" | "approved" | "frozen" | "superseded";
-  journeys: ContractJourney[];
+export interface RunBoard {
+  run_id: string;
+  run_status: string;
+  run_kind: string;
+  total: number;
+  counts: Record<string, number>;
+  items: BoardItem[];
 }
 export interface ArtifactAccess {
   artifact_id: string;
@@ -433,6 +440,23 @@ async function readResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 export const api = {
+  listPersonas: (applicationId: string, signal?: AbortSignal) =>
+    request<PersonaDefinitionSummary[]>(`/api/v1/applications/${applicationId}/personas`, { signal }),
+  updatePersona: (applicationId: string, personaId: string, yaml: string) =>
+    request<PersonaDefinitionSummary>(`/api/v1/applications/${applicationId}/personas/${personaId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json", "X-MarketTwin-Request": "1" },
+      body: JSON.stringify({ yaml }),
+    }),
+  extendPark: (runId: string) =>
+    request<{ parked_at: string; deadline_at: string }>(`/api/v1/test-runs/${runId}/park/extend`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+    }),
+  getRunBoard: (runId: string, signal?: AbortSignal) =>
+    request<RunBoard>(`/api/v1/test-runs/${runId}/board`, { signal, cache: "no-store" }),
+  disableBoardItem: (runId: string, itemId: string) =>
+    request<RunBoard>(`/api/v1/test-runs/${runId}/board/items/${itemId}/disable`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+    }),
   requestExecutionPause: (runId: string, browser: LiveBrowser) =>
     request<ExecutionPause>(`/api/v1/test-runs/${runId}/live-browser/pause`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
@@ -442,23 +466,16 @@ export const api = {
     request<ExecutionPause>(`/api/v1/test-runs/${runId}/live-browser/pause/${pauseId}/resume`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
     }),
+  getLiveGrant: (runId: string, browserSessionId?: string, signal?: AbortSignal) => {
+    const query = browserSessionId ? `?browser_session_id=${browserSessionId}` : "";
+    return request<LiveGrant>(`/api/v1/test-runs/${runId}/live-grant${query}`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" }, signal,
+    });
+  },
   getLiveExecution: (runId: string, cursor?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ limit: "50" });
     if (cursor) query.set("cursor", cursor);
     return request<LiveExecution>(`/api/v1/test-runs/${runId}/live-browser?${query}`, { signal, cache: "no-store" });
-  },
-  getLiveBrowserFrame: async (runId: string, browser: LiveBrowser, signal: AbortSignal): Promise<Blob> => {
-    const query = new URLSearchParams({ browser_session_id: browser.browser_session_id, generation: String(browser.generation) });
-    const response = await fetch(`/api/v1/test-runs/${runId}/live-browser/frame?${query}`, {
-      credentials: "include", cache: "no-store", signal,
-    });
-    if (!response.ok) throw new ApiError("The selected live browser is unavailable.", response.status);
-    if (response.headers.get("content-type")?.split(";")[0].trim() !== "image/jpeg") {
-      throw new ApiError("The live browser returned an invalid frame.", 502);
-    }
-    const frame = await response.blob();
-    if (!frame.size || frame.size > 2 * 1024 * 1024) throw new ApiError("The live browser frame exceeded its limits.", 502);
-    return frame;
   },
   ingestKnowledgeLink: (workspaceId: string, url: string, name: string, roles: string[]) =>
     request<IngestionEntry>(`/api/v1/workspaces/${workspaceId}/ingestion/link`, {
@@ -579,14 +596,6 @@ export const api = {
   getRun: (runId: string, signal?: AbortSignal) =>
     request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
   getRunPreflight: (runId: string) => request<RunPreflight>(`/api/v1/test-runs/${runId}/preflight`),
-  getTestContract: (workspaceId: string, runId: string) =>
-    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract`),
-  updateContractJourney: (workspaceId: string, runId: string, journeyKey: string, update: { excluded?: boolean; title?: string; assertions?: ContractCheck[] }) =>
-    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract/journeys/${encodeURIComponent(journeyKey)}`, { method: "PUT", body: JSON.stringify(update) }),
-  approveTestContract: (workspaceId: string, runId: string) =>
-    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract/approve`, { method: "POST", body: "{}" }),
-  startTestContract: (workspaceId: string, runId: string) =>
-    request<TestContract>(`/api/v1/workspaces/${workspaceId}/test-runs/${runId}/contract/start`, { method: "POST", body: "{}" }),
   getRunResults: (runId: string, signal?: AbortSignal) =>
     request<RunResults>(`/api/v1/test-runs/${runId}/results`, { signal }),
   getRunJourneys: (runId: string, signal?: AbortSignal) =>
@@ -635,9 +644,9 @@ export const api = {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
       body: JSON.stringify({ approved }),
     }),
-  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", executionMode = "discovery_contract_v1", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = [], authMode?: "required" | "optional", runtimeHumanAssistance = true) =>
+  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", runKind = "explore_test", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = [], authMode?: "required" | "optional", runtimeHumanAssistance = true) =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",
-        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, execution_mode: executionMode, runtime_human_assistance: runtimeHumanAssistance, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
+        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, run_kind: runKind, runtime_human_assistance: runtimeHumanAssistance, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
     }),
 };

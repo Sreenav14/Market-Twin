@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.persistence.models import (
@@ -76,6 +77,8 @@ class ExecutionRepository:
         *,
         browser_session_id: UUID,
         execution_id: UUID,
+        test_run_id: UUID | None = None,
+        session_role: str = "legacy",
     ) -> None:
         browser_session = BrowserSession(
             id=browser_session_id,
@@ -83,10 +86,51 @@ class ExecutionRepository:
             browser_type="chromium",
             state="open",
             started_at=_utc_now(),
+            test_run_id=test_run_id,
+            session_role=session_role,
         )
 
         self._session.add(browser_session)
         await self._session.flush()
+
+    async def rebind_browser_session(
+        self,
+        *,
+        browser_session_id: UUID,
+        execution_id: UUID,
+    ) -> None:
+        """Point a Room's browser row at its current borrowing execution.
+
+        Watch/activity read models join browser rows to executions; the
+        Room's row must follow the in-memory rebind or the live view
+        would keep showing the previous item's execution (U-P3-03).
+        """
+
+        statement = (
+            update(BrowserSession)
+            .where(BrowserSession.id == browser_session_id)
+            .values(execution_id=execution_id)
+        )
+        await self._session.execute(statement)
+        await self._session.flush()
+
+    async def reap_open_browser_sessions(self) -> int:
+        """Close every still-open browser-session row (U-P2-04).
+
+        The worker is a single-owner process (advisory lock in
+        worker.main): at startup, no live browser can exist yet, so
+        any row left 'starting'/'open' by a crashed predecessor is an
+        orphan whose browser died with its process.
+        """
+
+        statement = (
+            update(BrowserSession)
+            .where(BrowserSession.state.in_(("starting", "open")))
+            .values(state="closed", closed_at=_utc_now())
+        )
+        result = await self._session.execute(statement)
+        await self._session.flush()
+        return int(result.rowcount or 0)
 
     async def mark_browser_session_closed(
         self,

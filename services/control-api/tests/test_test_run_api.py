@@ -23,31 +23,49 @@ from markettwin_control_api.persistence.repositories import (
 )
 from markettwin_control_api.services import run_readiness
 from markettwin_shared.auth_verification import AuthVerificationPolicy
-from markettwin_shared.discovery_contract import (
-    ContractAssertion,
-    DiscoveryMap,
-    FrozenJourneyContract,
-    TestContract,
-)
-from markettwin_shared.feature_plan import CaseAction, SemanticTarget
 from pydantic import ValidationError
 
 
-def test_new_runs_default_to_discovery_contract() -> None:
+def test_new_runs_default_to_explore_test() -> None:
+    # U-P8: the default kind is explore_test; no legacy mode is set.
     request = test_run_api.CreateTestRunRequest(
         target_id=uuid4(), study_brief="Check the storefront.",
     )
-    assert request.execution_mode == "discovery_contract_v1"
+    assert request.run_kind is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "kind"),
+    [
+        ("legacy_persona", "persona"),
+        ("deep_feature_v1", "explore_test"),
+        ("discovery_contract_v1", "explore_test"),
+        ("harness_v1", "explore_test"),
+    ],
+)
+def test_legacy_modes_translate_to_unified_kinds(mode: str, kind: str) -> None:
+    from markettwin_shared.run_kind import translate_execution_mode
+
+    assert translate_execution_mode(mode) == kind
+
+
+def test_create_request_accepts_an_explicit_run_kind() -> None:
+    request = test_run_api.CreateTestRunRequest(
+        target_id=uuid4(), study_brief="Check the look.", run_kind="slop",
+    )
+    assert request.run_kind == "slop"
 
 
 @pytest.mark.parametrize("mode", ["legacy_persona", "deep_feature_v1", "discovery_contract_v1"])
-def test_new_runs_preserve_explicit_execution_modes(
+def test_create_rejects_the_retired_execution_mode_alias(
     mode: Literal["legacy_persona", "deep_feature_v1", "discovery_contract_v1"],
 ) -> None:
-    request = test_run_api.CreateTestRunRequest(
-        target_id=uuid4(), study_brief="Check the storefront.", execution_mode=mode,
-    )
-    assert request.execution_mode == mode
+    """U-P8: sending execution_mode is a validation error (422)."""
+
+    with pytest.raises(ValidationError, match="run_kind instead"):
+        test_run_api.CreateTestRunRequest(
+            target_id=uuid4(), study_brief="Check the storefront.", execution_mode=mode,
+        )
 
 
 @pytest.mark.parametrize("mode", ["required", "optional"])
@@ -140,10 +158,9 @@ class FakeAuthorizationRepository:
 
 class FakeTestRunRepository:
     def __init__(
-        self, test_run: TestRunRecord, source_runs: tuple[TestRunRecord, ...] = (),
+        self, test_run: TestRunRecord,
     ) -> None:
         self._test_run = test_run
-        self._source_runs = source_runs
         self.create_arguments: dict[str, object] | None = None
 
     async def create(
@@ -157,6 +174,7 @@ class FakeTestRunRepository:
         configuration_snapshot: dict[str, object],
         synthetic_fixture_approval_enabled: bool = False,
         human_action_approvals_enabled: bool = False,
+        run_kind: str | None = None,
     ) -> TestRunRecord:
         self.create_arguments = {
             "workspace_id": workspace_id,
@@ -167,6 +185,7 @@ class FakeTestRunRepository:
             "configuration_snapshot": configuration_snapshot,
             "synthetic_fixture_approval_enabled": synthetic_fixture_approval_enabled,
             "human_action_approvals_enabled": human_action_approvals_enabled,
+            "run_kind": run_kind,
         }
         return self._test_run
     
@@ -178,7 +197,7 @@ class FakeTestRunRepository:
     ) -> TestRunRecord | None:
         if self._test_run.test_run_id == test_run_id:
             return self._test_run
-        return next((run for run in self._source_runs if run.test_run_id == test_run_id), None)
+        return None
 
     async def update_configuration_snapshot(
         self, *, test_run_id: UUID, configuration_snapshot: dict[str, object],
@@ -419,14 +438,12 @@ async def test_create_test_run_rejects_target_without_active_authorization(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("testing_depth", ["low", "medium", "high"])
 @pytest.mark.parametrize("requires_auth", [False, True])
-@pytest.mark.parametrize("mode", ["legacy_persona", "deep_feature_v1"])
 async def test_create_test_run_snapshots_active_authorization(
     monkeypatch: pytest.MonkeyPatch,
     testing_depth: str,
     requires_auth: bool,
-    mode: Literal["legacy_persona", "deep_feature_v1"],
 ) -> None:
-    """Both modes start without upfront identity setup, including protected targets."""
+    """Runs start without upfront identity setup, including protected targets."""
 
     user_id, application, workspace, target = make_records()
     target = replace(target, requires_auth=requires_auth)
@@ -455,9 +472,6 @@ async def test_create_test_run_snapshots_active_authorization(
         ),
         "authorization_id_at_creation": str(authorization_id),
     }
-    if mode == "deep_feature_v1":
-        expected_configuration["execution_mode"] = mode
-
     persisted_run = TestRunRecord(
         test_run_id=test_run_id,
         workspace_id=application.workspace_id,
@@ -490,7 +504,6 @@ async def test_create_test_run_snapshots_active_authorization(
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
             testing_depth=cast(Literal["low", "medium", "high"], testing_depth),
-            execution_mode=mode,
             study_brief=(
                 "Evaluate the shopping and checkout experience."
             ),
@@ -511,72 +524,43 @@ async def test_create_test_run_snapshots_active_authorization(
 
 
 @pytest.mark.asyncio
-async def test_create_test_run_reuses_only_integrity_valid_frozen_contract(
+async def test_create_test_run_with_run_kind_only_is_unified_native(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """U-P1-06: run_kind without an explicit legacy mode writes no
+    execution_mode into the snapshot, and the kind goes to the column."""
+
     user_id, application, workspace, target = make_records()
-    authorization = TargetAuthorizationRecord(
-        authorization_id=uuid4(), target_id=target.target_id,
-        created_by_user_id=user_id, authorized_by_user_id=user_id,
-        status="authorized", authorization_basis="Owned local application.",
-        created_at=datetime.now(UTC), authorized_at=datetime.now(UTC),
-        revoked_at=None, expires_at=None,
-    )
-    source_run_id, destination_run_id, contract_id = uuid4(), uuid4(), uuid4()
-    source_contract = TestContract(
-        contract_id=contract_id,
-        test_run_id=source_run_id,
-        version=3,
-        status="frozen",
-        approved_by_user_id=user_id,
-        approved_at=datetime.now(UTC),
-        journeys=(FrozenJourneyContract(
-            journey_key="checkout",
-            title="Checkout",
-            feature_key="purchase",
-            steps=(CaseAction(
-                action="click",
-                target=SemanticTarget(role="button", name="Pay"),
-            ),),
-            assertions=(ContractAssertion(
-                assertion_id="pay_visible",
-                oracle="visible",
-                target_role="button",
-                target_name="Pay",
-                expected_value=True,
-                plain_language="Pay button is visible.",
-                origin="user_approved",
-                source_step_ordinal=1,
-            ),),
-        ),),
-    )
-    discovery_map = DiscoveryMap(target_origin="http://localhost:3000")
     now = datetime.now(UTC)
-    source_run = TestRunRecord(
-        test_run_id=source_run_id,
-        workspace_id=workspace.workspace_id,
+    authorization_id = uuid4()
+    authorization = TargetAuthorizationRecord(
+        authorization_id=authorization_id,
+        target_id=target.target_id,
+        created_by_user_id=user_id,
+        authorized_by_user_id=user_id,
+        status="authorized",
+        authorization_basis="Owned local application.",
+        created_at=now,
+        authorized_at=now,
+        revoked_at=None,
+        expires_at=None,
+    )
+    persisted_run = TestRunRecord(
+        test_run_id=uuid4(),
+        workspace_id=application.workspace_id,
         application_id=application.application_id,
         target_id=target.target_id,
         created_by_user_id=user_id,
-        status="completed",
-        target_snapshot=test_run_api.build_target_snapshot(target),
-        configuration_snapshot={
-            "execution_mode": "discovery_contract_v1",
-            "discovery_map": discovery_map.model_dump(mode="json"),
-            "frozen_contract": source_contract.model_dump(mode="json"),
-            "frozen_contract_hash": source_contract.content_hash(),
-        },
-        created_at=now, updated_at=now, started_at=now, completed_at=now,
-    )
-    destination_run = replace(
-        source_run,
-        test_run_id=destination_run_id,
         status="draft",
+        target_snapshot=test_run_api.build_target_snapshot(target),
         configuration_snapshot={},
+        created_at=now,
+        updated_at=now,
         started_at=None,
         completed_at=None,
+        run_kind="explore_test",
     )
-    repository = FakeTestRunRepository(destination_run, (source_run,))
+    test_run_repository = FakeTestRunRepository(persisted_run)
     patch_common_dependencies(
         monkeypatch,
         user_id=user_id,
@@ -584,80 +568,46 @@ async def test_create_test_run_reuses_only_integrity_valid_frozen_contract(
         workspace=workspace,
         target=target,
         authorization=authorization,
-        test_run_repository=repository,
+        test_run_repository=test_run_repository,
     )
-
     response = await test_run_api.create_test_run(
         application.application_id,
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
-            execution_mode="discovery_contract_v1",
-            frozen_contract_source_run_id=source_run_id,
-            study_brief="Replay the previously approved fixture contract.",
+            study_brief="Explore and test everything.",
+            run_kind="explore_test",
         ),
         make_request(),
     )
+    assert response.run_kind == "explore_test"
+    assert test_run_repository.create_arguments is not None
+    assert test_run_repository.create_arguments["run_kind"] == "explore_test"
+    snapshot = test_run_repository.create_arguments["configuration_snapshot"]
+    assert isinstance(snapshot, dict)
+    assert "execution_mode" not in snapshot
 
-    replay = TestContract.model_validate(response.configuration_snapshot["test_contract"])
-    assert replay.test_run_id == destination_run_id
-    assert replay.contract_id == source_contract.contract_id
-    assert replay.version == source_contract.version
-    assert replay.status == "approved"
-    assert replay.approved_by_user_id == source_contract.approved_by_user_id
-    assert replay.approved_at == source_contract.approved_at
-    assert replay.journeys == source_contract.journeys
-    assert replay.content_hash() == source_contract.content_hash()
-    assert response.configuration_snapshot["frozen_contract_source_run_id"] == str(source_run_id)
-    assert response.configuration_snapshot["frozen_contract_source_hash"] == (
-        source_contract.content_hash()
-    )
-    assert response.configuration_snapshot["discovery_map"] == discovery_map.model_dump(mode="json")
-    assert response.configuration_snapshot["discovery_map_source_run_id"] == str(source_run_id)
 
-    bad_hash_snapshot = dict(source_run.configuration_snapshot)
-    bad_hash_snapshot["frozen_contract_hash"] = "0" * 64
-    repository._source_runs = (replace(
-        source_run, configuration_snapshot=bad_hash_snapshot,
-    ),)
-    with pytest.raises(HTTPException, match="integrity or approval") as exc_info:
-        await test_run_api.create_test_run(
-            application.application_id,
-            test_run_api.CreateTestRunRequest(
-                target_id=target.target_id,
-                execution_mode="discovery_contract_v1",
-                frozen_contract_source_run_id=source_run_id,
-                study_brief="Replay the previously approved fixture contract.",
-            ),
-            make_request(),
+@pytest.mark.asyncio
+async def test_create_rejects_frozen_contract_replay() -> None:
+    """U-P8: frozen-contract replay was retired with the legacy
+    engines; asking for it is a validation error (422)."""
+
+    with pytest.raises(ValidationError, match="replay was retired"):
+        test_run_api.CreateTestRunRequest(
+            target_id=uuid4(),
+            frozen_contract_source_run_id=uuid4(),
+            study_brief="Replay the previously approved fixture contract.",
         )
-    assert exc_info.value.status_code == 409
-
-    repository._source_runs = (replace(
-        source_run, created_by_user_id=uuid4(),
-    ),)
-    with pytest.raises(HTTPException, match="source run not found") as exc_info:
-        await test_run_api.create_test_run(
-            application.application_id,
-            test_run_api.CreateTestRunRequest(
-                target_id=target.target_id,
-                execution_mode="discovery_contract_v1",
-                frozen_contract_source_run_id=source_run_id,
-                study_brief="Replay the previously approved fixture contract.",
-            ),
-            make_request(),
-        )
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("mode", "requires_auth", "auth_mode"),
-    [("deep_feature_v1", True, "required"), ("legacy_persona", True, "required"),
-     ("deep_feature_v1", False, "optional"), ("legacy_persona", False, "optional")],
+    ("requires_auth", "auth_mode"),
+    [(True, "required"), (False, "optional")],
 )
 async def test_create_test_run_freezes_approved_auth_verification_policy(
     monkeypatch: pytest.MonkeyPatch,
-    mode: str, requires_auth: bool, auth_mode: str,
+    requires_auth: bool, auth_mode: str,
 ) -> None:
     user_id, application, workspace, raw_target = make_records()
     target = replace(raw_target, requires_auth=requires_auth)
@@ -691,8 +641,6 @@ async def test_create_test_run_freezes_approved_auth_verification_policy(
         "auth_verification": policy.model_dump(mode="json"),
         "auth_mode": auth_mode,
     }
-    if mode == "deep_feature_v1":
-        config["execution_mode"] = mode
     persisted = TestRunRecord(
         test_run_id=test_run_id,
         workspace_id=application.workspace_id,
@@ -723,7 +671,6 @@ async def test_create_test_run_freezes_approved_auth_verification_policy(
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
             study_brief="Evaluate the shopping and checkout experience.",
-            execution_mode=mode,
             auth_verification=policy,
             auth_mode=auth_mode,
         ),
@@ -777,7 +724,7 @@ async def test_create_test_run_rejects_auth_verification_outside_target_allowlis
             test_run_api.CreateTestRunRequest(
                 target_id=target.target_id,
                 study_brief="Evaluate the shopping and checkout experience.",
-                execution_mode="deep_feature_v1",
+
                 auth_verification=policy,
             ),
             make_request(),
@@ -852,7 +799,7 @@ async def test_legacy_opt_out_still_requires_protected_identity_policy(monkeypat
             application.application_id,
             test_run_api.CreateTestRunRequest(
                 target_id=target.target_id, study_brief="Check protected fixture.",
-                execution_mode="legacy_persona",
+
                 runtime_human_assistance=False,
             ), make_request(),
         )
@@ -907,7 +854,7 @@ async def test_fixture_approval_opt_in_is_persisted_outside_config_snapshot(
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
             study_brief="Test synthetic registration.",
-            execution_mode="deep_feature_v1",
+
             synthetic_fixture_approval=True,
         ),
         make_request(),
@@ -968,7 +915,7 @@ async def test_general_action_approval_opt_in_is_persisted_separately(
         test_run_api.CreateTestRunRequest(
             target_id=target.target_id,
             study_brief="Test an authorized form action.",
-            execution_mode="deep_feature_v1",
+
             human_action_approvals=True,
         ),
         make_request(),
@@ -1022,7 +969,7 @@ async def test_fixture_approval_rejects_remote_allowed_origin(
             test_run_api.CreateTestRunRequest(
                 target_id=target.target_id,
                 study_brief="Test synthetic registration.",
-                execution_mode="deep_feature_v1",
+
                 synthetic_fixture_approval=True,
             ),
             make_request(),
@@ -1100,7 +1047,7 @@ async def test_generic_start_rejects_frozen_contract_replay_without_dispatch(
         test_run_repository=run_repository,
     )
 
-    with pytest.raises(HTTPException, match="contract start endpoint") as exc_info:
+    with pytest.raises(HTTPException, match="retired contract") as exc_info:
         await test_run_api.start_test_run(persisted_run.test_run_id, make_request())
 
     assert exc_info.value.status_code == 409

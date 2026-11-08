@@ -1,18 +1,17 @@
 """Authenticated observation, separate from lease-bound browser input."""
 
-import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from markettwin_control_api.api.auth import get_database_runtime
 from markettwin_control_api.api.dependencies import get_authenticated_user_id
 from markettwin_control_api.api.execution_pause import PauseResponse, pause_response
-from markettwin_control_api.api.observation_common import NO_STORE, ObservationRoute
+from markettwin_control_api.api.observation_common import ObservationRoute
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.persistence.repositories.execution_pause_repository import (
     ExecutionPauseRepository,
@@ -20,15 +19,18 @@ from markettwin_control_api.persistence.repositories.execution_pause_repository 
 from markettwin_control_api.persistence.repositories.live_browser_repository import (
     LiveBrowserRepository,
 )
-from markettwin_control_api.services.hitl_worker_client import (
-    BrowserObservationUnavailable,
-    HitlWorkerClient,
-)
-
-_frame_slots = asyncio.Semaphore(4)
+from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient
 
 
 router = APIRouter(tags=["Live Execution"], route_class=ObservationRoute)
+
+
+class BoardItemBanner(BaseModel):
+    """Now-line for the Watch page: 'Item 23 of 112 — Save (button)'."""
+
+    index: int
+    total: int
+    label: str
 
 
 class BrowserSelection(BaseModel):
@@ -40,6 +42,7 @@ class BrowserSelection(BaseModel):
     viewer_state: Literal["available", "suppressed"]
     journey_title: str
     requesting_agent: str
+    board_item: BoardItemBanner | None = None
 
 
 class ActivityItem(BaseModel):
@@ -119,47 +122,50 @@ async def get_live_browser(
         )
 
 
-@router.get("/api/v1/test-runs/{run_id}/live-browser/frame")
-async def get_live_frame(
-    run_id: UUID, request: Request, browser_session_id: UUID,
-    generation: int = Query(ge=0),
-) -> Response:
+class LiveGrantResponse(BaseModel):
+    ticket: str
+    viewer_url: str
+    browser: BrowserSelection
+
+
+@router.post(
+    "/api/v1/test-runs/{run_id}/live-grant", response_model=LiveGrantResponse,
+)
+async def create_live_grant(
+    run_id: UUID, request: Request, browser_session_id: UUID | None = None,
+) -> LiveGrantResponse:
+    """Issue a single-use observer ticket for the run's live browser.
+
+    This is the first production caller of the worker's observer-grant
+    route (U-P3-01): the Watch page exchanges this grant for the
+    screencast WebSocket. 503 when the HITL worker service is not
+    configured (worker_client), 409 when no browser can be observed.
+    """
+
     actor_id = await get_authenticated_user_id(request=request)
-    if _frame_slots.locked():
-        raise HTTPException(429, "Browser observation is busy. Try again.")
-    async with _frame_slots:
-        async with get_database_runtime(request).session_factory() as session:
-            repository = LiveBrowserRepository(session)
-
-            async def exact_selection() -> BrowserSelection:
-                run = await repository.authorized_run(run_id=run_id, actor_id=actor_id)
-                if run is None:
-                    raise HTTPException(404, "Test run not found.")
-                selection = await repository.selected_browser(
-                    run=run, browser_session_id=browser_session_id,
-                )
-                if (not selection or selection["browser_session_id"] != browser_session_id
-                        or selection["generation"] != generation
-                        or selection["viewer_state"] != "available"):
-                    raise HTTPException(409, "Browser observation unavailable.")
-                return BrowserSelection.model_validate(selection)
-
-            selected = await exact_selection()
-            try:
-                image = await worker_client().observe_frame(
-                    actor_id=actor_id, browser_session_id=browser_session_id,
-                    execution_id=selected.execution_id, journey_id=selected.journey_id,
-                    generation=generation,
-                )
-            except BrowserObservationUnavailable:
-                raise HTTPException(409, "Browser observation unavailable.") from None
-            except RuntimeError:
-                raise HTTPException(503, "The supervised browser owner is unavailable.") from None
-            # Session revocation, membership, target approval and durable generation
-            # can change during the asynchronous worker capture. Recheck before bytes.
-            if await get_authenticated_user_id(request=request) != actor_id:
-                raise HTTPException(401, "Authentication required.")
-            current = await exact_selection()
-            if current != selected:
-                raise HTTPException(409, "Browser observation unavailable.")
-            return Response(content=image, media_type="image/jpeg", headers=NO_STORE)
+    async with get_database_runtime(request).session_factory() as session:
+        repository = LiveBrowserRepository(session)
+        run = await repository.authorized_run(run_id=run_id, actor_id=actor_id)
+        if run is None:
+            raise HTTPException(404, "Test run not found.")
+        selection = await repository.selected_browser(
+            run=run, browser_session_id=browser_session_id,
+        )
+        if not selection or selection["viewer_state"] != "available":
+            raise HTTPException(409, "Browser observation unavailable.")
+        browser = BrowserSelection.model_validate(selection)
+    try:
+        grant = await worker_client().issue_observer_grant(
+            actor_id=actor_id,
+            browser_session_id=browser.browser_session_id,
+            execution_id=browser.execution_id,
+            journey_id=browser.journey_id,
+            generation=browser.generation,
+        )
+    except RuntimeError:
+        raise HTTPException(
+            503, "The supervised browser owner is unavailable.",
+        ) from None
+    return LiveGrantResponse(
+        ticket=grant.ticket, viewer_url=str(grant.viewer_url), browser=browser,
+    )

@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-from contextlib import AsyncExitStack
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.deep_testing import CaseExecutionResult
-from markettwin_shared.discovery_contract import DiscoveryMap
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from markettwin_execution_orchestrator.agents.schemas.journey import PersonaJourneySpec
-from markettwin_execution_orchestrator.agents.schemas.plan import MetaAgentPlan
-from markettwin_execution_orchestrator.browser import (
-    AllowedOrigin,
-    BrowserController,
-)
+from markettwin_execution_orchestrator.browser import AllowedOrigin
 from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
 )
@@ -28,32 +21,7 @@ from markettwin_execution_orchestrator.browser.policy import (
 from markettwin_execution_orchestrator.observability import (
     initialize_adk_observability,
 )
-from markettwin_execution_orchestrator.persistence import (
-    PlanRepository,
-    RunStateRepository,
-)
-from markettwin_execution_orchestrator.workflow.adk_workflow import (
-    WorkflowPlan,
-    create_run_workflow,
-    run_workflow,
-)
-from markettwin_execution_orchestrator.workflow.multi_persona_executor import (
-    MultiPersonaExecutionRequest,
-    execute_one_planned_journey,
-    persist_run_collection,
-)
-from markettwin_execution_orchestrator.workflow.multi_persona_result import (
-    MultiPersonaExecutionResult,
-)
-from markettwin_execution_orchestrator.workflow.persona_result import PersonaJourneyResult
-from markettwin_execution_orchestrator.workflow.planning import (
-    MetaPlanningRequest,
-    generate_meta_agent_plan,
-)
-from markettwin_execution_orchestrator.workflow.testing_depth import TestingDepth, mission_limit
-
-if TYPE_CHECKING:
-    from markettwin_execution_orchestrator.workflow.deep_run import DeepFeatureRunResult
+from markettwin_execution_orchestrator.workflow.testing_depth import TestingDepth
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,15 +40,12 @@ class MarketTwinRunRequest:
     max_duration_seconds_per_journey: int = 180
     knowledge_context: tuple[dict[str, object], ...] = ()
     testing_depth: TestingDepth = "high"
-    agent_prompt_overrides: dict[str, dict[str, str]] = field(
-        default_factory=dict[str, dict[str, str]]
-    )
-    replay_plan: dict[str, object] | None = None
-    execution_mode: Literal[
-        "legacy_persona", "deep_feature_v1", "discovery_contract_v1", "harness_v1",
-    ] = "discovery_contract_v1"
-    feature_scope: dict[str, object] | None = None
-    feature_budget: dict[str, object] | None = None
+    # Unified run kind, resolved from the run_kind column / legacy mode
+    # (U-P0-04/05); dispatch switches on it (U-P8).
+    run_kind: Literal["explore_test", "persona", "slop"] = "explore_test"
+    # True when the run was created unified-native: a run_kind column
+    # value and NO legacy execution_mode in its snapshot (U-P1-06).
+    unified_native: bool = False
     feature_plan: dict[str, object] | None = None
     fixture_truth: bool = False
     auth_verification: AuthVerificationPolicy | None = None
@@ -97,8 +62,7 @@ async def execute_markettwin_run(
     *,
     session: AsyncSession,
 ) -> (
-    MultiPersonaExecutionResult | DeepFeatureRunResult | DiscoveryMap
-    | tuple[CaseExecutionResult, ...]
+    tuple[CaseExecutionResult, ...] | None
 ):
     """Bind durable provider limits for every execution entry point."""
     from markettwin_database.model_budget import model_budget
@@ -112,10 +76,16 @@ async def _execute_markettwin_run(
     *,
     session: AsyncSession,
 ) -> (
-    MultiPersonaExecutionResult | DeepFeatureRunResult | DiscoveryMap
-    | tuple[CaseExecutionResult, ...]
+    tuple[CaseExecutionResult, ...] | None
 ):
-    """Plan and execute one complete MarketTwin test run."""
+    """Execute one unified run: exactly three kinds exist (U-P8).
+
+    explore_test runs on the Board engine (the successor of the
+    harness/discovery/deep modes); persona and slop run their native
+    executors and only as unified-native runs — legacy runs of those
+    kinds were retired with the legacy engines and refuse loudly
+    instead of silently running a dead path.
+    """
 
     initialize_adk_observability()
 
@@ -130,149 +100,39 @@ async def _execute_markettwin_run(
     if request.max_duration_seconds_per_journey <= 0:
         raise ValueError("max_duration_seconds_per_journey must be positive.")
 
-    validated_start_url = validate_target_url(
+    # Validation only: the engines navigate to request.start_url; the
+    # normalized form's one consumer was the retired legacy persona
+    # path. The call stays because it raises on a disallowed target.
+    validate_target_url(
         request.start_url,
         request.allowed_origins,
         request.network_policy,
     )
 
-    if request.execution_mode == "harness_v1":
-        from markettwin_execution_orchestrator.workflow.harness_run import (
-            execute_harness_run,
+    if request.run_kind == "persona":
+        if not request.unified_native:
+            raise ValueError(
+                "Legacy persona runs were retired in the unified build; "
+                "create a new Persona Test run instead."
+            )
+        from markettwin_execution_orchestrator.workflow.persona_run import (
+            execute_persona_run,
         )
 
-        return await execute_harness_run(request=request, session=session)
-    if request.execution_mode == "discovery_contract_v1":
-        from markettwin_database.models import TestRun
+        return await execute_persona_run(request=request, session=session)
+    if request.run_kind == "slop":
+        if not request.unified_native:
+            raise ValueError(
+                "Slop runs have no legacy form; create the run with "
+                "run_kind only."
+            )
+        from markettwin_execution_orchestrator.workflow.slop_run import (
+            execute_slop_run,
+        )
 
-        from markettwin_execution_orchestrator.workflow.contract_run import execute_contract_run
-        from markettwin_execution_orchestrator.workflow.discovery import execute_discovery_run
-
-        run = await session.get(TestRun, request.run_id)
-        if run is not None and run.configuration_snapshot.get("discovery_stage") == "executing":
-            return await execute_contract_run(request=request, session=session)
-        return await execute_discovery_run(request=request, session=session)
-    if request.execution_mode == "deep_feature_v1":
-        from markettwin_execution_orchestrator.workflow.deep_run import execute_deep_feature_run
-
-        return await execute_deep_feature_run(request=request, session=session)
-    if request.execution_mode != "legacy_persona":
-        raise ValueError("Unsupported execution mode.")
-
-    run_repository = RunStateRepository(session)
-    plan_repository = PlanRepository(session)
-
-    await run_repository.mark_planning(
-        test_run_id=request.run_id,
+        return await execute_slop_run(request=request, session=session)
+    from markettwin_execution_orchestrator.workflow.harness_run import (
+        execute_harness_run,
     )
-    await session.commit()
 
-    async def prepare_plan() -> WorkflowPlan:
-        if request.replay_plan is not None:
-            plan = MetaAgentPlan.model_validate(request.replay_plan)
-        else:
-            plan = await generate_meta_agent_plan(
-                request=MetaPlanningRequest(
-                    test_run_id=request.run_id,
-                    study_brief=study_brief,
-                    target_snapshot=request.target_snapshot,
-                    knowledge_context=request.knowledge_context,
-                    testing_depth=request.testing_depth,
-                    prompt_override=request.agent_prompt_overrides.get("meta"),
-                ),
-                session=session,
-            )
-        if len(plan.missions) > mission_limit(request.testing_depth):
-            raise ValueError("The generated plan exceeds the selected testing depth.")
-
-        persisted_plan = await plan_repository.create_from_plan(
-            test_run_id=request.run_id,
-            plan=plan,
-        )
-
-        await session.commit()
-
-        await run_repository.mark_running(
-            test_run_id=request.run_id,
-        )
-
-        await session.commit()
-
-        return WorkflowPlan(
-            plan=plan,
-            journey_ids_by_key={
-                item.journey_key: item.journey_id for item in persisted_plan.journeys
-            },
-            persona_ids_by_key={
-                item.persona_key: item.persona_id for item in persisted_plan.personas
-            },
-            mission_ids_by_key={
-                item.mission_key: item.mission_id for item in persisted_plan.missions
-            },
-        )
-
-    async def collect_results(result: MultiPersonaExecutionResult) -> None:
-        await persist_run_collection(run_id=request.run_id, result=result, session=session)
-
-    try:
-        async with AsyncExitStack() as resources:
-            browser_controller: BrowserController | None = None
-
-            async def execute_journey(
-                prepared: WorkflowPlan, journey: PersonaJourneySpec
-            ) -> PersonaJourneyResult:
-                nonlocal browser_controller
-                if browser_controller is None:
-                    browser_controller = await resources.enter_async_context(BrowserController())
-                return await execute_one_planned_journey(
-                    request=MultiPersonaExecutionRequest(
-                        run_id=request.run_id,
-                        runtime_human_assistance=request.runtime_human_assistance,
-                        plan=prepared.plan,
-                        journey_ids_by_key=prepared.journey_ids_by_key,
-                        persona_ids_by_key=prepared.persona_ids_by_key,
-                        mission_ids_by_key=prepared.mission_ids_by_key,
-                        start_url=validated_start_url.href,
-                        allowed_origins=request.allowed_origins,
-                        network_policy=request.network_policy,
-                        max_duration_seconds_per_journey=(request.max_duration_seconds_per_journey),
-                        agent_prompt_overrides=request.agent_prompt_overrides,
-                        auth_verification=request.auth_verification,
-                        auth_mode=request.auth_mode,
-                        target_id=request.target_snapshot.get("target_id"),
-                    ),
-                    journey=journey,
-                    browser_controller=browser_controller,
-                    session=session,
-                )
-
-            result = await run_workflow(
-                run_id=request.run_id,
-                workflow=create_run_workflow(
-                    prepare_plan=prepare_plan,
-                    execute_journey=execute_journey,
-                    collect_results=collect_results,
-                    max_journeys=3 * mission_limit(request.testing_depth),
-                ),
-            )
-
-        await run_repository.mark_completed(
-            test_run_id=request.run_id,
-        )
-
-        await session.commit()
-
-        return result
-
-    except Exception:
-        await session.rollback()
-
-        try:
-            await run_repository.mark_failed(
-                test_run_id=request.run_id,
-            )
-            await session.commit()
-        except Exception:
-            await session.rollback()
-
-        raise
+    return await execute_harness_run(request=request, session=session)

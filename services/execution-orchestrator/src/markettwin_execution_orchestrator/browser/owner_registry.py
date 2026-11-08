@@ -87,9 +87,6 @@ class BrowserOwnerRegistry:
     async def diagnostics(self, lease: OwnerLease) -> tuple[dict[str, str | int], ...]:
         return await self._owner(lease.handle).diagnostics(lease)
 
-    async def observe(self, handle: BrowserSessionHandle, *, generation: int) -> bytes:
-        return await self._owner(handle).observe(handle, generation=generation)
-
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None:
         await self._owner(handle).revoke(handle, generation)
 

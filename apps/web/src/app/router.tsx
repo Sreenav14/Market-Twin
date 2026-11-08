@@ -12,6 +12,7 @@ import { ApplicationOverviewPage } from "../pages/applications/ApplicationOvervi
 import { IngestionPage } from "../pages/knowledge/IngestionPage";
 import { ReviewKnowledgePage } from "../pages/knowledge/ReviewKnowledgePage";
 import { KnowledgeReviewPage } from "../pages/knowledge/KnowledgeReviewPage";
+import { ApplicationPersonasPage } from "../pages/applications/ApplicationPersonasPage";
 import { ApplicationRunsPage } from "../pages/applications/ApplicationRunsPage";
 import { EditApplicationPage } from "../pages/applications/EditApplicationPage";
 import { TargetsPage } from "../pages/targets/TargetsPage";
@@ -22,8 +23,8 @@ import { EditTargetPage } from "../pages/targets/EditTargetPage";
 import { TargetNetworkPolicyPage } from "../pages/targets/TargetNetworkPolicyPage";
 import { RunsPage } from "../pages/runs/RunsPage";
 import { NewRunPage } from "../pages/runs/NewRunPage";
-import { ContractApprovalPage } from "../pages/runs/ContractApprovalPage";
 import { RunOverviewPage } from "../pages/runs/RunOverviewPage";
+import { RunBoardPage } from "../pages/runs/RunBoardPage";
 import { AgentPromptsPage } from "../pages/runs/AgentPromptsPage";
 import { RunPerspectivesPage } from "../pages/runs/RunPerspectivesPage";
 import { RunMissionsPage } from "../pages/runs/RunMissionsPage";
@@ -87,6 +88,10 @@ export function AuthenticatedRouter({
           element={<ApplicationRunsPage />}
         />
         <Route
+          path="/applications/:applicationId/personas"
+          element={<ApplicationPersonasPage />}
+        />
+        <Route
           path="/applications/:applicationId/targets"
           element={<TargetsPage />}
         />
@@ -113,6 +118,7 @@ export function AuthenticatedRouter({
         <Route path="/runs/:runId" element={<RunLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<RunOverviewPage />} />
+          <Route path="board" element={<RunBoardPage />} />
           <Route path="agents" element={<AgentPromptsPage />} />
           <Route path="perspectives" element={<RunPerspectivesPage />} />
           <Route path="missions" element={<RunMissionsPage />} />
@@ -127,7 +133,6 @@ export function AuthenticatedRouter({
           <Route path="evidence/:artifactId" element={<EvidenceDetailPage />} />
           <Route path="report" element={<LiveTestPage view="results" />} />
           <Route path="results" element={<LiveTestPage view="results" />} />
-          <Route path="contract" element={<ContractApprovalPage />} />
           <Route path="human-action" element={<HumanActionPage />} />
         </Route>
         <Route path="/settings" element={<SettingsLayout />}>

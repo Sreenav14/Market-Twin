@@ -4,20 +4,6 @@ import { api } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
-it("fetches exact-generation frames with cookies and no-store outside the JSON client", async () => {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(new Blob(["jpeg"]), { status: 200, headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store" } }));
-  vi.stubGlobal("fetch", fetchMock);
-  const signal = new AbortController().signal;
-  const blob = await api.getLiveBrowserFrame("run", { browser_session_id: "browser", generation: 3 } as Parameters<typeof api.getLiveBrowserFrame>[1], signal);
-  expect(blob).toBeInstanceOf(Blob);
-  expect(fetchMock).toHaveBeenCalledWith("/api/v1/test-runs/run/live-browser/frame?browser_session_id=browser&generation=3", { credentials: "include", cache: "no-store", signal });
-});
-
-it.each(["application/json", "text/html"])("rejects a non-JPEG %s frame", async (contentType) => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not a frame", { status: 200, headers: { "Content-Type": contentType } })));
-  await expect(api.getLiveBrowserFrame("run", { browser_session_id: "browser", generation: 1 } as Parameters<typeof api.getLiveBrowserFrame>[1], new AbortController().signal)).rejects.toThrow("invalid frame");
-});
-
 it("sends workspace ingestion as browser-encoded multipart data", async () => {
   const fetchMock = vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ source: { name: "source.txt" } }), { status: 200 }),
@@ -50,14 +36,15 @@ it("starts ordinary runs with runtime assistance and no upfront identity policy"
   await api.createRun("app", "target", "Test the protected page");
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   const payload = JSON.parse(init.body as string);
-  expect(payload.execution_mode).toBe("discovery_contract_v1");
+  expect(payload.run_kind).toBe("explore_test");
+  expect(payload).not.toHaveProperty("execution_mode");
   expect(payload.runtime_human_assistance).toBe(true);
   expect(payload).not.toHaveProperty("auth_verification");
   expect(payload).not.toHaveProperty("auth_mode");
 });
 
-it.each(["legacy_persona", "deep_feature_v1", "discovery_contract_v1"])(
-  "preserves the selected %s execution mode in the HTTP request",
+it.each(["explore_test", "persona", "slop"])(
+  "preserves the selected %s run kind in the HTTP request",
   async (mode) => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "run" }), { status: 200 }),
@@ -68,7 +55,7 @@ it.each(["legacy_persona", "deep_feature_v1", "discovery_contract_v1"])(
 
     const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/applications/app/test-runs");
-    expect(JSON.parse(init.body as string).execution_mode).toBe(mode);
+    expect(JSON.parse(init.body as string).run_kind).toBe(mode);
   },
 );
 
@@ -88,7 +75,7 @@ it("preserves explicit identity policies for existing API callers", async () => 
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "run" }), { status: 200 }));
   vi.stubGlobal("fetch", fetchMock);
   const policy = { origin: "https://fixture.test", marker_selector: "#identity", expected_marker: "user", role: "user", account_reference: "synthetic-01" };
-  await api.createRun("app", "target", "Verify protected fixture", [], "low", "", "legacy_persona", policy, false, false, [], "required", false);
+  await api.createRun("app", "target", "Verify protected fixture", [], "low", "", "persona", policy, false, false, [], "required", false);
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(JSON.parse(init.body as string)).toMatchObject({
     auth_verification: policy, auth_mode: "required", runtime_human_assistance: false,

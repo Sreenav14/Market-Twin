@@ -311,6 +311,20 @@ class BrowserSession(Base):
             "id",
             name="uq_browser_sessions_execution_id_id",
         ),
+        CheckConstraint(
+            "session_role IN ('room', 'proof', 'persona', 'legacy')",
+            name="ck_browser_sessions_session_role_allowed",
+        ),
+        # One open Room per run (U-P2-01): the unified engine's shared
+        # browser is unique among live room rows for its run.
+        Index(
+            "uq_browser_sessions_open_room_per_run",
+            "test_run_id",
+            unique=True,
+            postgresql_where=text(
+                "session_role = 'room' AND state IN ('starting', 'open')"
+            ),
+        ),
         {"schema": "execution"},
     )
 
@@ -320,6 +334,22 @@ class BrowserSession(Base):
         Uuid(as_uuid=True),
         ForeignKey("execution.agent_executions.id", ondelete="CASCADE"),
         nullable=False,
+    )
+
+    # The run this session belongs to (unified engine). NULL on rows
+    # created by legacy per-case paths.
+    test_run_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.test_runs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    session_role: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="legacy",
+        server_default=text("'legacy'"),
     )
 
     browser_type: Mapped[str] = mapped_column(

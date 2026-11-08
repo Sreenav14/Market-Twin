@@ -1,9 +1,8 @@
 """Frozen coverage choices reach planning without changing legacy run semantics."""
 
 import json
-from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -64,35 +63,24 @@ def test_feature_case_coverage_limits_follow_selected_depth(depth: str, limit: i
     assert feature_case_limit(cast(TestingDepth, depth)) == limit
 
 
-async def test_over_budget_plan_cannot_reach_browser_execution(
+async def test_legacy_persona_dispatch_is_retired(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    session = AsyncMock(spec=AsyncSession)
-    state = SimpleNamespace(mark_planning=AsyncMock(), mark_failed=AsyncMock())
-    plans = SimpleNamespace(create_from_plan=AsyncMock())
-    monkeypatch.setattr(run_executor, "RunStateRepository", lambda _: state)
-    monkeypatch.setattr(run_executor, "PlanRepository", lambda _: plans)
+    """U-P8: the legacy meta-plan path is gone; a legacy persona
+    request refuses loudly instead of reaching a browser. The unified
+    engine's own budget gate lives in the Board tests."""
+
     monkeypatch.setattr(run_executor, "initialize_adk_observability", lambda: None)
-    monkeypatch.setattr(
-        run_executor,
-        "generate_meta_agent_plan",
-        AsyncMock(
-            return_value=SimpleNamespace(missions=[{}, {}]),
-        ),
-    )
-    browser = MagicMock()
-    monkeypatch.setattr(run_executor, "BrowserController", browser)
     request = run_executor.MarketTwinRunRequest(
         run_id=uuid4(),
         study_brief="Check the stated user task",
         target_snapshot={},
         start_url="https://example.invalid",
         testing_depth="low",
-        execution_mode="legacy_persona",
+        run_kind="persona",
         allowed_origins=(AllowedOrigin(scheme="https", hostname="example.invalid"),),
     )
-    with pytest.raises(ValueError, match="exceeds the selected testing depth"):
-        await run_executor.execute_markettwin_run(request, session=cast(AsyncSession, session))
-    plans.create_from_plan.assert_not_awaited()
-    browser.assert_not_called()
-    state.mark_failed.assert_awaited_once()
+    with pytest.raises(ValueError, match="retired"):
+        await run_executor.execute_markettwin_run(
+            request, session=cast(AsyncSession, AsyncMock(spec=AsyncSession)),
+        )

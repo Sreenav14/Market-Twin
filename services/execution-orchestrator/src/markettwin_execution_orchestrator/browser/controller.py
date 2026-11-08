@@ -72,6 +72,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionHandle,
     ElementBoundingBox,
     FailedRequestRecord,
+    JsErrorRecord,
     NetworkPolicy,
     ScopeRole,
 )
@@ -143,6 +144,7 @@ class BrowserController:
         self._max_pages_per_session = max_pages_per_session
         self._playwright: Playwright | None = None
         self._sessions: dict[UUID, JourneyBrowserSession] = {}
+        self._rooms: dict[UUID, UUID] = {}
         self._egress_proxies: dict[UUID, PinnedEgressProxy] = {}
         self._auth_session_broker = AuthSessionBroker()
         self._authentication_handlers: dict[UUID, Callable[[], Awaitable[None]]] = {}
@@ -196,6 +198,10 @@ class BrowserController:
         timeout_ms: int = 30_000,
         viewport_preset: Literal["mobile320", "desktop1280"] = "desktop1280",
         fixture_action_rules: tuple[SensitiveActionRule, ...] = (),
+        is_room: bool = False,
+        viewport_size: tuple[int, int] | None = None,
+        locale: str | None = None,
+        js_capture: bool = False,
     ) -> BrowserSessionHandle:
         """Create one fresh Chromium + BrowserContext for one Journey."""
 
@@ -237,11 +243,19 @@ class BrowserController:
                 ],
             )
             self._egress_proxies[session_id] = egress
+            context_kwargs: dict[str, Any] = {}
+            if locale is not None:
+                context_kwargs["locale"] = locale
             context = await browser.new_context(
-                viewport={"width": 320 if viewport_preset == "mobile320" else 1280, "height": 900},
+                viewport=(
+                    {"width": viewport_size[0], "height": viewport_size[1]}
+                    if viewport_size is not None
+                    else {"width": 320 if viewport_preset == "mobile320" else 1280, "height": 900}
+                ),
                 device_scale_factor=1,
                 accept_downloads=False,
                 service_workers="block",
+                **context_kwargs,
             )
             if auth_snapshot is not None:
                 await AuthSessionBroker.install_snapshot(
@@ -266,7 +280,27 @@ class BrowserController:
                 auth_only_origins=auth_only_origins,
                 authenticated_session=authenticated_session or auth_snapshot is not None,
                 fixture_action_rules=fixture_action_rules,
+                is_room=is_room,
+                js_capture=js_capture,
             )
+            if js_capture:
+                # Unhandled-rejection hook (U-P6-03): pageerror does
+                # not fire for rejected promises, so the page itself
+                # collects them for harvest_js_records().
+                await context.add_init_script(
+                    """
+                    window.__mt_rejections = [];
+                    window.__mt_rejection_doc = Date.now().toString(36)
+                      + Math.random().toString(36).slice(2);
+                    window.addEventListener('unhandledrejection', (event) => {
+                      const reason = event.reason;
+                      window.__mt_rejections.push({
+                        message: String(reason && reason.message ? reason.message : reason),
+                        stack: reason && reason.stack ? String(reason.stack) : null,
+                      });
+                    });
+                    """,
+                )
             self._sessions[session_id] = session
 
             await context.route("**/*", lambda route: self._route_request(session, route))
@@ -298,6 +332,165 @@ class BrowserController:
                 await egress.close()
             raise
 
+        return handle
+
+    async def open_room_session(
+        self,
+        *,
+        run_id: UUID,
+        execution_id: UUID,
+        journey_id: UUID,
+        allowed_origins: tuple[AllowedOrigin, ...] | list[AllowedOrigin],
+        network_policy: NetworkPolicy,
+        auth_snapshot: AuthSessionSnapshot | None = None,
+        authenticated_session: bool = False,
+        fixture_action_rules: tuple[SensitiveActionRule, ...] = (),
+        js_capture: bool = False,
+    ) -> BrowserSessionHandle:
+        """Open the run's Room: ONE session shared by the whole run (U-P2).
+
+        The Room is created exactly like a journey session, marked
+        is_room, and registered under the run id. Workers borrow it via
+        rebind_session; only close_room may close it.
+        """
+
+        handle = await self.create_session(
+            execution_id=execution_id,
+            journey_id=journey_id,
+            allowed_origins=allowed_origins,
+            network_policy=network_policy,
+            auth_snapshot=auth_snapshot,
+            authenticated_session=authenticated_session,
+            fixture_action_rules=fixture_action_rules,
+            is_room=True,
+            js_capture=js_capture,
+        )
+        self._rooms[run_id] = handle.session_id
+        return handle
+
+    def room_handle(self, run_id: UUID) -> BrowserSessionHandle | None:
+        session_id = self._rooms.get(run_id)
+        if session_id is None:
+            return None
+        session = self._sessions.get(session_id)
+        if session is None:
+            return None
+        return BrowserSessionHandle(
+            session_id=session_id,
+            execution_id=session.execution_id,
+            journey_id=session.journey_id,
+        )
+
+    async def close_room(self, *, run_id: UUID) -> None:
+        session_id = self._rooms.pop(run_id, None)
+        if session_id is not None and session_id in self._sessions:
+            await self.close_session(session_id=session_id)
+
+    async def rebind_session(
+        self,
+        *,
+        session_id: UUID,
+        execution_id: UUID,
+        journey_id: UUID,
+    ) -> BrowserSessionHandle:
+        """Bind a shared (Room) session to one item execution.
+
+        Single-writer rule: the Room serves exactly one execution at a
+        time, so rebinding re-keys its ownership (and its owner-
+        registry handle) to the borrowing execution.
+        """
+
+        session = self._get_session(session_id=session_id)
+        from markettwin_execution_orchestrator.browser.owner_registry import (
+            browser_owner_registry,
+        )
+
+        browser_owner_registry.unregister(
+            BrowserSessionHandle(
+                session_id=session_id,
+                execution_id=session.execution_id,
+                journey_id=session.journey_id,
+            )
+        )
+        session.execution_id = execution_id
+        session.journey_id = journey_id
+        handle = BrowserSessionHandle(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        browser_owner_registry.register(self, handle)
+        return handle
+
+    async def create_proof_session(
+        self,
+        *,
+        room_session_id: UUID,
+        execution_id: UUID,
+        journey_id: UUID,
+    ) -> BrowserSessionHandle:
+        """Open a fresh context INSIDE the Room's browser (U-P2-03).
+
+        Defect proof must not be polluted by working-session state:
+        the proof context starts clean, seeded only with the Room's
+        storage state (cookies/local storage) when the Room is
+        authenticated — session storage and page state never carry.
+        Closing a proof session closes only its context.
+        """
+
+        room = self._get_session(session_id=room_session_id)
+        session_id = uuid4()
+        artifact_directory = self._artifact_root / str(execution_id) / str(session_id)
+        artifact_directory.mkdir(parents=True, exist_ok=True)
+        storage_state = None
+        if room.authenticated_session:
+            storage_state = await room.context.storage_state()
+        context = await room.browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            device_scale_factor=1,
+            accept_downloads=False,
+            service_workers="block",
+            storage_state=storage_state,  # type: ignore[arg-type]
+        )
+        context.set_default_timeout(room.timeout_ms)
+        context.set_default_navigation_timeout(room.timeout_ms)
+        page = await context.new_page()
+        session = JourneyBrowserSession(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+            allowed_origins=room.allowed_origins,
+            network_policy=room.network_policy,
+            timeout_ms=room.timeout_ms,
+            browser=room.browser,
+            context=context,
+            page=page,
+            artifact_directory=artifact_directory,
+            auth_only_origins=room.auth_only_origins,
+            authenticated_session=room.authenticated_session,
+            fixture_action_rules=room.fixture_action_rules,
+            shares_browser=True,
+        )
+        self._sessions[session_id] = session
+        await context.route("**/*", lambda route: self._route_request(session, route))
+        await context.route_web_socket(
+            "**/*",
+            lambda route: self._route_web_socket(session, route),
+        )
+        context.on("page", lambda new_page: self._schedule_page_setup(session, new_page))
+        await self._configure_page(session, page)
+        await start_trace(session)
+        session.state = "open"
+        handle = BrowserSessionHandle(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        from markettwin_execution_orchestrator.browser.owner_registry import (
+            browser_owner_registry,
+        )
+
+        browser_owner_registry.register(self, handle)
         return handle
 
     def _get_session(
@@ -657,7 +850,10 @@ class BrowserController:
         )
         page.on(
             "pageerror",
-            lambda error: self._record_page_error(session, str(error)),
+            lambda error: self._record_page_error(
+                session, str(error),
+                stack=getattr(error, "stack", None),
+            ),
         )
         page.on("requestfailed", lambda request: self._on_request_failed(session, request))
         page.on("dialog", lambda dialog: self._dismiss_dialog(session, dialog))
@@ -669,16 +865,87 @@ class BrowserController:
         )
 
     @staticmethod
-    def _record_page_error(session: JourneyBrowserSession, message: str) -> None:
+    def _js_capture_active(session: JourneyBrowserSession) -> bool:
+        """Structured JS capture (U-P6-03) runs in agent mode when
+        capture is on; on authenticated sessions only for sessions
+        that opted in (slop runs — message + stack + URL only)."""
+
+        return bool(
+            session.capture_enabled
+            and session.control_mode == "agent"
+            and (not session.authenticated_session or session.js_capture)
+        )
+
+    @staticmethod
+    def _record_page_error(
+        session: JourneyBrowserSession, message: str,
+        stack: str | None = None,
+    ) -> None:
         if (session.capture_enabled and session.control_mode == "agent"
                 and not session.authenticated_session):
             session.event_buffer.record_page_error(message)
+        if session.js_capture and BrowserController._js_capture_active(session):
+            session.event_buffer.record_js(JsErrorRecord(
+                kind="uncaught", message=message, stack=stack,
+                url=session.page.url if session.page is not None else "",
+            ))
 
     @staticmethod
     def _on_console(session: JourneyBrowserSession, kind: str, text: str) -> None:
         if (kind == "error" and session.capture_enabled and session.control_mode == "agent"
                 and not session.authenticated_session):
             session.event_buffer.record_console_error(text)
+        if (kind == "error" and session.js_capture
+                and BrowserController._js_capture_active(session)):
+            session.event_buffer.record_js(JsErrorRecord(
+                kind="console_error", message=text, stack=None,
+                url=session.page.url if session.page is not None else "",
+            ))
+
+    async def probe_page(self, *, session_id: UUID) -> dict[str, Any]:
+        """Run the slop probe (U-P6-04): raw measurements of the
+        current page — elements, images, overflow, word count."""
+
+        from markettwin_execution_orchestrator.slop.probe import PROBE_SCRIPT
+
+        session = self._get_session(session_id=session_id)
+        return await session.page.evaluate(PROBE_SCRIPT)
+
+    async def harvest_js_records(
+        self, *, session_id: UUID,
+    ) -> list[JsErrorRecord]:
+        """Collect unhandled rejections the init hook gathered since
+        the last harvest (U-P6-03) and return ALL structured records."""
+
+        session = self._get_session(session_id=session_id)
+        if session.js_capture:
+            try:
+                snapshot = await session.page.evaluate(
+                    "() => ({ doc: window.__mt_rejection_doc || '',"
+                    " items: window.__mt_rejections || [] })"
+                )
+            except Exception:
+                snapshot = {"doc": "", "items": []}
+            # The init hook resets the array on every new document,
+            # so the watermark is only valid for the document that
+            # produced it. Keying the watermark to the document id
+            # keeps page B's first rejections from being sliced away
+            # by page A's count.
+            document = str(snapshot.get("doc", ""))
+            if document != session.rejections_document:
+                session.rejections_document = document
+                session.rejections_harvested = 0
+            collected = list(snapshot.get("items") or [])
+            new_items = collected[session.rejections_harvested:]
+            session.rejections_harvested = len(collected)
+            for item in new_items:
+                session.event_buffer.record_js(JsErrorRecord(
+                    kind="unhandled_rejection",
+                    message=str(item.get("message", "")),
+                    stack=item.get("stack"),
+                    url=session.page.url,
+                ))
+        return list(session.event_buffer.js_records)
 
     @staticmethod
     def _on_request_failed(session: JourneyBrowserSession, request: Request) -> None:
@@ -857,6 +1124,33 @@ class BrowserController:
                 action="focus_next",
                 observation=await build_observation(session, screenshot_path=screenshot),
             )
+
+    async def emulate_network(
+        self,
+        *,
+        session_id: UUID,
+        latency_ms: int,
+        download_bps: int,
+        upload_bps: int,
+    ) -> None:
+        """Apply real network throttling to a session (persona
+        conditions, U-P5-04) via CDP Network.emulateNetworkConditions."""
+
+        session = self._get_session(session_id=session_id)
+        # The CDP session is deliberately NOT detached afterwards:
+        # detaching clears the emulated conditions (verified against
+        # Chromium — navigation returns to full speed the moment the
+        # session detaches). It is reaped when the context closes.
+        cdp = await session.context.new_cdp_session(session.page)
+        await cdp.send("Network.enable")
+        await cdp.send("Network.emulateNetworkConditions", {
+            "offline": False,
+            "latency": latency_ms,
+            # The condition block stores bytes/second; CDP takes the
+            # same unit for throughput.
+            "downloadThroughput": download_bps,
+            "uploadThroughput": upload_bps,
+        })
 
     async def set_viewport(
         self,
@@ -1808,7 +2102,10 @@ class BrowserController:
                     await session.context.close()
                 finally:
                     try:
-                        await session.browser.close()
+                        # A proof session shares the Room's Chromium:
+                        # closing it must never close the shared browser.
+                        if not session.shares_browser:
+                            await session.browser.close()
                     finally:
                         egress = self._egress_proxies.pop(session_id, None)
                         if egress is not None:

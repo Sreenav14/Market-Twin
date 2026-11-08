@@ -35,7 +35,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionm
 
 from markettwin_execution_orchestrator.browser.owner_registry import browser_owner_registry
 from markettwin_execution_orchestrator.browser.owner_service import HITLWorkerService
-from markettwin_execution_orchestrator.persistence import RunStateRepository
+from markettwin_execution_orchestrator.persistence import (
+    ExecutionRepository,
+    RunStateRepository,
+)
 from markettwin_execution_orchestrator.persistence.run_event_repository import RunEventRepository
 from markettwin_execution_orchestrator.temp_failure_log import (
     bind_temp_run,
@@ -130,10 +133,6 @@ async def process_command(
             # must not be used to recover deliveries across concurrent workers.
             # Do not replay potentially state-changing browser actions.
             run = await session.get(TestRun, UUID(str(envelope.payload["test_run_id"])))
-            if (run is not None and run.status == "awaiting_human"
-                    and run.configuration_snapshot.get("execution_mode") == "discovery_contract_v1"
-                    and run.configuration_snapshot.get("discovery_stage") == "awaiting_approval"):
-                return
             if run is not None and run.status in {"planning", "running", "awaiting_human"}:
                 await abandon_run_handoffs(session, test_run_id=run.id)
                 await RunStateRepository(session).mark_failed(test_run_id=run.id)
@@ -394,6 +393,19 @@ async def main() -> None:
             await ownership.commit()
             if not locked:
                 raise RuntimeError("Another execution worker owns the live browser registry.")
+            # Reaper (U-P2-04): this process now owns the registry and
+            # no browser exists yet, so every still-open browser row is
+            # an orphan from a crashed predecessor.
+            async with session_factory() as reap_session:
+                async with reap_session.begin():
+                    reaped = await ExecutionRepository(
+                        reap_session
+                    ).reap_open_browser_sessions()
+            if reaped:
+                logging.getLogger(__name__).info(
+                    "Closed %d orphaned browser session row(s) at startup.",
+                    reaped,
+                )
             try:
                 async with asyncio.TaskGroup() as group:
                     group.create_task(_watch_execution_owner(ownership))

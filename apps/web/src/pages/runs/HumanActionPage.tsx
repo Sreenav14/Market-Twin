@@ -11,6 +11,43 @@ import { canAuthorizeTarget } from "../../lib/permissions";
 import { terminalTestStatuses } from "../../lib/results";
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
 
+/** Live-park countdown (U-P4): time left for the human to log in,
+ * a warning state inside the last two minutes, and Extend (capped
+ * server-side at 30 minutes from the park). */
+function ParkCountdown({ runId, deadlineAt }: { runId: string; deadlineAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  const [deadline, setDeadline] = useState(deadlineAt);
+  useEffect(() => setDeadline(deadlineAt), [deadlineAt]);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const extend = useMutation({
+    mutationFn: () => api.extendPark(runId),
+    onSuccess: (data) => setDeadline(data.deadline_at),
+  });
+  const remainingSeconds = Math.max(0, Math.floor((Date.parse(deadline) - now) / 1000));
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  const warning = remainingSeconds <= 120 && remainingSeconds > 0;
+  return (
+    <div className={warning ? "park-countdown park-countdown-warning" : "park-countdown"} role="status">
+      {remainingSeconds > 0 ? (
+        <p>
+          Time left to log in: <strong>{minutes}:{String(seconds).padStart(2, "0")}</strong>
+          {warning ? " — the park is about to expire." : ""}
+        </p>
+      ) : (
+        <p>The park window has expired. The run stays paused until you resume or end it.</p>
+      )}
+      <button type="button" className="secondary-button" disabled={extend.isPending} onClick={() => extend.mutate()}>
+        Extend by 15 minutes
+      </button>
+      {extend.isError ? <p className="muted">Could not extend the park. It may already be at the 30-minute cap.</p> : null}
+    </div>
+  );
+}
+
 function RequestContext({ action, runId }: { action: HumanAction; runId: string }) {
   return <div className="muted">
     <p>Requesting executor: {action.requesting_agent ?? "Browser executor"} · {action.journey_title ?? `Execution ${action.execution_id.slice(0, 8)}`}</p>
@@ -194,7 +231,16 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       ? { requestId: activeRequestId, done: () => release.mutate(activeRequestId) } : null);
   }, [activeLease?.lease_id, activeRequestId, canManageHumanActions, ended, onControlChange]);
 
-  const harnessLoginPark = run.configuration_snapshot?.execution_mode === "harness_v1" && run.status === "awaiting_human";
+  // Parked for login (U-P4): keyed on the run STATE, not a legacy
+  // mode string — unified runs carry harness_park metadata (or the
+  // explore_test kind) instead of an execution_mode.
+  const parkMeta = (run.configuration_snapshot?.harness_park ?? null) as
+    | { parked_at: string; deadline_at: string; item_id?: string }
+    | null;
+  const harnessLoginPark = run.status === "awaiting_human"
+    && (parkMeta !== null
+      || run.configuration_snapshot?.execution_mode === "harness_v1"
+      || run.run_kind === "explore_test");
 
   if (inline && !activeLease && !pending.length && !leased.length && !pendingApprovals.length
       && !actions.isError && !approvals.isError && run.status !== "awaiting_human") return null;
@@ -204,6 +250,7 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       <p className="section-label">Human assistance</p>
       <h2 id="human-action-heading">{harnessLoginPark ? "Log in so the test can continue" : "Continue in the test browser"}</h2>
       {harnessLoginPark ? <p>Your login session is held only in memory on our servers while this run is active. It is discarded when the run ends. We never store your password.</p> : <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>}
+      {harnessLoginPark && parkMeta ? <ParkCountdown runId={run.id} deadlineAt={parkMeta.deadline_at} /> : null}
       {!canManageHumanActions ? <p className="human-action-denied" role="status">Human browser control and action approvals require an owner or administrator role. {run.status === "awaiting_human" ? "This test is paused until an authorized operator acts." : "Ask an authorized operator to review protected requests."}</p> : null}
       {canManageHumanActions ? <>
       <section className="human-action-group human-auth-group" aria-label="Login and protected interaction requests">

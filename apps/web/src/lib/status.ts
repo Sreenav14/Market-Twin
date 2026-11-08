@@ -19,7 +19,8 @@ export type HarnessItemStatus =
   | "could_not_check"
   | "not_checked"
   | "blocked"
-  | "needs_human_login";
+  | "needs_human_login"
+  | "owner_disabled";
 
 export type ExecutionStatus =
   | "running"
@@ -77,6 +78,7 @@ export const HARNESS_ITEM_STATUS: Record<HarnessItemStatus, StatusEntry> = {
   not_checked: { word: "Not checked", tone: "notchecked" },
   blocked: { word: "Blocked", tone: "couldnot" },
   needs_human_login: { word: "Needs your login", tone: "couldnot" },
+  owner_disabled: { word: "Turned off by you", tone: "notchecked" },
 };
 
 export const JOURNEY_OUTCOME_STATUS: Record<JourneyOutcome, StatusEntry> = {

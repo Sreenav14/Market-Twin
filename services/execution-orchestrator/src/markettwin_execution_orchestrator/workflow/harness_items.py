@@ -154,9 +154,16 @@ def case_for_item(
     Shape: at most one precondition step (navigate back to the item's
     state when it is not the start state — always ≤3), exactly one
     action, and two assertions (enabled before the action, visible
-    after it) — always inside the schema ceilings of steps ≤24 and
-    assertions ≤8, and valid by construction (TestCaseSpec validates
-    on creation).
+    after it) — plus, for checkable items (checkbox/radio), a third
+    assertion on the OUTCOME of the action: the control must end up
+    checked. Outcome assertions are only generated where an existing
+    oracle can actually prove the outcome (the value oracle is
+    deliberately unverified for privacy, and a click's destination is
+    not knowable at generation time — those outcomes are proven by the
+    driver's post-action re-observation and reproduction instead, never
+    by a fabricated assertion). Always inside the schema ceilings of
+    steps ≤24 and assertions ≤8, and valid by construction
+    (TestCaseSpec validates on creation).
     """
 
     target = SemanticTarget(role=item.role, name=item.name)
@@ -185,20 +192,31 @@ def case_for_item(
         f"Check {item.name}" if item.name
         else f"Check {item.role} {item.occurrence_index + 1}"
     )
+    assertions = [
+        ExpectedAssertion(
+            assertion_id="target_enabled", oracle="enabled",
+            target=target, expected_value=True, origin="inferred",
+            after_step_ordinal=0,
+        ),
+        ExpectedAssertion(
+            assertion_id="target_visible", oracle="visible",
+            target=target, expected_value=True, origin="inferred",
+        ),
+    ]
+    if item.role in {"checkbox", "radio"}:
+        # The check action's outcome, asserted with the checked oracle
+        # against the same target as the other assertions.
+        assertions.append(
+            ExpectedAssertion(
+                assertion_id="target_checked", oracle="checked",
+                target=target, expected_value=True,
+                origin="inferred",
+            )
+        )
     return TestCaseSpec(
         case_id=item.case_id, feature_key=feature_key, title=title[:160],
         kind="exploratory", priority="medium", steps=tuple(steps),
-        expected=(
-            ExpectedAssertion(
-                assertion_id="target_enabled", oracle="enabled",
-                target=target, expected_value=True, origin="inferred",
-                after_step_ordinal=0,
-            ),
-            ExpectedAssertion(
-                assertion_id="target_visible", oracle="visible",
-                target=target, expected_value=True, origin="inferred",
-            ),
-        ),
+        expected=tuple(assertions),
     )
 
 

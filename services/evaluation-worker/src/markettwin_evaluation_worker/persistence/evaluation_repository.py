@@ -196,6 +196,33 @@ class EvaluationRepository:
         return tuple(results)
     
     
+    async def list_board_item_results(
+        self,
+        *,
+        test_run_id: UUID,
+    ) -> dict[str, dict[str, object]]:
+        """Latest board.item.result payload per Board item id (U-P1-05)."""
+
+        events = tuple(
+            (
+                await self._session.scalars(
+                    select(RunEvent)
+                    .where(
+                        RunEvent.test_run_id == test_run_id,
+                        RunEvent.event_type == "board.item.result",
+                    )
+                    .order_by(RunEvent.id)
+                )
+            ).all()
+        )
+        latest: dict[str, dict[str, object]] = {}
+        for event in events:
+            item_id = event.payload.get("board_item_id")
+            if isinstance(item_id, str):
+                latest[item_id] = event.payload
+        return latest
+
+
     async def list_visual_evidence(
         self,
         *,

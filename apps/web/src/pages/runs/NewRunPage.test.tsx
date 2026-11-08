@@ -10,9 +10,9 @@ import { NewRunPage } from "./NewRunPage";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it.each([
-  ["legacy_persona", "target"], ["deep_feature_v1", "target"],
-  ["legacy_persona", "second"], ["legacy_persona", "missing"],
-])("creates a protected %s run and retains requested target %s", async (mode, requested) => {
+  ["legacy_persona", "target", "persona"], ["deep_feature_v1", "target", "explore_test"],
+  ["legacy_persona", "second", "persona"], ["legacy_persona", "missing", "persona"],
+])("creates a protected %s run and retains requested target %s", async (mode, requested, kind) => {
   const user = userEvent.setup();
   vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
   vi.spyOn(api, "listTargets").mockResolvedValue([{
@@ -33,30 +33,31 @@ it.each([
       <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Create test" });
+  const targetBox = () => screen.getByRole("combobox", { name: kind === "explore_test" ? /^App/ : /^Application target/ });
   if (requested === "missing") {
-    expect(screen.getByRole("combobox", { name: /^Application target/ })).toHaveValue("");
+    expect(targetBox()).toHaveValue("");
     // Phase 2d: a field's own message is a FieldError linked by
     // aria-describedby, not a role="alert" (the summary owns alerts).
     expect(screen.getByText(/requested target is unavailable/)).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: /^Application target/ })).toHaveAttribute("aria-describedby", "test-target-error");
+    expect(targetBox()).toHaveAttribute("aria-describedby", "test-target-error");
     expect(create).not.toHaveBeenCalled();
-    await user.selectOptions(screen.getByRole("combobox", { name: /^Application target/ }), "second");
-  } else expect(screen.getByRole("combobox", { name: /^Application target/ })).toHaveValue(requested);
+    await user.selectOptions(targetBox(), "second");
+  } else expect(targetBox()).toHaveValue(requested);
   expect(screen.queryByLabelText(/marker|account reference|authentication origin|Enable verified/i)).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Authentication assistance" })).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Testing mode")).toHaveValue(mode);
-  fireEvent.change(screen.getByLabelText(/^Your testing goal/), { target: { value: "Check the protected account page" } });
+  expect(screen.getByLabelText("Kind of test")).toHaveValue(kind);
+  fireEvent.change(screen.getByLabelText(kind === "persona" ? /^Your testing goal/ : /^What is this app and who is it for/), { target: { value: "Check the protected account page" } });
   await user.click(screen.getByRole("button", { name: "Create test" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]?.[1]).toBe(requested === "missing" ? "second" : requested);
-  expect(create.mock.calls[0]?.[6]).toBe(mode);
+  expect(create.mock.calls[0]?.[6]).toBe(kind);
   expect(create.mock.calls[0]?.[7]).toBeUndefined();
   expect(create.mock.calls[0]?.[11]).toBeUndefined();
   expect(create.mock.calls[0]?.[12]).toBe(true);
   expect(await screen.findByText("Created run")).toBeInTheDocument();
 });
 
-it("defaults new tests to exploration and opens contract review after starting discovery", async () => {
+it("defaults new tests to Explore & Test and opens the overview after creating", async () => {
   const user = userEvent.setup();
   vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
   vi.spyOn(api, "listTargets").mockResolvedValue([{
@@ -72,10 +73,10 @@ it("defaults new tests to exploration and opens contract review after starting d
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/applications/app/runs/new?target=target"]}>
     <Routes><Route element={<ContextOutlet />}><Route path="/applications/:applicationId/runs/new" element={<NewRunPage />} />
-      <Route path="/runs/:runId/contract" element={<p>Review discovered tests</p>} /></Route></Routes>
+      <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
-  await screen.findByRole("button", { name: "Explore the app" });
-  expect(screen.getByLabelText("Testing mode")).toHaveValue("discovery_contract_v1");
+  await screen.findByRole("button", { name: "Create test" });
+  expect(screen.getByLabelText("Kind of test")).toHaveValue("explore_test");
   const app = screen.getByRole("combobox", { name: /^App \(required\)/ });
   const appUrl = screen.getByRole("textbox", { name: "App URL" });
   expect(appUrl).toHaveValue("https://fixture.test");
@@ -84,16 +85,15 @@ it("defaults new tests to exploration and opens contract review after starting d
   expect(appUrl.closest(".composer-target")).toBeNull();
   expect(app.compareDocumentPosition(appUrl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.change(screen.getByLabelText(/^What is this app and who is it for/), { target: { value: "A storefront for local shoppers." } });
-  await user.click(screen.getByRole("button", { name: "Explore the app" }));
-  expect(await screen.findByText("Review discovered tests")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Create test" }));
+  expect(await screen.findByText("Created run")).toBeInTheDocument();
   expect(create).toHaveBeenCalledOnce();
-  expect(create.mock.calls[0]?.[6]).toBe("discovery_contract_v1");
-  expect(create.mock.calls[0]?.[12]).toBe(false);
-  expect(start).toHaveBeenCalledExactlyOnceWith("run");
-  expect(create.mock.invocationCallOrder[0]).toBeLessThan(start.mock.invocationCallOrder[0]);
+  expect(create.mock.calls[0]?.[6]).toBe("explore_test");
+  expect(create.mock.calls[0]?.[12]).toBe(true);
+  expect(start).not.toHaveBeenCalled();
 });
 
-it("renders the harness option disabled as not available yet and keeps the current default", async () => {
+it("offers Explore & Test as the enabled default kind", async () => {
   vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
   vi.spyOn(api, "listTargets").mockResolvedValue([{
     id: "target", name: "Authorized fixture", status: "active", requires_auth: false,
@@ -108,15 +108,14 @@ it("renders the harness option disabled as not available yet and keeps the curre
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/applications/app/runs/new?target=target"]}>
     <Routes><Route element={<ContextOutlet />}><Route path="/applications/:applicationId/runs/new" element={<NewRunPage />} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
-  await screen.findByRole("button", { name: "Explore the app" });
-  expect(screen.getByLabelText("Testing mode")).toHaveValue("discovery_contract_v1");
-  // The unavailability note is attached to the disabled option itself,
-  // not a floating line under the select (examination, New test).
-  expect(screen.getByRole("option", { name: "Full test — checks every interaction (not available yet)" })).toBeDisabled();
-  expect(screen.queryByText("Not available yet")).not.toBeInTheDocument();
+  await screen.findByRole("button", { name: "Create test" });
+  expect(screen.getByLabelText("Kind of test")).toHaveValue("explore_test");
+  expect(screen.getByRole("option", { name: "Explore & Test — checks every interaction" })).not.toBeDisabled();
+  expect(screen.getByRole("option", { name: "Persona Test — how it feels to use" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "Check the look — design quality and JavaScript errors" })).toBeInTheDocument();
 });
 
-it("posts harness_v1 when the harness mode is preselected", async () => {
+it("maps a preselected harness_v1 link to Explore & Test", async () => {
   const user = userEvent.setup();
   vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
   vi.spyOn(api, "listTargets").mockResolvedValue([{
@@ -134,11 +133,11 @@ it("posts harness_v1 when the harness mode is preselected", async () => {
       <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Create test" });
-  expect(screen.getByLabelText("Testing mode")).toHaveValue("harness_v1");
-  expect(screen.getByText("The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it.")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText(/^Your testing goal/), { target: { value: "Check the protected account page" } });
+  expect(screen.getByLabelText("Kind of test")).toHaveValue("explore_test");
+  expect(screen.getByText(/The agent explores your app, checks every button, field and link it finds/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/^What is this app and who is it for/), { target: { value: "Check the protected account page" } });
   await user.click(screen.getByRole("button", { name: "Create test" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
-  expect(create.mock.calls[0]?.[6]).toBe("harness_v1");
+  expect(create.mock.calls[0]?.[6]).toBe("explore_test");
   expect(await screen.findByText("Created run")).toBeInTheDocument();
 });

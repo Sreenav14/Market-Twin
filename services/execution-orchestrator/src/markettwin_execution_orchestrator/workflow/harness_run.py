@@ -1,17 +1,19 @@
-"""Skeleton harness_v1 driver: a fixed policy over a hand-written work-list.
+"""The unified Board engine (Explore & Test): the Lead Agent's driver.
 
-Stage 0 shape, structured on execute_discovery_run (discovery.py:193): load
-the TestRun, create the execution rows, mark_running, open BrowserController,
-work the list through the existing execute_test_case, persist harness_stage
-into the snapshot at every item boundary, and set run.status =
-"awaiting_human" when parked. The "agent" in this stage is a fixed policy —
-next pending item, in order. No model calls, no discovery, no login handling.
+Loads the TestRun, opens the run's Browser Room, builds and works the
+Board — the live work-list of every discovered interaction — through
+execute_test_case, persists the Board into the snapshot at every item
+boundary, parks for a human when a login is needed, and marks the run
+completed at Close. Attempt-2 defect proofs re-run in a fresh context
+inside the Room's browser. This engine produces the only
+verdict-bearing results in the product.
 """
 
 from __future__ import annotations
 
 import statistics
 import time
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
@@ -24,6 +26,7 @@ from markettwin_execution_orchestrator.agents.schemas.test_case import (
     PlanBudget,
     TestCaseSpec,
 )
+
 from markettwin_execution_orchestrator.browser import BrowserController
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
@@ -42,9 +45,10 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionHandle,
 )
 from markettwin_execution_orchestrator.workflow.case_execution import (
+    PersonaJourneyExecutionRequest,
     execute_test_case,
 )
-from markettwin_execution_orchestrator.workflow.deep_run import (
+from markettwin_execution_orchestrator.workflow.feature_scope import (
     case_journey,
     default_scope,
 )
@@ -65,10 +69,6 @@ from markettwin_execution_orchestrator.workflow.harness_state import (
     new_harness_state,
     persist_harness_state,
 )
-from markettwin_execution_orchestrator.workflow.journey_executor import (
-    PersonaJourneyExecutionRequest,
-)
-
 if TYPE_CHECKING:
     from markettwin_execution_orchestrator.workflow.run_executor import (
         MarketTwinRunRequest,
@@ -89,6 +89,14 @@ FIXTURE_ELEMENTS: tuple[tuple[str, str], ...] = (
     ("link", "Open restricted destination"),
 )
 FIXTURE_FORM_FIELDS: tuple[str, ...] = ("Display name", "Contact address")
+
+# Case verdict -> agent-execution outcome word, shared by the item
+# execution and its attempt-2 proof.
+_VERDICT_TO_OUTCOME = {
+    "satisfied": "passed",
+    "not_satisfied": "failed",
+    "unverified": "inconclusive",
+}
 
 
 def _case(
@@ -325,7 +333,7 @@ async def _publish_skipped_journey_result(
     *, session: AsyncSession, executions: ExecutionRepository,
     run_id: UUID, journey_id: UUID, case_id: str, summary: str,
     runtime_name: str, error_code: str | None = None,
-) -> None:
+) -> UUID:
     """Account for a journey that will never execute, as skipped.
 
     Evaluation requires one journey.result per registered journey and
@@ -352,6 +360,74 @@ async def _publish_skipped_journey_result(
             "outcome": None,
             "journey_key": case_id,
             "summary": summary,
+        },
+    )
+    return execution_id
+
+
+# The unified result contract (UNIFIED_IMPLEMENTATION_PLAN §3.3): one
+# board.item.result event per Board item, published by the engine at
+# every item boundary. Evaluation for unified kinds reads ONLY these.
+_ASSERTION_KIND_BY_ORACLE = {
+    "checked": "outcome",
+    "visible": "visible",
+    "enabled": "enabled",
+    "url": "url",
+    "url_path_v1": "url",
+    "visible_text": "text",
+    "title": "text",
+    "value": "outcome",
+    "count": "outcome",
+}
+
+
+async def _publish_board_item_result(
+    *, session: AsyncSession, run_id: UUID, item: HarnessItem,
+    execution_id: UUID | None,
+    result: CaseExecutionResult | None = None,
+) -> None:
+    """Publish the unified board.item.result event for one item."""
+
+    assertions: list[dict[str, object]] = []
+    evidence_refs: list[str] = list(item.evidence_refs)
+    requirement_refs: list[str] = []
+    if result is not None:
+        for assertion in result.assertion_results:
+            assertions.append({
+                "assertion_id": assertion.assertion_id,
+                "kind": _ASSERTION_KIND_BY_ORACLE.get(
+                    assertion.oracle, "outcome"),
+                "status": assertion.status,
+                "detail": str(assertion.reason) if assertion.reason else "",
+            })
+            for artifact_id in assertion.artifact_ids:
+                if str(artifact_id) not in evidence_refs:
+                    evidence_refs.append(str(artifact_id))
+            for ref in assertion.requirement_refs:
+                if ref not in requirement_refs:
+                    requirement_refs.append(ref)
+    await RunEventRepository(session).create(
+        test_run_id=run_id,
+        event_type="board.item.result",
+        journey_id=UUID(str(item.journey_id)) if item.journey_id else None,
+        execution_id=execution_id,
+        payload={
+            "board_version": 2,
+            "run_kind": "explore_test",
+            "board_item_id": item.item_id,
+            "state_id": item.state_id,
+            "journey_id": item.journey_id,
+            "execution_id": str(execution_id) if execution_id else None,
+            "board_status": item.status,
+            "blocker": item.blocker,
+            "attempts": item.attempts,
+            "duration_ms": result.elapsed_ms if result is not None else 0,
+            "evidence_refs": evidence_refs,
+            "assertions": assertions,
+            "requirement_refs": requirement_refs,
+            "quotes": [],
+            "verdict_rows": [],
+            "js_errors": [],
         },
     )
 
@@ -394,6 +470,26 @@ def _auth_session_scope(
         account_reference=request.auth_verification.account_reference,
         origin=request.auth_verification.origin,
     )
+
+
+def _enforce_item_budget(state: HarnessState) -> int:
+    """Cap executable items at the board's item budget (U-P1-03).
+
+    The budget was previously stored on the board but never read.
+    Items beyond the budget in board (discovery) order that are still
+    pending become not_checked with the reason on the item — counted
+    honestly in the coverage denominator, never silently dropped.
+    Returns how many items this call newly marked.
+    """
+
+    budget = int(state.budget_counters.get("item_budget", 300))
+    marked = 0
+    for position, item in enumerate(state.ordered_items()):
+        if position >= budget and item.status == "pending":
+            item.status = "not_checked"
+            item.blocker = f"over item budget ({budget})"
+            marked += 1
+    return marked
 
 
 async def _register_items(
@@ -473,6 +569,7 @@ async def _absorb_inventory(
         if await collect() == 0:
             break
     new_items = ingest_page_index(state, url=state_url, entries=collected)
+    _enforce_item_budget(state)
     for item in state.ordered_items():
         if item.case_id not in cases:
             owner = state.states[item.state_id]
@@ -584,9 +681,13 @@ async def execute_harness_run(
         # in the handed-off session. Any other run's recorded items
         # keep their statuses exactly as they were left.
         if run.status == "awaiting_human":
+            run.configuration_snapshot.pop("harness_park", None)
             for item in state.ordered_items():
                 if item.status == "needs_human_login":
                     item.status = "pending"
+        # A resumed board may hold more pending items than the budget
+        # (budget lowered, or the board predates enforcement).
+        _enforce_item_budget(state)
 
     if run.status != "running":
         await states.mark_running(test_run_id=request.run_id)
@@ -603,42 +704,46 @@ async def execute_harness_run(
         inv_handle: BrowserSessionHandle | None = None
         inv_authenticated = False
         ordinal = len(state.items) + 1
-        if inventory_driven:
-            # The inventory session is the driver's own session, apart
-            # from the per-case sessions execute_test_case creates.
-            # When a human session was handed off earlier (broker
-            # snapshot, in memory only), the inventory session is
-            # created from it and the page index may read the
-            # logged-in app through item 1-2's opt-in; the take
-            # consumes one of the broker's bounded uses.
-            auth_snapshot = None
-            if (
-                request.runtime_human_assistance
-                and request.target_snapshot.get("target_id") is not None
-            ):
-                try:
-                    auth_snapshot = controller.take_human_session_snapshot(
-                        run_id=request.run_id,
-                        target_id=UUID(str(request.target_snapshot["target_id"])),
-                        case_id="harness_inventory",
-                    )
-                except Exception:
-                    auth_snapshot = None
-            inv_execution_id, inv_journey_id = uuid4(), uuid4()
-            inv_handle = await controller.create_session(
-                execution_id=inv_execution_id, journey_id=inv_journey_id,
-                allowed_origins=request.allowed_origins,
-                network_policy=request.network_policy,
-                fixture_action_rules=request.fixture_action_rules,
-                auth_snapshot=auth_snapshot,
-                authenticated_session=auth_snapshot is not None,
-            )
-            inv_authenticated = auth_snapshot is not None
-            await executions.create_browser_session(
-                browser_session_id=inv_handle.session_id,
-                execution_id=inv_execution_id,
-            )
-            await session.commit()
+        # The Room (U-P2): ONE browser session for the whole run. The
+        # inventory crawl uses it first; every item execution borrows
+        # it (rebind per item); attempt-2 proof runs in a fresh context
+        # inside the same Chromium. When a human session was handed off
+        # earlier (broker snapshot, in memory only), the Room is
+        # created from it, so the login serves the entire run.
+        auth_snapshot = None
+        if (
+            request.runtime_human_assistance
+            and request.target_snapshot.get("target_id") is not None
+        ):
+            try:
+                auth_snapshot = controller.take_human_session_snapshot(
+                    run_id=request.run_id,
+                    target_id=UUID(str(request.target_snapshot["target_id"])),
+                    case_id="harness_inventory",
+                )
+            except Exception:
+                auth_snapshot = None
+        inv_execution_id, inv_journey_id = uuid4(), uuid4()
+        room_handle = await controller.open_room_session(
+            run_id=request.run_id,
+            execution_id=inv_execution_id, journey_id=inv_journey_id,
+            allowed_origins=request.allowed_origins,
+            network_policy=request.network_policy,
+            fixture_action_rules=request.fixture_action_rules,
+            auth_snapshot=auth_snapshot,
+            authenticated_session=auth_snapshot is not None,
+        )
+        inv_handle = room_handle
+        inv_authenticated = auth_snapshot is not None
+        await executions.create_browser_session(
+            browser_session_id=room_handle.session_id,
+            execution_id=inv_execution_id,
+            test_run_id=request.run_id,
+            session_role="room",
+        )
+        await session.commit()
+        async def _crawl_inventory(*, authenticated: bool) -> None:
+            nonlocal ordinal
             # Inventory-driven generation: index the start state, then
             # follow read-classified links in the inventory session —
             # each landed state is indexed and appended the same way.
@@ -658,7 +763,7 @@ async def execute_harness_run(
                     scope=scope, request=request,
                     persona_id=UUID(str(state.persona_id)),
                     first_ordinal=ordinal,
-                    authenticated=inv_authenticated, cases=cases,
+                    authenticated=authenticated, cases=cases,
                 )
                 for item in list(state.ordered_items()):
                     if item.role != "link" or safety_of(item) != "read":
@@ -685,6 +790,9 @@ async def execute_harness_run(
                 payload={"states": len(state.states), "items": len(state.items)},
             )
             await session.commit()
+
+        if inventory_driven:
+            await _crawl_inventory(authenticated=inv_authenticated)
         while True:
             item = state.next_pending()
             if item is None:
@@ -704,7 +812,7 @@ async def execute_harness_run(
                     item.status = "not_checked"
                     item.blocker = reason
                     state.budget_counters["items_finished"] += 1
-                    await _publish_skipped_journey_result(
+                    skipped_execution_id = await _publish_skipped_journey_result(
                         session=session, executions=executions,
                         run_id=request.run_id,
                         journey_id=UUID(str(item.journey_id)),
@@ -712,6 +820,11 @@ async def execute_harness_run(
                         summary=f"Check {case.case_id} was {reason}.",
                         runtime_name="harness_v1", error_code=reason,
                     )
+                    await _publish_board_item_result(
+                        session=session, run_id=request.run_id, item=item,
+                        execution_id=skipped_execution_id,
+                    )
+                    item.locator["board_result_published"] = True
                     run = await session.get(
                         TestRun, request.run_id, populate_existing=True,
                     )
@@ -751,6 +864,19 @@ async def execute_harness_run(
             )
             await session.commit()
             started = time.monotonic()
+            # Borrow the Room for this item (single-writer rebind).
+            item_handle = await controller.rebind_session(
+                session_id=room_handle.session_id,
+                execution_id=execution_id,
+                journey_id=journey_id,
+            )
+            # Keep the Room's database row pointing at the borrowing
+            # execution so Watch reads the current item (U-P3-03).
+            await executions.rebind_browser_session(
+                browser_session_id=room_handle.session_id,
+                execution_id=execution_id,
+            )
+            await session.commit()
             result = await execute_test_case(
                 request=PersonaJourneyExecutionRequest(
                     test_run_id=request.run_id,
@@ -763,11 +889,16 @@ async def execute_harness_run(
                     allowed_origins=request.allowed_origins,
                     network_policy=request.network_policy,
                     max_duration_seconds=_item_wall_clock_seconds(state),
-                    runtime_human_assistance=request.runtime_human_assistance,
+                    # Unified runs always offer login handover (U-P4):
+                    # when a challenge is met, the item execution waits
+                    # with the human driving THIS Room session instead
+                    # of failing the item.
+                    runtime_human_assistance=True,
                     runtime_target_id=UUID(str(request.target_snapshot["target_id"]))
-                        if request.runtime_human_assistance else None,
+                        if request.target_snapshot.get("target_id") is not None else None,
                     fixture_action_rules=request.fixture_action_rules,
                 ),
+                session_handle=item_handle,
                 case=case,
                 scope=scope,
                 budget=PlanBudget(max_steps=32),
@@ -789,11 +920,7 @@ async def execute_harness_run(
                     else result.execution_status
                 ),
                 outcome=(
-                    {
-                        "satisfied": "passed",
-                        "not_satisfied": "failed",
-                        "unverified": "inconclusive",
-                    }[result.verdict]
+                    _VERDICT_TO_OUTCOME[result.verdict]
                     if result.execution_status == "completed"
                     else None
                 ),
@@ -830,33 +957,75 @@ async def execute_harness_run(
                 )
                 await session.commit()
                 confirm_started = time.monotonic()
-                confirm = await execute_test_case(
-                    request=PersonaJourneyExecutionRequest(
-                        test_run_id=request.run_id,
-                        execution_id=confirm_id,
-                        journey_id=journey_id,
-                        persona_id=persona_id,
-                        mission_id=mission_id,
-                        journey=case_journey(case),
-                        start_url=request.start_url,
-                        allowed_origins=request.allowed_origins,
-                        network_policy=request.network_policy,
-                        max_duration_seconds=_item_wall_clock_seconds(state),
-                        runtime_human_assistance=request.runtime_human_assistance,
-                        runtime_target_id=UUID(str(request.target_snapshot["target_id"]))
-                            if request.runtime_human_assistance else None,
-                        fixture_action_rules=request.fixture_action_rules,
-                    ),
-                    case=case,
-                    scope=scope,
-                    budget=PlanBudget(max_steps=32),
-                    controller=controller,
-                    session=session,
-                    auth_verification=request.auth_verification,
-                    auth_mode=request.auth_mode,
-                    auth_session_scope=auth_session_scope,
-                    reuse_auth_session=True,
+                # Proof runs in a FRESH context inside the Room's
+                # browser (U-P2-03): clean state, seeded only with the
+                # Room's storage state — never the working session.
+                proof_handle = await controller.create_proof_session(
+                    room_session_id=room_handle.session_id,
+                    execution_id=confirm_id,
+                    journey_id=journey_id,
                 )
+                await executions.create_browser_session(
+                    browser_session_id=proof_handle.session_id,
+                    execution_id=confirm_id,
+                    test_run_id=request.run_id,
+                    session_role="proof",
+                )
+                await session.commit()
+                # Proof is an unattended reproduction: unlike the item
+                # path it does not force handover — it runs on the
+                # Room's seeded storage state and the run's own
+                # assistance setting, because a proof that needs a
+                # fresh human login is not a reproduction.
+                proof_failed = False
+                try:
+                    confirm = await execute_test_case(
+                        request=PersonaJourneyExecutionRequest(
+                            test_run_id=request.run_id,
+                            execution_id=confirm_id,
+                            journey_id=journey_id,
+                            persona_id=persona_id,
+                            mission_id=mission_id,
+                            journey=case_journey(case),
+                            start_url=request.start_url,
+                            allowed_origins=request.allowed_origins,
+                            network_policy=request.network_policy,
+                            max_duration_seconds=_item_wall_clock_seconds(state),
+                            runtime_human_assistance=request.runtime_human_assistance,
+                            runtime_target_id=UUID(str(request.target_snapshot["target_id"]))
+                                if request.runtime_human_assistance else None,
+                            fixture_action_rules=request.fixture_action_rules,
+                        ),
+                        case=case,
+                        scope=scope,
+                        budget=PlanBudget(max_steps=32),
+                        controller=controller,
+                        session=session,
+                        auth_verification=request.auth_verification,
+                        auth_mode=request.auth_mode,
+                        auth_session_scope=auth_session_scope,
+                        reuse_auth_session=True,
+                        session_handle=proof_handle,
+                    )
+                except BaseException:
+                    proof_failed = True
+                    raise
+                finally:
+                    # The proof context and its row close even when the
+                    # confirmation execution raises; otherwise both
+                    # leak until the startup reaper finds them.
+                    await controller.close_session(
+                        session_id=proof_handle.session_id,
+                    )
+                    await executions.mark_browser_session_closed(
+                        browser_session_id=proof_handle.session_id
+                    )
+                    if proof_failed:
+                        await executions.finish_agent_execution(
+                            execution_id=confirm_id, status="failed",
+                            outcome=None,
+                        )
+                    await session.commit()
                 confirm_ms = confirm.elapsed_ms or int(
                     (time.monotonic() - confirm_started) * 1000
                 )
@@ -867,11 +1036,7 @@ async def execute_harness_run(
                         else confirm.execution_status
                     ),
                     outcome=(
-                        {
-                            "satisfied": "passed",
-                            "not_satisfied": "failed",
-                            "unverified": "inconclusive",
-                        }[confirm.verdict]
+                        _VERDICT_TO_OUTCOME[confirm.verdict]
                         if confirm.execution_status == "completed"
                         else None
                     ),
@@ -909,6 +1074,24 @@ async def execute_harness_run(
                 )
                 # Discovery's park pattern: awaiting_human releases the worker.
                 run.status = "awaiting_human"
+                # Park metadata (U-P4): the deadline the owner sees
+                # counting down, extendable up to the 30-minute cap.
+                park_seconds = run.configuration_snapshot.get(
+                    "harness_park_seconds", 900,
+                )
+                if not isinstance(park_seconds, int) or isinstance(
+                    park_seconds, bool
+                ):
+                    park_seconds = 900
+                park_seconds = max(60, min(1800, park_seconds))
+                parked_at = datetime.now(UTC)
+                run.configuration_snapshot["harness_park"] = {
+                    "parked_at": parked_at.isoformat(),
+                    "deadline_at": (
+                        parked_at + timedelta(seconds=park_seconds)
+                    ).isoformat(),
+                    "item_id": item.item_id,
+                }
                 await session.commit()
                 return tuple(results)
             # The item is terminal from here (the login-wall park above
@@ -919,6 +1102,15 @@ async def execute_harness_run(
                 journey_id=journey_id, execution_id=final_execution_id,
                 result=final_result,
             )
+            if item.status != "needs_human_login":
+                # A parked item is not finished: its board result is
+                # published when it finally resolves, so each item owns
+                # exactly one (terminal) board.item.result.
+                await _publish_board_item_result(
+                    session=session, run_id=request.run_id, item=item,
+                    execution_id=final_execution_id, result=final_result,
+                )
+                item.locator["board_result_published"] = True
             if item.status == "needs_human_login":
                 # An opaque confirmation parks exactly one item; the
                 # rest of the list still completes (contrast V10).
@@ -949,7 +1141,14 @@ async def execute_harness_run(
                 # may have changed the app state — re-inventory the
                 # start state and append whatever is new (fingerprint
                 # dedupe makes a repeat index a no-op) before the
-                # next pending item is taken.
+                # next pending item is taken. The Room is bound to the
+                # item right now; rebind it back to the Room anchor
+                # first (single-writer rule).
+                inv_handle = await controller.rebind_session(
+                    session_id=room_handle.session_id,
+                    execution_id=inv_execution_id,
+                    journey_id=inv_journey_id,
+                )
                 await controller.navigate(
                     session_id=inv_handle.session_id, url=request.start_url,
                 )
@@ -961,6 +1160,49 @@ async def execute_harness_run(
                     first_ordinal=ordinal,
                     authenticated=inv_authenticated, cases=cases,
                 )
+            if (
+                inventory_driven and inv_handle is not None
+                and final_result.human_wait_ms > 0
+            ):
+                # A human logged in during this item (U-P4): the app
+                # behind the wall was never inventoried. Re-crawl in
+                # the SAME Room session, now authenticated, so the
+                # post-login states and items join the Board instead
+                # of staying an unchecked bucket.
+                inv_handle = await controller.rebind_session(
+                    session_id=room_handle.session_id,
+                    execution_id=inv_execution_id,
+                    journey_id=inv_journey_id,
+                )
+                inv_authenticated = True
+                await _crawl_inventory(authenticated=True)
+
+    # The run's work is done: close the Room (U-P2). Parked runs return
+    # earlier without reaching here — their Room row stays 'open' in
+    # the database and the startup reaper (U-P2-04) closes the stale
+    # row, since the in-process browser dies with the controller.
+    await controller.close_room(run_id=request.run_id)
+    await executions.mark_browser_session_closed(
+        browser_session_id=room_handle.session_id
+    )
+    await session.commit()
+
+    # Close sweep (U-P1-04): every terminal Board item must own exactly
+    # one board.item.result event. Boundary publishes set the item's
+    # board_result_published locator flag in the same commit as the
+    # publish, so the flag survives kill/resume; the items this sweep can owe are
+    # the ones that became terminal without a boundary publish — the
+    # item-budget marks (_enforce_item_budget).
+    for item in state.ordered_items():
+        if (
+            item.status in TERMINAL_STATUSES
+            and not item.locator.get("board_result_published")
+        ):
+            await _publish_board_item_result(
+                session=session, run_id=request.run_id, item=item,
+                execution_id=None,
+            )
+            item.locator["board_result_published"] = True
 
     run = await session.get(TestRun, request.run_id, populate_existing=True)
     assert run is not None

@@ -29,8 +29,8 @@ from markettwin_execution_orchestrator.workflow import case_execution
 from markettwin_execution_orchestrator.workflow.case_execution import (
     _is_failed_action_precondition,
 )
-from markettwin_execution_orchestrator.workflow.deep_run import case_journey
-from markettwin_execution_orchestrator.workflow.journey_executor import (
+from markettwin_execution_orchestrator.workflow.feature_scope import case_journey
+from markettwin_execution_orchestrator.workflow.case_execution import (
     PersonaJourneyExecutionRequest,
 )
 from markettwin_shared.deep_testing import AssertionResult, CaseExecutionResult

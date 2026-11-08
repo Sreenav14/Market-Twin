@@ -43,7 +43,7 @@ export function RunOverviewPage() {
     <>
       {run.status_reason ? <p className="panel" role="status">{run.status_reason}</p> : null}
       {!["draft", "failed", "cancelled"].includes(run.status) ? (
-        <Banner titleAs="h2" severity={awaitingApproval || pausedForHuman ? "warning" : "info"} title={awaitingApproval ? "Approve the tests" : pausedForHuman
+        <Banner titleAs="h2" severity={awaitingApproval || pausedForHuman ? "warning" : "info"} title={awaitingApproval ? "Contract flow retired" : pausedForHuman
                 ? "Human assistance required"
                 : run.status === "completed"
                 ? ready
@@ -56,7 +56,7 @@ export function RunOverviewPage() {
                 : "Watch this test execute"} action={<Link
             className="primary-button"
             to={
-              awaitingApproval ? `/runs/${run.id}/contract` : pausedForHuman
+              awaitingApproval ? `/runs/${run.id}/overview` : pausedForHuman
                 ? `/runs/${run.id}/watch`
                 : run.status === "completed"
                 ? ready
@@ -65,7 +65,7 @@ export function RunOverviewPage() {
                 : `/runs/${run.id}/watch`
             }
           >
-            {awaitingApproval ? "Approve the tests" : pausedForHuman
+            {awaitingApproval ? "Open the overview" : pausedForHuman
               ? "Watch live"
               : run.status === "completed"
               ? ready
@@ -74,7 +74,7 @@ export function RunOverviewPage() {
               : run.status === "queued" || run.status === "planning"
               ? "Open Watch"
               : "Watch live"}
-          </Link>}>{awaitingApproval ? "Exploration is complete. Review the journeys and checks before testing begins." : pausedForHuman
+          </Link>}>{awaitingApproval ? "This run was created with the retired contract-approval flow and cannot be approved. Its stored contract and results remain readable here." : pausedForHuman
                 ? "Open the requesting journey and protected browser. The tester waits while you assist."
                 : run.status === "completed"
                 ? ready

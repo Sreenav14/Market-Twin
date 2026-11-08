@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from markettwin_database.model_budget import model_budget
-from markettwin_database.models import TestRun
-from markettwin_shared.feature_plan import FeatureScope
+from markettwin_database.models import Report, TestRun
+from markettwin_shared.run_kind import resolve_run_kind
 from markettwin_shared.observability import use_observability_correlation
 from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,6 @@ from markettwin_evaluation_worker.persistence.visual_cache import VisualResultCa
 from markettwin_evaluation_worker.report_generator import (
     generate_deterministic_report,
 )
-from markettwin_evaluation_worker.run_assessment import assess_completed_run
 from markettwin_evaluation_worker.visual_artifact_storage import (
     VisualArtifactStorage,
 )
@@ -86,41 +85,37 @@ async def _evaluate_and_generate_report(
 
     try:
         run = await session.get(TestRun, test_run_id)
-        mode = run.configuration_snapshot.get("execution_mode") if run else None
-        if run is not None and mode == "discovery_contract_v1":
-            from markettwin_shared.discovery_contract import DiscoveryMap, TestContract
-
-            from markettwin_evaluation_worker.contract_evaluator import evaluate_contract_run
+        if run is not None and resolve_run_kind(
+            run_kind_column=getattr(run, "run_kind", None),
+            configuration_snapshot=run.configuration_snapshot,
+        ) == "persona" and getattr(run, "run_kind", None) == "persona":
+            # Unified persona runs (U-P5-05): a quotes report with no
+            # verdict, built from persona.impression events alone. The
+            # generic path below requires journey results a persona
+            # walk never produces — routing persona runs around it is
+            # what keeps them from evaluating to an empty report.
+            from markettwin_evaluation_worker.persona_evaluator import (
+                evaluate_persona_run,
+            )
 
             await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)
-            finding_ids, report_id = await evaluate_contract_run(
+            finding_ids, report_id = await evaluate_persona_run(
                 test_run_id=test_run_id, session=session,
-                contract=TestContract.model_validate(run.configuration_snapshot["frozen_contract"]),
-                discovery=DiscoveryMap.model_validate(run.configuration_snapshot["discovery_map"]),
             )
             await session.commit()
             return EvaluationWorkflowResult(
                 test_run_id=test_run_id, finding_ids=finding_ids, report_id=report_id,
             )
-        if run is not None and mode in {"deep_feature_v1", "discovery_contract_v1"}:
-            from markettwin_shared.discovery_contract import TestContract
-
-            from markettwin_evaluation_worker.deep_evaluator import evaluate_deep_run
+        if run is not None and getattr(run, "run_kind", None) == "slop":
+            # Unified slop runs (U-P6-05): three family numbers from
+            # the published verdict rows; no verdict, no findings.
+            from markettwin_evaluation_worker.slop_evaluator import (
+                evaluate_slop_run,
+            )
 
             await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)
-            frozen_scope = run.configuration_snapshot.get("feature_scope")
-            scope = FeatureScope.model_validate(frozen_scope) if frozen_scope is not None else None
-            frozen_contract_data = run.configuration_snapshot.get("frozen_contract")
-            frozen_contract = (
-                TestContract.model_validate(frozen_contract_data)
-                if frozen_contract_data is not None
-                else None
-            )
-            finding_ids, report_id = await evaluate_deep_run(
-                test_run_id=test_run_id,
-                session=session,
-                trusted_scope=scope,
-                frozen_contract=frozen_contract,
+            finding_ids, report_id = await evaluate_slop_run(
+                test_run_id=test_run_id, session=session,
             )
             await session.commit()
             return EvaluationWorkflowResult(
@@ -186,17 +181,43 @@ async def _evaluate_and_generate_report(
             }
             for item in visual_evaluation.evaluations
         )
-        assessment = await assess_completed_run(
-            test_run_id=test_run_id,
-            session=session,
-            evaluation_records=evaluation_records,
-        )
         report = await generate_deterministic_report(
             test_run_id=test_run_id,
             session=session,
             evaluation_records=evaluation_records,
-            assessment=assessment,
+            assessment=None,
         )
+
+        # Unified enrichment (U-P1-05): an Explore & Test run that owns
+        # a Board gets the Board verdict + coverage merged into its
+        # report payload. The verdict is computed from the Board alone;
+        # the legacy findings/report above stay as they are.
+        if run is not None:
+            kind = resolve_run_kind(
+                run_kind_column=getattr(run, "run_kind", None),
+                configuration_snapshot=run.configuration_snapshot,
+            )
+            board_document = run.configuration_snapshot.get("harness_state")
+            if kind == "explore_test" and isinstance(board_document, dict):
+                from markettwin_evaluation_worker.board_evaluator import (
+                    compute_board_verdict,
+                )
+
+                board_results = await repository.list_board_item_results(
+                    test_run_id=test_run_id,
+                )
+                board_section = compute_board_verdict(
+                    board_document=board_document,
+                    board_results=board_results,
+                )
+                report_row = await session.get(Report, report.report_id)
+                if report_row is not None:
+                    report_row.report_payload = {
+                        **report_row.report_payload,
+                        "run_kind": "explore_test",
+                        "verdict": board_section["verdict"],
+                        "board": board_section,
+                    }
 
         await session.commit()
 

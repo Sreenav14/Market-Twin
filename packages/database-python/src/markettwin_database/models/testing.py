@@ -222,6 +222,11 @@ class TestRun(Base):
             "'completed', 'failed', 'cancelled')",
             name="ck_test_runs_status_allowed",
         ),
+        CheckConstraint(
+            "run_kind IS NULL OR run_kind IN "
+            "('explore_test', 'persona', 'slop')",
+            name="ck_test_runs_run_kind_allowed",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "application_id"],
             ["testing.applications.workspace_id", "testing.applications.id"],
@@ -251,6 +256,10 @@ class TestRun(Base):
         default="draft",
         server_default=text("'draft'"),
     )
+    # Unified run kind (explore_test | persona | slop). NULL on rows
+    # created before the unified engine; readers resolve those from the
+    # configuration_snapshot execution_mode (read-time translation).
+    run_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     target_snapshot: Mapped[dict[str, object]] = mapped_column(
         JSONB,
         nullable=False,
@@ -388,4 +397,49 @@ class PersonaJourney(Base):
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ApplicationPersonaDefinition(Base):
+    """Owner-editable persona definitions per application (U-P5-03).
+
+    The definition document is the validated YAML contract rendered as
+    JSON: machine conditions are canonical for the type (enforced by
+    the personas.definitions validator on every write); only voice,
+    name, and enabled are owner-editable. No score field can exist in
+    the document — the validator rejects those keys on write.
+    """
+
+    __tablename__ = "application_persona_definitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "application_id", "persona_id",
+            name="uq_application_persona_definitions_app_persona",
+        ),
+        {"schema": "testing"},
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    application_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("testing.applications.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    persona_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    persona_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true"),
+    )
+    definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    definition_yaml: Mapped[str] = mapped_column(Text, nullable=False)
+    source_run_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )

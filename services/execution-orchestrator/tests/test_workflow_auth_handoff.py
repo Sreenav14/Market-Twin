@@ -16,7 +16,7 @@ from markettwin_execution_orchestrator.persistence.human_action_lifecycle_reposi
     HumanActionState,
 )
 from markettwin_execution_orchestrator.workflow import case_execution
-from markettwin_execution_orchestrator.workflow.journey_executor import (
+from markettwin_execution_orchestrator.workflow.case_execution import (
     PersonaJourneyExecutionRequest,
 )
 from markettwin_shared.auth_verification import AuthVerificationPolicy

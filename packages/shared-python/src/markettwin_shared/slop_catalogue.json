@@ -1,0 +1,2092 @@
+{
+ "definitions_version": "slop-detect@2026.11",
+ "catalogue_version": 2,
+ "formula_version": 1,
+ "skill_package": "ui-quality",
+ "versioning_note": "Definitions version follows the slop-detect scheme (definitions@YYYY.MM) from the calculation research report. Any tell/threshold change = new definitions version + CHANGELOG line; scores are comparable only within a version.",
+ "families": {
+  "slop": "Unchosen AI-default design tells present on the page. Never a claim about who or what built the app.",
+  "inefficiency": "Wasted user effort: interaction cost, choice cost, form friction, waiting. Measured in counts, seconds and ratios.",
+  "defect": "Violations of normative rules (WCAG, platform guidelines, operationalised heuristics). Counted, never blended with the other families."
+ },
+ "detection_classes": {
+  "deterministic": "Settled by code from DOM/computed styles/text/geometry. Same capture -> same verdict.",
+  "vision": "Settled by a vision model on a screenshot, anchored to a region. Opinion by construction; never in the slop percentage.",
+  "hybrid": "Deterministic candidate generation + vision/judgement settlement, or static+performed measurement.",
+  "performed": "Settled only by an agent performing the task (action log, probes, lab performance run).",
+  "judgement": "No reliable automated detector. Never auto-verdicted; may be noted, never counted."
+ },
+ "honesty_classes": [
+  "measured",
+  "judged",
+  "cant_tell"
+ ],
+ "constants": [
+  {
+   "name": "SLOP_W_SEVERE",
+   "value": 2,
+   "source": "SPEC 6.1",
+   "note": "Headline weight for severe-flagged elements."
+  },
+  {
+   "name": "SLOP_W_MINOR",
+   "value": 1,
+   "source": "SPEC 6.1",
+   "note": "Headline weight for minor-flagged elements."
+  },
+  {
+   "name": "SLOP_T_FP_BUTTONS",
+   "value": 3,
+   "source": "SPEC 3.1",
+   "note": "Distinct primary-button fingerprints at/above which SLOP_COMPONENT_FINGERPRINTS fires."
+  },
+  {
+   "name": "SLOP_T_FP_OTHER",
+   "value": 4,
+   "source": "SPEC 3.1",
+   "note": "Same threshold for inputs and cards."
+  },
+  {
+   "name": "SLOP_T_ONEOFF_COLOURS",
+   "value": 5,
+   "source": "SPEC 3.1",
+   "note": "Colours used exactly once across all captures."
+  },
+  {
+   "name": "SLOP_T_OFFRHYTHM",
+   "value": 0.2,
+   "source": "SPEC 3.1",
+   "note": "Share of peer instances >2px off the modal spacing rhythm; clustering tolerance 2px."
+  },
+  {
+   "name": "SLOP_T_UPSCALE",
+   "value": 1.25,
+   "source": "SPEC 3.1",
+   "note": "Upscale ratio above which SLOP_LOW_RES_MEDIA fires (display width >= 100px)."
+  },
+  {
+   "name": "SLOP_T_COVERAGE_MIN",
+   "value": 0.8,
+   "source": "SPEC 4.4",
+   "note": "Element coverage J/(J+U) needed to show the headline percentage."
+  },
+  {
+   "name": "SLOP_T_UNDECIDED_W_MAX",
+   "value": 0.1,
+   "source": "SPEC 4.4",
+   "note": "Max prominence share of cant_tell elements to show the headline percentage."
+  },
+  {
+   "name": "SLOP_T_CANT_TELL_FLOOR",
+   "value": 0.5,
+   "source": "SPEC 4.4",
+   "note": "Below this coverage the headline is 'Can't tell'. A page is cant_tell below 50% of its elements judged."
+  },
+  {
+   "name": "SLOP_TIER_WEIGHT_STRONG",
+   "value": 1.0,
+   "source": "SPEC 6.4",
+   "note": "Prominence-secondary load weight."
+  },
+  {
+   "name": "SLOP_TIER_WEIGHT_MODERATE",
+   "value": 0.6,
+   "source": "SPEC 6.4",
+   "note": "Prominence-secondary load weight."
+  },
+  {
+   "name": "SLOP_TIER_WEIGHT_WEAK",
+   "value": 0.3,
+   "source": "SPEC 6.4",
+   "note": "Prominence-secondary load weight."
+  },
+  {
+   "name": "SLOP_T_BRAND_HUE_TOL_DEG",
+   "value": 10,
+   "source": "SPEC 4.7",
+   "note": "Hue distance (degrees) within which a tell's dominant hue counts as attested brand."
+  },
+  {
+   "name": "CRITIC_BUDGET_USD",
+   "value": 0.5,
+   "source": "SPEC 4.1/5.4",
+   "note": "Hard per-run cap for the vision critic."
+  },
+  {
+   "name": "CRITIC_MAX_CALLS",
+   "value": 40,
+   "source": "SPEC 5.4",
+   "note": "Absolute per-run cap on critic calls."
+  },
+  {
+   "name": "SLOP_T_CONTRAST_AA",
+   "value": 4.5,
+   "source": "SPEC 3.1 / App. A.7 (agree)",
+   "note": "Normal-text AA contrast floor for SLOP_CONTRAST."
+  },
+  {
+   "name": "SLOP_T_CONTRAST_AA_LARGE",
+   "value": 3.0,
+   "source": "SPEC 3.1 / App. A.7 (agree)",
+   "note": "Large-text AA floor (>=24px, or >=18.66px at weight >=700)."
+  },
+  {
+   "name": "SLOP_T_FONT_FAMILIES_MAX",
+   "value": 2,
+   "source": "SPEC 3.1 / App. A.7 (agree)",
+   "note": "More than 2 distinct font families fires SLOP_TYPE_DISCIPLINE."
+  },
+  {
+   "name": "SLOP_T_SPACING_BASE",
+   "value": 4,
+   "source": "SPEC App. A.7 (appendix-only)",
+   "note": "No section-3 body counterpart. Flagged; see discrepancies."
+  },
+  {
+   "name": "SLOP_T_ACCENT_HUES_MAX",
+   "value": 2,
+   "source": "SPEC App. A.7 (appendix-only)",
+   "note": "Hue distance >= 30 degrees. No body counterpart. Flagged."
+  },
+  {
+   "name": "SLOP_T_SHADOW_MAX",
+   "value": 2,
+   "source": "SPEC App. A.7 (appendix-only)",
+   "note": "No body counterpart. Flagged."
+  },
+  {
+   "name": "SLOP_T_RADIUS_MAX",
+   "value": 2,
+   "source": "SPEC App. A.7 (appendix-only)",
+   "note": "No body counterpart. Flagged."
+  },
+  {
+   "name": "SLOP_T_CARD_MIN",
+   "value": 3,
+   "source": "SPEC App. A.7 (appendix-only as a named constant)",
+   "note": "Body rule (3.3) is >=3 siblings with widths within +/-2% and identical structure signature; A.7's 'similarity >= 0.95' has no body counterpart. Flagged."
+  }
+ ],
+ "data_lists": {
+  "placeholder_patterns": {
+   "source": "SPEC App. A.2 (printed) union SPEC 3.1 examples",
+   "substrings": [
+    "lorem ipsum",
+    "dolor sit amet",
+    "placeholder text",
+    "sample text",
+    "dummy text",
+    "text goes here",
+    "your text here",
+    "todo:",
+    "tbd",
+    "john doe",
+    "jane doe",
+    "acme",
+    "foo bar"
+   ],
+   "insert_here_pattern": "Insert ... here (SPEC 3.1)",
+   "domains_in_src_or_href": [
+    "example.com",
+    "example.org",
+    "via.placeholder.com",
+    "placehold.co",
+    "picsum.photos"
+   ],
+   "repeated_token_rule": "Visible text node >= 12 chars consisting of one repeated word >= 4 times."
+  },
+  "placeholder_names": {
+   "source": "SPEC 3.3 (App. A.5 as cited) union App. A.2 name entries",
+   "names": [
+    "Jane Doe",
+    "John Doe",
+    "John Smith",
+    "Sarah Johnson"
+   ]
+  },
+  "fake_face_hosts": {
+   "source": "SPEC 3.3 + App. A.5",
+   "hosts": [
+    "pravatar.cc",
+    "i.pravatar.cc",
+    "randomuser.me",
+    "thispersondoesnotexist.com",
+    "ui-avatars.com"
+   ],
+   "also": "unsplash source URLs with face/portrait params in testimonial context (App. A.5)."
+  },
+  "generic_phrases": {
+   "source": "SPEC App. A.1 (printed list, headed 'Generic-phrase list')",
+   "phrases": [
+    "welcome to our platform",
+    "welcome to the future of",
+    "unlock the power of",
+    "supercharge your",
+    "take your business to the next level",
+    "elevate your",
+    "seamless experience",
+    "seamlessly",
+    "cutting-edge",
+    "revolutionize the way",
+    "game-changer",
+    "game changer",
+    "all-in-one platform",
+    "in today's fast-paced world",
+    "delve into",
+    "empower your team",
+    "streamline your workflow",
+    "harness the power of",
+    "unlock seamless",
+    "built for the modern",
+    "join thousands of",
+    "loved by teams",
+    "get started today",
+    "start your journey"
+   ]
+  },
+  "generic_cta_labels": {
+   "source": "SPEC App. A.1",
+   "labels": [
+    "get started",
+    "learn more",
+    "submit",
+    "click here",
+    "sign up",
+    "sign up free",
+    "get started for free",
+    "try it free",
+    "start now",
+    "join now",
+    "explore",
+    "discover more"
+   ]
+  },
+  "generic_stat_labels": {
+   "source": "SPEC 3.3 examples (cited there as App. A.2; the printed App. A.2 does not contain them - see discrepancies D13)",
+   "labels": [
+    "happy customers",
+    "users worldwide",
+    "businesses trust us"
+   ]
+  },
+  "round_stat_number_set": {
+   "source": "SPEC 3.3 (body; wins over App. A.1 regex variant - see discrepancies D9)",
+   "values": [
+    "99.9%",
+    "100%",
+    "10x",
+    "10\u00d7",
+    "24/7",
+    "a round count >= 10000 with <= 2 significant digits"
+   ]
+  },
+  "default_fonts": {
+   "source": "SPEC 3.3 (versioned catalogue data)",
+   "wave_1": [
+    "Inter",
+    "Roboto",
+    "Open Sans",
+    "Poppins",
+    "Lato",
+    "system-ui-first stacks"
+   ],
+   "wave_2": [
+    "Space Grotesk",
+    "Geist",
+    "Instrument Serif"
+   ]
+  },
+  "template_asset_hosts": {
+   "source": "SPEC 3.3",
+   "hosts": [
+    "placehold.co",
+    "via.placeholder.com",
+    "dummyimage.com",
+    "picsum.photos",
+    "undraw.co",
+    "storyset.com",
+    "freepik CDN paths",
+    "source.unsplash.com"
+   ]
+  },
+  "ai_chrome_terms": {
+   "source": "SPEC App. A.9",
+   "terms": [
+    "ai-powered",
+    "powered by ai",
+    "powered by gpt",
+    "powered by claude",
+    "powered by openai",
+    "built with ai",
+    "ai-generated (as a UI label on the app's own features)",
+    "gpt-4 / claude / gemini as a button or feature label",
+    "ask ai",
+    "ai assistant as a decorative nav/badge label"
+   ]
+  },
+  "emoji_ranges": {
+   "source": "SPEC App. A.4",
+   "ranges": [
+    "U+1F300-U+1FAFF",
+    "U+2600-U+27BF"
+   ],
+   "excluded_glyphs": [
+    "U+2713 check",
+    "U+2717 cross",
+    "U+2605 star",
+    "arrows"
+   ]
+  },
+  "dead_end_destination_patterns": {
+   "source": "SPEC 3.1",
+   "patterns": [
+    "Coming soon",
+    "Under construction",
+    "Coming Soon"
+   ]
+  }
+ },
+ "flag_gate": {
+  "id": "GATE-FLAG-01",
+  "source": "SPEC 4.3 (research reconciliation R2)",
+  "statement": "An element is slop if it carries >= 1 verified severe signal. It is slop_minor only with no severe signal AND any of: >= 1 verified strong-tier minor tell; >= 1 verified signal from the bundle-constituted set; or >= 2 distinct verified minor codes counted AFTER offsets. A single weak or moderate tell never flags an element; it is recorded as a lone tell. Severe codes flag singly and are never offset. Page- and region-unit signals are not gated.",
+  "bundle_constituted_set": [
+   "SLOP_COMPONENT_FINGERPRINTS",
+   "SLOP_CENTRED_HERO",
+   "SLOP_EDITORIAL_CLUSTER",
+   "SLOP_ACID_DARK",
+   "SLOP_UNIFORM_SURFACE",
+   "SLOP_CARD_GRID",
+   "SLOP_DEFAULT_FONT"
+  ],
+  "element_verdicts": [
+   "slop",
+   "slop_minor",
+   "not_slop",
+   "cant_tell"
+  ],
+  "cant_tell_reasons": [
+   "unreached_state",
+   "capture_incomplete",
+   "auth_wall",
+   "analyser_error"
+  ]
+ },
+ "craft_credits": [
+  {
+   "id": "display_face",
+   "earned_when": "Headings use a display family distinct from the body family, in neither default list.",
+   "offsets": [
+    "SLOP_DEFAULT_FONT"
+   ],
+   "source": "SPEC 4.7"
+  },
+  {
+   "id": "optical_tracking",
+   "earned_when": "Negative letter-spacing on >= 1 heading >= 24px, or letter-spacing varying across heading size classes.",
+   "offsets": [
+    "SLOP_DEFAULT_FONT",
+    "SLOP_FLAT_TYPE"
+   ],
+   "source": "SPEC 4.7"
+  },
+  {
+   "id": "radius_hierarchy",
+   "earned_when": ">= 2 distinct radius values in role-consistent use (same role -> same radius; different roles -> different).",
+   "offsets": [
+    "SLOP_UNIFORM_SURFACE"
+   ],
+   "source": "SPEC 4.7"
+  },
+  {
+   "id": "focus_state",
+   "earned_when": "A non-default :focus-visible style exists in readable CSS.",
+   "offsets": [
+    "SLOP_NO_MICROSTATES"
+   ],
+   "source": "SPEC 4.7"
+  }
+ ],
+ "brand_token_offsets": {
+  "source": "SPEC 4.1/4.7",
+  "rule": "Owner-attested brand_tokens (palette_hexes, font_families) offset a SLOP_GRADIENT_SIGNATURE or SLOP_SIDE_TAB_BORDER tell whose dominant hue is within 10 degrees of an attested palette hex, and a SLOP_DEFAULT_FONT tell whose family is attested. Never offsettable: all severe codes, and bundle-constituted codes other than SLOP_DEFAULT_FONT.",
+  "stripe_anchor": "Kim/IOV recalibration: Stripe paints 123 purple accents and scores 0 - attested brand purple is not a tell."
+ },
+ "coverage_rules": {
+  "source": "SPEC 4.4 (research reconciliation R4)",
+  "element_coverage": "J / (J + U)",
+  "undecided_weight": "Prominence (visible-area) share of cant_tell elements among judged elements' pages; count-share fallback when areas are unavailable, labelled as fallback.",
+  "show_percentage_iff": "element_coverage >= 0.80 AND undecided_weight <= 0.10",
+  "tier_1": "Coverage 0.50-0.80, or undecided weight > 0.10: headline replaced by 'Insufficient coverage'; partial composition still shown; unreachable areas named.",
+  "tier_2": "Coverage < 0.50: headline is 'Can't tell' with the reasons roll-up leading.",
+  "page_rule": "A page is cant_tell when < 50% of its inventoried elements are judged; per-page bars show counts, never a lone percentage.",
+  "error_band_line": "Deterministic checks carry an estimated 5-10% false-flag band (Krebs 2026: manual QA over 1,590 crawled pages). No confidence interval is ever attached to the census headline.",
+  "sampled_figures": "Sampled-layer figures (critic audit sample) are displayed as n = N with a Wilson 95% interval, or not displayed at all."
+ },
+ "formulas": {
+  "slop_percentage": {
+   "formula": "round_half_up_1dp( 100 * (2*S + 1*M) / (2*J) )",
+   "source": "SPEC 6.1",
+   "terms": "S = elements with verdict slop; M = slop_minor; J = judged elements (J = S + M + C). Cant_tell (U) never in the denominator. Weights SLOP_W_SEVERE=2, SLOP_W_MINOR=1. All-clean = 0%, all-minor = 50%, all-severe = 100%."
+  },
+  "prominence_secondary": {
+   "formula": "PageScore_p = 100 * sum(prom_e * load_e); app figure = equal-weight mean of PageScore over pages with >= 1 judged element",
+   "source": "SPEC 6.4",
+   "terms": "prom_e = element bbox area / total bbox area of judged elements on the page. load_e = 0 unless flagged under GATE-FLAG-01; if flagged, min(1, sum of tier weights of distinct verified non-offset tells): strong 1.0, moderate 0.6, weak 0.3. Disclosed secondary only - never the headline; the launch criterion reads neither percentage."
+  },
+  "contrast_ratio": {
+   "formula": "c_lin = c/12.92 if c <= 0.04045 else ((c+0.055)/1.055)^2.4 per channel (c = channel/255); L = 0.2126*R + 0.7152*G + 0.0722*B; ratio = (L_light + 0.05) / (L_dark + 0.05)",
+   "source": "CALC 3.1 / cookbook C1 (WCAG)",
+   "terms": "Range 1-21. Never round up: 4.499 fails a 4.5 floor."
+  },
+  "fitts_id": {
+   "formula": "ID = log2(D/W + 1) bits; MT = a + b*ID",
+   "source": "CALC 2.2 / cookbook C2",
+   "terms": "D = distance from previous click point (first click: viewport centre - state the convention). W = target width along the movement axis (conservative variant: min(width, height) - state which). a ~= 50ms, b ~= 150ms/bit are device-dependent regression values, NOT universals - report ID in bits."
+  },
+  "klm_time": {
+   "formula": "T = sum over operators of n_op * t_op",
+   "source": "CALC 2.1 / cookbook C3",
+   "terms": "Operators: K keystroke, P point, H home, B mouse button, M mental preparation, R system response (measured, never assumed). Validated to ~20% RMS error for skilled, error-free performance only."
+  },
+  "hick_cost": {
+   "formula": "RT = a + b*log2(n+1); generalised T = b * H, H = sum p_i * log2(1/p_i + 1)",
+   "source": "CALC 2.3 / cookbook C4",
+   "terms": "n = visible, equally-likely options at the decision point. b ~= 155ms is illustrative. There is NO normative n; '7+/-2 menu items' is a folk misapplication and is never a threshold."
+  },
+  "kim_tell_score": {
+   "formula": "100 * sum(w_t * fired_t) / sum(w_t over applicable t)",
+   "source": "CALC cookbook C5 (Kim/IOV)",
+   "terms": "External reference formula, recorded for comparability with the published corpus. NOT the product headline: the MarketTwin headline is slop_percentage (SPEC 6.1, owner decision). Per-tell Kim weights are not fully published - see gaps."
+  },
+  "wilson_interval": {
+   "formula": "Wilson score interval for a binomial proportion at z = 1.96 (95%)",
+   "source": "SPEC 4.4",
+   "terms": "Used only for sampled-layer figures (e.g. critic audit sample miss rate), always printed with n."
+  },
+  "defect_rate": {
+   "formula": "rate = fails / (passes + fails) per check over elements; coverage = (passes + fails) / all targets printed beside every rate",
+   "source": "CALC cookbook C8",
+   "terms": "review/cant_tell and n/a leave the denominator. Deliberate, disclosed difference from Lighthouse's all-or-nothing audit rule."
+  }
+ },
+ "worked_examples": {
+  "canonical_thread_and_co": {
+   "source": "SPEC 11",
+   "inventoried": 120,
+   "J": 112,
+   "S": 2,
+   "M": 9,
+   "C": 101,
+   "U": 8,
+   "percentage": 5.8,
+   "check": "100 * (2*2 + 9) / (2*112) = 100 * 13/224 = 5.80357... -> 5.8",
+   "notes": "S: SLOP_PLACEHOLDER_TEXT block on the sign-up page + SLOP_BROKEN_MEDIA trust-badge image on the Pay page. One page-level SLOP_DEAD_END rolls up outside the percentage. Critic: 2 notes, out of the number."
+  }
+ },
+ "source_facts": {
+  "kim_stripe_purple_accents": {
+   "value": 123,
+   "source": "CALC 1.1 (Kim/IOV recalibration on 202 real sites; median score 0, AI-default fixtures 35-59)"
+  },
+  "krebs_corpus": {
+   "pages": 1590,
+   "heavy_pct": 22,
+   "mild_pct": 32,
+   "clean_pct": 46,
+   "fp_band": [
+    0.05,
+    0.1
+   ],
+   "source": "CALC 1.2 (Krebs, Show HN sample - never quote as '% of websites')"
+  },
+  "webaim_million_2025": {
+   "pages_with_failures_pct": 94.8,
+   "mean_errors_per_page": 51,
+   "low_contrast_pct": 79.1,
+   "low_contrast_instances_per_page": 29.6,
+   "missing_alt_pct": 55.5,
+   "empty_links_pct": 45.4,
+   "six_error_types_share_pct": 96,
+   "skipped_headings_pct": 39,
+   "source": "CALC 3.1-3.4"
+  },
+  "baymard_checkout": {
+   "steps_avg": 5.1,
+   "steps_suffer_at": 8,
+   "form_elements_avg": 11.3,
+   "form_elements_needed_approx": 8,
+   "abandonment_pct": 70.22,
+   "forced_account_pct": 18,
+   "long_complicated_pct": 17,
+   "source": "CALC 2.6 (Baymard via named secondary; vendor research, methods public, raw data paywalled)"
+  },
+  "cwv_pass_all_mobile_pct_approx": {
+   "value": 48,
+   "source": "CALC 2.10 (HTTP Archive Web Almanac 2025, CrUX)"
+  },
+  "first_click_studies": {
+   "bailey_wolfson_correct_vs_wrong_pct": [
+    87,
+    46
+   ],
+   "measuringu_replication_pct": [
+    78,
+    70
+   ],
+   "source": "CALC 2.5 - effect is real, its size is unsettled; cite both"
+  },
+  "deque_automation_coverage": {
+   "issues_found_by_volume_pct": 57,
+   "wcag_criteria_fully_automatable_pct_range": [
+    30,
+    40
+   ],
+   "source": "CALC 3.11 (Deque study: 2,000+ audits, 13,000+ pages, ~300,000 issues) - both numbers are true; quoting either alone misleads"
+  },
+  "worked_computation_examples": {
+   "note": "Outputs of scripts/measure.py, verified at package build time - the values calibration-examples.md cites.",
+   "contrast_black_on_white": 21.0,
+   "contrast_767676_on_white": 4.54,
+   "contrast_949494_on_white": 3.03,
+   "fitts_example": {
+    "distance_px": 200,
+    "width_px": 50,
+    "id_bits": 2.3219
+   },
+   "klm_example": {
+    "operators": {
+     "K": 10,
+     "P": 2,
+     "H": 1,
+     "M": 1,
+     "R": 0.5
+    },
+    "seconds": 7.25
+   },
+   "wilson_example": {
+    "successes": 20,
+    "n": 100,
+    "interval_95": [
+     0.133,
+     0.289
+    ]
+   },
+   "contrast_rounding_example_fails": 4.499,
+   "gradient_example_stops": {
+    "hex": [
+     "#6366F1",
+     "#A855F7"
+    ],
+    "hues_deg": [
+     239,
+     271
+    ],
+    "note": " hues computed from the hex pair cited in SKILL.md's worked verdict row and CAL-SLOP-06"
+   }
+  },
+  "vlm_judge_agreement": {
+   "cross_model_rank_correlation": 0.36,
+   "null_baseline": 0.14,
+   "source": "SPEC 2.3 (2026 cross-model audit of VLMs judging design/affective qualities; per-category 0.21-0.51) - why VIS verdicts are opinion, never verified"
+  }
+ },
+ "rules": [
+  {
+   "id": "SLOP_PLACEHOLDER_TEXT",
+   "family": "slop",
+   "name": "Placeholder text",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "severe",
+   "tier": "strong",
+   "unit": "element/region",
+   "judged_via": "instance",
+   "trigger": "Visible rendered text matches the placeholder list (data_lists.placeholder_patterns).",
+   "thresholds": {
+    "match": "substring, case-insensitive, on captured visible text"
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_DEAD_END",
+   "family": "slop",
+   "name": "Dead end",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "severe",
+   "tier": "strong",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "A visible control/link whose executed destination's visible text matches the dead-end patterns, or a destination state with 0 interactive elements, 0 onward links and < 40 visible words.",
+   "thresholds": {
+    "min_visible_words_for_live_state": 40
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_BROKEN_MEDIA",
+   "family": "slop",
+   "name": "Broken media",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "severe",
+   "tier": "strong",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "img with naturalWidth == 0 after load settles (measured on the confirmation capture); embed/iframe failed to load (responseEnd == 0 or error state); visible element's image 404s.",
+   "thresholds": {
+    "natural_width": 0
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_VIEWPORT_INTEGRITY",
+   "family": "slop",
+   "name": "Viewport integrity",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "severe",
+   "tier": "strong",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": "At desktop or mobile320: scrollWidth > clientWidth + 1; or two interactive elements overlapping by > 4px on both axes; or visible text with scrollHeight > clientHeight + 2 and computed overflow hidden (clipped text).",
+   "thresholds": {
+    "overflow_px": 1,
+    "overlap_px": 4,
+    "clip_px": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_FABRICATED_PROOF",
+   "family": "slop",
+   "name": "Placeholder proof block",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "severe",
+   "tier": "strong",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "A testimonial/proof-shaped block where the name matches data_lists.placeholder_names, or the avatar img src host matches data_lists.fake_face_hosts. UI plain name is 'Placeholder proof block'; no string may call a testimonial fake/invented - severity rests on the placeholder fact only.",
+   "thresholds": {
+    "structure": "quote-like text + person name + role/company line (SPEC App. A.4)"
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_GENERIC_PHRASES",
+   "family": "slop",
+   "name": "Generic phrases",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "element/region",
+   "judged_via": "instance",
+   "trigger": "Visible copy matches data_lists.generic_phrases. Reported as 'phrase found' + the phrase, never as a quality verdict.",
+   "thresholds": {
+    "tier_escalation": "moderate when >= 3 distinct phrases occur in one page's first viewport"
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_STYLE_INCONSISTENCY",
+   "family": "slop",
+   "name": "Style inconsistency (one page)",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page",
+   "judged_via": "cluster",
+   "trigger": ">= 2 distinct primary-action fingerprints (background, radius, font) among primary buttons on one page.",
+   "thresholds": {
+    "min_distinct_fingerprints": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_COMPONENT_FINGERPRINTS",
+   "family": "slop",
+   "name": "Component fingerprints",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page/app",
+   "judged_via": "cluster",
+   "trigger": "Distinct style fingerprints per component role across the app >= SLOP_T_FP_BUTTONS (3) for buttons, >= SLOP_T_FP_OTHER (4) for inputs and cards.",
+   "thresholds": {
+    "buttons": 3,
+    "inputs_and_cards": 4
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true
+  },
+  {
+   "id": "SLOP_TYPE_DISCIPLINE",
+   "family": "slop",
+   "name": "Type discipline",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page/app",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": "> 2 distinct font families across visible rendered text (icon fonts excluded), or >= 4 font sizes outside the page's dominant 6-value size scale (+/-1px).",
+   "thresholds": {
+    "max_font_families": 2,
+    "dominant_scale_size": 6,
+    "min_sizes_outside_scale": 4,
+    "scale_tolerance_px": 1
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_COLOUR_DISCIPLINE",
+   "family": "slop",
+   "name": "Colour discipline",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "app",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": ">= SLOP_T_ONEOFF_COLOURS (5) colours used exactly once across all captures (image content excluded), or >= 2 distinct primary-button background colours app-wide.",
+   "thresholds": {
+    "oneoff_colours": 5,
+    "max_primary_button_backgrounds": 1
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_SPACING_RHYTHM",
+   "family": "slop",
+   "name": "Spacing rhythm",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": "Per page, per peer role: padding/margin values clustered at 2px tolerance; the modal cluster is the rhythm; fires when >= SLOP_T_OFFRHYTHM (20%) of peer instances sit > 2px off the rhythm.",
+   "thresholds": {
+    "cluster_tolerance_px": 2,
+    "off_rhythm_share": 0.2,
+    "off_rhythm_px": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_ALIGNMENT",
+   "family": "slop",
+   "name": "Alignment near-miss",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": "Peer elements sharing a parent row/column whose shared-edge coordinates differ by 2-6px. (> 6px with no shared-edge structure is not this code; overlaps/clipping are SLOP_VIEWPORT_INTEGRITY.)",
+   "thresholds": {
+    "near_miss_min_px": 2,
+    "near_miss_max_px": 6
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_CONTRAST",
+   "family": "slop",
+   "name": "Contrast below AA",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "cluster",
+   "trigger": "Computed foreground/background contrast below WCAG AA: < 4.5 normal text, < 3.0 large text (>= 24px, or >= 18.66px at weight >= 700). Background = nearest opaque ancestor; gradient backgrounds: worst stop.",
+   "thresholds": {
+    "aa_normal": 4.5,
+    "aa_large": 3.0,
+    "large_text_px": 24,
+    "large_text_bold_px": 18.66,
+    "large_text_bold_weight": 700
+   },
+   "formula_ref": "formulas.contrast_ratio",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_LOW_RES_MEDIA",
+   "family": "slop",
+   "name": "Low-resolution media",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "Image displayed at cssWidth * devicePixelRatio > naturalWidth * SLOP_T_UPSCALE (1.25), display width >= 100px. Resolution only; SVG exempt.",
+   "thresholds": {
+    "upscale_ratio": 1.25,
+    "min_display_width_px": 100
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_STRETCHED_IMAGE",
+   "family": "slop",
+   "name": "Stretched image",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "|displayAspect - naturalAspect| / naturalAspect > 0.05 while computed object-fit is fill (or unset with both CSS width and height constraining). object-fit cover/contain suppresses this code (never SLOP_LOW_RES_MEDIA). SVG exempt.",
+   "thresholds": {
+    "aspect_deviation": 0.05
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_GRADIENT_SIGNATURE",
+   "family": "slop",
+   "name": "Gradient signature",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "strong",
+   "unit": "element/page",
+   "judged_via": "cluster",
+   "trigger": "Computed background-image is a linear-gradient with >= 2 stops whose hues fall in 230-300 degrees (indigo->violet->pink band), on an element >= 200x60px or on any heading's ancestor hero region; or any element with background-clip: text + a gradient. Brand-token offset: dominant hue within 10 degrees of an attested palette hex -> offset, recorded not counted.",
+   "thresholds": {
+    "hue_min_deg": 230,
+    "hue_max_deg": 300,
+    "min_stops": 2,
+    "min_width_px": 200,
+    "min_height_px": 60,
+    "brand_hue_tolerance_deg": 10
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "offset_eligible": true,
+   "offsets": [
+    "brand_token"
+   ]
+  },
+  {
+   "id": "SLOP_DEFAULT_FONT",
+   "family": "slop",
+   "name": "Default font (bundle form)",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page/app",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": "Bundle form only - a default font alone never fires. All three: (1) computed font-family of h1/h2 (first non-generic family) is in data_lists.default_fonts; (2) the same family serves display and body with no display/body contrast; (3) neither offset applies (family attested in brand_tokens; display_face or optical_tracking credit earned).",
+   "thresholds": {},
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true,
+   "offset_eligible": true,
+   "offsets": [
+    "brand_token",
+    "craft_credit:display_face",
+    "craft_credit:optical_tracking"
+   ]
+  },
+  {
+   "id": "SLOP_EMOJI_ICONS",
+   "family": "slop",
+   "name": "Emoji as icons",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "An emoji codepoint (data_lists.emoji_ranges, exclusions applied) is the sole content, or >= 50% of glyphs, of a button / nav item / icon slot / feature-tile lead. Body paragraphs and [data-ugc]/article/chat regions are out of scope.",
+   "thresholds": {
+    "sole_or_glyph_share": 0.5
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_TEMPLATE_CHROME",
+   "family": "slop",
+   "name": "Template chrome",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element/page",
+   "judged_via": "instance",
+   "trigger": "Any of: (a) eyebrow - element immediately preceding a heading, font-size <= 13px, uppercase with letter-spacing >= 0.08em; (b) middle-dot meta - one visible text node <= 120 chars with >= 2 ' . ' separators; (c) glued arrow - link/button text matching /->\\s*$/ (arrow glyph); (d) numbered siblings - >= 3 sibling cards/headings starting with sequential 01,02,03 where the parent is not an ol and items carry no step semantics; (e) mono micro-labels - monospace section label <= 12px preceding a heading, on >= 3 headings on one page.",
+   "thresholds": {
+    "eyebrow_max_px": 13,
+    "eyebrow_min_letter_spacing_em": 0.08,
+    "meta_max_chars": 120,
+    "meta_min_separators": 2,
+    "numbered_min_siblings": 3,
+    "mono_label_max_px": 12,
+    "mono_label_min_headings": 3
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "tier_condition": "strong when pattern (a) repeats over >= 3 sections; otherwise moderate"
+  },
+  {
+   "id": "SLOP_UNIFORM_SURFACE",
+   "family": "slop",
+   "name": "Uniform surface kit",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": ">= 8 elevated elements (box-shadow != none, or card-like border+background) spanning >= 3 distinct roles on one page, with exactly 1 distinct (border-radius, box-shadow) pair across all of them.",
+   "thresholds": {
+    "min_elements": 8,
+    "min_roles": 3,
+    "distinct_pairs": 1
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true,
+   "offset_eligible": true,
+   "offsets": [
+    "craft_credit:radius_hierarchy"
+   ]
+  },
+  {
+   "id": "SLOP_CENTRED_HERO",
+   "family": "slop",
+   "name": "Centred hero",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "strong",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": "In the first viewport-height region: an h1 whose box centre is within +/-2% of its container's centre, plus >= 2 of {pill/badge element directly above the h1, centred paragraph under the h1, centred CTA group} also centred. Page-level only; never attaches to an element verdict.",
+   "thresholds": {
+    "centre_tolerance_pct": 2,
+    "min_supporting_signs": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true
+  },
+  {
+   "id": "SLOP_CARD_GRID",
+   "family": "slop",
+   "name": "Identical card grid",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "strong",
+   "unit": "page/region",
+   "judged_via": "cluster",
+   "trigger": ">= 3 sibling elements with widths equal within +/-2% and identical child-structure signature, where the first child is an icon/svg/img <= 48px; or >= 3 equal-width siblings with identical structure signatures regardless of first child (variant recorded in measured values).",
+   "thresholds": {
+    "min_siblings": 3,
+    "width_tolerance_pct": 2,
+    "icon_max_px": 48
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true
+  },
+  {
+   "id": "SLOP_ROUND_STATS",
+   "family": "slop",
+   "name": "Round-number stats",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "A stat-band element (number set at >= 28px with a small label) whose number is in data_lists.round_stat_number_set AND whose label matches data_lists.generic_stat_labels. A bare round number alone never fires.",
+   "thresholds": {
+    "min_number_px": 28
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_MOCK_CHROME",
+   "family": "slop",
+   "name": "Mock browser chrome / tilted mockup",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "Fake browser/OS chrome built from divs: a bar with exactly 3 circular elements 8-16px in red/yellow/green hues above a pill-shaped URL-like element, none of it an img; or a media/screenshot element in a hero region with a CSS rotate transform of 0.5-12 degrees.",
+   "thresholds": {
+    "dot_count": 3,
+    "dot_min_px": 8,
+    "dot_max_px": 16,
+    "tilt_min_deg": 0.5,
+    "tilt_max_deg": 12
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_EMPTY_VISUAL",
+   "family": "slop",
+   "name": "Empty visual block",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "region",
+   "judged_via": "instance",
+   "trigger": "An element >= 300x200px with a gradient or decorative solid background, containing no img/video/canvas and < 3 words of text, in a content region; or an empty frame (bordered/media-slot element rendering no content).",
+   "thresholds": {
+    "min_width_px": 300,
+    "min_height_px": 200,
+    "max_words": 3
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_GLASS_GLOW",
+   "family": "slop",
+   "name": "Glass / glow",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "cluster",
+   "trigger": "Any of: backdrop-filter blur(>= 8px) with background alpha < 0.9 on card-like elements - glass fires only at >= 3 such panels on one page; an element with filter blur(>= 40px) and a saturated background, positioned decoratively (orb, single-fire); a box-shadow with blur >= 40px, spread 0, offset 0 and a saturated colour (glow).",
+   "thresholds": {
+    "glass_blur_px": 8,
+    "glass_max_alpha": 0.9,
+    "glass_min_panels": 3,
+    "orb_blur_px": 40,
+    "glow_blur_px": 40
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_MOTION_TELLS",
+   "family": "slop",
+   "name": "Motion tells",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "page",
+   "judged_via": "cluster",
+   "trigger": "From stylesheets + computed styles: any transition-property: all; any keyframe timing function with cubic-bezier y-values outside [0, 1] (bounce/overshoot) on a UI element; an infinite animation on a non-status element; a pulsing (opacity/scale keyframes) status dot.",
+   "thresholds": {
+    "bezier_y_min": 0,
+    "bezier_y_max": 1
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_COPY_CADENCE",
+   "family": "slop",
+   "name": "Copy cadence",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": "Rebuttal cadence ('Not a X. A Y.' / 'Not just X - Y.' shapes) >= 3 occurrences app-wide; or a two-tone headline (heading text split across >= 2 distinct computed colours). Em-dash density is supporting evidence only and never fires this code by itself.",
+   "thresholds": {
+    "rebuttal_min_app_wide": 3,
+    "headline_min_colours": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_EDITORIAL_CLUSTER",
+   "family": "slop",
+   "name": "Editorial cluster (cream + serif + terracotta)",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "strong",
+   "unit": "page/app",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": "Conjunction, all three measured: page background OKLCH lightness >= 0.90 and hue 40-100 degrees (cream); display headings in a serif family; primary accent hue 15-55 degrees with chroma in the terracotta band.",
+   "thresholds": {
+    "bg_lightness_min": 0.9,
+    "bg_hue_min_deg": 40,
+    "bg_hue_max_deg": 100,
+    "accent_hue_min_deg": 15,
+    "accent_hue_max_deg": 55
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true
+  },
+  {
+   "id": "SLOP_ACID_DARK",
+   "family": "slop",
+   "name": "Acid-dark cluster",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page/app",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": "Conjunction: page background relative luminance <= 0.02 (near-black); exactly one accent colour carrying primary actions, with HSL saturation >= 0.8 (acid); body text light. A dark page alone never fires.",
+   "thresholds": {
+    "bg_luminance_max": 0.02,
+    "accent_count": 1,
+    "accent_saturation_min": 0.8
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "bundle_constituted": true
+  },
+  {
+   "id": "SLOP_TEMPLATE_ASSETS",
+   "family": "slop",
+   "name": "Template assets",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "An img/svg/background URL matching data_lists.template_asset_hosts. Hero/proof-slot occurrences are reported; footer/decorative slots excluded. URL fact only - whether it reads generic is SLOP_GENERIC_IMAGERY (VIS).",
+   "thresholds": {},
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_CENTRED_LAYOUT",
+   "family": "slop",
+   "name": "Centred layout",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": ">= 50% of a page's visible text-bearing block elements (paragraphs, list items, blockquotes - headings, buttons and nav excluded) are centre-aligned by computed text-align, AND at least one is long-form body text (>= 25 words).",
+   "thresholds": {
+    "min_centred_share": 0.5,
+    "long_form_min_words": 25
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_UNIFORM_RHYTHM",
+   "family": "slop",
+   "name": "Uniform section rhythm",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "page",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": ">= 4 sibling section-level containers on one page whose top+bottom padding are identical within 1px AND whose inter-section gaps are identical within 1px.",
+   "thresholds": {
+    "min_sections": 4,
+    "tolerance_px": 1
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_FLAT_TYPE",
+   "family": "slop",
+   "name": "Flat type",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "page",
+   "judged_via": "cluster (page aggregate)",
+   "trigger": "Across >= 8 sampled visible text elements: every font weight used in {400, 500, 600} (no display weight >= 700, no light weight <= 300) AND no heading >= 24px carries negative letter-spacing.",
+   "thresholds": {
+    "min_elements": 8,
+    "allowed_weights": [
+     400,
+     500,
+     600
+    ],
+    "heading_min_px": 24
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "offset_eligible": true,
+   "offsets": [
+    "craft_credit:optical_tracking"
+   ]
+  },
+  {
+   "id": "SLOP_SIDE_TAB_BORDER",
+   "family": "slop",
+   "name": "Coloured side-tab border",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element/page",
+   "judged_via": "cluster",
+   "trigger": "A card-like element with exactly one border side >= 3px wide in a saturated colour while the remaining sides are <= 1px or absent. Judged per cluster.",
+   "thresholds": {
+    "tab_min_px": 3,
+    "other_sides_max_px": 1
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3",
+   "offset_eligible": true,
+   "offsets": [
+    "brand_token"
+   ]
+  },
+  {
+   "id": "SLOP_GENERIC_CTA",
+   "family": "slop",
+   "name": "Generic CTA census",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "weak",
+   "unit": "page",
+   "judged_via": "instance",
+   "trigger": "A page with >= 3 call-to-action buttons where every primary CTA label is in data_lists.generic_cta_labels and none names the product's actual action. One specific label anywhere on the page defeats it.",
+   "thresholds": {
+    "min_ctas": 3
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_AI_CHROME",
+   "family": "slop",
+   "name": "AI self-reference chrome",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "Visible text or an accessible name matching data_lists.ai_chrome_terms, on a control/badge/nav item/feature card, or the name form ('Ask AI' style) applied as decoration on >= 2 features of one page. Pure icon-glyph detection (a sparkle SVG with no name) is out of v1 scope.",
+   "thresholds": {
+    "name_form_min_features": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_NO_MICROSTATES",
+   "family": "slop",
+   "name": "No designed microstates",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": "moderate",
+   "unit": "page",
+   "judged_via": "instance (stylesheet census)",
+   "trigger": "Across the page's readable stylesheets: interactive elements exist, but no :hover rule targets an interactive selector AND no :focus-visible rule exists at all. Confidence gate: if any stylesheet is unreadable (cross-origin), this code does not fire - a missed tell, never a false accusation.",
+   "thresholds": {
+    "confidence_gate": "all stylesheets readable"
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3"
+  },
+  {
+   "id": "SLOP_DRAWN_ILLUSTRATION",
+   "family": "slop",
+   "name": "Drawn illustration (hybrid)",
+   "detection_class": "hybrid",
+   "spec_class": "HYB",
+   "severity": null,
+   "tier": null,
+   "unit": "region",
+   "judged_via": "instance (DET candidate -> critic settles; ships as note only)",
+   "trigger": "Candidate (deterministic): an inline svg >= 120px in either dimension with >= 3 path curves or >= 3 fills and no text content, or a CSS-drawn figure of similar size. Settlement (vision): the critic decides whether it depicts an object/person/scene (illustration) vs a chart, map, diagram of real data, or the product's logo - the latter three are NOT flagged. Ships only as a critic note (opinion class). Severity: SPEC 3 intro - VIS/HYB codes carry no severity (App. A.6 lists 'minor'; the body wins - see discrepancies D14).",
+   "thresholds": {
+    "min_dimension_px": 120,
+    "min_path_curves": 3,
+    "min_fills": 3
+   },
+   "formula_ref": "never enters the percentage (SPEC 4.3/6.1)",
+   "source": "SPEC 3.5"
+  },
+  {
+   "id": "SLOP_TEMPLATE_STRUCTURE",
+   "family": "slop",
+   "name": "Template structure",
+   "detection_class": "vision",
+   "spec_class": "VIS",
+   "severity": null,
+   "tier": null,
+   "unit": "page",
+   "judged_via": "critic only",
+   "trigger": "The page's section sequence is the default template (centred hero -> logo strip -> feature cards -> testimonials -> pricing -> CTA -> footer) with no section specific to this product's category. The note must list the sequence it observed.",
+   "thresholds": {},
+   "formula_ref": "never enters the percentage (SPEC 6.1 invariance)",
+   "source": "SPEC 3.4"
+  },
+  {
+   "id": "SLOP_TILTED_MOCKUP",
+   "family": "slop",
+   "name": "Tilted / drawn mockup",
+   "detection_class": "vision",
+   "spec_class": "VIS",
+   "severity": null,
+   "tier": null,
+   "unit": "region",
+   "judged_via": "critic only",
+   "trigger": "A hero visual that is a drawn/imitation product mockup (styled divs or generated art) rather than a capture of the real product. The tilt geometry itself, when present, is a DET fact under SLOP_MOCK_CHROME.",
+   "thresholds": {},
+   "formula_ref": "never enters the percentage (SPEC 6.1 invariance)",
+   "source": "SPEC 3.4"
+  },
+  {
+   "id": "SLOP_HIERARCHY_SHOUT",
+   "family": "slop",
+   "name": "Hierarchy shout",
+   "detection_class": "vision",
+   "spec_class": "VIS",
+   "severity": null,
+   "tier": null,
+   "unit": "page/region",
+   "judged_via": "critic only",
+   "trigger": "Nothing leads: headings, cards, badges and CTAs at one visual weight (the squint test fails). The note must name >= 2 competing elements.",
+   "thresholds": {},
+   "formula_ref": "never enters the percentage (SPEC 6.1 invariance)",
+   "source": "SPEC 3.4"
+  },
+  {
+   "id": "SLOP_GENERIC_IMAGERY",
+   "family": "slop",
+   "name": "Generic imagery",
+   "detection_class": "vision",
+   "spec_class": "VIS",
+   "severity": null,
+   "tier": null,
+   "unit": "region",
+   "judged_via": "critic only",
+   "trigger": "Imagery that could belong to any product (generic stock scene, abstract 3D shapes) in a hero or proof position. The note must say what the image shows and where it sits.",
+   "thresholds": {},
+   "formula_ref": "never enters the percentage (SPEC 6.1 invariance)",
+   "source": "SPEC 3.4"
+  },
+  {
+   "id": "EFF_KLM_TASK_COST",
+   "family": "inefficiency",
+   "name": "Interaction cost (KLM/GOMS)",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "task/page",
+   "trigger": "Decompose the performed task into operators from the agent's action log and sum their times. Report raw operator counts as primary (they need no timing assumptions); KLM seconds are secondary.",
+   "thresholds": {
+    "operators_seconds": {
+     "K": {
+      "range": [
+       0.08,
+       1.2
+      ],
+      "default_avg_typist": 0.28
+     },
+     "P": 1.1,
+     "H": 0.4,
+     "B": 0.1,
+     "M": 1.35,
+     "R": "measured"
+    },
+    "validity": "~20% RMS error, skilled error-free performance only; says nothing about novices, learning, or errors"
+   },
+   "source": "CALC 2",
+   "formula_ref": "formulas.klm_time (CALC C3)"
+  },
+  {
+   "id": "EFF_FITTS_TARGET_COST",
+   "family": "inefficiency",
+   "name": "Fitts cost per target",
+   "detection_class": "hybrid",
+   "severity": null,
+   "unit": "element/task",
+   "trigger": "Per click: ID = log2(D/W + 1) bits from geometry (static) or the real click path (performed). Report mean/max ID per task and per page, in bits.",
+   "thresholds": {
+    "a_ms_illustrative": 50,
+    "b_ms_per_bit_illustrative": 150,
+    "note": "a and b are device-dependent regression values, not universals. Size floors live in DEF_TARGET_SIZE."
+   },
+   "source": "CALC 2",
+   "formula_ref": "formulas.fitts_id (CALC C2)"
+  },
+  {
+   "id": "EFF_HICK_CHOICE_COST",
+   "family": "inefficiency",
+   "name": "Choice cost (Hick-Hyman)",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "decision point",
+   "trigger": "Per decision point: bits = log2(n+1) over visible, equally-likely options at the moment of decision (post-expansion state). Task choice load = sum of bits. Report n and bits; there is NO normative n and no fail verdict from n alone.",
+   "thresholds": {
+    "b_ms_illustrative": 155,
+    "normative_n": null,
+    "folk_rule_warning": "'7+/-2 menu items' is a folk misapplication of Miller - never a threshold."
+   },
+   "source": "CALC 2",
+   "formula_ref": "formulas.hick_cost (CALC C4)"
+  },
+  {
+   "id": "EFF_NAV_STRUCTURE",
+   "family": "inefficiency",
+   "name": "Navigation depth vs breadth",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "page/app",
+   "trigger": "Build the site graph from the crawl: depth(page) = shortest click-path from home; breadth(level) = options per menu/level. Report max/mean depth to canonical destinations and the share of destinations within 3 clicks.",
+   "thresholds": {
+    "evidence": "Miller 1981: 2 levels x 8 beat 1x64 and 6x2; replicated (Kiger 1984; Jacko & Salvendy 1996; Larson & Czerwinski 1998; Zaphiris 2000). '<= 3 clicks' is practitioner synthesis of that literature, NOT a law."
+   },
+   "source": "CALC 2"
+  },
+  {
+   "id": "EFF_FIRST_CLICK",
+   "family": "inefficiency",
+   "name": "First-click correctness",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "task",
+   "trigger": "For each canonical task, record whether the agent's first click is on the correct path. First-click success rate = correct first clicks / attempts.",
+   "thresholds": {
+    "studies_pct": {
+     "bailey_wolfson_correct_vs_wrong": [
+      87,
+      46
+     ],
+     "measuringu_replication": [
+      78,
+      70
+     ]
+    },
+    "note": "Effect is real, size unsettled - cite both studies."
+   },
+   "source": "CALC 2"
+  },
+  {
+   "id": "EFF_FORM_FRICTION",
+   "family": "inefficiency",
+   "name": "Form friction (Baymard)",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "flow",
+   "trigger": "Count on the performed flow: form elements (fields + selectors + checkboxes), steps (screens cart->review), required vs optional, derivable fields, and re-entry after an invalid submission. Measure in fields, not screens.",
+   "thresholds": {
+    "checkout_benchmarks": {
+     "steps_avg": 5.1,
+     "steps_suffer_at": 8,
+     "form_elements_avg": 11.3,
+     "form_elements_needed_approx": 8
+    },
+    "counting_rule": "Publish the counting rules with the number - scopes differ across studies (a US average of 23.48 elements uses a different scope)."
+   },
+   "source": "CALC 2",
+   "formula_ref": "CALC C6"
+  },
+  {
+   "id": "EFF_COGNITIVE_LOAD_PROXIES",
+   "family": "inefficiency",
+   "name": "Cognitive-load proxies",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "viewport",
+   "trigger": "Per viewport: visible interactive element count; competing primary actions (elements with primary-button styling in one viewport - proxy practice flags > 1, or > 2 with a clear secondary hierarchy); visual density = interactive elements / viewport area. PROXIES with no validated cut-offs: report distributions and top-decile outliers against the run's own corpus, never a magic number.",
+   "thresholds": {
+    "validated_cutoffs": null
+   },
+   "source": "CALC 2"
+  },
+  {
+   "id": "EFF_ERROR_RECOVERY",
+   "family": "inefficiency",
+   "name": "Error-recovery cost",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "form",
+   "trigger": "Agent submits invalid/edge input on each form; measure: error caught inline/at all; fields the user must re-enter (data-loss count); extra KLM operators to recover; message identifies field + fix in plain language. The defect itself is scored once in DEF_NIELSEN_H9_ERROR_RECOVERY / WCAG 3.3.1/3.3.3; only the COST is counted here.",
+   "thresholds": {},
+   "source": "CALC 2"
+  },
+  {
+   "id": "EFF_CORE_WEB_VITALS",
+   "family": "inefficiency",
+   "name": "Performance as inefficiency (Core Web Vitals)",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "page",
+   "trigger": "Per page, lab values from the agent's browser run (never reported as field p75): LCP, INP (from performed interactions), CLS. A page passes only if all three are good. Never average the three into one number at this layer.",
+   "thresholds": {
+    "percentile_basis": 75,
+    "lcp_seconds": {
+     "good_max": 2.5,
+     "poor_above": 4.0
+    },
+    "inp_ms": {
+     "good_max": 200,
+     "poor_above": 500
+    },
+    "cls": {
+     "good_max": 0.1,
+     "poor_above": 0.25
+    }
+   },
+   "source": "CALC 2",
+   "formula_ref": "CALC C7"
+  },
+  {
+   "id": "EFF_SEARCH_VS_BROWSE",
+   "family": "inefficiency",
+   "name": "Search-vs-browse burden",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "task",
+   "trigger": "For findability tasks, run the task both ways where the UI allows (navigation and site search); report steps/time for each and the delta. Static signals: search present/persistent; search returns the canonical item in top-3 for its own name (product-defined probe - disclose as such); filters present on long lists.",
+   "thresholds": {
+    "own_name_top_k": 3
+   },
+   "source": "CALC 2"
+  },
+  {
+   "id": "EFF_SCROLL_REACH",
+   "family": "inefficiency",
+   "name": "Scroll & reach burden",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "task",
+   "trigger": "Total scroll distance per task in viewport-heights; scrolls before the primary CTA enters the viewport on landing pages; target's viewport-relative position at decision time (feeds EFF_FITTS_TARGET_COST's D). No published threshold - report raw counts.",
+   "thresholds": {},
+   "source": "CALC 2"
+  },
+  {
+   "id": "DEF_CONTRAST",
+   "family": "defect",
+   "name": "Contrast failure (WCAG 1.4.3 / 1.4.11)",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "element/page",
+   "trigger": "Per text node: compute the WCAG ratio from measured colours (effective background resolved through ancestors). AA: >= 4.5 normal text, >= 3.0 large text (>= 18pt, or >= 14pt bold; CSS-px equivalents >= 24px, >= 18.66px bold). AAA: 7.0 / 4.5. Non-text (1.4.11): >= 3.0 for UI components and meaningful graphics. Never round up. Gradient/image backgrounds -> cant_tell (needs review), never a silent pass (CALC C1; note the slop family's SLOP_CONTRAST uses the spec's worst-stop rule instead - per-family divergence, see discrepancies D15).",
+   "thresholds": {
+    "aa_normal": 4.5,
+    "aa_large": 3.0,
+    "aaa_normal": 7.0,
+    "aaa_large": 4.5,
+    "non_text": 3.0,
+    "large_text_pt": 18,
+    "large_text_bold_pt": 14,
+    "webaim_norm": {
+     "low_contrast_pages_pct": 79.1,
+     "mean_instances_per_page": 29.6
+    }
+   },
+   "source": "CALC 3",
+   "formula_ref": "formulas.contrast_ratio (CALC C1)"
+  },
+  {
+   "id": "DEF_TARGET_SIZE",
+   "family": "defect",
+   "name": "Target-size failure (WCAG 2.5.8 / 2.5.5)",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "element",
+   "trigger": "Interactive target below minimum size/spacing. AA 2.5.8: >= 24x24 CSS px, OR one of the 5 exceptions (spacing - a 24px-diameter circle on the target centre must not overlap another target; equivalent; inline; user-agent control; essential) - compute all five in code. Report two rates: % below 24 (defect) and % below 44 (ergonomic shortfall vs AAA 2.5.5 / Apple HIG 44pt / Material 48dp).",
+   "thresholds": {
+    "aa_min_px": 24,
+    "aaa_min_px": 44,
+    "apple_pt": 44,
+    "material_dp": 48,
+    "exceptions": 5
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_ACCESSIBLE_NAME",
+   "family": "defect",
+   "name": "Missing accessible names / labels",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "element",
+   "trigger": "Buttons, links, inputs with no accessible name; images with no alt. Per-element binary. WebAIM Million 2025 norms: missing alt on 55.5% of pages, empty links 45.4%; six error types (low contrast, missing alt, missing form labels, empty links, empty buttons, missing document language) = 96% of all detected errors.",
+   "thresholds": {
+    "webaim_norm": {
+     "missing_alt_pages_pct": 55.5,
+     "empty_links_pages_pct": 45.4,
+     "six_types_share_pct": 96
+    }
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_HEADING_LANDMARK",
+   "family": "defect",
+   "name": "Heading / landmark structure",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "page",
+   "trigger": "Skipped heading levels, missing or multiple h1, missing landmarks, no document language. Binary per rule per page + skipped-level count. WebAIM norm: skipped heading levels on 39% of pages.",
+   "thresholds": {
+    "webaim_norm": {
+     "skipped_headings_pages_pct": 39
+    }
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_TYPE_SCALE",
+   "family": "defect",
+   "name": "Type-scale discipline",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "page",
+   "trigger": "Collect distinct font sizes for heading levels + body; check a monotonic ladder H1 > H2 > H3 > body. Kim 199-site norms: H1 64 / H2 48 / H3 32 / body 16 px, headline line-height ~1.1 with negative tracking, body ~1.5. Flat hierarchy fires at >= 3 sizes with max/min ratio < 2 (slop-detect).",
+   "thresholds": {
+    "kim_norms_px": {
+     "h1": 64,
+     "h2": 48,
+     "h3": 32,
+     "body": 16
+    },
+    "flat_min_sizes": 3,
+    "flat_max_min_ratio": 2
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_SPACING_GRID",
+   "family": "defect",
+   "name": "Spacing rhythm / grid adherence",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "page",
+   "trigger": "Collect all margins/paddings/gaps; report % on a 4/8px grid. Kim norms: steps 16, 8, 24, 12, 4, 32 dominate real sites 'not religiously' - expect a majority on-grid, not 100%; no published pass threshold. Uniform section padding is a Family-1 cross-reference, scored there.",
+   "thresholds": {
+    "grid_px": [
+     4,
+     8
+    ],
+    "kim_dominant_steps_px": [
+     16,
+     8,
+     24,
+     12,
+     4,
+     32
+    ],
+    "pass_threshold": null
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_TOKEN_DISCIPLINE",
+   "family": "defect",
+   "name": "Consistency / token discipline",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "component type",
+   "trigger": "Fingerprint each component instance (tag+role+computed colour/radius/padding/font/shadow tuple); per component type report # distinct fingerprints and modal-share (% instances matching the mode). Raw-value rate: one-off colour/spacing values not in the site's own token set / total. No published cut-off: modal-share < 0.80 is a PRODUCT-DEFINED flag - disclose it as such.",
+   "thresholds": {
+    "modal_share_flag_below": 0.8,
+    "modal_share_flag_status": "product-defined, disclosed"
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_READABILITY",
+   "family": "defect",
+   "name": "Readability of UI text",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "text block",
+   "trigger": "Body size floor 16px (browser default; sustained reading research favours 18px+); micro-type floor 12px for real labels (Kim); line length 45-75 chars (55 best comprehension - Dyson & Haselgrove 2001); line-height 1.4-1.6 for body; WCAG 1.4.8 (AAA) mechanism: <= 80 chars, >= 1.5 line spacing. Measure rendered lines, not ch settings. Floors are script-dependent (14px body is normal for Hangul) - record the script context.",
+   "thresholds": {
+    "body_floor_px": 16,
+    "sustained_reading_px": 18,
+    "micro_floor_px": 12,
+    "line_length_chars": [
+     45,
+     75
+    ],
+    "line_length_best_chars": 55,
+    "line_height_range": [
+     1.4,
+     1.6
+    ],
+    "wcag_148_max_chars": 80,
+    "wcag_148_min_line_spacing": 1.5
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_STATE_QUALITY",
+   "family": "defect",
+   "name": "State quality (empty/error/loading/success)",
+   "detection_class": "hybrid",
+   "severity": null,
+   "unit": "surface",
+   "trigger": "Agent forces each state per surface (empty search, cleared list, slow load, invalid submit, successful submit): state present? (binary) + informative? (names the cause and the next action - fixed checklist). Deterministic side-checks: a :focus-visible style exists; :disabled is distinguishable; skeleton/spinner present on async views. Scored here as a defect; cross-referenced from the slop family, never double-counted.",
+   "thresholds": {},
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_FOCUS_KEYBOARD",
+   "family": "defect",
+   "name": "Focus & keyboard defects",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "page",
+   "trigger": "Agent tabs through the page: focus order vs visual order; focused element has a visible indicator (computed-style/screenshot diff); Esc/Tab escape from dialogs. A keyboard trap is a binary defect of axe impact class critical.",
+   "thresholds": {
+    "trap_impact": "critical"
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_MOBILE_HOSTILITY",
+   "family": "defect",
+   "name": "Mobile hostility",
+   "detection_class": "hybrid",
+   "severity": null,
+   "unit": "page",
+   "trigger": "At a mobile viewport (360-390px): horizontal overflow (scrollWidth > innerWidth) per page + count of elements extending beyond the viewport; target pairs violating the 2.5.8 spacing geometry; meta viewport disabling zoom (user-scalable=no or maximum-scale < 2); hover-only functions unreachable by tap (probe).",
+   "thresholds": {
+    "viewport_px": [
+     360,
+     390
+    ],
+    "max_scale_min": 2
+   },
+   "source": "CALC 3"
+  },
+  {
+   "id": "DEF_NIELSEN_H1_STATUS",
+   "family": "defect",
+   "name": "H1 - Visibility of system status",
+   "detection_class": "hybrid",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Partially automatable: after each agent action, does visible state change / a loading indicator / a confirmation appear? Presence of progress indicators on multi-step flows; aria-live/status roles. 'Appropriate feedback' remains judgement.",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H2_REAL_WORLD",
+   "family": "defect",
+   "name": "H2 - Match with the real world",
+   "detection_class": "judgement",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "NOT automatable beyond crude proxies (reading grade of UI strings). Never auto-verdicted: verdict is cant_tell unless an explicit judgement pass is in scope.",
+   "thresholds": {
+    "automatable": false
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H3_CONTROL",
+   "family": "defect",
+   "name": "H3 - User control & freedom",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Automatable by probing: can the agent undo, cancel, and exit every flow it enters (back, close, undo, cancel probes)? Flows with no exit = defects (count them).",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H4_CONSISTENCY",
+   "family": "defect",
+   "name": "H4 - Consistency & standards",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Largely automatable: component fingerprint variance + token discipline (DEF_TOKEN_DISCIPLINE) and the slop consistency codes; platform-convention probes (e.g. logo top-left links home).",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H5_ERROR_PREVENTION",
+   "family": "defect",
+   "name": "H5 - Error prevention",
+   "detection_class": "hybrid",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Partially automatable via a fixed probe list: destructive actions have confirmation/undo; inputs carry constraints (type, inputmode, masks, disabled invalid options).",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H6_RECOGNITION",
+   "family": "defect",
+   "name": "H6 - Recognition over recall",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Partially automatable: does step N of a flow redisplay the data entered at step N-1 that step N depends on (agent compares its own entered values against what is visible)? Options visible vs hidden behind recall-heavy gestures.",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H7_FLEXIBILITY",
+   "family": "defect",
+   "name": "H7 - Flexibility & efficiency of use",
+   "detection_class": "hybrid",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Partially automatable: feature presence (keyboard shortcuts, search, recently-used, bulk actions); expert path shorter than novice path in operator counts (EFF_KLM_TASK_COST). Quality remains judgement.",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H8_MINIMALISM",
+   "family": "defect",
+   "name": "H8 - Aesthetic & minimalist design",
+   "detection_class": "judgement",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "NOT automatable as stated; only its density proxies are (EFF_COGNITIVE_LOAD_PROXIES). Never auto-verdicted.",
+   "thresholds": {
+    "automatable": false
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H9_ERROR_RECOVERY",
+   "family": "defect",
+   "name": "H9 - Help users recognise, diagnose, recover from errors",
+   "detection_class": "performed",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Largely automatable by the invalid-submission probe: message exists, is plain-language (no bare error codes), names the field, suggests the fix. The cost side is EFF_ERROR_RECOVERY.",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_NIELSEN_H10_HELP",
+   "family": "defect",
+   "name": "H10 - Help & documentation",
+   "detection_class": "deterministic",
+   "severity": null,
+   "unit": "flow/page",
+   "trigger": "Presence automatable: help/docs reachable from task pages (link presence + depth <= 2); searchability probe. Quality is not automatable.",
+   "thresholds": {
+    "automatable": true
+   },
+   "source": "CALC 3.1 (Nielsen 1994, NN/g)"
+  },
+  {
+   "id": "DEF_JS_UNCAUGHT",
+   "family": "defect",
+   "name": "Uncaught JavaScript exception",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "serious",
+   "tier": null,
+   "unit": "page-visit",
+   "judged_via": "instance",
+   "trigger": "A window pageerror (uncaught exception) fires during the visit; captured via the pageerror listener with stack.",
+   "thresholds": {},
+   "formula_ref": null,
+   "source": "Unified spec (owner addition 2026-11-08): the Slop Run also checks JavaScript for any possible errors."
+  },
+  {
+   "id": "DEF_JS_CONSOLE_ERROR",
+   "family": "defect",
+   "name": "Console error",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "minor",
+   "tier": null,
+   "unit": "page-visit",
+   "judged_via": "instance",
+   "trigger": "A console error message during the visit; serious when the same normalised message reproduces on a re-visit, else minor.",
+   "thresholds": {},
+   "formula_ref": null,
+   "source": "Unified spec (owner addition 2026-11-08)."
+  },
+  {
+   "id": "DEF_JS_UNHANDLED_REJECTION",
+   "family": "defect",
+   "name": "Unhandled promise rejection",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "serious",
+   "tier": null,
+   "unit": "page-visit",
+   "judged_via": "instance",
+   "trigger": "An unhandledrejection event fires during the visit; captured via the window.__mt_rejections init-script hook.",
+   "thresholds": {},
+   "formula_ref": null,
+   "source": "Unified spec (owner addition 2026-11-08)."
+  }
+ ],
+ "discrepancies": [
+  {
+   "id": "D1",
+   "where": "Gradient hue window",
+   "body": "SPEC 3.3: hues 230-300 deg",
+   "appendix": "SPEC App. A.7: 230-290 deg",
+   "resolution": "Body wins: catalogue uses 230-300 (SLOP_GRADIENT_SIGNATURE).",
+   "flagged_in_spec": "13 'noted, not resolved'"
+  },
+  {
+   "id": "D2",
+   "where": "Stretch tolerance",
+   "body": "SPEC 3.1: aspect deviation > 0.05",
+   "appendix": "SPEC App. A.7: SLOP_T_STRETCH_TOL = 0.02",
+   "resolution": "Body wins: 0.05 (SLOP_STRETCHED_IMAGE).",
+   "flagged_in_spec": "13 'noted, not resolved'"
+  },
+  {
+   "id": "D3",
+   "where": "Spacing rhythm constants",
+   "body": "SPEC 3.1: SLOP_T_OFFRHYTHM = 0.20, clustering tolerance 2px, off-rhythm > 2px",
+   "appendix": "SPEC App. A.7: SLOP_T_SPACING_OFFGRID_MAX = 0.40, SLOP_T_SPACING_BASE = 4",
+   "resolution": "Body wins: 0.20 / 2px (SLOP_SPACING_RHYTHM). SPACING_BASE kept as appendix-only constant, flagged.",
+   "flagged_in_spec": "13 'noted, not resolved'"
+  },
+  {
+   "id": "D4",
+   "where": "Alignment tolerance",
+   "body": "SPEC 3.1: shared-edge difference 2-6px",
+   "appendix": "SPEC App. A.7: SLOP_T_ALIGN_TOL = 4px",
+   "resolution": "Body wins: 2-6px window (SLOP_ALIGNMENT).",
+   "flagged_in_spec": "13 'noted, not resolved'"
+  },
+  {
+   "id": "D5",
+   "where": "Type discipline size scale",
+   "body": "SPEC 3.1: dominant 6-value size scale (+/-1px), >= 4 sizes outside fires",
+   "appendix": "SPEC App. A.7: SLOP_T_FONT_SIZES_MAX = 9",
+   "resolution": "Body wins: 6-value dominant scale formulation (SLOP_TYPE_DISCIPLINE). FONT_FAMILIES_MAX = 2 agrees in both.",
+   "flagged_in_spec": "13 'noted, not resolved'"
+  },
+  {
+   "id": "D6",
+   "where": "Acid-dark cluster",
+   "body": "SPEC 3.3: bg luminance <= 0.02, exactly 1 accent, saturation >= 0.8",
+   "appendix": "SPEC App. A.7: bg luminance < 0.05, >= 2 accents with saturation > 0.9 and hue in {80-100, 280-320} deg",
+   "resolution": "Body wins (SLOP_ACID_DARK).",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D7",
+   "where": "Motion tells",
+   "body": "SPEC 3.3: transition-property: all; cubic-bezier y outside [0,1]; infinite animation on non-status element; pulsing status dot",
+   "appendix": "SPEC App. A.7: ease-in-out + duration in [200,400]ms on >= 80% of animated interactive elements",
+   "resolution": "Body wins (SLOP_MOTION_TELLS).",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D8",
+   "where": "Copy cadence",
+   "body": "SPEC 3.3: rebuttal cadence >= 3 app-wide, or two-tone headline; em-dash density demoted to supporting evidence",
+   "appendix": "SPEC App. A.7: mean sentence 10-16 words + SD < 4.0 over >= 8 sentences",
+   "resolution": "Body wins (SLOP_COPY_CADENCE).",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D9",
+   "where": "Round stats",
+   "body": "SPEC 3.3: one stat-band element with a round number from the set AND a generic label fires",
+   "appendix": "SPEC App. A.1/A.7: regex set (47|50|60|70|80|90|95|99.9)% etc. + SLOP_T_ROUND_MIN = 2 per page; A.1 cross-reference points at '3.4' (the vision-codes section)",
+   "resolution": "Body wins: per-element rule with the 3.3 number set (SLOP_ROUND_STATS). The A.1 regex set is retained in the spec only.",
+   "flagged_in_spec": "13 'noted, not resolved' (cross-reference)"
+  },
+  {
+   "id": "D10",
+   "where": "Card grid similarity",
+   "body": "SPEC 3.3: >= 3 siblings, widths within +/-2%, identical structure signature",
+   "appendix": "SPEC App. A.7: SLOP_T_CARD_MIN = 3, similarity >= 0.95",
+   "resolution": "Body wins (SLOP_CARD_GRID). CARD_MIN kept as appendix-only named constant, flagged.",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D11",
+   "where": "Unit column, section 3 body vs App. A.6",
+   "body": "DEAD_END element; GENERIC_PHRASES element/region; FABRICATED_PROOF element; PLACEHOLDER_TEXT element/region; STYLE_INCONSISTENCY page; TEMPLATE_CHROME element/page; CENTRED_HERO page; CARD_GRID page/region; EMPTY_VISUAL region; COMPONENT_FINGERPRINTS page/app; MOTION_TELLS page; GENERIC_IMAGERY region; HIERARCHY_SHOUT page/region",
+   "appendix": "A.6: DEAD_END page; GENERIC_PHRASES page; FABRICATED_PROOF region/page; PLACEHOLDER_TEXT element/page; STYLE_INCONSISTENCY element; TEMPLATE_CHROME page; CENTRED_HERO region; CARD_GRID region; EMPTY_VISUAL element; COMPONENT_FINGERPRINTS element; MOTION_TELLS element; GENERIC_IMAGERY element/region; HIERARCHY_SHOUT page",
+   "resolution": "Body units used in catalogue.json throughout. Note the live tension: GATE-FLAG-01's bundle-constituted set includes SLOP_COMPONENT_FINGERPRINTS, which only affects element verdicts if signals attach to elements - a builder must resolve this in the product catalogue module (SPEC S0) explicitly.",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D13",
+   "where": "Appendix cross-references for data lists",
+   "body": "SPEC 3.1 cites 'App. A.1' for the placeholder list and 'App. A.2' for generic phrases; SPEC 3.3 cites App. A.5 for placeholder names and App. A.2 for generic stat labels",
+   "appendix": "Printed A.1 is the generic-phrase + CTA + round-stat list; printed A.2 is the placeholder patterns; printed A.5 is portrait/stock signals; generic stat labels appear only as examples inside 3.3",
+   "resolution": "Catalogue data_lists are keyed by content, sourced to the printed lists (A.1 phrases, A.2 placeholders) and to 3.3 where the printed appendix lacks the list (stat labels, names union).",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D14",
+   "where": "SLOP_DRAWN_ILLUSTRATION severity",
+   "body": "SPEC 3 intro: VIS/HYB codes carry no severity (they are opinion; the band's standing label covers them)",
+   "appendix": "SPEC App. A.6 lists severity 'minor'",
+   "resolution": "Body wins: severity null in catalogue.json; it ships as a critic note only.",
+   "flagged_in_spec": "no - found in this pass"
+  },
+  {
+   "id": "D15",
+   "where": "Contrast on gradient backgrounds (cross-source)",
+   "body": "SPEC 3.1 (SLOP_CONTRAST): gradient backgrounds use the worst stop",
+   "appendix": "CALC C1 (DEF_CONTRAST): gradient/image backgrounds -> review (cant_tell), never a silent pass",
+   "resolution": "Kept per family, deliberately: the slop consistency code uses the spec's worst-stop rule; the WCAG defect code refuses to pass what it cannot resolve. Recorded so a builder does not 'unify' them silently.",
+   "flagged_in_spec": "no - found in this pass"
+  }
+ ],
+ "gaps": [
+  "Rule IDs for the inefficiency and defect families: the calculation report gives taxonomy numbers (2.1-2.12, 3.1-3.11) but no stable rule IDs. EFF_* and DEF_* IDs are assigned by this package (v0.1.0) and recorded in CHANGELOG.md.",
+  "Kim/IOV per-tell weights (3-9): the calculation report publishes only examples (A1 9, C1 8, C3 4, G1 6, G2 4, F2 7, H1 5, H2 5, H3 3). No full weight table exists in the sources, so catalogue.json carries no Kim weights and the product headline uses SPEC 6.1 weights (2/1) only.",
+  "Kim craft-credit point values: CALC C5 states credits subtract points but the values are product calibration, not published. The slop family instead uses SPEC 4.7's gate-offset credits (no invented points).",
+  "Editorial-cluster colour distance: CALC 1.5 notes no published delta-E cut-off exists. The catalogue uses SPEC 3.3's OKLCH conjunction (lightness/hue bands) instead - no delta-E value was invented.",
+  "Axe impact levels (critical/serious/moderate/minor) are Deque expert metadata, not computed values (CALC 3.11). Catalogue defect rules therefore carry severity null except where a source assigns a class (keyboard trap = critical, CALC 3.9). Defect verdict rows may carry impact from the checker that produced them.",
+  "No slop catalogue anywhere publishes held-out precision/recall (CALC 1.3/Could-not-verify). The catalogue's error language is the Krebs 5-10% band until the product's own audit sample replaces it (SPEC 4.4/5.5)."
+ ],
+ "product_note": "Product copy of the ui-quality skill catalogue (constants source of truth), plus DEF_JS_* rules added by the unified spec. The research skill package remains the upstream source; sync deliberately, never silently."
+}

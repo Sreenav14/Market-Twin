@@ -15,6 +15,7 @@ from .human_action_repository import (
     HumanLeaseGrant,
 )
 from .identity_repository import IdentityRepository, ResolvedIdentity
+from .persona_definition_repository import PersonaDefinitionRepository
 from .runtime_snapshot_repository import RuntimeSnapshotRecord, RuntimeSnapshotRepository
 from .target_repository import AllowedOriginRecord, TargetRecord, TargetRepository
 from .test_run_repository import TestRunRecord, TestRunRepository
@@ -53,4 +54,5 @@ __all__ = (
     "ReportResultRecord",
     "RuntimeSnapshotRepository",
     "RuntimeSnapshotRecord",
+    "PersonaDefinitionRepository",
 )

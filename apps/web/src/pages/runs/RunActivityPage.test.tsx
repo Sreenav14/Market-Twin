@@ -47,12 +47,10 @@ it("merges cursor history by stable IDs and refreshes mutable statuses without d
 
 it("does not query privileged live metadata for a viewer role", async () => {
   const live = vi.spyOn(api, "getLiveExecution");
-  const frames = vi.spyOn(api, "getLiveBrowserFrame");
   vi.spyOn(api, "getRunJourneys").mockResolvedValue([]);
   mount("viewer");
   expect(await screen.findByText(/Live activity and browser observation require owner/)).toBeInTheDocument();
   expect(live).not.toHaveBeenCalled();
-  expect(frames).not.toHaveBeenCalled();
 });
 
 it("orders actual activity timestamps when ISO fractional precision differs", async () => {
@@ -72,7 +70,6 @@ it("distinguishes accepted pause request from worker acknowledgement and fences 
   const pause: ExecutionPause = { id: "pause-1", status: "requested", execution_id: "execution", journey_id: "journey", browser_session_id: "browser", generation: 1, human_request_id: null, created_at: item.occurred_at, expires_at: "2026-10-18T12:05:00Z", acknowledged_at: null, completed_at: null };
   let latest: LiveExecution = { run_id: "run", run_status: "running", server_observed_at: item.occurred_at, browser: { browser_session_id: "browser", execution_id: "execution", journey_id: "journey", generation: 1, control_state: "agent", viewer_state: "available", journey_title: "Check registration", requesting_agent: "Persona" }, activity: { items: [], next_cursor: null } };
   vi.spyOn(api, "getLiveExecution").mockImplementation(async () => latest);
-  vi.spyOn(api, "getLiveBrowserFrame").mockImplementation(() => new Promise(() => {}));
   vi.spyOn(api, "getRunJourneys").mockResolvedValue([]);
   const actions = vi.spyOn(api, "listHumanActions").mockResolvedValue([]);
   vi.spyOn(api, "listActionApprovals").mockResolvedValue([]);
@@ -96,4 +93,27 @@ it("distinguishes accepted pause request from worker acknowledgement and fences 
   await waitFor(() => expect(screen.getByRole("status", { name: "Manual pause status" })).toHaveTextContent("Resume requested"));
   expect(screen.getByRole("button", { name: /Take browser control/ })).toBeDisabled();
   expect(claim).not.toHaveBeenCalled();
+});
+
+
+it("fetches a live grant for the available browser and shows the board banner", async () => {
+  const browser = {
+    browser_session_id: "browser-1", execution_id: "execution", journey_id: "journey",
+    generation: 0, control_state: "agent", viewer_state: "available" as const,
+    journey_title: "Live test session", requesting_agent: "Lead tester",
+    board_item: { index: 23, total: 112, label: "Save (button)" },
+  };
+  vi.spyOn(api, "getLiveExecution").mockResolvedValue({
+    run_id: "run", run_status: "running", server_observed_at: item.occurred_at,
+    browser, activity: { items: [item], next_cursor: null },
+  });
+  vi.spyOn(api, "getRunJourneys").mockResolvedValue([]);
+  vi.spyOn(api, "listHumanActions").mockResolvedValue([]);
+  vi.spyOn(api, "listActionApprovals").mockResolvedValue([]);
+  const grant = vi.spyOn(api, "getLiveGrant").mockResolvedValue({
+    ticket: "t".repeat(40), viewer_url: "ws://localhost:9/hitl-viewer", browser,
+  });
+  mount();
+  await screen.findByText("Item 23 of 112 — Save (button)");
+  await waitFor(() => expect(grant).toHaveBeenCalledWith("run", "browser-1", expect.anything()));
 });

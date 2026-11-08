@@ -101,7 +101,7 @@ async def test_workflow_runs_visual_evaluation_before_report(
         assessment: dict[str, object],
     ) -> GeneratedReportResult:
         events.append("report")
-        assert assessment == {"status": "completed", "test_run_id": str(test_run_id)}
+        assert assessment is None  # U-P8: run_assessment retired
         if visual_status is None:
             assert evaluation_records == ()
         else:
@@ -118,18 +118,6 @@ async def test_workflow_runs_visual_evaluation_before_report(
             test_run_id=test_run_id,
         )
 
-    expected_test_run_id = test_run_id
-
-    async def fake_assessment(
-        *, test_run_id: UUID, session: AsyncSession,
-        evaluation_records: tuple[dict[str, object], ...],
-    ) -> dict[str, object]:
-        events.append("assessment")
-        assert test_run_id == expected_test_run_id
-        assert len(evaluation_records) == (0 if visual_status is None else 1)
-        return {"status": "completed", "test_run_id": str(test_run_id)}
-
-    monkeypatch.setattr(workflow, "assess_completed_run", fake_assessment)
     monkeypatch.setattr(
         workflow,
         "evaluate_completed_run",
@@ -210,7 +198,6 @@ async def test_workflow_runs_visual_evaluation_before_report(
         "deterministic",
         "visual",
         "visual_findings",
-        "assessment",
         "report",
     ]
 
@@ -257,7 +244,6 @@ async def test_retry_after_each_commit_boundary(
         return_value=VisualBatchEvaluationResult(test_run_id=run_id, evaluations=()),
     ))
     monkeypatch.setattr(workflow, "persist_visual_findings", AsyncMock(return_value=()))
-    monkeypatch.setattr(workflow, "assess_completed_run", AsyncMock())
     monkeypatch.setattr(workflow, "generate_deterministic_report", report)
     failing = {"provenance": snapshot_repository.ensure_run_level_snapshot,
                "evaluation": deterministic, "report": report}[failure_stage]

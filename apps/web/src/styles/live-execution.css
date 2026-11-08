@@ -112,3 +112,133 @@
 .tester-advanced > summary { padding: 16px 0; cursor: pointer; font-weight: 600; }
 @media (max-width: 1050px) { .live-workbench { grid-template-columns: 1fr; } .live-activity { border: 0; border-top: 1px solid var(--border); padding: 20px 0 0; } .live-activity-list { max-height: 360px; } }
 @media (max-width: 640px) { .live-execution-heading, .live-work-selector { display: block; } .live-work-selector > * { margin-bottom: 12px; } .live-browser-empty { min-height: 200px; padding: 16px; } .tester-journey { grid-template-columns: 1fr; } .live-browser-column .study-summary { display: block; } }
+
+/* Unified Watch banner + park countdown + persona editor (P3/P4/P5). */
+.live-board-banner {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  background: #101214;
+  color: #f5f4f2;
+  width: fit-content;
+}
+
+.park-countdown {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, #d6d3d1);
+  border-radius: 12px;
+  margin: 0.75rem 0;
+}
+
+.park-countdown-warning {
+  border-color: #b45309;
+  background: #fffbeb;
+}
+
+.persona-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.persona-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.persona-list-item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border, #d6d3d1);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+}
+
+.persona-list-item.is-selected {
+  border-color: var(--accent-deep, #155e75);
+  box-shadow: 0 1px 4px rgb(28 25 23 / 0.08);
+}
+
+.persona-editor textarea {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  width: 100%;
+}
+
+/* Persona impressions band (U-P5-05): lilac-tinted separation from
+   checked results; quotes in the theme's human voice. */
+.impressions-band {
+  border: 1px solid #ddd6fe;
+  background: #f5f3ff;
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.impression-persona {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.impression-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.impression-quote {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.impression-anchor {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+/* Slop report families (U-P6-05). */
+.slop-family-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.slop-family-card {
+  border: 1px solid var(--border, #d6d3d1);
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  background: var(--surface, #fff);
+}
+
+.slop-headline {
+  font-size: 1.6rem;
+  font-weight: 650;
+  margin: 0.25rem 0;
+}
+
+.slop-js-errors {
+  margin-top: 1rem;
+}
+
+.slop-js-errors code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+}

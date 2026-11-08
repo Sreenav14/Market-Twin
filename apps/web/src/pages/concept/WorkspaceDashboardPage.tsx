@@ -45,9 +45,9 @@ function isApprovedReplayDraft(test: TestRun): boolean {
 
 export function testDestination(test: TestRun): { to: string; label: string } {
   const base = `/runs/${test.id}`;
-  if (isApprovedReplayDraft(test)) return { to: `${base}/contract`, label: "Run approved tests" };
+  if (isApprovedReplayDraft(test)) return { to: `${base}/overview`, label: "Review the run" };
   if (test.configuration_snapshot.discovery_stage === "awaiting_approval") {
-    return { to: `${base}/contract`, label: "Approve the tests" };
+    return { to: `${base}/overview`, label: "Review the run" };
   }
   if (test.status === "awaiting_human") return { to: `${base}/human-action`, label: "Help this tester" };
   if (test.status === "completed") return { to: `${base}/results`, label: "See test results" };
@@ -486,8 +486,8 @@ export function WorkspaceDashboardPage() {
             const { run } = item;
             return <article key={`approval-${run.id}`} {...cardMotionProps(item)}>
               <p className="desk-card-eyebrow">TEST PLAN · {appName(run).toUpperCase()}</p>
-              <p className="desk-card-quote">{testTitle(run)} — the tests are ready for your approval.</p>
-              <Link className="primary-button" to={`/runs/${run.id}/contract`}>Review the tests →</Link>
+              <p className="desk-card-quote">{testTitle(run)} — created with the retired contract flow; it cannot be approved or started.</p>
+              <Link className="primary-button" to={`/runs/${run.id}/overview`}>Open the run →</Link>
             </article>;
           }
           return <article key={`knowledge-${item.id}`} {...cardMotionProps(item)}>

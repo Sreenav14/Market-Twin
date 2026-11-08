@@ -40,7 +40,7 @@ from markettwin_execution_orchestrator.persistence.human_action_lifecycle_reposi
 )
 
 if TYPE_CHECKING:
-    from markettwin_execution_orchestrator.workflow.journey_executor import (
+    from markettwin_execution_orchestrator.workflow.case_execution import (
         PersonaJourneyExecutionRequest,
     )
 
