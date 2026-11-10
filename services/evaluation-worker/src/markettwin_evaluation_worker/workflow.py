@@ -85,6 +85,23 @@ async def _evaluate_and_generate_report(
 
     try:
         run = await session.get(TestRun, test_run_id)
+        if run is not None and (
+            run.configuration_snapshot.get("execution_mode") == "harness_v1"
+            or (
+                getattr(run, "run_kind", None) == "explore_test"
+                and "execution_mode" not in run.configuration_snapshot
+            )
+        ):
+            from markettwin_evaluation_worker.harness_report import generate_harness_report
+
+            await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)
+            report_id = await generate_harness_report(
+                test_run_id=test_run_id, snapshot=run.configuration_snapshot, session=session,
+            )
+            await session.commit()
+            return EvaluationWorkflowResult(
+                test_run_id=test_run_id, finding_ids=(), report_id=report_id,
+            )
         if run is not None and resolve_run_kind(
             run_kind_column=getattr(run, "run_kind", None),
             configuration_snapshot=run.configuration_snapshot,

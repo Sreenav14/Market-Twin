@@ -140,6 +140,7 @@ async def main() -> None:
         port=int(os.environ["POSTGRES_PORT"]), database=os.environ["POSTGRES_DB"],
     ).render_as_string(hide_password=False)
     engine = create_database_engine(database_url)
+    logger.info("Evaluation worker connected; waiting for completed tests")
     try:
         await run_worker(engine)
     finally:

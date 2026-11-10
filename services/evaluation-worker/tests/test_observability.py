@@ -28,17 +28,20 @@ async def test_visual_verifier_emits_a_model_span(
             "status": "satisfied", "rationale": "Source supports criterion", "observed_details": [],
         })},
     }])
-    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=response))
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     instrumentor = LiteLLMInstrumentor()
     if instrumentor.is_instrumented_by_opentelemetry:
         instrumentor.uninstrument()
+    # Uninstrumentation restores the original function, so install the double afterwards.
+    completion = AsyncMock(return_value=response)
+    monkeypatch.setattr(litellm, "acompletion", completion)
     instrumentor.instrument(tracer_provider=provider, config=TraceConfig(hide_inputs=True))
     try:
         result = await verify_visual_criterion(criterion="Source criterion", viewport_path=viewport)
         assert result.status == "satisfied"
+        completion.assert_awaited_once()
     finally:
         instrumentor.uninstrument()
         provider.shutdown()
