@@ -75,6 +75,7 @@ class Application(Base):
 class ApplicationTarget(Base):
     __tablename__ = "application_targets"
     __table_args__ = (
+        Index("ix_testing_application_targets_scope_parent_id", "scope_parent_id"),
         CheckConstraint(
             "status IN ('active', 'archived')",
             name="ck_application_targets_status_allowed",
@@ -97,7 +98,6 @@ class ApplicationTarget(Base):
         Uuid(as_uuid=True),
         ForeignKey("testing.application_targets.id", ondelete="RESTRICT"),
         nullable=True,
-        index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     environment: Mapped[str] = mapped_column(String(64), nullable=False)

@@ -19,6 +19,8 @@ class SessionContext:
 
 
 def configure(monkeypatch, *, run, results):
+    if run is not None and not hasattr(run, "evaluation_quarantined_at"):
+        run.evaluation_quarantined_at = None
     if run is not None and not hasattr(run, "configuration_snapshot"):
         run.configuration_snapshot = {}
     get_run = AsyncMock(return_value=run)
@@ -74,6 +76,33 @@ async def test_completed_report_is_returned_after_pending_evaluation(monkeypatch
     assert response.report.id == report_id
     assert response.report.status == "completed"
     assert response.findings == []
+
+
+async def test_quarantined_evaluation_is_unavailable_until_operator_recovery(monkeypatch):
+    run = SimpleNamespace(status="completed", evaluation_quarantined_at=datetime.now(UTC))
+    configure(monkeypatch, run=run, results=None)
+    with pytest.raises(HTTPException) as error:
+        await test_run_results.get_test_run_results(uuid4(), object())
+    assert error.value.status_code == 503
+    assert "report generation stopped" in error.value.detail
+    assert "recover evaluation" in error.value.detail
+
+    run.evaluation_quarantined_at = None
+    with pytest.raises(HTTPException) as error:
+        await test_run_results.get_test_run_results(uuid4(), object())
+    assert error.value.status_code == 409
+
+
+async def test_completed_report_wins_over_stale_quarantine_metadata(monkeypatch):
+    report_id = uuid4()
+    configure(monkeypatch, run=SimpleNamespace(
+        status="completed", evaluation_quarantined_at=datetime.now(UTC),
+    ), results=SimpleNamespace(report=SimpleNamespace(
+        report_id=report_id, version=1, status="completed", executive_summary="Ready",
+        report_payload={}, generated_at=datetime.now(UTC),
+    ), findings=()))
+    response = await test_run_results.get_test_run_results(uuid4(), object())
+    assert response.report.id == report_id
 
 
 @pytest.mark.parametrize("approved", [False, True])

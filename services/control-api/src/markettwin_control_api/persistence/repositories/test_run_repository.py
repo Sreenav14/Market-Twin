@@ -34,6 +34,7 @@ class TestRunRecord:
     synthetic_fixture_approval_enabled: bool = False
     human_action_approvals_enabled: bool = False
     run_kind: str | None = None
+    evaluation_quarantined_at: datetime | None = None
 
 
 def _to_record(
@@ -58,6 +59,7 @@ def _to_record(
         completed_at=test_run.completed_at,
         test_number=test_run.test_number,
         run_kind=test_run.run_kind,
+        evaluation_quarantined_at=test_run.evaluation_quarantined_at,
     )
 
 

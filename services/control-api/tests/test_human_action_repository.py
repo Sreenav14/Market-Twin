@@ -924,6 +924,14 @@ async def _exercise_viewer_release_lifecycle(
     async def actor(cookie):
         return user_id if cookie == "synthetic-session" else None
     monkeypatch.setattr(service._authority, "actor", actor)
+    # The gateway's combined check bypasses actor(). Keep identity synthetic at
+    # both entry points while exercising the real PostgreSQL entitlement fence.
+    async def permitted_session(cookie, lease):
+        return (
+            await actor(cookie) == lease.actor_id
+            and await service._authority.permitted(lease.actor_id, lease)
+        )
+    monkeypatch.setattr(service._authority, "permitted_session", permitted_session)
     bridge = HitlWorkerClient(base_url="http://worker", secret=SecretStr(secret),
         transport=httpx.ASGITransport(app=service.app))
     monkeypatch.setattr(human_actions, "_worker_client", lambda: bridge)

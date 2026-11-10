@@ -400,6 +400,10 @@ async def get_test_run_journey(
 @router.get(
     "/api/v1/test-runs/{test_run_id}/results",
     response_model=TestRunResultsResponse,
+    responses={
+        409: {"description": "Execution or evaluation is still pending."},
+        503: {"description": "Evaluation is quarantined; operator recovery is required."},
+    },
 )
 async def get_test_run_results(
     test_run_id: UUID,
@@ -444,6 +448,15 @@ async def get_test_run_results(
             )
 
     if results is None:
+        if test_run.evaluation_quarantined_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Browser execution is complete, but report generation stopped "
+                    "after repeated failures. Ask your workspace operator to recover "
+                    "evaluation for this test, then check again."
+                ),
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=("Test run execution completed, but evaluation results are not available yet."),
