@@ -1,5 +1,237 @@
 # MarketTwin implementation handoff
 
+## 2026-11-10 — Explicit multi-agent audit authorization
+
+Additional verified repairs: gateway retains disconnected lease bookkeeping so
+renewal updates retained owner expiry; real DB/browser takeover regression1 passed,
+no pending-task warning. Updated synthetic actor fixture matches permitted_session
+optimization but retains real DB entitlement checks. Boss Close now parks remaining
+needs_human_login work; failing-first reproduced and all29 harness double-based
+tests pass. Architecture review records critical unimplemented live Room lifetime
+across explicit park, visibility-only ordinary outcomes, missing supervisory
+callers and separate persona/slop lifecycles. Do not claim these fixed. Agents
+remain assigned; browser checks and proof-predicate repair are still underway.
+
+Three subagents active (takeover, browser, architecture); root integrates report
+changes. Preserve their owned edits and agent-specific audit reports. Runner order:
+takeover then browser then architecture. Root added report identity validation with
+three failing-first regressions; 16 focused tests and touched Ruff pass. See
+report-identity-before/after.log. Application readiness remains unproven; audit ongoing.
+
+## 2026-11-10 — Audit resumed and migration drift repaired
+
+Owner resumed source work. Reconciled pending DB/browser results. Report backend
+13/13 and frontend 8/8 pass on latest report revision; tests remain mocked and do
+not prove persisted report provenance. Fixed scope-parent index metadata to match
+the existing migration's ix_testing_application_targets_scope_parent_id; no DDL
+change. Existing real disposable-database migration regression passes all its
+upgrade/check/downgrade/upgrade/check stages, 1/1 in 34.14s. Evidence:
+`.local/audit-20261108/{report-resumed,report-web-resumed,migration-resumed}.log`.
+Next priority: diagnose remaining real DB takeover policy rejection, then public
+browser failures, and continue architecture/coverage review. Do not weaken control
+fences to satisfy the test. Historical paused sections below are superseded.
+
+## 2026-11-10 — Owner requested plan before further audit work
+
+Execution plan revision 2 supersedes the first generic plan. Prioritize actual
+dispatch/Board contracts, adversarial verification and report integrity. Use one
+heavy runner at a time with evidence tied to source hashes; do not edit source
+under test. No application changes or tests were launched during this plan revision.
+
+Implementation paused at the owner's request; efficient plan is
+`docs/AUDIT_EXECUTION_PLAN.md`. Continue from existing evidence and edits, not a
+fresh audit. Current-tree review is the chosen scope. Initial dirty patch/status
+and all fresh validation logs are under `.local/audit-20261108/`.
+
+Owner clarified the target: one engine, code-owned Boss plus bounded Lead Agent,
+stateless one-item Worker, one Browser Room/control key, durable append-only Board,
+and a typed ask door for Model/Decisions APIs. The six stages are Open, Inventory,
+Work, Park/Resume, Close and Report. Explore & Test owns coverage/verdict; persona
+owns anchored quotes; slop owns three separate family metrics. This is intended
+behavior, not a verified description of all current code. Existing uncommitted
+empty-discovery and inventory-execution cleanup fixes already address two gaps in
+the owner's historical account. Lead supervision and unified engine parity still
+need detailed assessment. Preserve the sequential MKT/T00–T13 framework.
+
+Owner explicitly chose to complete the untracked `harness_report.py`,
+`HarnessReport.tsx`, and associated test as the replacement. Dispatch/frontend
+wiring has been added for harness and native Explore & Test; the latest revision
+uses existing Board verdict computation and preserves counted coverage and named
+outcomes. Latest tests/type checks remain unfinished. Do not silently replace
+the required verdict with the initial draft's observation-only list.
+
+Fresh audit evidence and limitations are summarized at CURRENT_STATE's top.
+Collect background database/browser results and correct the frontend report
+test's text-node matcher before final gates. Preserve the disposable audit DB
+until its integration checks finish, then stop only that audit-created container.
+No production restart, commit, push or paid provider acceptance is authorized.
+
+## 2026-11-08 - zoro_4 empty discovery and Sup_66 registration ordering
+
+User reported a completed zero-journey test with Browser discovery still Running,
+then MT-000121 Sup_66 failed. These are distinct verified failures:
+
+- MT-000120 zoro_4, UUID `200f5a5a-1ebd-42c1-a9ac-3ffbf7dbc159`:
+  zero Board items, no execution steps. Inventory execution
+  `45a99384-c92f-43c9-963f-bc587d22c721` retained running status after completion.
+  Its saved action-0004 accessibility artifact contains only "Please enable JS
+  and disable any ad blocker"; failed-requests.json records the CAPTCHA script
+  request to ct.captcha-delivery.com. Evidence under artifacts/runs/<execution>/
+  `7b4307df-2ab9-48a8-960a-bfe36b2a8fdf/`. This supports verification-page
+  obstruction, not a product-test success or tested-and-skipped journeys.
+- MT-000121 Sup_66, UUID `8f693479-0792-4e56-be9a-2786b9e58e5e`:
+  actual controls were discovered; PostgreSQL at 20:11:28 UTC rejected journey
+  insertion with `fk_persona_journeys_test_run_id_run_missions`. Parent mission
+  was absent when the ORM flushed journey rows. Saved accessibility artifacts
+  are under inventory execution `851d2946-c152-4664-9b41-6ce6a38d4666`.
+
+Repairs: harness empty inventory now closes/persists the Room execution failed,
+then raises BrowserDiscoveryEmptyError before evaluation. Shared failure mapping
+publishes reviewed `browser_discovery_empty` guidance without raw page content.
+Successful Room execution finishes completed. `_register_items` batches mission
+flush before adding journey rows; explicit-list initialization also flushes parent
+missions before dependent journeys. No broad ORM relationship refactor.
+
+Both new regressions failed before their repair. Existing startup/resume regression
+now uses one real discovered item rather than empty inventory. Updated timeout
+test accounts for the Room's terminal record without weakening item expectations.
+53 focused tests pass: harness driver, shared run failure, execution worker.
+`.local/verify_mt121_registration.py` exercised real production registration on
+PostgreSQL: two journeys inserted with FK enforcement, then every diagnostic row
+rolled back and absence checked. It performs no browser/model work. Ruff passes
+for new production files; harness checks pass excluding existing E501/E402 debt.
+Diff whitespace passes. Prior Pyright debt remains; no clean full typecheck claim.
+
+Reloaded local worker and Control API through `.local/reload_mt121_services.ps1`
+after the no-active-execution guard. Launchers: worker 22008, API 24932. Logs:
+`.local/mt119-worker.err.log`, `.local/mt121-api.err.log`. New empty-discovery
+message is loaded into both producer and public API reader. No historical run or
+report changed and neither target replayed. Preserve pre-existing report/UI/audit
+and uv.lock work. No commit, push, CAPTCHA bypass or network policy change.
+
+## 2026-11-08 - TestMT-000119 / zoro_3 startup repair
+
+Read-only database inspection confirmed test number 119, name zoro_3, UUID
+`4b4d9c6a-726c-4f87-a8d1-8560adaabf0c`, failed at 19:59:53 UTC after
+starting at 19:59:48. No execution steps were recorded. PostgreSQL logs identify
+duplicate `(journey_id, attempt_number)` on bootstrap journey
+`e698bba9-3c4d-49ab-8802-c2ed33f7ef66`, attempt 1. The sole persisted execution
+is `browser_discovery_v1`, skipped. The pre-existing local Room persistence
+change created another execution with the default attempt 1.
+
+Surgical repair in `workflow/harness_run.py`: query max attempt for the selected
+bootstrap journey and pass max+1 to Room execution creation. Worker run ownership
+serializes this allocation. Do not replace this with constant attempt 2, since
+a resumed Room also needs a new identity. `test_harness_run.py` adds a regression
+enforcing journey/attempt uniqueness over startup and resume; it failed before
+the repair and passes after it. Existing driver session doubles now support the
+Room lookup and max query. Full file: 27 passed. Whitespace check passes; Ruff
+passes ignoring existing E501/E402, while unfiltered checks retain two old lint
+errors. Pyright reports 10 errors outside the allocation change.
+
+Restarted only the local execution worker through
+`.local/restart_mt119_worker.ps1`, guarded against interrupting executing runs.
+New launcher PID 12588; `.local/mt119-worker.err.log` confirms Kafka assignment
+and "Execution worker connected; waiting for commands". Failed run 119 was not
+reset/replayed. The older queued run was left alone. Existing backend, report,
+UI, uv.lock and audit changes remain intact. No commit or push.
+
+## 2026-11-08 - Implicit state-machine audit and decisions
+
+Request: find the app's implicit state machines and choose improvements that
+benefit UX, DX and AX without regressing existing behavior. AX here includes both
+the runtime testing agents and coding agents working on the app. Decision: retain
+separate domain owners and existing typed states; make hidden lifecycle failures
+observable, and provide a reproducible source index before considering migrations.
+A universal machine library or a single global status would obscure independent
+lifecycles and require a much larger compatibility change.
+
+Evidence: [state-machine-inventory.json](state-machine-inventory.json) indexes
+411 application source files, 22 DB models with state constraints and 182 files
+with candidate state evidence. Each entry includes a source path, line number,
+construct kind and source text. DB allowed-value constraints are extracted using
+Python AST, without importing application code. The source patterns include React
+state, status/state/stage/phase fields and recovery clocks. Some candidates are
+classifications, samples or static domains rather than temporal machines. Flags,
+URLs, external protocols and combinations of fields can encode additional states;
+this audit does not claim a mathematical guarantee of finding every machine.
+
+Regenerate: `.venv\Scripts\python.exe scripts/audit_state_machines.py`.
+Verify drift: append `--check`. Paths/lines describe the current local tree,
+including the owner's pre-existing untracked harness-report work. The tool does
+not run services, read credentials or change application state.
+
+Lifecycle map (source paths below are relative to the named service's `src`
+package, unless the path starts with apps or packages):
+
+| Family | State representation / transition boundary | Owner and decision |
+| --- | --- | --- |
+| Identity and login | Active/disabled user, identity resolution, login submission and callback | control-api `auth/services.py`, `auth/providers/local.py`; web `pages/auth`, `layouts/AppShell.tsx`. Keep authentication server-owned. |
+| User session | Issued token, idle renewal, absolute expiry, revocation; timestamps encode states | control-api `auth/services.py`, `persistence/models/auth/user_session.py`. Expiry is independent of user status. |
+| Workspace and membership | Active/archived workspace, role, membership/deletion gates | DB `models/core.py`; control-api workspace/identity repositories. Keep role checks on each privileged transition. |
+| Application / target | Active/archived plus soft deletion and dependent runs | control-api `api/lifecycle.py`, application/target repositories. Existing running-work deletion guards remain authoritative. |
+| Target authorization | Pending/authorized/revoked/expired plus effective expiry time | control-api authorization repository; web `lib/targetAuthorization.ts`. Stored authorized is insufficient after expiry. |
+| Run creation / dispatch | Draft, readiness validation, queue and atomic queued-to-planning claim | control-api dispatch/readiness services; orchestrator `persistence/run_state_repository.py`. Preserve atomic claiming and outbox transaction. |
+| Run execution | Planning/running/awaiting_human/completed/failed/cancelled | orchestrator run-state repository, harness/persona/slop workflows. Run completion does not imply report completion. |
+| Harness stage | Exploring/testing/needs_login/evaluating/done in run snapshot | orchestrator `workflow/harness_state.py`, `harness_run.py`. Keep stage separate from run status and item verdicts. |
+| Harness work graph | Pending/running, work verdicts, blocked/login/disabled; counters and interrupted-item reset | orchestrator harness state/run/items. Snapshot and `harness.*` event are written together. Keep budgets, provenance and confirmation attempts. |
+| Historical contract | Discovery stage, contract draft/frozen and approval metadata | packages/shared-python `discovery_contract.py`, historical report validation. Current API rejects new legacy-mode/replay requests; retain historical readers. |
+| Agent execution / case | Pending/queued/running and completed/failure/timeout/policy/skip outcomes | orchestrator execution repository and `workflow/case_execution.py`. Preserve the distinction between execution failure and product failure. |
+| Browser step | Pending/running/completed/failed/policy_blocked and evidence linkage | orchestrator `persistence/step_recorder.py`, browser controller/tools. Failed tools must not become successful product checks. |
+| Browser lifetime | Starting/open/closed/failed | orchestrator browser session/owner/registry. Closure ends availability independently of execution history. |
+| Browser control | Agent/human_pending/human/verifying/none plus ownership generation | orchestrator browser human-control/viewer-authority; control-api human-action repository. Keep generation fencing and transactional lock order. |
+| Human request | Pending/leased/completed/cancelled/expired/skipped | control-api human-action repository and orchestrator lifecycle repository. Request completion and verification are separate steps. |
+| Human lease | Granted, renewed, expired/released via timestamps and generation | same repositories, `HumanBrowserViewer.tsx`, `HumanActionPage.tsx`. Local countdown never grants authority. |
+| Cooperative pause | Requested/paused/resume_requested/resumed and terminal skip/cancel/expiry/unavailable | orchestrator `workflow/cooperative_pause.py`, control-api pause repository. Pause only at a replay-safe boundary, with bounded allowance. |
+| Execution suspension | Waiting/ready/consumed/abandoned plus auth/case/assertion phase | orchestrator suspension repository and case execution. Resume counts/checkpoint identity remain independent of human-request state. |
+| Sensitive-action approval | Pending/approved/rejected/expired/consumed/cancelled | control-api approval repository; orchestrator sensitive-action approval. Approval does not prove an effect occurred. |
+| Effect dispatch receipt | Claimed/completed/failed_before_effect/uncertain | orchestrator sensitive approval and cooperative pause code. Keep ambiguous effects uncertain; do not blindly replay them. |
+| Authentication reuse | Captured/expired, per-case consumed reuse and scope/principal checks | orchestrator `browser/auth_session_broker.py`. Keep credentials in memory and bounded per-case reuse. |
+| Outbox delivery | Unpublished/due/backoff/quarantined/published derived from timestamps/attempts | packages/database-python outbox repository; control-api relay. Eighth failure quarantines; acknowledgment loss can duplicate delivery, so preserve consumer deduplication. |
+| Execution worker | Poll/claim/process, duplicate claim rejection, connectivity and heartbeat freshness | orchestrator `worker.py`, control-api readiness service, DB heartbeat. Liveness is separate from readiness and run progress. |
+| Evaluation recovery | Pending/eligible/backoff/quarantined; completed v1 report is completion marker | evaluation-worker `worker.py`. Fifth failure quarantines. Fixed results API to surface quarantine instead of pending forever. |
+| Report generation | Generating/completed/failed, transaction rollback and in-place recovery | evaluation report repository/workflow. Completed report takes precedence over stale quarantine metadata. |
+| Finding / assertion evidence | Finding open/resolved/dismissed domain; assertion satisfied/not_satisfied/unverified; separate visual/confirmation classifications | DB evaluation models, shared case evidence, browser assertions, evaluators. These dimensions must not collapse into a single pass/fail status. |
+| Knowledge ingestion | Asset upload/validation/processing/review/failure/exclusion, plus UI projected processing stage | DB knowledge models; control-api knowledge processor/repository and ingestion API. Approval and processing completion are separate. |
+| Knowledge versions | Blueprint/skill draft/approved, immutable approval metadata and parent active/archive | DB knowledge models; control-api knowledge repository, knowledge-worker skill repository. Keep approval evidence and version identity. |
+| Async page data / results | Loading/ready/error; results additionally waiting; React Query pending/fetch/error/stale data and polling rules | web `lib/useAsync.ts`, `lib/query.ts`, `layouts/RunLayout.tsx`, `ResultsBoundary.tsx`. Existing discriminated unions are useful; do not replace them with independent booleans. |
+| Live observation / control transport | Grant, connecting, frame available, disconnect/retry, hidden-tab pause; identity fences stale frames | web `LiveBrowserObserver.tsx`, `HumanBrowserViewer.tsx`; orchestrator viewer gateway/authority. Transport readiness never grants control. |
+| Activity and evidence access | Cursor/history/loading/error/selected event; artifact idle/loading/access/error | web `RunActivityPage.tsx`, `ArtifactEvidence.tsx`. Keep identity/cursor boundaries visible during future changes. |
+| Forms and mutations | Pristine/touched/invalid/submitted/busy/success/error; saved versus edited agent prompts; delete confirmation | web new-app/target/run/ingestion/authorization pages, `AgentPromptsPage.tsx`, `DeleteAction.tsx`. Simple local state can remain local; use unions/reducers when combinations become invalid. |
+| Interaction and presentation | Menu/modal open, focus/index selection, copy feedback, upload drag, filters, disclosures, motion phase, error boundary | web UI/concept components, `deskMotion.tsx`, `RenderErrorBoundary.tsx`. No need for domain machine infrastructure for these local interactions. Sample takeover controls are not authorization. |
+
+Implemented defect and compatibility contract:
+
+- `/results` still authorizes the run before inspecting report availability.
+- Incomplete execution and genuinely pending evaluation still return 409.
+- Missing report plus persisted evaluation quarantine now returns 503 with a
+  safe recovery instruction. No raw worker exception is exposed. OpenAPI documents
+  409 and 503, so clients/agents can distinguish waiting from unavailable.
+- A completed report is returned even if quarantine metadata is stale.
+- Existing RunLayout treats 503 as an error, stops interval polling after its
+  existing bounded request retry, and offers Try again. Clearing quarantine through
+  the existing operator procedure permits evaluation to resume; no browser work
+  is replayed by this fix. It does not add a public recovery endpoint or reset data.
+
+UX: the waiting screen no longer promises progress after automatic retries stop.
+DX: the repository carries the actual failure marker into the availability check,
+with regression coverage and a reproducible source inventory. AX: clients receive
+an explicit unavailable response and coding agents can locate state owners and
+guards without inferring behavior from status labels alone.
+
+Next improvements require their own reproductions, not a blanket rewrite: check
+request identity when evidence/forms switch entities; model human-control UI
+combinations with typed states if impossible combinations are demonstrated; expose
+backoff timing if users need it. Never infer legal transition edges solely from a
+DB constraint, change historical verdict meaning, remove a control fence, or
+auto-retry an uncertain external effect as part of a state-model refactor.
+
+Validation: complete control-api suite 385 passed / 10 opt-in database checks
+skipped; RunLayout 2 passed (including 409 -> 503 -> recovered report); web
+typecheck, focused Ruff, inventory regeneration/check passed. No live browser or
+opt-in database validation. Existing uv.lock and three untracked harness-report
+files preserved; no commit, push, deployment, service restart or schema migration.
+
 ## 2026-11-06 — Home: rename + research-led rebuild (local only)
 
 Dashboard is renamed **Home** across the signed-in product (route path

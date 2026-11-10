@@ -1,5 +1,145 @@
 # Current MarketTwin state
 
+## Parallel audit underway — 2026-11-10
+
+Fresh team results: takeover real DB/browser regression passes (1 in25.15s) after
+fixing disconnected-lease renewal bookkeeping; synthetic identity fixture now
+uses the optimized authority entry point while real entitlement SQL stays active.
+No owner actor/generation checks weakened. Close/park regression reproduced done
+with waiting item before fix; full mocked harness tests now 29 passed in9.54s.
+Browser public suite is under verification. Architecture agent continues proof
+assertion identity audit. Root report-only Pyright: zero errors/warnings.
+
+Owner explicitly authorized maximum available agents. All four slots used: root
+owns report integration/evidence; takeover agent diagnoses real DB policy rejection;
+browser agent owns public contrast/navigation checks; architecture agent reviews
+Boss/Worker/Room contracts and repairs the reproduced Close/park violation.
+No shared-file editing between agents. Heavy browser/DB tests serialize.
+
+New report identity validation rejects missing/empty/duplicate item IDs before
+evaluation, preventing ambiguous counting. Three failing-first cases now pass;
+focused report/evaluator total 16 passed (`report-identity-after.log`); focused
+report-source/test Ruff passes. Coverage JSON updated for five fully read report
+files with content hashes and explicit mocked/pure-test limitations.
+
+Architecture source concerns under investigation: ordinary button visibility
+can stand in for outcome verification; confirmation compares aggregate broken
+status rather than matching failed assertions; native persona/slop share dispatch
+but not necessarily Board lifecycle. No broad architecture change made.
+
+## Audit resumed — 2026-11-10
+
+Owner instructed implementation to resume under plan revision 2. Latest report
+checks pass: 13 evaluator/report tests (`report-resumed.log`) and 8 frontend
+report tests (`report-web-resumed.log`). Corrected the regression's split-text
+matcher while retaining per-item outcome assertions.
+
+Collected prior integration evidence: disposable DB tests had 17 passes and two
+failures; public browser checks had six passes and two failures. One DB failure
+was a confirmed ORM/migration index-name mismatch on target scope_parent_id.
+Model now explicitly names the existing migrated index, with no schema migration.
+The real fresh upgrade/check/downgrade/upgrade/check regression passes (1 test,
+`migration-resumed.log`). Takeover WebSocket policy rejection remains undiagnosed;
+public How-page contrast and the second browser failure still require follow-up.
+Logs remain under `.local/audit-20261108/`. Overall audit is incomplete.
+
+## Audit paused for execution planning — 2026-11-10
+
+Plan revision 2 now adds an ordered execution queue, source/requirement map, ten
+adversarial checks, report acceptance criteria and explicit narrow-fix versus
+architectural-decision boundaries. It corrects prior audit inefficiencies and
+distinguishes completed review from product readiness. Planning only; source work
+and test launches remain paused.
+
+Owner requested an efficient plan before continuing implementation. Plan complete:
+`docs/AUDIT_EXECUTION_PLAN.md`. Audit remains incomplete; see
+`docs/AUDIT_20261108.md`, `docs/audit-20261108-coverage.json` and logs under
+`.local/audit-20261108/`. Preserve all existing and audit edits. Current scope is
+the entire working tree, per owner clarification, not a selected commit range.
+The owner's Boss / Worker / Browser Room / Board specification is authoritative
+for intended behavior; do not confuse the live Watch stream with a supervising AI.
+Owner authorized completing the untracked harness report replacement; integration
+is in progress and must retain Board coverage/verdict, not just an outcome list.
+
+Verified in this audit: native run labels (9 focused web checks); URL identity
+port/IPv6 fix plus harness checks (35); tracing recheck (23); initial web typing
+and build; fresh isolated PostgreSQL migration upgrade. Broad elevated Python run:
+1174 passed, 23 skipped, 9 failed; eight failures came from the audit's disabled
+tracing configuration and passed recheck. Remaining harness dispatch failure was
+subsequently repaired, but the latest report revision needs final verification.
+Full frontend thread run: 285 passed, 3 ingestion timeouts; focused follow-up
+also exposed a report test text-node matcher problem, still requiring correction.
+Baseline Ruff: 39 diagnostics; production Pyright: 191 errors. Browser fixes and
+stale-test updates await final results. No all-files or all-workflows claim.
+
+Audit-created disposable PostgreSQL container: `markettwin-audit-20261109`, loopback
+port 55439, no existing volumes. Pending test processes may still be running;
+collect outcomes before restarting anything. No production mutations, commits,
+pushes or paid model calls were performed by the audit.
+
+## MT-000120 empty discovery / MT-000121 registration failure - 2026-11-08
+
+MT-000120 `zoro_4` completed with zero Board items because the browser saw a
+verification page (saved accessibility text: "Please enable JS and disable any
+ad blocker"; failed request to ct.captcha-delivery.com). No product checks ran.
+Fixed empty inventory completion: close the Room, finish its execution failed,
+and raise a safe `browser_discovery_empty` failure before evaluation. Successful
+Room executions now finish completed instead of remaining running. No CAPTCHA
+or network policy change. The old run/report was not rewritten.
+
+MT-000121 `Sup_66` reached supermemory.ai/product and discovered controls, then
+failed the composite journey-to-mission foreign key. `_register_items` queued
+both unrelated ORM mappers in one flush, allowing journeys before missions.
+Now flush all parent missions before adding journeys; explicit-work-list setup
+also flushes its parent first. Regression tests reproduced both failures before
+their fixes. Final focused tests: 53 passed (harness driver, shared failure
+diagnostics, worker). Real PostgreSQL registration of two journeys passed and
+was fully rolled back. Focused lint passes (the existing harness E501/E402
+exceptions remain); whitespace check passes. Local worker and API reloaded;
+no target replay, history rewrite, commit, push or policy relaxation.
+
+## TestMT-000119 / zoro_3 startup failure - 2026-11-08
+
+Confirmed run `4b4d9c6a-726c-4f87-a8d1-8560adaabf0c` failed before any
+browser steps: PostgreSQL rejected `uq_agent_executions_journey_attempt`.
+Discovery accounting had already persisted bootstrap attempt 1 as skipped;
+the Room startup also defaulted to attempt 1 on that journey. Room execution
+now uses the journey's maximum persisted attempt plus one, including resumes.
+Existing workspace changes were preserved.
+
+Regression reproduced the duplicate before the fix; all 27 harness driver
+tests now pass, covering initial and resumed Room attempts. Diff whitespace
+check passes. Focused Ruff passes with the two existing E501/E402 rules ignored;
+unfiltered lint retains one old long line and one old mid-file import. Pyright
+reports 10 diagnostics outside the edited allocation block; no clean typecheck
+is claimed. Local execution worker restarted after checking no run was executing,
+then confirmed connected to Kafka and waiting for commands. Run 119 remains
+failed and was not replayed; no customer target was retested. No commit/push.
+
+## Implicit state-machine audit - 2026-11-08
+
+Indexed 411 application Python/TypeScript files: 22 database models with state
+constraints, 182 files with state/React/recovery-clock evidence. Reproducible
+inventory: `docs/state-machine-inventory.json`; regenerate with
+`.venv\Scripts\python.exe scripts/audit_state_machines.py` and check drift with
+`--check`. This is a source candidate index, not proof of semantic completeness.
+The lifecycle map and UX/DX/AX decisions are in SESSION_HANDOFF's matching section.
+
+Fixed one verified cross-layer mismatch: a completed run whose evaluation worker
+has quarantined report generation now returns an actionable 503 from `/results`,
+instead of the pending 409 that kept the web waiting indefinitely. Normal pending
+409, authorization checks, completed-report precedence and explicit operator
+recovery remain intact. Existing web error state stops interval polling and lets
+the user check again after recovery. OpenAPI describes both response states.
+No schema change, worker replay, dependency, deployment or broad engine rewrite.
+
+Validation: Control API 385 passed / 10 opt-in database checks skipped; RunLayout
+2/2 (including pending -> unavailable -> recovered UI); web typecheck and focused
+Ruff passed. Inventory regeneration and `--check` passed. No live browser session
+or opt-in DB integration was run. Initial Vitest sandbox spawn EPERM was resolved
+by the approved external rerun. Existing uv.lock and three untracked harness-report
+files were preserved. Changes are uncommitted.
+
 ## Soft Proof theme adoption — Components Programme Phase 2a — 2026-11-07 (this session)
 
 Candidate C "Soft Proof" adopted app-wide through the token layer. Ten itemised
