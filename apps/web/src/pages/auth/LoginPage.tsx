@@ -143,7 +143,7 @@ export function LoginPage({
                 </p>
 
                 {error ? (
-                  <InlineAlert severity="error" title={error} role="alert" ref={errorRef} tabIndex={-1} />
+                  <div id="signin-error"><InlineAlert severity="error" title={error} role="alert" ref={errorRef} tabIndex={-1} /></div>
                 ) : null}
 
                 <Button
@@ -171,7 +171,7 @@ export function LoginPage({
 
           {/* The product's own visual: three looks, one verdict */}
           <section aria-label="What MarketTwin shows you" style={{ minWidth: 0 }}>
-            <p className="font-meta-label" style={{ color: "var(--ink-faint)", margin: "0 0 12px" }}>
+            <p className="font-meta-label" style={{ color: "var(--ink-2)", margin: "0 0 12px" }}>
               THREE LOOKS, ONE VERDICT
             </p>
             <p className="font-body-small" style={{ color: "var(--ink-2)", margin: "0 0 16px", maxWidth: "560px" }}>

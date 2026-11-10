@@ -216,6 +216,9 @@ export const LIFECYCLE_STATUS: Record<string, StatusEntry> = {
 // per mode the API can name; harness_v1 registered here when the mode
 // shipped, so its header word comes from the same table as the others.
 export const MODE_STATUS: Record<string, StatusEntry> = {
+  explore_test: { word: "Explore & Test", tone: "info" },
+  persona: { word: "Persona Test", tone: "info" },
+  slop: { word: "Check the look", tone: "info" },
   discovery_contract_v1: { word: "Explore, approve and test", tone: "info" },
   deep_feature_v1: { word: "Feature checks", tone: "info" },
   legacy_persona: { word: "Exploratory testing", tone: "info" },

@@ -27,6 +27,22 @@ function renderReport(payload: Record<string, unknown>, findings: Finding[] = []
 
 const legacyNotice = "This report was produced by the older exploratory mode. Its findings are unverified observations.";
 
+it("shows the Board verdict, counted coverage and every saved harness outcome", () => {
+  renderReport({ mode: "harness_v1", verdict: "Not ready yet",
+    board: { coverage: { checked: 1, total_items: 2, denominator: 1 } }, items: [
+    { name: "Save profile", status: "broken", journey_id: "owned" },
+    { name: "Delete account", status: "owner_disabled" },
+  ] });
+  expect(screen.getByText("Save profile").closest("li")).toHaveTextContent("Broken");
+  expect(screen.getByRole("heading", { name: "Not ready yet" })).toBeInTheDocument();
+  expect(screen.getByText(/Checked 1 of 2 discovered items/)).toBeInTheDocument();
+  expect(screen.getByText("Delete account").closest("li")).toHaveTextContent("Disabled by owner");
+  expect(screen.getByRole("link", { name: "Review recorded steps" }))
+    .toHaveAttribute("href", "/runs/run/journeys/owned");
+  expect(screen.queryByRole("region", { name: "Test result" })).not.toBeInTheDocument();
+  expect(screen.queryByText(legacyNotice)).not.toBeInTheDocument();
+});
+
 it.each([undefined, "legacy_persona"])("labels %s historical exploratory reports with the exact legacy notice", (mode) => {
   renderReport({}, [], mode);
   expect(screen.getByRole("note")).toHaveTextContent(legacyNotice);

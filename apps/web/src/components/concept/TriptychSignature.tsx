@@ -60,7 +60,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
                 marginBottom: "16px",
               }}
             >
-              <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "4px" }}>
+              <div className="font-meta-label" style={{ color: "var(--ink-2)", marginBottom: "4px" }}>
                 THREAD & CO.
               </div>
               <div className="font-body" style={{ fontWeight: 600, color: "var(--ink)", marginBottom: "8px" }}>
@@ -136,7 +136,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
                 marginBottom: "16px",
               }}
             >
-              <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "4px" }}>
+              <div className="font-meta-label" style={{ color: "var(--ink-2)", marginBottom: "4px" }}>
                 THREAD & CO.
               </div>
               <div className="font-body" style={{ fontWeight: 600, color: "var(--ink)", marginBottom: "8px" }}>
@@ -213,7 +213,7 @@ export const TriptychSignature: React.FC<TriptychSignatureProps> = ({
                 marginBottom: "16px",
               }}
             >
-              <div className="font-meta-label" style={{ color: "var(--ink-faint)", marginBottom: "4px" }}>
+              <div className="font-meta-label" style={{ color: "var(--ink-2)", marginBottom: "4px" }}>
                 THREAD & CO.
               </div>
               <div className="font-body" style={{ fontWeight: 600, color: "var(--ink)", marginBottom: "8px" }}>

@@ -254,9 +254,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <TabsPrimitive.Trigger value="results" className="mt-tab">Test results</TabsPrimitive.Trigger>
                 <TabsPrimitive.Trigger value="watch" className="mt-tab">Watch live</TabsPrimitive.Trigger>
               </TabsPrimitive.List>
-            </TabsPrimitive.Root>
-
-            {exampleCardTab === "results" ? (
+            <TabsPrimitive.Content value="results">
               <div>
                 <VerdictBlock
                   word={data.verdict.word}
@@ -310,7 +308,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   ))}
                 </div>
               </div>
-            ) : (
+            </TabsPrimitive.Content>
+            <TabsPrimitive.Content value="watch">
               <div className="flex flex-col gap-4">
                 <div className="font-body-small" style={{ color: "var(--ink-2)" }}>
                   Snapshot: 1 of 3 testers finished · 9 of 18 attempts done
@@ -328,7 +327,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <div className="font-body-small" style={{ color: "var(--ink-2)" }}>Track an order — waiting for a login · Waiting 6 minutes</div>
                 </div>
               </div>
-            )}
+            </TabsPrimitive.Content>
+            </TabsPrimitive.Root>
           </div>
         </div>
       </section>

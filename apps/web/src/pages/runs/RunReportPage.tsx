@@ -23,6 +23,7 @@ import {
 } from "../../lib/results";
 import type { Finding } from "../../lib/api";
 import { ContractReport } from "./ContractReport";
+import { HarnessReport } from "./HarnessReport";
 import { PersonaImpressions, type PersonaImpressionsPayload } from "./PersonaImpressions";
 import { SlopReport, type SlopReportPayload } from "./SlopReport";
 import { statusLabel } from "../../lib/format";
@@ -106,6 +107,9 @@ export function RunReportPage() {
   }
   if (data.report.payload.mode === "discovery_contract_v1") {
     return <ResultsBoundary><ContractReport runId={run.id} payload={data.report.payload} /></ResultsBoundary>;
+  }
+  if (data.report.payload.mode === "harness_v1") {
+    return <ResultsBoundary><HarnessReport runId={run.id} payload={data.report.payload} /></ResultsBoundary>;
   }
   if (data.report.payload.run_kind === "slop") {
     return (

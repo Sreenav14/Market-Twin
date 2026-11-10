@@ -115,9 +115,11 @@ export function RunLayout() {
   const run = runQuery.data;
   // The mode descriptor and the header stage badge take their words from
   // lib/status.ts — the one status vocabulary (examination X-1).
-  const modeKey = typeof run.configuration_snapshot.execution_mode === "string"
-    ? run.configuration_snapshot.execution_mode
-    : "legacy_persona";
+  const modeKey = run.run_kind && ["explore_test", "persona", "slop"].includes(run.run_kind)
+    ? run.run_kind
+    : typeof run.configuration_snapshot.execution_mode === "string"
+      ? run.configuration_snapshot.execution_mode
+      : "legacy_persona";
   const executionMode = (MODE_STATUS[modeKey] ?? MODE_STATUS.legacy_persona).word;
   const discoveryStage = typeof run.configuration_snapshot.discovery_stage === "string"
     ? run.configuration_snapshot.discovery_stage

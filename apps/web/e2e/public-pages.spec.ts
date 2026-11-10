@@ -23,19 +23,19 @@ test("landing explains the product and connects to How and real sign-in", async 
   await page.screenshot({ path: testInfo.outputPath("landing.png"), fullPage: true });
   await page.locator("footer").getByRole("button", { name: "How it works", exact: true }).click();
   await expect(page).toHaveURL(/\/how-it-works$/);
-  await expect(page.getByRole("heading", { name: "Know what each category proves." })).toBeVisible();
-  await page.getByRole("navigation", { name: "Product navigation", exact: true }).getByRole("link", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Your app, tested like a person, with proof." })).toBeVisible();
+  await page.locator("header").getByRole("button", { name: "SIGN IN", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole("heading", { name: "Sign in to MarketTwin" })).toBeVisible();
-  await page.getByRole("link", { name: "MarketTwin home" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
+  await page.locator("header").getByRole("button", { name: "MarketTwin", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
 });
 
 test("How explains evidence limits and remains accessible without the API", async ({ page }, testInfo) => {
   await page.goto("/how-it-works");
-  await expect(page.getByText(/Repetition across simulated testers does not confirm a defect/)).toBeVisible();
-  await page.getByText("Missing or uncaptured artifact", { exact: true }).click();
-  await expect(page.getByText(/Adjacent screenshots are never substituted/)).toBeVisible();
+  await expect(page.getByText(/counts as confirmed when it happens again on a re-check/)).toBeVisible();
+  await page.getByText("Evidence could not be captured", { exact: true }).click();
+  await expect(page.getByText(/A neighbouring screenshot is never substituted/)).toBeVisible();
   await checkPage(page);
   await page.screenshot({ path: testInfo.outputPath("how.png"), fullPage: true });
 });
@@ -68,6 +68,7 @@ test("login form exposes service failure and permits retry", async ({ page }, te
   await page.getByRole("textbox", { name: /email/i }).fill("reviewer@example.test");
   await page.getByRole("button", { name: "Continue to workspace", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("The login service is unavailable");
+  await expect(page.getByRole("textbox", { name: /email/i })).toHaveAccessibleDescription(/The login service is unavailable/);
   await expect(page.getByRole("alert")).toBeFocused();
   await expect(page.getByRole("button", { name: "Continue to workspace", exact: true })).toBeEnabled();
   await checkPage(page);
@@ -76,7 +77,8 @@ test("login form exposes service failure and permits retry", async ({ page }, te
 
 test("callback stays honest about unavailable production authentication", async ({ page }, testInfo) => {
   await page.goto("/auth/callback");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Production sign-in is not available here");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Cognito callback");
+  await expect(page.getByText(/This route does not simulate a production login/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Return to sign in" })).toHaveAttribute("href", "/login");
   await checkPage(page);
   await page.screenshot({ path: testInfo.outputPath("callback.png"), fullPage: true });

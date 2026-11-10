@@ -13,10 +13,10 @@ test("logged-out entry point is usable and accessible", async ({
   );
   await page.goto("/login");
   await expect(
-    page.getByRole("heading", { name: /Test user journeys/ }),
+    page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
-  await expect(page.getByLabel("Email")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: /email/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to workspace" })).toBeDisabled();
   const results = await new AxeBuilder({ page }).analyze();
   expect(
     results.violations.filter(

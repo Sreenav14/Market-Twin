@@ -37,8 +37,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-      - run: npm ci
+      # The repository intentionally disables npm lockfiles (.npmrc).
+      - run: npm install --legacy-peer-deps
       - run: npm run typecheck
       - run: npm run build
       - run: npm --workspace @markettwin/web run test -- --pool=threads --maxWorkers=1
