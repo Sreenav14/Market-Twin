@@ -902,6 +902,15 @@ class BrowserController:
                 url=session.page.url if session.page is not None else "",
             ))
 
+    async def discovery_page_signals(self, *, session_id: UUID) -> dict[str, Any]:
+        """Read bounded checkpoint signals; never send them to a model or logs."""
+        session = self._get_session(session_id=session_id)
+        return await session.page.evaluate("""() => ({
+            text: (document.body?.innerText || '').slice(0, 8000),
+            scripts: Array.from(document.scripts).slice(0, 100).map(s => s.src),
+            controls: document.querySelectorAll('button,a[href],input:not([type=hidden]),select,textarea').length
+        })""")
+
     async def probe_page(self, *, session_id: UUID) -> dict[str, Any]:
         """Run the slop probe (U-P6-04): raw measurements of the
         current page — elements, images, overflow, word count."""

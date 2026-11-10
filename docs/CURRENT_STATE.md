@@ -1,5 +1,15 @@
 # Current MarketTwin state
 
+## Continuation directive steps 1–3 complete — 2026-11-10
+
+Local checkpoint commits preserve all prior edits; Board report replacement c712021
+verified real disposable DB/evaluator/results handler/Chromium (synthetic identity
+and unrelated UI transport fixtures), rollback/retry,22 tests plus7 compatibility
+and8 frontend. Step3 wall/empty/normal/exception fixtures reproduced failures first;
+reviewed discovery/lifecycle/shared-failure suite52 passed. Final full-suite gates
+are next. Accepted November8 unified-build audit is historical coverage, not to be
+repeated. No new plan/coverage/ledger upkeep; no push/deployment/paid calls.
+
 ## Parallel audit underway — 2026-11-10
 
 Fresh team results: takeover real DB/browser regression passes (1 in25.15s) after

@@ -1,5 +1,14 @@
 # MarketTwin implementation handoff
 
+## Continuation directive checkpoint — steps 1–3 complete
+
+Owner's revised priorities supersede broad review work. Existing edits checkpointed
+in five local commits ending c3ac530; report contract completed c712021 with persisted
+API/browser regression and rollback/retry proof. Discovery checkpoint classifier and
+finally cleanup now pass52 focused tests, including real DOM fixtures; no models.
+Preserve exact compute_board_verdict semantics. Final full Python/web suites and
+web typing/build are next; production identity remains mocked in report acceptance.
+
 ## 2026-11-10 — Explicit multi-agent audit authorization
 
 Additional verified repairs: gateway retains disconnected lease bookkeeping so

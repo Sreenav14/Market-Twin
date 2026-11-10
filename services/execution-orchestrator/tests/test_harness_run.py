@@ -662,6 +662,9 @@ class _FakeInventoryController:
     async def __aenter__(self):
         return self
 
+    async def discovery_page_signals(self, **kwargs):
+        return {"text": "Synthetic application", "scripts": [], "controls": 3}
+
     async def __aexit__(self, *args: object) -> bool:
         return False
 
@@ -1446,6 +1449,52 @@ async def test_empty_discovery_stops_before_evaluation_and_finishes_room(monkeyp
     )
     executions.mark_browser_session_closed.assert_awaited_once()
     assert run.configuration_snapshot["harness_state"]["items"] == {}
+
+
+@pytest.mark.parametrize("fixture, code", [
+    ("wall", "browser_discovery_checkpoint"),
+    ("empty", "browser_discovery_empty"),
+    ("normal", None),
+    ("exception", "execution_failed"),
+])
+async def test_inventory_fixture_always_finishes_its_execution(monkeypatch, fixture, code):
+    """Checkpoint HTML is not an app; blank HTML is a distinct failure."""
+    fixtures = {
+        "wall": {"text": "Please enable JS and disable any ad blocker",
+                 "scripts": ["https://ct.captcha-delivery.com/c.js"], "controls": 0},
+        "empty": {"text": "", "scripts": [], "controls": 0},
+        "normal": {"text": "Search our catalog", "scripts": [], "controls": 1},
+        "exception": {"text": "", "scripts": [], "controls": 0},
+    }
+    entries = (_entry(1, "button", "Search"),) if fixture == "normal" else ()
+    controller = _FakeInventoryController(pages={INVENTORY_URL: entries}, start_url=INVENTORY_URL)
+    controller.discovery_page_signals = AsyncMock(return_value=fixtures[fixture])
+    if fixture == "exception":
+        controller.navigate = AsyncMock(side_effect=RuntimeError("Synthetic navigation failure"))
+    run, session, request = _inventory_run(uuid4(), start_url=INVENTORY_URL)
+    _install_inventory_doubles(monkeypatch, controller=controller,
+                              script={"Check Search": _worked}, calls=[])
+    executions = Mock(create_agent_execution=AsyncMock(), finish_agent_execution=AsyncMock(),
+        create_browser_session=AsyncMock(), mark_browser_session_closed=AsyncMock(),
+        rebind_browser_session=AsyncMock())
+    states = Mock(mark_running=AsyncMock(), mark_completed=AsyncMock())
+    monkeypatch.setattr(harness_run, "ExecutionRepository", lambda _: executions)
+    monkeypatch.setattr(harness_run, "RunStateRepository", lambda _: states)
+    if code:
+        from markettwin_shared.run_failure import failure_event_payload
+        with pytest.raises(RuntimeError) as error:
+            await harness_run.execute_harness_run(request=request, session=session)
+        assert failure_event_payload(error.value)["code"] == code
+        states.mark_completed.assert_not_awaited()
+    else:
+        await harness_run.execute_harness_run(request=request, session=session)
+        states.mark_completed.assert_awaited_once()
+    room = next(call.kwargs for call in executions.create_agent_execution.await_args_list
+                if call.kwargs["runtime_name"] == "harness_inventory_v1")
+    finishes = [call.kwargs for call in executions.finish_agent_execution.await_args_list
+                if call.kwargs["execution_id"] == room["execution_id"]]
+    assert len(finishes) == 1
+    assert finishes[0]["status"] == ("completed" if code is None else "failed")
 
 
 # === end of harness tests ===

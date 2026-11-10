@@ -27,6 +27,10 @@ MESSAGES = {
         "Browser discovery found no testable controls. No tests ran. "
         "Check whether the target shows a verification, access-denied, or loading page."
     ),
+    "browser_discovery_checkpoint": (
+        "The site showed a bot-check page instead of the app. Discovery was blocked. "
+        "Open the target in an authorized browser and resolve the site's verification."
+    ),
     "interrupted": (
         "This run was interrupted (the runner restarted) and was not resumed. Start a new run."
     ),
@@ -230,6 +234,7 @@ def classify_run_failure(error: BaseException) -> dict[str, str]:
         "APITimeoutError": "timeout",
         "BrowserNavigationError": "browser_navigation",
         "BrowserDiscoveryEmptyError": "browser_discovery_empty",
+        "BrowserDiscoveryCheckpointError": "browser_discovery_checkpoint",
         "BrowserPolicyError": "browser_navigation",
         "CancelledError": "interrupted",
     }

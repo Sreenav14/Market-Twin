@@ -57,6 +57,10 @@ class BrowserDiscoveryEmptyError(BrowserRuntimeError):
     """Discovery ended without any controls that could be tested."""
 
 
+class BrowserDiscoveryCheckpointError(BrowserRuntimeError):
+    """The authorized site showed a bot checkpoint instead of the application."""
+
+
 class BrowserTimeoutError(BrowserActionError):
     """Raised when a browser action exceeds its bounded timeout."""
 

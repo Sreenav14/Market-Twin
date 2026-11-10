@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import statistics
 import time
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
@@ -34,7 +36,10 @@ from markettwin_execution_orchestrator.browser.auth_session_broker import (
 from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionHandle,
 )
-from markettwin_execution_orchestrator.browser.errors import BrowserDiscoveryEmptyError
+from markettwin_execution_orchestrator.browser.errors import (
+    BrowserDiscoveryEmptyError, BrowserDiscoveryCheckpointError,
+)
+from markettwin_execution_orchestrator.browser.discovery_checkpoint import is_discovery_checkpoint
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     PlanRepository,
@@ -599,6 +604,38 @@ async def _absorb_inventory(
     return first_ordinal + len(pairs)
 
 
+@asynccontextmanager
+async def _inventory_execution_cleanup(
+    session: AsyncSession, executions: ExecutionRepository,
+) -> AsyncIterator[dict[str, UUID]]:
+    """Finish the inventory record even when Room startup or discovery raises."""
+    tracked: dict[str, UUID] = {}
+    error: BaseException | None = None
+    try:
+        yield tracked
+    except BaseException as caught:
+        error = caught
+        await session.rollback()
+        raise
+    finally:
+        if "execution_id" in tracked:
+            code = (
+                "browser_discovery_checkpoint" if isinstance(error, BrowserDiscoveryCheckpointError)
+                else "browser_discovery_empty" if isinstance(error, BrowserDiscoveryEmptyError)
+                else "execution_failed"
+            )
+            await executions.finish_agent_execution(
+                execution_id=tracked["execution_id"],
+                status="failed" if error else "completed",
+                **({"error_code": code} if error else {}),
+            )
+            if error and "browser_session_id" in tracked:
+                await executions.mark_browser_session_closed(
+                    browser_session_id=tracked["browser_session_id"],
+                )
+            await session.commit()
+
+
 async def execute_harness_run(
     *, request: MarketTwinRunRequest, session: AsyncSession
 ) -> tuple[CaseExecutionResult, ...]:
@@ -715,7 +752,7 @@ async def execute_harness_run(
         if run.configuration_snapshot.get("harness_run_mode") == "standard"
         else "read_only"
     )
-    async with BrowserController() as controller:
+    async with _inventory_execution_cleanup(session, executions) as inventory, BrowserController() as controller:
         inv_handle: BrowserSessionHandle | None = None
         inv_authenticated = False
         ordinal = len(state.items) + 1
@@ -764,6 +801,7 @@ async def execute_harness_run(
             attempt_number=(last_attempt or 0) + 1,
             runtime_name="harness_inventory_v1",
         )
+        inventory["execution_id"] = inv_execution_id
         await session.commit()
         room_handle = await controller.open_room_session(
             run_id=request.run_id,
@@ -782,6 +820,7 @@ async def execute_harness_run(
             test_run_id=request.run_id,
             session_role="room",
         )
+        inventory["browser_session_id"] = room_handle.session_id
         await session.commit()
         async def _crawl_inventory(*, authenticated: bool) -> None:
             nonlocal ordinal
@@ -798,6 +837,9 @@ async def execute_harness_run(
                 await controller.navigate(
                     session_id=inv_handle.session_id, url=current_url,
                 )
+                signals = await controller.discovery_page_signals(session_id=inv_handle.session_id)
+                if is_discovery_checkpoint(**signals):
+                    raise BrowserDiscoveryCheckpointError("The site showed a bot-check page.")
                 ordinal = await _absorb_inventory(
                     controller=controller, handle=inv_handle,
                     session=session, state=state, state_url=current_url,
@@ -834,6 +876,8 @@ async def execute_harness_run(
 
         if inventory_driven:
             await _crawl_inventory(authenticated=inv_authenticated)
+            if not state.items:
+                raise BrowserDiscoveryEmptyError("Browser discovery found no testable controls.")
         while True:
             item = state.next_pending()
             if item is None:
@@ -1269,19 +1313,7 @@ async def execute_harness_run(
     await executions.mark_browser_session_closed(
         browser_session_id=room_handle.session_id
     )
-    empty_discovery = inventory_driven and not state.items
-    if empty_discovery:
-        await executions.finish_agent_execution(
-            execution_id=inv_execution_id, status="failed",
-            error_code="browser_discovery_empty",
-        )
-    else:
-        await executions.finish_agent_execution(
-            execution_id=inv_execution_id, status="completed",
-        )
     await session.commit()
-    if empty_discovery:
-        raise BrowserDiscoveryEmptyError("Browser discovery found no testable controls.")
 
     # Close sweep (U-P1-04): every terminal Board item must own exactly
     # one board.item.result event. Boundary publishes set the item's
