@@ -175,7 +175,10 @@ it("(b) a changed poll shows final values at t=0; only the length transitions", 
   // The step fill renders its final fraction; the outcome fill engaged
   // its transform transition and already targets the true length.
   expect((document.querySelector(".desk-step-fill") as HTMLElement).style.transform).toBe("scaleX(1)");
-  const outcomeFill = document.querySelector(".desk-outcome-fill") as HTMLElement;
+  // The settled verdict may crossfade with an aria-hidden outgoing copy.
+  // Assert the current accessible segment, rather than that saved old DOM.
+  const outcomeFill = screen.getByRole("link", { name: /2 Worked/ })
+    .querySelector(".desk-outcome-fill") as HTMLElement;
   expect(outcomeFill.style.transform).toBe("scaleX(1)");
   expect(outcomeFill.style.transition).toContain("transform");
 });

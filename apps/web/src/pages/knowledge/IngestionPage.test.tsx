@@ -103,8 +103,10 @@ describe("workspace ingestion", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("radio", { name: "Research a link" }));
     expect(screen.queryByLabelText("Source file")).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText(/^Public source link/), "https://example.com/docs");
-    await user.type(screen.getByLabelText(/^Knowledge set name/), "Product docs");
+    await user.click(screen.getByLabelText(/^Public source link/));
+    await user.paste("https://example.com/docs");
+    await user.click(screen.getByLabelText(/^Knowledge set name/));
+    await user.paste("Product docs");
     await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
     await user.click(screen.getByRole("button", { name: "Add knowledge" }));
     expect(ingest).toHaveBeenCalledWith("workspace", "https://example.com/docs", "Product docs", ["product_knowledge"]);
@@ -124,8 +126,10 @@ describe("workspace ingestion", () => {
     vi.mocked(api.getIngestion).mockResolvedValue(queued);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("radio", { name: "Research a link" }));
-    await user.type(screen.getByLabelText(/^Public source link/), "https://example.com/docs");
-    await user.type(screen.getByLabelText(/^Knowledge set name/), "Product docs");
+    await user.click(screen.getByLabelText(/^Public source link/));
+    await user.paste("https://example.com/docs");
+    await user.click(screen.getByLabelText(/^Knowledge set name/));
+    await user.paste("Product docs");
     await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
     await user.click(screen.getByRole("button", { name: "Add knowledge" }));
     expect(await screen.findByRole("progressbar", { name: "Ingestion progress" })).toBeInTheDocument();
