@@ -17,8 +17,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
-from markettwin_database.models import PersonaJourney, RunMission, TestRun
+from markettwin_database.models import AgentExecution, PersonaJourney, RunMission, TestRun
 from markettwin_shared.deep_testing import CaseExecutionResult
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.agents.schemas.test_case import (
@@ -26,23 +27,26 @@ from markettwin_execution_orchestrator.agents.schemas.test_case import (
     PlanBudget,
     TestCaseSpec,
 )
-
 from markettwin_execution_orchestrator.browser import BrowserController
+from markettwin_execution_orchestrator.browser.auth_session_broker import (
+    AuthSessionScope,
+)
+from markettwin_execution_orchestrator.browser.contracts import (
+    BrowserSessionHandle,
+)
+from markettwin_execution_orchestrator.browser.errors import BrowserDiscoveryEmptyError
 from markettwin_execution_orchestrator.persistence import (
     ExecutionRepository,
     PlanRepository,
+)
+from markettwin_execution_orchestrator.persistence.plan_repository import (
+    AUTH_BOOTSTRAP_ORDINAL,
 )
 from markettwin_execution_orchestrator.persistence.run_event_repository import (
     RunEventRepository,
 )
 from markettwin_execution_orchestrator.persistence.run_state_repository import (
     RunStateRepository,
-)
-from markettwin_execution_orchestrator.browser.auth_session_broker import (
-    AuthSessionScope,
-)
-from markettwin_execution_orchestrator.browser.contracts import (
-    BrowserSessionHandle,
 )
 from markettwin_execution_orchestrator.workflow.case_execution import (
     PersonaJourneyExecutionRequest,
@@ -69,6 +73,7 @@ from markettwin_execution_orchestrator.workflow.harness_state import (
     new_harness_state,
     persist_harness_state,
 )
+
 if TYPE_CHECKING:
     from markettwin_execution_orchestrator.workflow.run_executor import (
         MarketTwinRunRequest,
@@ -262,7 +267,10 @@ def _result_status(result: CaseExecutionResult) -> ItemStatus:
     if result.blocker in {"human_takeover_required", "authentication_challenge_blocked"}:
         return "needs_human_login"
     if result.execution_status == "completed" and result.verdict == "satisfied":
-        return "worked"
+        if any(assertion.status == "satisfied" and assertion.oracle not in {"visible", "enabled"}
+               for assertion in result.assertion_results):
+            return "worked"
+        return "could_not_check"
     if result.execution_status == "completed" and result.verdict == "not_satisfied":
         return "broken"
     if result.execution_status == "policy_blocked" or result.blocker == "policy_blocked":
@@ -499,6 +507,7 @@ async def _register_items(
 ) -> None:
     """Create the mission/journey rows for newly appended board items."""
 
+    journeys: list[PersonaJourney] = []
     for offset, (item, case) in enumerate(pairs):
         mission_id, journey_id = uuid4(), uuid4()
         session.add(RunMission(
@@ -508,12 +517,17 @@ async def _register_items(
             success_criteria=[a.assertion_id for a in case.expected],
             priority=case.priority,
         ))
-        session.add(PersonaJourney(
+        journeys.append(PersonaJourney(
             id=journey_id, test_run_id=run_id,
             persona_id=persona_id, mission_id=mission_id,
             ordinal=first_ordinal + offset,
         ))
         item.mission_id, item.journey_id = str(mission_id), str(journey_id)
+    # These mappers have no ORM relationship to order the composite FK.
+    # Persist every parent mission before flushing its journey.
+    await session.flush()
+    for journey in journeys:
+        session.add(journey)
     await session.flush()
 
 
@@ -642,6 +656,7 @@ async def execute_harness_run(
                 success_criteria=[a.assertion_id for a in case.expected],
                 priority=case.priority,
             ))
+            await session.flush()
             session.add(PersonaJourney(
                 id=journey_id, test_run_id=request.run_id,
                 persona_id=record.persona_id, mission_id=mission_id,
@@ -723,7 +738,33 @@ async def execute_harness_run(
                 )
             except Exception:
                 auth_snapshot = None
-        inv_execution_id, inv_journey_id = uuid4(), uuid4()
+        # Room persistence needs a real agent_executions row (FK) and that
+        # row needs the bootstrap discovery journey (FK to persona_journeys).
+        inv_journey_id = await session.scalar(
+            select(PersonaJourney.id).where(
+                PersonaJourney.test_run_id == request.run_id,
+                PersonaJourney.ordinal == AUTH_BOOTSTRAP_ORDINAL,
+            )
+        )
+        if inv_journey_id is None:
+            raise ValueError(
+                "Harness Room requires the browser-discovery bootstrap journey."
+            )
+        inv_execution_id = uuid4()
+        # Discovery accounting already owns attempt 1; resumed Rooms also
+        # need a fresh attempt. The worker's run claim serializes allocation.
+        last_attempt = await session.scalar(
+            select(func.max(AgentExecution.attempt_number)).where(
+                AgentExecution.journey_id == inv_journey_id,
+            )
+        )
+        await executions.create_agent_execution(
+            execution_id=inv_execution_id,
+            journey_id=inv_journey_id,
+            attempt_number=(last_attempt or 0) + 1,
+            runtime_name="harness_inventory_v1",
+        )
+        await session.commit()
         room_handle = await controller.open_room_session(
             run_id=request.run_id,
             execution_id=inv_execution_id, journey_id=inv_journey_id,
@@ -928,6 +969,9 @@ async def execute_harness_run(
             )
             item.status = _result_status(result)
             item.blocker = result.blocker
+            if (item.status == "could_not_check" and result.verdict == "satisfied"
+                    and result.execution_status == "completed"):
+                item.locator = {**item.locator, "tier": "outcome_not_established"}
             item.verdict = result.verdict
             item.durations_ms.append(elapsed_ms)
             item.evidence_refs = [str(execution_id)] + [
@@ -1049,7 +1093,18 @@ async def execute_harness_run(
                     for assertion in confirm.assertion_results
                     for artifact_id in assertion.artifact_ids
                 ]
-                if _result_status(confirm) != "broken":
+                failed_assertions = {
+                    (assertion.assertion_id, assertion.oracle)
+                    for assertion in result.assertion_results
+                    if assertion.status == "not_satisfied"
+                }
+                repeated_failures = {
+                    (assertion.assertion_id, assertion.oracle)
+                    for assertion in confirm.assertion_results
+                    if assertion.status == "not_satisfied"
+                }
+                if (_result_status(confirm) != "broken"
+                        or not failed_assertions.intersection(repeated_failures)):
                     item.status = "could_not_check"
                     item.locator = {**item.locator, "tier": "observed_once"}
                 final_result, final_execution_id = confirm, confirm_id
@@ -1177,6 +1232,35 @@ async def execute_harness_run(
                 inv_authenticated = True
                 await _crawl_inventory(authenticated=True)
 
+    # A confirmation can defer one item while other items finish. It is
+    # still nonterminal: the Boss may not close the run around it.
+    waiting = next((item for item in state.ordered_items()
+                    if item.status == "needs_human_login"), None)
+    if waiting is not None:
+        run = await session.get(TestRun, request.run_id, populate_existing=True)
+        assert run is not None
+        park_seconds = run.configuration_snapshot.get("harness_park_seconds", 900)
+        if not isinstance(park_seconds, int) or isinstance(park_seconds, bool):
+            park_seconds = 900
+        parked_at = datetime.now(UTC)
+        run.configuration_snapshot = {
+            **run.configuration_snapshot,
+            "harness_park": {
+                "parked_at": parked_at.isoformat(),
+                "deadline_at": (parked_at + timedelta(
+                    seconds=max(60, min(1800, park_seconds)),
+                )).isoformat(),
+                "item_id": waiting.item_id,
+            },
+        }
+        run.status = "awaiting_human"
+        await persist_harness_state(
+            session, run, state, event_type="harness.run.needs_login",
+            stage="needs_login", journey_id=UUID(str(waiting.journey_id)),
+        )
+        await session.commit()
+        return tuple(results)
+
     # The run's work is done: close the Room (U-P2). Parked runs return
     # earlier without reaching here — their Room row stays 'open' in
     # the database and the startup reaper (U-P2-04) closes the stale
@@ -1185,7 +1269,19 @@ async def execute_harness_run(
     await executions.mark_browser_session_closed(
         browser_session_id=room_handle.session_id
     )
+    empty_discovery = inventory_driven and not state.items
+    if empty_discovery:
+        await executions.finish_agent_execution(
+            execution_id=inv_execution_id, status="failed",
+            error_code="browser_discovery_empty",
+        )
+    else:
+        await executions.finish_agent_execution(
+            execution_id=inv_execution_id, status="completed",
+        )
     await session.commit()
+    if empty_discovery:
+        raise BrowserDiscoveryEmptyError("Browser discovery found no testable controls.")
 
     # Close sweep (U-P1-04): every terminal Board item must own exactly
     # one board.item.result event. Boundary publishes set the item's

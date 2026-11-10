@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
     ("RateLimitError", "model_rate_limit"),
     ("ValidationError", "invalid_plan"),
     ("BrowserTimeoutError", "timeout"),
+    ("BrowserDiscoveryEmptyError", "browser_discovery_empty"),
     ("UnknownProviderError", "execution_failed"),
 ])
 def test_exception_payload_is_never_retained(name, code):

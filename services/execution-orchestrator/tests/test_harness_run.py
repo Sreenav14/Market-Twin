@@ -255,7 +255,8 @@ def _install_driver_doubles(monkeypatch, *, twin, calls) -> Mock:
 
 def _fixture_run(run_id):
     run = TestRun(id=run_id, status="queued", configuration_snapshot={})
-    session = Mock(get=AsyncMock(return_value=run), add=Mock(),
+    session = Mock(get=AsyncMock(return_value=run),
+                   scalar=AsyncMock(side_effect=_room_scalar), add=Mock(),
                    flush=AsyncMock(), commit=AsyncMock(), rollback=AsyncMock())
     request = MarketTwinRunRequest(
         run_id=run_id, study_brief="Check the controlled benchmark fixture",
@@ -265,6 +266,10 @@ def _fixture_run(run_id):
         fixture_truth=True,
     )
     return run, session, request
+
+
+async def _room_scalar(statement):
+    return 1 if "max(" in str(statement) else uuid4()
 
 
 @pytest.mark.parametrize("twin", ["broken", "good"])
@@ -784,7 +789,8 @@ def _inventory_run(run_id, *, start_url, target_id=None):
         id=run_id, status="queued",
         configuration_snapshot={"harness_run_mode": "standard"},
     )
-    session = Mock(get=AsyncMock(return_value=run), add=Mock(),
+    session = Mock(get=AsyncMock(return_value=run),
+                   scalar=AsyncMock(side_effect=_room_scalar), add=Mock(),
                    flush=AsyncMock(), commit=AsyncMock(), rollback=AsyncMock())
     request = MarketTwinRunRequest(
         run_id=run_id, study_brief="Inventory-driven harness run",
@@ -829,7 +835,9 @@ async def test_inventory_run_executes_every_item_it_discovers(monkeypatch) -> No
     # executed), zero items unaccounted for.
     assert len(loaded.items) == 13
     assert len(calls) == 13
-    assert loaded.counts()["worked"] == 13
+    # Only Subscribe has an outcome assertion; readiness is not behavioral success.
+    assert loaded.counts()["worked"] == 1
+    assert loaded.counts()["could_not_check"] == 12
     assert sum(loaded.counts().values()) == 13
     assert loaded.counts()["pending"] == 0
     assert run.configuration_snapshot["harness_stage"] == "done"
@@ -878,6 +886,44 @@ async def test_attempt_two_separates_confirmed_from_observed_once(
     assert calls.count("Check Generate preview") == 2
 
 
+@pytest.mark.parametrize(("confirmation_id", "expected_status"), [
+    ("target_enabled", "broken"),
+    ("target_visible", "could_not_check"),
+])
+async def test_proof_requires_the_same_failed_assertion(
+    monkeypatch, confirmation_id, expected_status,
+) -> None:
+    entries = (_entry(1, "button", "Search"),)
+    controller = _FakeInventoryController(pages={INVENTORY_URL: entries},
+                                          start_url=INVENTORY_URL)
+
+    def failure(assertion_id):
+        def result(case, execution_id):
+            failed = _result_for(case, execution_id, verdict="not_satisfied")
+            return CaseExecutionResult.model_validate({
+                **failed.model_dump(),
+                "assertion_results": tuple(a for a in failed.assertion_results
+                                           if a.assertion_id == assertion_id),
+            })
+        return result
+
+    run_id = uuid4()
+    run, session, request = _inventory_run(run_id, start_url=INVENTORY_URL)
+    calls: list[str] = []
+    _install_inventory_doubles(monkeypatch, controller=controller,
+        script={"Check Search": [failure("target_enabled"), failure(confirmation_id)]},
+        calls=calls)
+    await harness_run.execute_harness_run(request=request, session=session)
+    board = await load_harness_state(session, run_id)
+    assert board is not None
+    item = next(iter(board.items.values()))
+    assert item.status == expected_status
+    assert item.attempts == 2
+    assert len(item.evidence_refs) == 4
+    if expected_status == "could_not_check":
+        assert item.locator["tier"] == "observed_once"
+
+
 async def test_one_opaque_confirmation_parks_one_item_only(monkeypatch) -> None:
     entries = (
         _entry(1, "button", "Search"),
@@ -902,16 +948,24 @@ async def test_one_opaque_confirmation_parks_one_item_only(monkeypatch) -> None:
     calls: list[str] = []
     _install_inventory_doubles(monkeypatch, controller=controller,
                                script=script, calls=calls)
+    states = Mock(mark_running=AsyncMock(), mark_completed=AsyncMock())
+    monkeypatch.setattr(harness_run, "RunStateRepository", lambda _: states)
     await harness_run.execute_harness_run(request=request, session=session)
     loaded = await load_harness_state(session, run_id)
     assert loaded is not None
     by_name = {item.name: item for item in loaded.ordered_items()}
     assert by_name["Confirm booking"].status == "needs_human_login"
-    assert by_name["Search"].status == "worked"
-    assert by_name["Save settings"].status == "worked"
-    # The run completed the rest of the list instead of parking whole.
-    assert run.configuration_snapshot["harness_stage"] == "done"
-    assert run.status == "queued"
+    assert by_name["Search"].status == "could_not_check"
+    assert by_name["Search"].locator["tier"] == "outcome_not_established"
+    assert by_name["Save settings"].status == "could_not_check"
+    # Other work may finish, but the owner's Close contract forbids a
+    # completed run while any Board item still needs human input.
+    assert run.configuration_snapshot["harness_stage"] == "needs_login"
+    assert run.status == "awaiting_human"
+    assert run.configuration_snapshot["harness_park"]["item_id"] == (
+        by_name["Confirm booking"].item_id
+    )
+    states.mark_completed.assert_not_awaited()
 
 
 async def test_irreversible_items_are_inventoried_never_executed(
@@ -998,7 +1052,7 @@ async def test_login_wall_parks_then_resumes_the_same_session(monkeypatch) -> No
     assert parked is not None
     by_name = {item.name: item for item in parked.ordered_items()}
     assert by_name["Continue"].status == "needs_human_login"
-    assert by_name["Sign in"].status == "worked"
+    assert by_name["Sign in"].status == "could_not_check"
 
     # Scripted human login through the takeover path, then resume:
     # the same run takes the broker-held session (zero new handoffs),
@@ -1012,7 +1066,7 @@ async def test_login_wall_parks_then_resumes_the_same_session(monkeypatch) -> No
     resumed = await load_harness_state(session, run_id)
     assert resumed is not None
     assert len(resumed.items) == 7
-    assert resumed.counts()["worked"] == 7
+    assert resumed.counts()["could_not_check"] == 7
     assert resumed.counts()["pending"] == 0
     assert resumed.counts()["needs_human_login"] == 0
 
@@ -1081,7 +1135,7 @@ async def test_live_login_recrawls_the_app_behind_the_wall_in_one_dispatch(
     final = await load_harness_state(session, run_id)
     assert final is not None
     assert len(final.items) == 7
-    assert final.counts()["worked"] == 7
+    assert final.counts()["could_not_check"] == 7
     assert True in controller.index_authenticated
 
 
@@ -1135,7 +1189,7 @@ async def test_budget_exhausted_item_is_timed_out_on_the_record_and_could_not_ch
     by_name = {item.name: item for item in loaded.ordered_items()}
     assert by_name["Search"].status == "could_not_check"
     assert by_name["Search"].blocker == "action_limit"
-    assert by_name["Save settings"].status == "worked"
+    assert by_name["Save settings"].status == "could_not_check"
     assert calls == ["Check Search", "Check Save settings"]
     assert sum(loaded.counts().values()) == 2
     assert loaded.counts()["pending"] == 0
@@ -1143,8 +1197,8 @@ async def test_budget_exhausted_item_is_timed_out_on_the_record_and_could_not_ch
     assert len(seen) == 1
     finished = seen[0].finish_agent_execution.await_args_list
     # The bootstrap journey's skipped accounting record finishes first
-    # (journey-result wiring); the two item records follow, in order.
-    assert len(finished) == 3
+    # (journey-result wiring); the two items and Room finish in order.
+    assert len(finished) == 4
     assert finished[0].kwargs["status"] == "skipped"
     assert finished[1].kwargs["status"] == "timed_out"
     assert finished[2].kwargs["status"] == "completed"
@@ -1312,4 +1366,123 @@ async def test_safety_skipped_items_publish_skipped_journey_results(
     )
 
 
+async def test_room_execution_uses_a_new_attempt_on_start_and_resume(monkeypatch) -> None:
+    """Discovery accounting and each Room must have distinct persisted attempts."""
+    controller = _FakeInventoryController(
+        pages={INVENTORY_URL: (_entry(1, "button", "Search"),)},
+        start_url=INVENTORY_URL)
+    run_id, journey_id = uuid4(), uuid4()
+    run, session, request = _inventory_run(run_id, start_url=INVENTORY_URL)
+    _install_inventory_doubles(monkeypatch, controller=controller,
+                               script={"Check Search": _worked}, calls=[])
+    record = PersistedJourneyRecord(journey_id, uuid4(), uuid4(),
+                                    "browser_discovery__observe_starting_page", 10000)
+    monkeypatch.setattr(harness_run, "PlanRepository", lambda _: Mock(
+        create_auth_bootstrap=AsyncMock(return_value=record)))
+    attempts = []
+    execution_keys = set()
+
+    async def create_execution(**kwargs):
+        attempt = kwargs.get("attempt_number", 1)
+        key = (kwargs["journey_id"], attempt)
+        if key in execution_keys:
+            raise ValueError("uq_agent_executions_journey_attempt")
+        execution_keys.add(key)
+        if kwargs["journey_id"] == journey_id:
+            attempts.append(attempt)
+
+    async def scalar(statement):
+        if "max(" in str(statement):
+            assert journey_id in statement.compile().params.values()
+            return max(attempts, default=0)
+        return journey_id
+
+    session.scalar = AsyncMock(side_effect=scalar)
+    executions = Mock(create_agent_execution=AsyncMock(side_effect=create_execution),
+                      finish_agent_execution=AsyncMock(),
+                      create_browser_session=AsyncMock(),
+                      mark_browser_session_closed=AsyncMock(),
+                      rebind_browser_session=AsyncMock())
+    monkeypatch.setattr(harness_run, "ExecutionRepository", lambda _: executions)
+    await harness_run.execute_harness_run(request=request, session=session)
+    assert attempts == [1, 2]
+    room = next(call.kwargs for call in executions.create_agent_execution.await_args_list
+                if call.kwargs["runtime_name"] == "harness_inventory_v1")
+    executions.finish_agent_execution.assert_any_await(
+        execution_id=room["execution_id"], status="completed",
+    )
+    # A resumed worker must not reuse the previous Room's attempt either.
+    await harness_run.execute_harness_run(request=request, session=session)
+    assert attempts == [1, 2, 3]
+
+
+async def test_empty_discovery_stops_before_evaluation_and_finishes_room(monkeypatch) -> None:
+    from markettwin_shared.run_failure import failure_event_payload
+
+    controller = _FakeInventoryController(pages={INVENTORY_URL: ()},
+                                          start_url=INVENTORY_URL)
+    run, session, request = _inventory_run(uuid4(), start_url=INVENTORY_URL)
+    events = _install_inventory_doubles(monkeypatch, controller=controller,
+                                        script={}, calls=[])
+    executions = Mock(create_agent_execution=AsyncMock(),
+                      finish_agent_execution=AsyncMock(),
+                      create_browser_session=AsyncMock(),
+                      mark_browser_session_closed=AsyncMock(),
+                      rebind_browser_session=AsyncMock())
+    states = Mock(mark_running=AsyncMock(), mark_completed=AsyncMock())
+    monkeypatch.setattr(harness_run, "ExecutionRepository", lambda _: executions)
+    monkeypatch.setattr(harness_run, "RunStateRepository", lambda _: states)
+    with pytest.raises(RuntimeError) as caught:
+        await harness_run.execute_harness_run(request=request, session=session)
+    assert failure_event_payload(caught.value)["code"] == "browser_discovery_empty"
+    states.mark_completed.assert_not_awaited()
+    assert not any(call.kwargs["event_type"] == "harness.run.evaluating"
+                   for call in events.create.await_args_list)
+    room = next(call.kwargs for call in executions.create_agent_execution.await_args_list
+                if call.kwargs["runtime_name"] == "harness_inventory_v1")
+    executions.finish_agent_execution.assert_any_await(
+        execution_id=room["execution_id"], status="failed",
+        error_code="browser_discovery_empty",
+    )
+    executions.mark_browser_session_closed.assert_awaited_once()
+    assert run.configuration_snapshot["harness_state"]["items"] == {}
+
+
 # === end of harness tests ===
+
+
+async def test_register_items_persists_missions_before_journeys() -> None:
+    """The journey's composite FK must reference an already persisted mission."""
+    from markettwin_database.models import PersonaJourney, RunMission
+
+    board = new_harness_state()
+    page = board.add_state(url=INVENTORY_URL, elements=())
+    entries = harness_run.v1_benchmark_work_list(INVENTORY_URL)[:2]
+    pairs = []
+    for entry in entries:
+        case = harness_run.TestCaseSpec.model_validate(entry["case"])
+        role, name, occurrence = entry["role_name"]
+        item = board.add_item(state_id=page.state_id, case_id=case.case_id,
+                              role=role, name=name, occurrence_index=occurrence)
+        pairs.append((item, case))
+    pending = []
+    persisted_missions = set()
+    persisted_journeys = []
+
+    async def flush():
+        # Independent mappers can flush journeys first; no ORM relationship
+        # exists to guarantee their ordering within one flush.
+        for row in pending:
+            if isinstance(row, PersonaJourney):
+                assert (row.test_run_id, row.mission_id) in persisted_missions
+                persisted_journeys.append(row)
+        persisted_missions.update((row.test_run_id, row.id) for row in pending
+                                  if isinstance(row, RunMission))
+        pending.clear()
+
+    session = Mock(add=pending.append, add_all=pending.extend, flush=AsyncMock(side_effect=flush))
+    run_id, persona_id = uuid4(), uuid4()
+    await harness_run._register_items(session=session, run_id=run_id,
+        persona_id=persona_id, first_ordinal=1, pairs=pairs)
+    assert len(persisted_journeys) == 2
+    assert {str(row.id) for row in persisted_journeys} == {item.journey_id for item, _ in pairs}

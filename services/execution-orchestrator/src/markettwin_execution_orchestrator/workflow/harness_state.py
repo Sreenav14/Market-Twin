@@ -41,8 +41,11 @@ def canonical_url(url: str) -> str:
 
     parsed = urlsplit(url)
     host = (parsed.hostname or "").lower()
+    if ":" in host:
+        host = f"[{host}]"
     port = parsed.port
-    netloc = host if port in (None, 80, 443) else f"{host}:{port}"
+    default_port = {"http": 80, "https": 443}.get(parsed.scheme.lower())
+    netloc = host if port is None or port == default_port else f"{host}:{port}"
     path = parsed.path or "/"
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")

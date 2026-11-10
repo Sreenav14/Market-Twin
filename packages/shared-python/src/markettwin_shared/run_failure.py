@@ -23,6 +23,10 @@ MESSAGES = {
         'Browser discovery could not navigate within the '
         'authorized target policy.'
     ),
+    "browser_discovery_empty": (
+        "Browser discovery found no testable controls. No tests ran. "
+        "Check whether the target shows a verification, access-denied, or loading page."
+    ),
     "interrupted": (
         "This run was interrupted (the runner restarted) and was not resumed. Start a new run."
     ),
@@ -225,6 +229,7 @@ def classify_run_failure(error: BaseException) -> dict[str, str]:
         "TimeoutError": "timeout",
         "APITimeoutError": "timeout",
         "BrowserNavigationError": "browser_navigation",
+        "BrowserDiscoveryEmptyError": "browser_discovery_empty",
         "BrowserPolicyError": "browser_navigation",
         "CancelledError": "interrupted",
     }

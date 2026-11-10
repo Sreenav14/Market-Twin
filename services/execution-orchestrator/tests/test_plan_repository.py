@@ -24,6 +24,31 @@ from markettwin_execution_orchestrator.persistence.plan_repository import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+async def test_browser_journey_persists_its_owner_before_execution() -> None:
+    session = MagicMock(spec=AsyncSession)
+    parents = set()
+    journeys = []
+
+    async def flush():
+        for call in session.add_all.call_args_list:
+            parents.update(row.id for row in call.args[0])
+        for call in session.add.call_args_list:
+            row = call.args[0]
+            assert row.persona_id in parents and row.mission_id in parents
+            journeys.append(row)
+
+    session.flush = AsyncMock(side_effect=flush)
+    run_id = uuid4()
+    record = await PlanRepository(session).create_browser_journey(
+        test_run_id=run_id, ordinal=2, name="Keyboard user",
+        objective="Navigate with the keyboard", attributes={"persona_type": "keyboard_only"},
+    )
+    assert len(journeys) == 1
+    assert journeys[0].id == record.journey_id
+    assert journeys[0].test_run_id == run_id
+    assert journeys[0].ordinal == 2
+
+
 @pytest.mark.asyncio
 async def test_plan_repository_flushes_parents_before_journeys() -> None:
     """Persona and mission parents must exist before Journey rows."""

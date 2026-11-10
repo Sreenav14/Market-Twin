@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from markettwin_database.models import TestRun
 
 from markettwin_execution_orchestrator.browser import BrowserController
-from markettwin_execution_orchestrator.persistence import ExecutionRepository
+from markettwin_execution_orchestrator.persistence import ExecutionRepository, PlanRepository
 from markettwin_execution_orchestrator.workflow.harness_state import canonical_url
 from markettwin_execution_orchestrator.persistence.run_event_repository import (
     RunEventRepository,
@@ -46,7 +46,12 @@ async def execute_slop_run(
     executions = ExecutionRepository(session)
     events = RunEventRepository(session)
     execution_id = uuid4()
-    journey_id = uuid4()
+    journey = await PlanRepository(session).create_browser_journey(
+        test_run_id=request.run_id, ordinal=1, name="Slop checker",
+        objective="Inspect authorized pages for visual quality and JavaScript errors.",
+        attributes={"runtime_name": "slop_crawl_v1"},
+    )
+    journey_id = journey.journey_id
     await executions.create_agent_execution(
         execution_id=execution_id, journey_id=journey_id,
         runtime_name="slop_crawl_v1",

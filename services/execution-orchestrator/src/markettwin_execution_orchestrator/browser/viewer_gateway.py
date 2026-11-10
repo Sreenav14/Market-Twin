@@ -184,8 +184,10 @@ class ViewerGateway:
         reach owner.input, whatever the client sends after the handshake.
         Human-control leases keep using connect()'s unchanged path.
         """
+        cookie = websocket.cookies.get("markettwin_session", "")
         if (
             actor_id != lease.actor_id
+            or await self._authority.actor(cookie) != actor_id
             or not await self._observer_permitted(actor_id, lease)
             or lease.handle.session_id in self._connected
             or lease.handle.session_id in self._observing
@@ -197,12 +199,18 @@ class ViewerGateway:
         try:
             await self._owner.start_screencast(lease.handle, generation=lease.generation)
             while True:
-                if not await self._observer_permitted(actor_id, lease):
+                if (
+                    await self._authority.actor(cookie) != actor_id
+                    or not await self._observer_permitted(actor_id, lease)
+                ):
                     break
                 frame = await self._owner.next_screencast_frame(
                     lease.handle, generation=lease.generation,
                 )
-                if not await self._observer_permitted(actor_id, lease):
+                if (
+                    await self._authority.actor(cookie) != actor_id
+                    or not await self._observer_permitted(actor_id, lease)
+                ):
                     break
                 async with asyncio.timeout(5):
                     await websocket.send_bytes(frame)
@@ -458,7 +466,9 @@ class ViewerGateway:
                         if (current.handle == lease.handle and current.actor_id == lease.actor_id
                                 and current.generation == lease.generation):
                             await self._owner.detach(current)
-                            self._attached.discard(lease.lease_id)
+                            # Detach ends transport, but the owner retains this
+                            # lease for reconnect. Renew its expiry even while
+                            # disconnected so the next attach has the same lease.
                     except Exception:
                         pass
                 self._connected.discard(lease.handle.session_id)

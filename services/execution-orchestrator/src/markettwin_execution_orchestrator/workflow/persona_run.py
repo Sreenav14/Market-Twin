@@ -23,7 +23,7 @@ from markettwin_shared.persona_definitions import PersonaDefinition
 
 from markettwin_execution_orchestrator.browser import BrowserController
 from markettwin_execution_orchestrator.models import ask
-from markettwin_execution_orchestrator.persistence import ExecutionRepository
+from markettwin_execution_orchestrator.persistence import ExecutionRepository, PlanRepository
 from markettwin_execution_orchestrator.persistence.persona_definition_repository import (
     PersonaDefinitionRepository,
 )
@@ -127,12 +127,17 @@ async def _ensure_definitions(
 
 async def _walk_persona(
     *, session: AsyncSession, request: "MarketTwinRunRequest",
-    controller: BrowserController, definition: PersonaDefinition,
+    controller: BrowserController, definition: PersonaDefinition, ordinal: int = 1,
 ) -> int:
     executions = ExecutionRepository(session)
     events = RunEventRepository(session)
     execution_id = uuid4()
-    journey_id = uuid4()
+    journey = await PlanRepository(session).create_browser_journey(
+        test_run_id=request.run_id, ordinal=ordinal, name=definition.name,
+        objective=definition.voice.focus,
+        attributes={"persona_id": definition.persona_id, "persona_type": definition.type},
+    )
+    journey_id = journey.journey_id
     await executions.create_agent_execution(
         execution_id=execution_id, journey_id=journey_id,
         runtime_name="persona_walk_v1",
@@ -278,10 +283,10 @@ async def execute_persona_run(
     await RunStateRepository(session).mark_running(test_run_id=request.run_id)
     await session.commit()
     async with BrowserController() as controller:
-        for definition in definitions:
+        for ordinal, definition in enumerate(definitions, start=1):
             await _walk_persona(
                 session=session, request=request, controller=controller,
-                definition=definition,
+                definition=definition, ordinal=ordinal,
             )
     # Reached only when every walk finished: like the Board engine,
     # the executor owns the run's terminal state. Without this the

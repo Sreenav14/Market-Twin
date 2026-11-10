@@ -69,6 +69,28 @@ class PlanRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def create_browser_journey(
+        self, *, test_run_id: UUID, ordinal: int, name: str,
+        objective: str, attributes: dict[str, object],
+    ) -> PersistedJourneyRecord:
+        """Persist ownership for a native persona walk or slop crawl."""
+        persona_id, mission_id, journey_id = uuid4(), uuid4(), uuid4()
+        self._session.add_all([
+            RunPersona(id=persona_id, test_run_id=test_run_id, ordinal=ordinal,
+                       name=name, description=objective, attributes=attributes),
+            RunMission(id=mission_id, test_run_id=test_run_id, ordinal=ordinal,
+                       title=name, objective=objective, success_criteria=[], priority="medium"),
+        ])
+        await self._session.flush()
+        self._session.add(PersonaJourney(
+            id=journey_id, test_run_id=test_run_id, persona_id=persona_id,
+            mission_id=mission_id, ordinal=ordinal,
+        ))
+        await self._session.flush()
+        return PersistedJourneyRecord(
+            journey_id, persona_id, mission_id, str(journey_id), ordinal,
+        )
+
     async def create_auth_bootstrap(
         self, *, test_run_id: UUID, requires_identity_verification: bool = True,
     ) -> PersistedJourneyRecord:

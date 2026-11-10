@@ -110,6 +110,7 @@ async def test_seeded_slop_and_js_fixture(monkeypatch) -> None:
     session = Mock()
     session.get = AsyncMock(return_value=run)
     session.commit = AsyncMock()
+    session.flush = AsyncMock()
     request = SimpleNamespace(
         run_id=run_id,
         start_url=f"http://127.0.0.1:{port}/",

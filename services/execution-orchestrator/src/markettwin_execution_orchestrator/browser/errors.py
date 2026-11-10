@@ -53,6 +53,10 @@ class BrowserNavigationError(BrowserActionError):
     """Raised when navigation fails after policy approval."""
 
 
+class BrowserDiscoveryEmptyError(BrowserRuntimeError):
+    """Discovery ended without any controls that could be tested."""
+
+
 class BrowserTimeoutError(BrowserActionError):
     """Raised when a browser action exceeds its bounded timeout."""
 

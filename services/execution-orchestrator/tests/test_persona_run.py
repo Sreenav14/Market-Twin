@@ -85,6 +85,7 @@ async def test_walk_publishes_anchored_impressions_with_signals(monkeypatch) -> 
     ))
     session = Mock()
     session.commit = AsyncMock()
+    session.flush = AsyncMock()
     request = SimpleNamespace(
         run_id=uuid4(), start_url="https://app.example.test/home",
         allowed_origins=(), network_policy="local_development",
@@ -100,6 +101,9 @@ async def test_walk_publishes_anchored_impressions_with_signals(monkeypatch) -> 
     assert all("score" not in event for event in events)
     # The mobile session got the canonical viewport + Slow 4G applied.
     assert controller.sessions[0]["viewport_size"] == (320, 800)
+    journey = session.add.call_args.args[0]
+    assert controller.sessions[0]["journey_id"] == journey.id
+    assert journey.test_run_id == request.run_id
     assert controller.network[0]["latency_ms"] == 150
     assert controller.network[0]["download_bps"] == 200_000
     quote = next(e["quote"] for e in events if e["kind"] == "small_targets")
@@ -142,13 +146,15 @@ async def test_persona_run_marks_the_run_completed(monkeypatch) -> None:
     )
 
     async def _ensure(**kwargs):
-        return definitions[:1]
+        return definitions[:2]
 
     monkeypatch.setattr(persona_run, "_ensure_definitions", _ensure)
     walked: list[str] = []
+    ordinals: list[int] = []
 
     async def _walk(**kwargs):
         walked.append(kwargs["definition"].persona_id)
+        ordinals.append(kwargs["ordinal"])
         return 0
 
     monkeypatch.setattr(persona_run, "_walk_persona", _walk)
@@ -159,7 +165,8 @@ async def test_persona_run_marks_the_run_completed(monkeypatch) -> None:
     session.commit = AsyncMock()
     request = SimpleNamespace(run_id=uuid4())
     await persona_run.execute_persona_run(request=request, session=session)
-    assert walked == [definitions[0].persona_id]
+    assert walked == [definition.persona_id for definition in definitions[:2]]
+    assert ordinals == [1, 2]
     assert states_calls == ["running", "completed"]
 
 
@@ -195,6 +202,7 @@ async def test_failed_walk_finishes_its_execution_as_failed(monkeypatch) -> None
     controller.navigate = AsyncMock(side_effect=RuntimeError("browser died"))
     session = Mock()
     session.commit = AsyncMock()
+    session.flush = AsyncMock()
     request = SimpleNamespace(
         run_id=uuid4(), start_url="https://app.example.test/home",
         allowed_origins=(), network_policy="local_development",
