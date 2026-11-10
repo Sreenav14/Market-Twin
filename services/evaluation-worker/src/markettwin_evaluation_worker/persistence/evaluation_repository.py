@@ -200,6 +200,7 @@ class EvaluationRepository:
         self,
         *,
         test_run_id: UUID,
+        strict: bool = False,
     ) -> dict[str, dict[str, object]]:
         """Latest board.item.result payload per Board item id (U-P1-05)."""
 
@@ -218,8 +219,37 @@ class EvaluationRepository:
         latest: dict[str, dict[str, object]] = {}
         for event in events:
             item_id = event.payload.get("board_item_id")
+            if strict:
+                if not isinstance(item_id, str) or not item_id or item_id in latest:
+                    raise ValueError("Invalid or duplicate Board result record.")
+                if event.payload.get("board_status") in {"worked", "broken"} and (
+                    event.journey_id is None or event.execution_id is None
+                ):
+                    raise ValueError("Checked Board result lacks execution ownership.")
+                if event.journey_id is not None:
+                    journey = await self._session.get(PersonaJourney, event.journey_id)
+                    if journey is None or journey.test_run_id != test_run_id:
+                        raise ValueError("Board result references a foreign journey.")
+                if event.execution_id is not None:
+                    execution = await self._session.get(AgentExecution, event.execution_id)
+                    if (execution is None or execution.journey_id != event.journey_id
+                            or (event.payload.get("board_status") in {"worked", "broken"}
+                                and execution.status != "completed")):
+                        raise ValueError("Board result references a foreign execution.")
+                    if event.payload.get("board_status") == "broken":
+                        attempts = event.payload.get("attempts")
+                        if (type(attempts) is not int or attempts < 2
+                                or execution.outcome != "failed"):
+                            raise ValueError("Broken Board result lacks repeated failure proof.")
+                        proofs = tuple((await self._session.scalars(select(AgentExecution.id).where(
+                            AgentExecution.journey_id == event.journey_id,
+                            AgentExecution.status == "completed", AgentExecution.outcome == "failed",
+                        ))).all())
+                        if len(proofs) < 2:
+                            raise ValueError("Broken Board result lacks two failed executions.")
             if isinstance(item_id, str):
-                latest[item_id] = event.payload
+                latest[item_id] = ({**event.payload, "_journey_id": str(event.journey_id)}
+                                   if strict else event.payload)
         return latest
 
 

@@ -33,13 +33,32 @@ async def generate_harness_report(
         raise ValueError("Completed harness run has invalid item identity.")
     if len(set(cast(list[str], item_ids))) != len(item_ids):
         raise ValueError("Completed harness run has duplicate item identity.")
-    events = await EvaluationRepository(session).list_board_item_results(test_run_id=test_run_id)
-    board_section = compute_board_verdict(board_document=board, board_results=events)
-    outcomes = cast(list[dict[str, object]], board_section["items"])
-
     journey_ids = set((await session.scalars(select(PersonaJourney.id).where(
         PersonaJourney.test_run_id == test_run_id,
     ))).all())
+    events = await EvaluationRepository(session).list_board_item_results(
+        test_run_id=test_run_id, strict=True,
+    )
+    allowed = {"worked", "broken", "could_not_check", "not_checked", "blocked",
+               "owner_disabled", "pending", "running", "needs_human_login"}
+    for item in board_items:
+        if item.get("status") not in allowed:
+            raise ValueError("Completed harness run has an invalid item status.")
+        event = events.get(cast(str, item["item_id"]))
+        if event is not None and event.get("board_status") != item.get("status"):
+            raise ValueError("Board result contradicts its saved item status.")
+        if (event is not None and "_journey_id" in event
+                and event["_journey_id"] != str(item.get("journey_id"))):
+            raise ValueError("Board result does not belong to its saved item journey.")
+        if item.get("status") in {"worked", "broken"}:
+            try:
+                owned = UUID(str(item.get("journey_id"))) in journey_ids
+            except ValueError:
+                owned = False
+            if not owned:
+                events.pop(cast(str, item["item_id"]), None)
+    board_section = compute_board_verdict(board_document=board, board_results=events)
+    outcomes = cast(list[dict[str, object]], board_section["items"])
     items: list[dict[str, object]] = []
     for item, outcome in zip(board_items, outcomes, strict=True):
         name = item.get("name")
@@ -58,8 +77,6 @@ async def generate_harness_report(
         locator = item.get("locator")
         if not reason and isinstance(locator, dict):
             reason = cast(dict[str, object], locator).get("tier")
-        if status not in {"worked", "broken"} and not reason:
-            reason = "No recorded reason" if status != "owner_disabled" else "Disabled by owner"
         items.append({
             "name": name if isinstance(name, str) and name else "Unnamed check",
             "role": role if isinstance(role, str) else "",

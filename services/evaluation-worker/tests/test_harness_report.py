@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from markettwin_evaluation_worker import harness_report, workflow
+from markettwin_evaluation_worker.persistence.evaluation_repository import EvaluationRepository
 
 
 @pytest.mark.parametrize("as_mapping", [True, False])
@@ -29,11 +30,12 @@ async def test_report_supports_both_boards_and_only_links_owned_journeys(monkeyp
     ) == report_id
     payload = reports.create_completed_report.await_args.kwargs["report_payload"]
     assert payload["mode"] == "harness_v1"
-    assert [item["status"] for item in payload["items"]] == ["worked", "broken", "blocked"]
+    assert [item["status"] for item in payload["items"]] == ["worked", "could_not_check", "blocked"]
     assert [item["journey_id"] for item in payload["items"]] == [str(owned), None, None]
-    assert payload["items"][1]["reason"] == "observed_once"
-    assert payload["verdict"] == "Not ready yet"
-    assert payload["board"]["coverage"]["checked"] == 2
+    assert payload["items"][1]["reason"] == "missing_result_event"
+    assert payload["verdict"] == "Can't tell yet"
+    assert payload["board"]["coverage"]["checked"] == 1
+    assert payload["items"][2]["reason"] is None
 
 
 async def test_empty_board_is_honest_and_missing_board_is_rejected(monkeypatch):
@@ -97,3 +99,24 @@ async def test_report_rejects_ambiguous_board_item_identity(ids):
                 {"item_id": item_id, "status": "worked"} for item_id in ids
             ]}},
         )
+
+
+@pytest.mark.parametrize("kind", ["duplicate", "missing_identity", "foreign_journey", "foreign_execution", "unproved_broken"])
+async def test_strict_board_results_reject_invalid_records(kind):
+    run_id, journey_id, execution_id = uuid4(), uuid4(), uuid4()
+    event = SimpleNamespace(payload={"board_item_id": "item", "board_status": "worked"},
+                            journey_id=journey_id, execution_id=execution_id)
+    if kind == "missing_identity":
+        event.execution_id = None
+    if kind == "unproved_broken":
+        event.payload["board_status"] = "broken"
+    rows = [event, event] if kind == "duplicate" else [event]
+    async def get(model, identity):
+        if identity == journey_id:
+            return SimpleNamespace(test_run_id=uuid4() if kind == "foreign_journey" else run_id)
+        return SimpleNamespace(journey_id=uuid4() if kind == "foreign_execution" else journey_id,
+                               status="completed", outcome="failed")
+    session = Mock(scalars=AsyncMock(return_value=Mock(all=Mock(return_value=rows))),
+                   get=AsyncMock(side_effect=get))
+    with pytest.raises(ValueError):
+        await EvaluationRepository(session).list_board_item_results(test_run_id=run_id, strict=True)

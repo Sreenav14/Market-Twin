@@ -35,7 +35,8 @@ it("shows the Board verdict, counted coverage and every saved harness outcome", 
   ] });
   expect(screen.getByText("Save profile").closest("li")).toHaveTextContent("Broken");
   expect(screen.getByRole("heading", { name: "Not ready yet" })).toBeInTheDocument();
-  expect(screen.getByText(/Checked 1 of 2 discovered items/)).toBeInTheDocument();
+  expect(screen.getByText(/Checked 1 of 2 found/)).toHaveTextContent("1 disabled by owner");
+  expect(screen.getByText(/Data gap: no saved reason/)).toBeInTheDocument();
   expect(screen.getByText("Delete account").closest("li")).toHaveTextContent("Disabled by owner");
   expect(screen.getByRole("link", { name: "Review recorded steps" }))
     .toHaveAttribute("href", "/runs/run/journeys/owned");

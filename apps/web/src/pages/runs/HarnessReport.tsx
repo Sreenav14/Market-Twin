@@ -16,7 +16,7 @@ export function HarnessReport({ runId, payload }: { runId: string; payload: Reco
   return <section className="panel" aria-labelledby="harness-results-title">
     <h2 id="harness-results-title">{typeof payload.verdict === "string" ? payload.verdict : "Can't tell yet"}</h2>
     {typeof coverage.checked === "number" && typeof coverage.total_items === "number" ?
-      <p>Checked {coverage.checked} of {coverage.total_items} discovered items. {typeof coverage.denominator === "number" ? `${coverage.denominator} were eligible after owner exclusions.` : ""} This verdict applies only to the recorded scope.</p> :
+      <p>Checked {coverage.checked} of {coverage.total_items} found. {typeof coverage.denominator === "number" ? `${coverage.total_items - coverage.denominator} disabled by owner; ${coverage.denominator} eligible.` : ""} This verdict applies only to the recorded scope.</p> :
       <p>{items.length} checks were recorded. Coverage is not available.</p>}
     {items.length === 0 ? <p>No checks were recorded for this test, so there are no results to assess.</p> :
       <ul>{items.map((item, index) => {
@@ -24,7 +24,8 @@ export function HarnessReport({ runId, payload }: { runId: string; payload: Reco
         return <li key={index}>
           <strong>{typeof item.name === "string" ? item.name : "Unnamed check"}</strong>{" — "}
           {labels[status] ?? "Unknown outcome"}
-          {typeof item.reason === "string" && item.reason ? <> · {item.reason.replaceAll("_", " ")}</> : null}
+          {typeof item.reason === "string" && item.reason ? <> · {item.reason.replaceAll("_", " ")}</> :
+            !["worked", "broken"].includes(status) ? <> · Data gap: no saved reason.</> : null}
           {typeof item.journey_id === "string" ? <> · <Link to={`/runs/${runId}/journeys/${item.journey_id}`}>Review recorded steps</Link></> : null}
         </li>;
       })}</ul>}
