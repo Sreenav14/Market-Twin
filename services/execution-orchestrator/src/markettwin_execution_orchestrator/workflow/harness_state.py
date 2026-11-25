@@ -11,10 +11,10 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from typing import Literal, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from markettwin_database.models import TestRun
+from markettwin_shared.app_map_common import canonical_url as canonical_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_execution_orchestrator.persistence.run_event_repository import (
@@ -34,23 +34,6 @@ ITEM_STATUSES: tuple[str, ...] = ("pending", "running", "worked", "broken",
 TERMINAL_STATUSES = frozenset({"worked", "broken", "could_not_check",
                                "not_checked", "blocked", "owner_disabled"})
 HarnessStage = Literal["exploring", "testing", "needs_login", "evaluating", "done"]
-
-
-def canonical_url(url: str) -> str:
-    """Normalise a URL for state identity: no fragment, sorted query."""
-
-    parsed = urlsplit(url)
-    host = (parsed.hostname or "").lower()
-    if ":" in host:
-        host = f"[{host}]"
-    port = parsed.port
-    default_port = {"http": 80, "https": 443}.get(parsed.scheme.lower())
-    netloc = host if port is None or port == default_port else f"{host}:{port}"
-    path = parsed.path or "/"
-    if path != "/" and path.endswith("/"):
-        path = path.rstrip("/")
-    query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
-    return urlunsplit((parsed.scheme.lower(), netloc, path, query, ""))
 
 
 def state_id_for(url: str, elements: tuple[tuple[str, str], ...] | list[tuple[str, str]],

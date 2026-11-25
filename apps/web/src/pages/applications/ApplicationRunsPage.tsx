@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { DeleteAction } from "../../components/markettwin/DeleteAction";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
@@ -12,9 +12,9 @@ import {
   LoadingPanel,
 } from "../../components/ui/StateViews";
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
-import { api } from "../../lib/api";
+import { api, RUN_PAGE_SIZE } from "../../lib/api";
 import { testTitle, textValue } from "../../lib/format";
-import { canDeleteTest, terminalTestStatuses } from "../../lib/results";
+import { canDeleteTest, partialExplorationLabel, terminalTestStatuses } from "../../lib/results";
 import { canManageLifecycle, canWriteWorkspace } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
 import { AppShellContext } from "../../layouts/AppShell";
@@ -31,10 +31,13 @@ export function ApplicationRunsPage() {
     () => api.getApplication(applicationId),
     [applicationId, revision],
   );
-  const runsState = useQuery({
+  const runsState = useInfiniteQuery({
     queryKey: ["application-tests", user.id, workspace.id, applicationId],
-    queryFn: () => api.listRuns(applicationId),
-    refetchInterval: (query) => query.state.data?.some((run) =>
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.listRunsPage(applicationId, pageParam),
+    getNextPageParam: (page, pages) => page.length === RUN_PAGE_SIZE
+      ? pages.length * RUN_PAGE_SIZE : undefined,
+    refetchInterval: (query) => query.state.data?.pages.flat().some((run) =>
       run.status !== "draft" && !terminalTestStatuses.has(run.status),
     ) ? 5000 : false,
   });
@@ -47,7 +50,9 @@ export function ApplicationRunsPage() {
 
   const canWrite =
     canWriteWorkspace(workspace.role) && appState.data.status === "active";
-  const runs = runsState.data ?? [];
+  const runs = [...new Map((runsState.data?.pages.flat() ?? []).map(
+    (run) => [run.id, run],
+  )).values()];
   const filteredRuns = runs.filter((run) =>
     (status === "all" || run.status === status)
     && `${testTitle(run)} ${textValue(run.target_snapshot.name, "")}`.toLowerCase().includes(search.trim().toLowerCase()),
@@ -92,7 +97,7 @@ export function ApplicationRunsPage() {
       ) : !runsState.data ? (
         <ErrorPanel message={runsState.error?.message || "Could not load tests."} action={<button className="secondary-button"
           onClick={() => void runsState.refetch()}>Try again</button>} />
-      ) : runsState.data.length === 0 ? (
+      ) : runs.length === 0 ? (
         <EmptyState
           title="No tests yet"
           copy="Create a test when an authorized target is ready."
@@ -125,42 +130,55 @@ export function ApplicationRunsPage() {
           {search || status !== "all" || sort !== "recent" ? <button className="secondary-button compact"
             onClick={() => setParams({}, { replace: true })}>Clear filters</button> : null}
         </div>
+        {runsState.hasNextPage ? <p>Search and filters apply to loaded tests. Load more to include older tests.</p> : null}
         {filteredRuns.length === 0 ? <EmptyState title="No matching tests" copy="Try another search or status."
           action={<button className="secondary-button" onClick={() => setParams({}, { replace: true })}>Clear filters</button>} /> :
         <div className="data-list">
-          {filteredRuns.map((run) => (
-            <div className="deletable-row" key={run.id}>
-              <Link className="data-row" to={`/runs/${run.id}/${run.status === "awaiting_human" ? "human-action" : ["running", "planning", "queued"].includes(run.status) ? "watch" : run.status === "draft" ? "overview" : "results"}`}>
-                <span className="row-icon">
-                  <Icon name="runs" size={16} />
-                </span>
-                <div className="row-primary">
-                  <strong>{testTitle(run)}</strong>
-                  <span>
-                    {textValue(
-                      run.target_snapshot.name,
-                      textValue(run.target_snapshot.base_url, "Target"),
-                    )}
+          {filteredRuns.map((run) => {
+            const coverage = partialExplorationLabel(run);
+            const runPath = `/runs/${run.id}`;
+            const destination = run.status === "awaiting_human" ? `${runPath}/watch#human-action-heading`
+              : ["running", "planning", "queued"].includes(run.status) ? `${runPath}/watch` : runPath;
+            return (
+              <div className="deletable-row" key={run.id}>
+                <Link className="data-row" to={destination}>
+                  <span className="row-icon">
+                    <Icon name="runs" size={16} />
                   </span>
-                  {run.status_reason ? <span>{run.status_reason}</span> : null}
-                </div>
-                <TestStatusBadge status={run.status} />
-                <Icon name="arrow" size={16} />
-              </Link>
-              {canManageLifecycle(workspace.role) ? (
-                <DeleteAction
-                  kind="test"
-                  id={run.id}
-                  name={testTitle(run)}
-                  disabled={!canDeleteTest(run.status)}
-                  onDeleted={() => {
-                    void runsState.refetch();
-                  }}
-                />
-              ) : null}
-            </div>
-          ))}
+                  <div className="row-primary">
+                    <strong>{testTitle(run)}</strong>
+                    <span>
+                      {textValue(
+                        run.target_snapshot.name,
+                        textValue(run.target_snapshot.base_url, "Target"),
+                      )}
+                    </span>
+                    {run.status_reason ? <span>{run.status_reason}</span> : null}
+                    {coverage ? <span>{coverage}</span> : null}
+                  </div>
+                  <TestStatusBadge status={run.status} />
+                  <Icon name="arrow" size={16} />
+                </Link>
+                {canManageLifecycle(workspace.role) ? (
+                  <DeleteAction
+                    kind="test"
+                    id={run.id}
+                    name={testTitle(run)}
+                    disabled={!canDeleteTest(run.status)}
+                    onDeleted={() => {
+                      void runsState.refetch();
+                    }}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>}
+        {runsState.hasNextPage ? <button className="secondary-button"
+          disabled={runsState.isFetchingNextPage}
+          onClick={() => void runsState.fetchNextPage()}>
+          {runsState.isFetchingNextPage ? "Loading tests…" : "Load more tests"}
+        </button> : null}
         </>
       )}
     </>

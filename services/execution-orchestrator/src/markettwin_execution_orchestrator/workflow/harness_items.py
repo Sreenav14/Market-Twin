@@ -25,12 +25,14 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Mapping, Sequence
+from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
 from markettwin_execution_orchestrator.agents.schemas.test_case import (
     CaseAction,
     ExpectedAssertion,
+    SafeTestValue,
     SemanticTarget,
     TestCaseSpec,
 )
@@ -45,6 +47,12 @@ RunSafetyMode = Literal["read_only", "standard"]
 
 NOT_EXERCISED_IRREVERSIBLE = "not exercised — requires approval or test mode"
 NOT_EXERCISED_READ_ONLY = "not exercised — read-only first run"
+NOT_EXERCISED_UNAPPROVED_DATA = "not exercised — no approved test data for this field"
+
+# The could-not-check reason for an unnamed control (doc 24 section
+# 6.2): the item is formed and counted, and the harness gate accounts
+# it with this reason instead of executing it.
+NOT_CHECKED_UNNAMED_CONTROL = "unnamed_control"
 
 FIELD_ROLES = frozenset({"textbox", "searchbox", "combobox"})
 ACTION_ROLES = frozenset({
@@ -131,6 +139,17 @@ def skip_reason(safety: SafetyClass, mode: RunSafetyMode) -> str | None:
     return None
 
 
+def run_safety_mode(snapshot: Mapping[str, object] | None) -> RunSafetyMode:
+    """The run's safety mode from its creation snapshot.
+
+    Fail-closed: only the exact string "standard" unlocks standard;
+    an absent key, a non-dict snapshot, or any other value is read_only.
+    """
+    if not isinstance(snapshot, Mapping):
+        return "read_only"
+    return "standard" if snapshot.get("harness_run_mode") == "standard" else "read_only"
+
+
 def safety_of(item: HarnessItem) -> SafetyClass:
     """The class recorded at ingest; a missing class is irreversible."""
 
@@ -138,6 +157,20 @@ def safety_of(item: HarnessItem) -> SafetyClass:
     if value == "read" or value == "reversible":
         return value
     return "irreversible"
+
+
+def structural_reason(item: HarnessItem) -> str | None:
+    """The could-not-check reason for a structural-identity item.
+
+    Exactly the items ingest formed from unnamed controls (locator
+    flag set at ingest) return NOT_CHECKED_UNNAMED_CONTROL; every
+    named item returns None. The harness gate consults this beside
+    skip_reason and closes the item as could_not_check.
+    """
+
+    if item.locator.get("structural_identity") is True:
+        return NOT_CHECKED_UNNAMED_CONTROL
+    return None
 
 
 def case_id_for(item_id: str) -> str:
@@ -151,9 +184,8 @@ def case_for_item(
 ) -> TestCaseSpec:
     """Synthesise the single-item case for one board item.
 
-    Shape: at most one precondition step (navigate back to the item's
-    state when it is not the start state — always ≤3), exactly one
-    action, and two assertions (enabled before the action, visible
+    Shape: optional navigation and saved view-opening steps, one
+    action for the item, and two assertions (enabled before the action, visible
     after it) — plus, for checkable items (checkbox/radio), a third
     assertion on the OUTCOME of the action: the control must end up
     checked. Outcome assertions are only generated where an existing
@@ -166,6 +198,22 @@ def case_for_item(
     (TestCaseSpec validates on creation).
     """
 
+    if structural_reason(item) is not None:
+        # Never executed: the gate closes a structural item as
+        # could_not_check before execution, because no frozen locator
+        # strategy can target a control with no accessible name. This
+        # case only keeps the gate's case-built path valid — one
+        # navigate step, one target-less URL assertion.
+        return TestCaseSpec(
+            case_id=item.case_id, feature_key=feature_key,
+            title=f"Check {item.role} {item.occurrence_index + 1}"[:160],
+            kind="exploratory", priority="medium",
+            steps=(CaseAction(action="navigate", url=state_url),),
+            expected=(ExpectedAssertion(
+                assertion_id="target_url", oracle="url", target=None,
+                expected_value=state_url, origin="inferred",
+            ),),
+        )
     target = SemanticTarget(role=item.role, name=item.name)
     if item.role in FIELD_ROLES:
         value_key = (
@@ -185,8 +233,13 @@ def case_for_item(
     else:
         action = CaseAction(action="click", target=target)
     steps: list[CaseAction] = []
-    if state_url != start_url:
+    entry_steps = item.locator.get("entry_steps")
+    if isinstance(entry_steps, list) and entry_steps:
         steps.append(CaseAction(action="navigate", url=state_url))
+        steps.extend(CaseAction.model_validate(step) for step in entry_steps)
+    elif state_url != start_url:
+        steps.append(CaseAction(action="navigate", url=state_url))
+    before_action = len(steps)
     steps.append(action)
     title = (
         f"Check {item.name}" if item.name
@@ -196,7 +249,7 @@ def case_for_item(
         ExpectedAssertion(
             assertion_id="target_enabled", oracle="enabled",
             target=target, expected_value=True, origin="inferred",
-            after_step_ordinal=0,
+            after_step_ordinal=before_action,
         ),
         ExpectedAssertion(
             assertion_id="target_visible", oracle="visible",
@@ -220,9 +273,147 @@ def case_for_item(
     )
 
 
+def expectation_assertion(
+    entry: Mapping[str, object],
+) -> ExpectedAssertion | None:
+    """The Board oracle for one snapshot expectation entry (doc 21
+    section 8.3): the entry's compiled assertion as a case assertion.
+
+    None when the assertion kind has no Board-case shape
+    (journey_terminal rides the skill-replay path; a page_text
+    absence claim cannot be asserted by the visible_text oracle).
+    """
+
+    assertion = entry.get("assertion")
+    if not isinstance(assertion, Mapping):
+        return None
+    kind = assertion.get("kind")
+    params = assertion.get("params")
+    params = params if isinstance(params, Mapping) else {}
+    subject = assertion.get("subject")
+    subject = subject if isinstance(subject, Mapping) else {}
+    role, name = subject.get("role"), subject.get("name")
+    target = (
+        SemanticTarget(role=str(role), name=str(name))
+        if isinstance(role, str) and role and isinstance(name, str) and name
+        else None
+    )
+    if kind == "element_state":
+        oracle = params.get("oracle")
+        if target is None or oracle not in {"visible", "enabled", "checked"}:
+            return None
+        return ExpectedAssertion(
+            assertion_id="expectation", oracle=oracle, target=target,
+            expected_value=True, origin="user_approved",
+        )
+    if kind == "navigation":
+        expected_url = params.get("expected_url")
+        if not isinstance(expected_url, str) or not expected_url:
+            return None
+        return ExpectedAssertion(
+            assertion_id="expectation", oracle="url", target=None,
+            expected_value=expected_url, origin="user_approved",
+        )
+    if kind == "page_text":
+        text = params.get("text")
+        if not isinstance(text, str) or not text or params.get("present") is False:
+            return None
+        return ExpectedAssertion(
+            assertion_id="expectation", oracle="visible_text",
+            target=SemanticTarget(text=text), expected_value=text,
+            origin="user_approved",
+        )
+    if kind == "field_validation":
+        error_text = params.get("expected_error_text")
+        if not isinstance(error_text, str) or not error_text:
+            return None
+        return ExpectedAssertion(
+            assertion_id="expectation", oracle="visible_text",
+            target=SemanticTarget(text=error_text),
+            expected_value=error_text, origin="user_approved",
+        )
+    return None
+
+
+def case_for_expectation(
+    *, entry: Mapping[str, object], item: HarnessItem, state_url: str,
+    feature_key: str, start_url: str,
+) -> TestCaseSpec:
+    """Compile one expectation entry into its dedicated Board case.
+
+    Navigate to the expectation's page, perform the assertion's own
+    action where it has one (click for navigation, fill for field
+    validation), and evaluate the compiled assertion deterministically
+    through the existing case machinery (doc 21 sections 8.3, 5.6).
+    """
+
+    assertion = entry.get("assertion")
+    assertion = assertion if isinstance(assertion, Mapping) else {}
+    kind = assertion.get("kind")
+    params = assertion.get("params")
+    params = params if isinstance(params, Mapping) else {}
+    subject = assertion.get("subject")
+    subject = subject if isinstance(subject, Mapping) else {}
+    steps: list[CaseAction] = []
+    if state_url != start_url:
+        steps.append(CaseAction(action="navigate", url=state_url))
+    role, name = subject.get("role"), subject.get("name")
+    if kind == "navigation" and isinstance(role, str) and isinstance(name, str):
+        steps.append(
+            CaseAction(action="click", target=SemanticTarget(role=role, name=name))
+        )
+    elif kind == "field_validation":
+        label = subject.get("label")
+        if isinstance(label, str) and label:
+            steps.append(CaseAction(
+                action="fill",
+                target=SemanticTarget(label=label),
+                test_value_key=(
+                    "empty"
+                    if params.get("probe_case") == "empty"
+                    else "invalid_text"
+                ),
+            ))
+    oracle = expectation_assertion(entry)
+    statement = str(entry.get("statement", ""))[:120]
+    return TestCaseSpec(
+        case_id=item.case_id, feature_key=feature_key,
+        title=f"Expectation: {statement}"[:160],
+        kind="exploratory", priority="medium", steps=tuple(steps),
+        expected=(oracle,) if oracle is not None else (),
+    )
+
+
+def missing_test_value_keys(
+    case: TestCaseSpec, values: Iterable[SafeTestValue],
+) -> tuple[str, ...]:
+    """The fill/select keys a case needs that the values do not resolve.
+
+    Pure: the Board loop's data guard (doc 17 section 6.4) refuses a
+    case whose key is listed here, with the safety gate's accounting
+    shape, rather than letting execution reach the by-key lookup
+    without a value.
+    """
+
+    resolved = {entry.key for entry in values}
+    missing: list[str] = []
+    for step in case.steps:
+        key = step.test_value_key
+        if (
+            step.action in {"fill", "select"}
+            and key is not None
+            and key not in resolved
+            and key not in missing
+        ):
+            missing.append(key)
+    return tuple(missing)
+
+
 def ingest_page_index(
     state: HarnessState, *, url: str,
     entries: Sequence[Mapping[str, object]],
+    entry_steps: Sequence[CaseAction] = (),
+    previous_elements: Sequence[str] = (),
 ) -> list[HarnessItem]:
     """Fold one page index into the board; returns only the new items.
 
@@ -247,19 +438,34 @@ def ingest_page_index(
         pairs.append((role, name))
         if role in FIELD_ROLES and name and name not in form_fields:
             form_fields.append(name)
+        # An unnamed control forms a structural-identity item
+        # (doc 24 section 6.2): counted in the denominator and
+        # accounted could_not_check via structural_reason, never
+        # silently skipped.
         parsed.append((
             role, name, occurrence,
             int(entry.get("ordinal", 0) or 0),
             str(entry.get("name_source", "playwright")),
         ))
     page = state.add_state(url=url, elements=pairs, form_fields=tuple(form_fields))
+    if not entry_steps and any(
+        item.state_id == page.state_id and item.locator.get("entry_steps")
+        for item in state.items.values()
+    ):
+        # A routine refresh can land on a state already inventoried through
+        # an opener. Preserve its replay steps and inherited-control exclusions.
+        return []
+    inherited = Counter(previous_elements)
     new_items: list[HarnessItem] = []
     for role, name, occurrence, ordinal, name_source in parsed:
+        if entry_steps and occurrence < inherited[f"{role}|{name}"]:
+            continue
         item_id = item_id_for(page.state_id, role, name, occurrence)
         is_new = item_id not in state.items
         item = state.add_item(
             state_id=page.state_id, case_id=case_id_for(item_id),
-            role=role, name=name, occurrence_index=occurrence,
+            role=role, name=name if name.strip() else "",
+            occurrence_index=occurrence,
         )
         if is_new:
             item.locator = {
@@ -268,5 +474,9 @@ def ingest_page_index(
                 "name_source": name_source,
                 "safety_class": classify_action(role=role, name=name),
             }
+            if not name.strip():
+                item.locator["structural_identity"] = True
+            if entry_steps:
+                item.locator["entry_steps"] = [step.model_dump(mode="json") for step in entry_steps]
             new_items.append(item)
     return new_items

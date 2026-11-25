@@ -19,6 +19,18 @@ def _element(**overrides) -> dict:
     return base
 
 
+def test_lazy_image_is_unassessed_until_loading_finishes():
+    image = {"key": 0, "src": "https://app.test/image.png", "width": 200,
+             "height": 100, "natural_width": 0, "complete": False}
+    loading = measure_state(_probe(images=[image]))["elements"][0]
+    assert loading["verdict"] == "cant_tell"
+    assert not loading["rules_fired"]
+    image["complete"] = True
+    unloaded = measure_state(_probe(images=[image]))["elements"][0]
+    assert unloaded["verdict"] == "cant_tell"
+    assert not unloaded["rules_fired"]
+
+
 def _probe(**overrides) -> dict:
     base = {
         "url": "https://app.example/", "title": "App", "lang": "en",
@@ -47,6 +59,7 @@ def test_broken_image_fires_severe() -> None:
     result = measure_state(_probe(images=[{
         "key": 0, "src": "https://app.example/badge.png", "alt": "badge",
         "natural_width": 0, "natural_height": 0, "width": 80, "height": 20,
+        "complete": True, "response_status": 404,
     }]))
     assert result["elements"][0]["verdict"] == "slop"
 
@@ -56,8 +69,12 @@ def test_contrast_math_and_rule() -> None:
     result = measure_state(_probe(elements=[
         _element(color="rgb(200, 200, 200)"),  # ~1.6:1 on white
     ]))
-    assert result["elements"][0]["verdict"] == "slop_minor"
+    # Doc 24 section 4.3's flag gate: a single moderate minor tell
+    # no longer flags — the element is clean, the tell kept as a
+    # lone tell (still measured, never counted as a flag).
+    assert result["elements"][0]["verdict"] == "clean"
     assert result["elements"][0]["rules_fired"][0]["rule_id"] == "SLOP_CONTRAST"
+    assert result["elements"][0]["lone_tells"][0]["rule_id"] == "SLOP_CONTRAST"
 
 
 def test_dead_end_and_overflow_are_page_signals() -> None:
@@ -79,3 +96,19 @@ def test_js_dedup_groups_and_maps_rules() -> None:
     assert by_rule["DEF_JS_CONSOLE_ERROR"]["severity"] == "minor"
     assert by_rule["DEF_JS_UNCAUGHT"]["severity"] == "serious"
     assert by_rule["DEF_JS_UNHANDLED_REJECTION"]["count"] == 1
+def test_cross_page_variants_are_review_signals_not_score_penalties():
+    from markettwin_execution_orchestrator.slop.measure import compare_components
+
+    def state(url, color):
+        return {"url": url, "page_signals": [], "elements": [{
+            "verdict": "clean", "component": {
+                "role": "button", "name": "Save", "region": "main",
+                "disabled": False, "style": {"color": color},
+            },
+        }]}
+
+    states = [state("https://example.test/a", "red"), state("https://example.test/b", "blue")]
+    compare_components(states)
+    assert states[1]["elements"][0]["verdict"] == "clean"
+    assert states[1]["page_signals"][0]["severity"] == "review"
+    assert "https://example.test/a" in states[1]["page_signals"][0]["detail"]

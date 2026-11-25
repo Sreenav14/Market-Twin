@@ -45,8 +45,9 @@ function isLoopbackHost(host: string) {
   const octets = normalized.split(".").map(Number);
   return octets.length === 4 && octets[0] === 127 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255);
 }
-export function NewRunPage() {
-  const { applicationId = "" } = useParams();
+export function NewRunPage({ applicationIdOverride, fixedKind }: { applicationIdOverride?: string; fixedKind?: "slop" } = {}) {
+  const { applicationId: routeApplicationId = "" } = useParams();
+  const applicationId = applicationIdOverride ?? routeApplicationId;
   const [params] = useSearchParams();
   const requestedTarget = params.get("target") ?? "";
   const navigate = useNavigate();
@@ -55,17 +56,20 @@ export function NewRunPage() {
   const [brief, setBrief] = useState("");
   const [name, setName] = useState("");
   const [testingDepth, setTestingDepth] = useState<TestingDepth>("medium");
+  const [allowOffsiteNavigation, setAllowOffsiteNavigation] = useState(false);
   const requestedMode = params.get("mode");
   // U-P8: one create flow, three run kinds. Legacy ?mode= values map
   // onto their unified successor kinds.
   const initialKind = requestedMode === "legacy_persona" || requestedMode === "persona"
     ? "persona"
     : requestedMode === "slop" ? "slop" : "explore_test";
-  const [runKind, setRunKind] = useState(initialKind);
+  const [runKind, setRunKind] = useState(fixedKind ?? initialKind);
   const [humanActionApprovals, setHumanActionApprovals] = useState(false);
   const [sensitiveActionRules, setSensitiveActionRules] = useState("[]");
+  const [rulesError, setRulesError] = useState<string | null>(null);
   const [syntheticFixtureApproval, setSyntheticFixtureApproval] = useState(false);
-  const [knowledgeIds, setKnowledgeIds] = useState<string[]>([]);
+  const [harnessRunMode, setHarnessRunMode] = useState<"read_only" | "standard">("read_only");
+  const [approvedTestData, setApprovedTestData] = useState<{ key: string; value: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Punish late, reward early (Spec 3 §6.2/§6.4): a failed submit
@@ -73,13 +77,9 @@ export function NewRunPage() {
   // clears the instant its value is fixed (derived, not stored).
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const submitting = useRef(false);
+  const creationRequestId = useRef<string | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const canWrite = canWriteWorkspace(workspace.role);
-  const knowledgeState = useQuery({
-    queryKey: ["ingestion", user.id, workspace.id, applicationId],
-    enabled: canWrite,
-    queryFn: () => api.listIngestion(workspace.id, applicationId),
-  });
   const state = useQuery({
     queryKey: ["test-targets", user.id, applicationId],
     enabled: canWrite,
@@ -136,7 +136,7 @@ export function NewRunPage() {
       setHumanActionApprovals(false);
     }
   }, [approvalsEligible, runKind]);
-  const briefError = submitAttempted && brief.trim().length < 10
+  const briefError = runKind !== "slop" && submitAttempted && brief.trim().length < 10
     ? "Describe your goal in at least 10 characters."
     : null;
   const targetError = submitAttempted && !target
@@ -150,28 +150,47 @@ export function NewRunPage() {
     event.preventDefault();
     if (submitting.current) return;
     setSubmitAttempted(true);
-    if (!target || brief.trim().length < 10) {
+    if (!target || (runKind !== "slop" && brief.trim().length < 10)) {
       return;
     }
+    let parsedRules: unknown[] = [];
+    if (humanActionApprovals) {
+      try {
+        const parsed: unknown = JSON.parse(sensitiveActionRules);
+        if (!Array.isArray(parsed)) throw new Error("not a list");
+        parsedRules = parsed as unknown[];
+      } catch {
+        setRulesError("The approval rules must be a JSON list. Fix the rules under Security and authorization, then try again.");
+        return;
+      }
+    }
+    setRulesError(null);
     submitting.current = true;
     setBusy(true);
     setError(null);
     try {
+      creationRequestId.current ??= crypto.randomUUID();
       const run = await api.createRun(
         applicationId,
         target.id,
-        brief.trim(),
-        knowledgeIds,
+        runKind === "slop" ? "Audit UI quality across all discovered authorized pages and states." : brief.trim(),
         testingDepth,
         name,
         runKind,
         undefined,
         humanActionApprovals && approvalsEligible && runKind === "explore_test",
         syntheticFixtureApproval && fixtureApprovalEligible && runKind === "explore_test",
-        humanActionApprovals ? JSON.parse(sensitiveActionRules) as unknown[] : [],
+        humanActionApprovals ? parsedRules : [],
         undefined,
         true,
+        allowOffsiteNavigation,
+        runKind === "explore_test" ? harnessRunMode : undefined,
+        runKind === "explore_test" && harnessRunMode === "standard"
+          ? approvedTestData.filter((entry) => entry.key.trim().length > 0)
+          : [],
+        creationRequestId.current,
       );
+      creationRequestId.current = null;
       setBrief("");
       navigate(`/runs/${run.id}/overview`);
     } catch (error) {
@@ -185,11 +204,11 @@ export function NewRunPage() {
       setBusy(false);
     }
   }
-  const header = (
+  const header = fixedKind ? null : (
     <PageHeader
       eyebrow="New test"
-      title="Start a test"
-      description="Choose a target, pick the kind of test, and describe what matters."
+      title={runKind === "slop" ? "Configure UI audit" : "Start a test"}
+      description={runKind === "slop" ? "Audit discoverable authorized pages and UI states; coverage gaps are reported." : "Choose a target, pick the kind of test, and describe what matters."}
     />
   );
   if (!canWrite)
@@ -291,6 +310,20 @@ export function NewRunPage() {
       <div className="study-create-layout">
         <form className="study-composer" onSubmit={submit} noValidate>
           {submitAttempted && summaryErrors.length ? <ErrorSummary errors={summaryErrors} /> : null}
+          {!fixedKind ? <fieldset className="run-create-zone" disabled={busy}>
+            <legend>Kind of test</legend>
+            {[
+              ["explore_test", "Explore & Test"],
+              ["persona", "Persona Test"],
+              ["slop", "Check the look"],
+            ].map(([value, label]) => (
+              <label key={value}>
+                <input type="radio" name="execution-mode" value={value}
+                  checked={runKind === value} onChange={() => setRunKind(value)} />
+                {label}
+              </label>
+            ))}
+          </fieldset> : null}
           <section className="run-create-zone" aria-labelledby="what-to-test-heading">
             <h2 id="what-to-test-heading">What to test</h2>
           <div className="composer-knowledge form-grid">
@@ -328,7 +361,7 @@ export function NewRunPage() {
               <p id="app-url-help" className="form-help">Choose an authorized app above to explore its address.</p>
             </div>
           </div> : null}
-          <div className="composer-body">
+          {runKind !== "slop" ? <div className="composer-body">
             <label className="composer-label" htmlFor="test-brief">
               {runKind === "explore_test" ? "What is this app and who is it for?" : "Your testing goal"} <RequiredMark required />
             </label>
@@ -371,53 +404,64 @@ export function NewRunPage() {
                 </button>
               ))}
             </div>
-          </div>
+          </div> : null}
           </section>
           <section className="run-create-zone" aria-labelledby="how-to-execute-heading">
             <h2 id="how-to-execute-heading">How to execute</h2>
           <div className="composer-knowledge form-grid">
-            <label htmlFor="execution-mode">Kind of test</label>
-            <select id="execution-mode" value={runKind} disabled={busy} onChange={(event) => setRunKind(event.target.value)}>
-              <option value="explore_test">Explore &amp; Test — checks every interaction</option>
-              <option value="persona">Persona Test — how it feels to use</option>
-              <option value="slop">Check the look — design quality and JavaScript errors</option>
-            </select>
             {runKind === "explore_test" ? <p className="form-help">The agent explores your app, checks every button, field and link it finds, and proves every problem twice before reporting it. This is the only kind that produces a ready / not-ready verdict.</p> : null}
             {runKind === "persona" ? <p className="form-help">Testers with real conditions — slow phone, keyboard only, first visit — walk the app and report what they felt, in their own words. No scores, and it never changes a verdict.</p> : null}
-            {runKind === "slop" ? <p className="form-help">Measures how the pages look — placeholder text, broken images, contrast, generic wording — and catches JavaScript errors. Reports three separate numbers, never a verdict.</p> : null}
-            <label htmlFor="testing-depth">Testing depth</label>
+            {runKind === "slop" ? <p className="form-help">Audit UI quality: placeholder content, broken images, contrast, generic wording and JavaScript errors. The score describes measured issues, not whether AI created the site. Review page coverage alongside the score.</p> : null}
+            {runKind !== "slop" ? <><label htmlFor="testing-depth">Testing depth</label>
             <select id="testing-depth" value={testingDepth} disabled={busy} onChange={(event) => setTestingDepth(event.target.value as TestingDepth)} aria-describedby="testing-depth-help">
               <option value="low">Low — focused coverage</option>
               <option value="medium">Medium — balanced coverage</option>
               <option value="high">High — broader coverage</option>
             </select>
-            <p id="testing-depth-help" className="form-help">{runKind === "explore_test" ? <>The agent checks every interaction it finds, up to the item budget. Depth controls how far it explores beyond the starting pages. Broader coverage takes longer.</> : runKind === "persona" ? <>Each persona walks the main pages under its conditions. Depth controls how many pages each walk covers.</> : <>Every reachable page is measured once. Depth controls how far the crawl goes beyond the starting pages.</>}</p>
-          </div>
-          <details className="composer-disclosure">
-            <summary>Knowledge for this test <span>Optional</span></summary>
-          <section className="composer-knowledge" aria-labelledby="test-knowledge-heading">
-            <h2 id="test-knowledge-heading" className="visually-hidden">Knowledge for this test <span className="muted">Optional</span></h2>
-            <p className="form-help">Select approved knowledge attached to this application before testers are created. You can select up to 10 sets.</p>
-            {knowledgeState.isPending ? <p className="form-note" role="status">Loading approved knowledge…</p> : knowledgeState.isError ? (
-              <InlineAlert severity="error" title="Could not load knowledge" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void knowledgeState.refetch()}>Try again</Button>} />
-            ) : knowledgeState.data.filter((entry) => entry.status === "approved").length ? (
-              <fieldset className="knowledge-choices"><legend className="visually-hidden">Select approved knowledge sets</legend>
-                {knowledgeState.data.filter((entry) => entry.status === "approved").map((entry) => (
-                  <div className="knowledge-choice" key={entry.id}>
-                    <label><input type="checkbox" className="mt-checkbox" checked={knowledgeIds.includes(entry.id)} disabled={busy || (knowledgeIds.length >= 10 && !knowledgeIds.includes(entry.id))} onChange={(event) => setKnowledgeIds((previous) => event.target.checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id))} /><span><strong>{entry.name}</strong><span className="muted">{entry.knowledge_count} knowledge items · {entry.artifact_count} artifacts · {entry.skill_count} Skills</span></span></label>
-                    <Link className="text-link" to={`/knowledge/review/${entry.id}`} target="_blank" rel="noreferrer">View<span className="visually-hidden"> {entry.name} in a new tab</span></Link>
+            <p id="testing-depth-help" className="form-help">{runKind === "explore_test" ? <>Depth controls exploration coverage.</> : <>Depth controls how many personas are selected.</>}</p></> : null}
+            {runKind === "explore_test" ? <>
+              <fieldset disabled={busy}>
+                <legend>Run mode</legend>
+                <label>
+                  <input type="radio" name="run-mode" value="read_only"
+                    checked={harnessRunMode === "read_only"} onChange={() => setHarnessRunMode("read_only")} />
+                  Read-only
+                </label>
+                <p className="form-help">Looks and checks only. Nothing on the site is changed.</p>
+                <label>
+                  <input type="radio" name="run-mode" value="standard"
+                    checked={harnessRunMode === "standard"} onChange={() => setHarnessRunMode("standard")} />
+                  Standard
+                </label>
+                <p className="form-help">Also fills forms and makes reversible changes, using only test data you approve below.</p>
+              </fieldset>
+              {harnessRunMode === "standard" ? <div className="approved-test-data">
+                <p className="form-help">Test data for form fills in this run. The built-in keys valid_name, valid_email, invalid_email and empty are already covered — add a row only to override one of them or to cover a field the built-ins do not fit. Values are stored with the run and never shown in results.</p>
+                {approvedTestData.map((entry, index) => (
+                  <div className="approved-test-data-row" key={index}>
+                    <label>
+                      Key
+                      <input className="text-input" aria-label={`Test data key ${index + 1}`} value={entry.key} disabled={busy} placeholder="company_name" onChange={(event) => setApprovedTestData((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, key: event.target.value } : row))} />
+                    </label>
+                    <label>
+                      Value
+                      <input className="text-input" aria-label={`Test data value ${index + 1}`} value={entry.value} disabled={busy} onChange={(event) => setApprovedTestData((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, value: event.target.value } : row))} />
+                    </label>
+                    <button type="button" className="text-link" aria-label={`Remove test data row ${index + 1}`} disabled={busy} onClick={() => setApprovedTestData((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}>Remove</button>
                   </div>
                 ))}
-              </fieldset>
-            ) : <p className="muted">No approved knowledge attached yet. <Link className="text-link" to="/knowledge/review" target="_blank" rel="noreferrer">Review knowledge</Link> and attach a set to this application, or continue without knowledge.</p>}
-          </section>
-          </details>
+                <button type="button" className="text-link" disabled={busy} onClick={() => setApprovedTestData((rows) => [...rows, { key: "", value: "" }])}>Add test data</button>
+              </div> : null}
+            </> : null}
+          </div>
           </section>
           <details className="composer-disclosure security-disclosure">
             <summary>Security and authorization</summary>
           <section className="run-create-zone" aria-labelledby="run-security-heading">
             <h2 id="run-security-heading" className="visually-hidden">Security and authorization</h2>
           <p className="form-help">Only controls permitted by the selected target and test mode are available here. Credentials never belong in the test brief or policy fields.</p>
+          <label><input type="checkbox" checked={allowOffsiteNavigation} onChange={(event) => setAllowOffsiteNavigation(event.target.checked)} /> Allow off-site navigation</label>
+          <p className="form-help">The lead agent checks outside navigation. Outside sites are browse-only, with up to 3 domains and 20 minutes of off-site browsing.</p>
           <p className="form-help">Testers start without login setup. If a login or protected interaction blocks execution, the tester pauses and asks for help. You can take control within approved origins or skip that case or journey.</p>
           {approvalsEligible && runKind === "explore_test" ? (
             <section className="composer-knowledge" aria-labelledby="action-approval-heading">
@@ -429,7 +473,8 @@ export function NewRunPage() {
               <p className="form-help">Each approval is bound to one exact action and authorized target, expires after ten minutes, and can be used once. Delete, payment, messaging, role, permission, and data-export actions stay blocked.</p>
               {humanActionApprovals ? <>
                 <label htmlFor="sensitive-action-rules">Declared synthetic effects and reset confirmation (JSON)</label>
-                <textarea className="text-input" id="sensitive-action-rules" value={sensitiveActionRules} onChange={(event) => setSensitiveActionRules(event.target.value)} disabled={busy} rows={5} />
+                <textarea className="text-input" id="sensitive-action-rules" value={sensitiveActionRules} onChange={(event) => { setSensitiveActionRules(event.target.value); setRulesError(null); }} disabled={busy} rows={5} aria-invalid={rulesError ? true : undefined} aria-describedby={rulesError ? "sensitive-action-rules-error" : undefined} />
+                {rulesError ? <FieldError id="sensitive-action-rules-error">{rulesError}</FieldError> : null}
                 <p className="form-help">Declare the exact button name, category, optional named scope, nonsecret resource reference, and test_data_reset_confirmed: true. Empty rules block all effects. Use dedicated synthetic test data only.</p>
               </> : null}
             </section>
@@ -462,13 +507,13 @@ export function NewRunPage() {
                 </>
               ) : (
                 <>
-                  {"Create test"} <ArrowRight size={16} aria-hidden="true" />
+                  {runKind === "slop" ? "Create UI audit" : "Create test"} <ArrowRight size={16} aria-hidden="true" />
                 </>
               )}
             </Button>
           </div>
         </form>
-        <aside className="study-guidance">
+        {runKind !== "slop" ? <aside className="study-guidance">
           <h2>Writing the test brief</h2>
           <p>
             Describe who is using the application and what they need to complete.
@@ -496,7 +541,7 @@ export function NewRunPage() {
                 : "Public target"}
             </span>
           </div>
-        </aside>
+        </aside> : null}
       </div>
     </>
   );

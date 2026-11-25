@@ -28,7 +28,7 @@ export interface AppShellContext {
 /* The primary nav, one list for the desktop sidebar and the mobile
    drawer (sidebar/buttons round): icon + label rows; the active row is
    the raised white pill. Active-state semantics are unchanged — the
-   route-prefix routes (apps, tests, knowledge) keep their manual
+   route-prefix routes (apps, tests) keep their manual
    aria-current computation, the rest use NavLink. */
 function ShellNav({
   applicationsRoute,
@@ -45,8 +45,8 @@ function ShellNav({
      the same list the command palette runs from. */
   const activeById: Record<string, boolean | undefined> = {
     apps: applicationsRoute,
-    tests: runsRoute,
     knowledge: knowledgeRoute,
+    tests: runsRoute,
   };
   const items = NAV_COMMANDS.map((command) => ({
     to: command.href,
@@ -107,10 +107,12 @@ export function AppShell({
       previousPath.current = location.pathname;
       navigationChangedContext.current ||= navigationOpen;
       setNavigationOpen(false);
+      const focusedId = document.activeElement?.id;
+      if (focusedId && location.hash === `#${encodeURIComponent(focusedId)}`) return;
       document.getElementById("main-content")?.focus({ preventScroll: true });
       window.scrollTo({ top: 0 });
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.hash]);
 
   if (workspaceState.status === "loading")
     return (
@@ -146,8 +148,9 @@ export function AppShell({
     );
 
   const applicationTests = /^\/applications\/[^/]+\/runs(?:\/|$)/.test(location.pathname);
-  const applicationsRoute = (location.pathname.startsWith("/applications") && !applicationTests) || location.pathname.startsWith("/targets/");
-  const knowledgeRoute = location.pathname.startsWith("/knowledge/");
+  const knowledgeRoute = location.pathname.startsWith("/knowledge")
+    || /^\/applications\/[^/]+\/knowledge(?:\/|$)/.test(location.pathname);
+  const applicationsRoute = (location.pathname.startsWith("/applications") && !applicationTests && !knowledgeRoute) || location.pathname.startsWith("/targets/");
   const runsRoute =
     applicationTests || location.pathname.startsWith("/runs");
 

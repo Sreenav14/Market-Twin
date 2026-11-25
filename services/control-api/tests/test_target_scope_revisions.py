@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 from markettwin_control_api.api import targets
 from markettwin_control_api.api.target_authorizations import require_authorization_role
+from markettwin_control_api.persistence.models import TargetAllowedOrigin
 from markettwin_control_api.persistence.repositories import TargetRecord
 from markettwin_control_api.persistence.repositories.authorization_repository import (
     TargetAuthorizationRepository,
@@ -162,3 +163,33 @@ async def test_scope_request_is_pending_and_grants_no_authority() -> None:
     assert record.status == "pending"
     assert record.authorized_by_user_id is None
     assert record.authorized_at is None
+
+
+@pytest.mark.asyncio
+async def test_revision_response_matches_stored_origin_flags() -> None:
+    session = MagicMock(spec=AsyncSession)
+
+    async def flush() -> None:
+        for call in session.add.call_args_list:
+            record = call.args[0]
+            if getattr(record, "id", None) is None:
+                record.id = uuid4()
+
+    session.flush = AsyncMock(side_effect=flush)
+    parent = TargetRecord(
+        uuid4(), uuid4(), "Original", "test", "https://example.invalid", False, "active",
+        (AllowedOriginRecord("https", "example.invalid", None, False),),
+    )
+    requested = (AllowedOriginRecord("https", "example.invalid", None, True),)
+    revision = await TargetRepository(session).create_scope_revision(
+        parent=parent, name="New scope", origins=requested
+    )
+    assert revision.allowed_origins == (
+        AllowedOriginRecord("https", "example.invalid", None, False),
+    )
+    stored = [
+        call.args[0]
+        for call in session.add.call_args_list
+        if isinstance(call.args[0], TargetAllowedOrigin)
+    ]
+    assert stored and all(not origin.include_subdomains for origin in stored)

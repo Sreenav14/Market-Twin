@@ -109,11 +109,12 @@ async def get_hitl_summary(test_run_id: UUID, request: Request) -> dict[str, obj
                 RunEvent.event_type.in_((
                     "test_plan.created", "test_case.authenticated", "test_case.completed",
                 )),
-            ).order_by(RunEvent.id).limit(200)
+            ).order_by(RunEvent.id).limit(201)
         )).all()
         summary = summarize_authenticated_coverage([
-            (kind, cast(dict[str, object], payload)) for kind, payload in rows
+            (kind, cast(dict[str, object], payload)) for kind, payload in rows[:200]
         ])
+        summary["truncated"] = len(rows) > 200
         human_states = list(await session.scalars(
             select(HumanActionRequest.status)
             .join(AgentExecution, AgentExecution.id == HumanActionRequest.execution_id)

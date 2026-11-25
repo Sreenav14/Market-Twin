@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { BrandMark } from "../components/ui/BrandMark";
@@ -10,16 +10,14 @@ import { LoginPage } from "../pages/auth/LoginPage";
 import { AuthCallbackPage } from "../pages/auth/AuthCallbackPage";
 import { AuthenticatedRouter } from "./router";
 import { queryClient } from "../lib/query";
-import { HowPage } from "../pages/public/PublicPages";
-import {
-  LandingPage,
-  DashboardPage,
-  TestResultsPage,
-  WatchLivePage,
-} from "../pages/concept";
+const HowPage = lazy(() => import("../pages/public/PublicPages").then(module => ({ default: module.HowPage })));
+const LandingPage = lazy(() => import("../pages/concept/LandingPage").then(module => ({ default: module.LandingPage })));
+const DashboardPage = lazy(() => import("../pages/concept/DashboardPage").then(module => ({ default: module.DashboardPage })));
+const TestResultsPage = lazy(() => import("../pages/concept/TestResultsPage").then(module => ({ default: module.TestResultsPage })));
+const WatchLivePage = lazy(() => import("../pages/concept/WatchLivePage").then(module => ({ default: module.WatchLivePage })));
 
 function AppRoot() {
-  const { pathname, search, state: navigationState } = useLocation();
+  const { pathname, search, hash, state: navigationState } = useLocation();
   const navigate = useNavigate();
   const sessionRequest = useRef(0);
   const [session, setSession] = useState<AsyncState<CurrentUser>>({
@@ -109,19 +107,19 @@ function AppRoot() {
 
   // Concept and public pages stay available while workspace access is resolving.
   if (pathname === "/" || pathname === "/landing") {
-    return <LandingPage onNavigate={handleConceptNavigate}
-      onStartTest={(url) => navigate(`/applications/new?url=${encodeURIComponent(url)}`)} />;
+    return <Suspense fallback={<Spinner />}><LandingPage onNavigate={handleConceptNavigate}
+      onStartTest={(url) => navigate(`/applications/new?url=${encodeURIComponent(url)}`)} /></Suspense>;
   }
   if (pathname === "/examples/dashboard") {
-    return <DashboardPage onNavigate={handleConceptNavigate} />;
+    return <Suspense fallback={<Spinner />}><DashboardPage onNavigate={handleConceptNavigate} /></Suspense>;
   }
   if (pathname === "/examples/results") {
-    return <TestResultsPage onNavigate={handleConceptNavigate} />;
+    return <Suspense fallback={<Spinner />}><TestResultsPage onNavigate={handleConceptNavigate} /></Suspense>;
   }
   if (pathname === "/examples/watch") {
-    return <WatchLivePage onNavigate={handleConceptNavigate} />;
+    return <Suspense fallback={<Spinner />}><WatchLivePage onNavigate={handleConceptNavigate} /></Suspense>;
   }
-  if (pathname === "/how-it-works") return <HowPage />;
+  if (pathname === "/how-it-works") return <Suspense fallback={<Spinner />}><HowPage /></Suspense>;
   if (pathname === "/login" && session.status === "ready") {
     const returnTo: unknown = navigationState?.returnTo;
     return <Navigate to={typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/dashboard"} replace />;
@@ -173,7 +171,7 @@ function AppRoot() {
           }
         />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
-        <Route path="*" element={<Navigate to="/login" state={{ returnTo: pathname + search }} replace />} />
+        <Route path="*" element={<Navigate to="/login" state={{ returnTo: pathname + search + hash }} replace />} />
       </Routes>
     );
   }

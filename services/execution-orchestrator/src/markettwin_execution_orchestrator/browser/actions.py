@@ -3,6 +3,7 @@
 import asyncio
 import re
 import time
+from functools import lru_cache
 from typing import Any, cast
 
 from playwright.async_api import Locator, Page
@@ -58,6 +59,11 @@ def semantic_locator(
     return page.get_by_text(text, exact=True)
 
 
+@lru_cache(maxsize=128)
+def _normalized_name_regex(name: str) -> re.Pattern[str]:
+    return re.compile(r"^\s*" + r"\s+".join(map(re.escape, name.split())) + r"\s*$", re.I)
+
+
 async def resolve_action_locator(
     root: Page | Locator, *, role: str | None = None, name: str | None = None,
     label: str | None = None, text: str | None = None,
@@ -73,7 +79,7 @@ async def resolve_action_locator(
     if text is not None:
         candidates.append((root.get_by_text(text, exact=True), "text_exact"))
     if role is not None and name:
-        normalized = re.compile(r"^\s*" + r"\s+".join(map(re.escape, name.split())) + r"\s*$", re.I)
+        normalized = _normalized_name_regex(name)
         candidates.append((root.get_by_role(cast(Any, role), name=normalized), "role_normalized"))
     if not candidates:
         raise BrowserActionError("Provide a role and name, label, or text.")

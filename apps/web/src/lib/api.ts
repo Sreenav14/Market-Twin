@@ -205,6 +205,25 @@ export interface KnowledgePreviewResponse {
   extraction_issues: KnowledgePreviewIssue[];
 }
 
+export interface KnowledgeFileIndex {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  token_count: number;
+  sha256: string;
+  version: number;
+  status: "generated" | "approved" | "superseded";
+}
+
+export interface KnowledgeFileContent {
+  slug: string;
+  title: string;
+  description: string;
+  markdown: string;
+  evidence: KnowledgePreviewEvidence[];
+}
+
 export interface IngestionSummary {
   id: string;
   workspace_id: string;
@@ -218,6 +237,7 @@ export interface IngestionSummary {
   artifact_count: number;
   skill_count: number;
   issue_count: number;
+  file_count?: number;
   processing_status?: "queued" | "processing" | "ready" | "failed";
   processing_error?: string | null;
   original_source_url?: string | null;
@@ -227,6 +247,7 @@ export interface IngestionSummary {
 
 export interface IngestionEntry extends IngestionSummary {
   preview: KnowledgePreviewResponse;
+  files?: KnowledgeFileIndex[];
 }
 
 export interface AllowedOrigin {
@@ -275,6 +296,7 @@ export interface TestRun {
   configuration_snapshot: Record<string, unknown>;
   human_action_approvals_enabled?: boolean;
   run_kind?: string;
+  harness_run_mode?: "read_only" | "standard";
 }
 export interface PersonaDefinitionSummary {
   persona_id: string;
@@ -312,7 +334,7 @@ export interface ArtifactAccess {
 }
 export interface RunPreflight {
   ready: boolean;
-  checks: { name: string; ready: boolean; reason: string | null }[];
+  checks: { name: string; ready: boolean; reason: string | null; advisory?: boolean }[];
 }
 export interface Finding {
   id: string;
@@ -406,12 +428,13 @@ export interface JourneyDetail {
 }
 
 async function requestForm<T>(path: string, form: FormData, signal?: AbortSignal): Promise<T> {
+  const timeout = AbortSignal.timeout(FETCH_CEILING_MS);
   const response = await fetch(path, {
     method: "POST",
     credentials: "include",
     body: form,
     headers: { "X-MarketTwin-Request": "1" },
-    signal,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   return readResponse<T>(response);
 }
@@ -424,8 +447,16 @@ async function readResponse<T>(response: Response): Promise<T> {
       const body = (await response.json()) as { detail?: unknown };
       if (typeof body.detail === "string") message = body.detail;
       else if (body.detail && typeof body.detail === "object" && "reason" in body.detail && typeof body.detail.reason === "string") message = body.detail.reason;
-      else if (Array.isArray(body.detail))
-        message = "Check the form fields and try again.";
+      else if (Array.isArray(body.detail)) {
+        const issues = body.detail.flatMap((issue: unknown) => {
+          if (!issue || typeof issue !== "object" || !("msg" in issue) || typeof issue.msg !== "string") return [];
+          const location = "loc" in issue && Array.isArray(issue.loc)
+            ? issue.loc.filter((part: unknown) => typeof part === "string" && part !== "body").join(" / ")
+            : "";
+          return [`${location ? `${location}: ` : ""}${issue.msg}`];
+        });
+        message = issues.length ? issues.slice(0, 4).join("; ") : "Check the form fields and try again.";
+      }
     } catch {
       // Preserve the safe fallback when the response is not JSON.
     }
@@ -439,6 +470,14 @@ async function readResponse<T>(response: Response): Promise<T> {
 
   return (await response.json()) as T;
 }
+export const RUN_PAGE_SIZE = 100;
+
+function fetchRunPage(applicationId: string, offset = 0): Promise<TestRun[]> {
+  return request<TestRun[]>(
+    `/api/v1/applications/${applicationId}/test-runs?limit=${RUN_PAGE_SIZE}&offset=${offset}`,
+  );
+}
+
 export const api = {
   listPersonas: (applicationId: string, signal?: AbortSignal) =>
     request<PersonaDefinitionSummary[]>(`/api/v1/applications/${applicationId}/personas`, { signal }),
@@ -449,6 +488,10 @@ export const api = {
     }),
   extendPark: (runId: string) =>
     request<{ parked_at: string; deadline_at: string }>(`/api/v1/test-runs/${runId}/park/extend`, {
+      method: "POST", headers: { "X-MarketTwin-Request": "1" },
+    }),
+  stopRun: (runId: string) =>
+    request<{ test_run_id: string; run_status: string; stop_requested_at: string }>(`/api/v1/test-runs/${runId}/stop`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
     }),
   getRunBoard: (runId: string, signal?: AbortSignal) =>
@@ -502,6 +545,8 @@ export const api = {
     request<IngestionSummary[]>(`/api/v1/workspaces/${workspaceId}/ingestion${applicationId ? `?application_id=${encodeURIComponent(applicationId)}` : ""}`),
   getIngestion: (workspaceId: string, entryId: string) =>
     request<IngestionEntry>(`/api/v1/workspaces/${workspaceId}/ingestion/${entryId}`),
+  getKnowledgeFile: (workspaceId: string, entryId: string, slug: string) =>
+    request<KnowledgeFileContent>(`/api/v1/workspaces/${workspaceId}/ingestion/${entryId}/files/${encodeURIComponent(slug)}`),
   approveIngestion: (workspaceId: string, entryId: string) =>
     request<IngestionEntry>(`/api/v1/workspaces/${workspaceId}/ingestion/${entryId}/approve`, { method: "POST" }),
   deleteIngestion: (workspaceId: string, entryId: string) =>
@@ -542,8 +587,6 @@ export const api = {
     }),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   listWorkspaces: () => request<Workspace[]>("/api/v1/workspaces"),
-  getWorkspace: (workspaceId: string) =>
-    request<Workspace>(`/api/v1/workspaces/${workspaceId}`),
   listApplications: (workspaceId: string) =>
     request<Application[]>(`/api/v1/workspaces/${workspaceId}/applications`),
   getApplication: (applicationId: string) =>
@@ -591,8 +634,16 @@ export const api = {
       `/api/v1/targets/${targetId}/authorization/revoke`,
       { method: "POST" },
     ),
-  listRuns: (applicationId: string) =>
-    request<TestRun[]>(`/api/v1/applications/${applicationId}/test-runs`),
+  listRunsPage: fetchRunPage,
+  listRuns: async (applicationId: string): Promise<TestRun[]> => {
+    // Aggregate callers need complete counts, while the tests page loads on demand.
+    const runs = new Map<string, TestRun>();
+    for (let offset = 0; ; offset += RUN_PAGE_SIZE) {
+      const page = await fetchRunPage(applicationId, offset);
+      for (const run of page) runs.set(run.id, run);
+      if (page.length < RUN_PAGE_SIZE) return [...runs.values()];
+    }
+  },
   getRun: (runId: string, signal?: AbortSignal) =>
     request<TestRun>(`/api/v1/test-runs/${runId}`, { signal }),
   getRunPreflight: (runId: string) => request<RunPreflight>(`/api/v1/test-runs/${runId}/preflight`),
@@ -624,10 +675,6 @@ export const api = {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
       body: JSON.stringify({ lease_id: lease.lease_id, lease_token: lease.lease_token, generation: lease.generation }),
     }),
-  cancelHumanAction: (requestId: string) =>
-    request<{ id: string; status: string }>(`/api/v1/human-actions/${requestId}/cancel`, {
-      method: "POST", headers: { "X-MarketTwin-Request": "1" },
-    }),
   skipHumanAction: (requestId: string) =>
     request<{ id: string; status: "skipped" }>(`/api/v1/human-actions/${requestId}/skip`, {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
@@ -644,9 +691,90 @@ export const api = {
       method: "POST", headers: { "X-MarketTwin-Request": "1" },
       body: JSON.stringify({ approved }),
     }),
-  createRun: (applicationId: string, targetId: string, testBrief: string, knowledgeIds: string[] = [], testingDepth: TestingDepth = "medium", name = "", runKind = "explore_test", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = [], authMode?: "required" | "optional", runtimeHumanAssistance = true) =>
+  researchAppLink: (workspaceId: string, applicationId: string, targetId: string, researchUrl: string) =>
+    request<{ map_id: string; status: string }>(
+      `/api/v1/workspaces/${workspaceId}/applications/${applicationId}/targets/${targetId}/map-builds`,
+      { method: "POST", body: JSON.stringify({ research_url: researchUrl }) },
+    ),
+  learnTask: (applicationId: string, targetId: string, name: string, pageUrl: string, expectedText: string) =>
     request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
       method: "POST",
-        body: JSON.stringify({ target_id: targetId, study_brief: testBrief, run_kind: runKind, runtime_human_assistance: runtimeHumanAssistance, knowledge_entry_ids: knowledgeIds, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}) }),
+      body: JSON.stringify({
+        target_id: targetId, name, study_brief: "Learn a browser task by verifying its visible outcome.",
+        run_kind: "explore_test", harness_run_mode: "read_only",
+        learn_task: { page_url: pageUrl, expected_text: expectedText },
+      }),
+    }),
+  createRun: (applicationId: string, targetId: string, testBrief: string, testingDepth: TestingDepth = "medium", name = "", runKind = "explore_test", authVerification?: { origin: string; marker_selector: string; expected_marker: string; role: string; account_reference: string; auth_only_origins?: string[] }, humanActionApprovals = false, syntheticFixtureApproval = false, sensitiveActionRules: unknown[] = [], authMode?: "required" | "optional", runtimeHumanAssistance = true, allowOffsiteNavigation = false, harnessRunMode?: "read_only" | "standard", approvedTestData: { key: string; value: string }[] = [], creationRequestId?: string) =>
+    request<TestRun>(`/api/v1/applications/${applicationId}/test-runs`, {
+      method: "POST",
+        body: JSON.stringify({ creation_request_id: creationRequestId, target_id: targetId, study_brief: testBrief, run_kind: runKind, runtime_human_assistance: runtimeHumanAssistance, allow_offsite_navigation: allowOffsiteNavigation, testing_depth: testingDepth, ...(name.trim() ? { name: name.trim() } : {}), ...(authVerification ? { auth_verification: authVerification, ...(authMode ? { auth_mode: authMode } : {}) } : {}), ...(humanActionApprovals ? { human_action_approvals: true, sensitive_action_rules: sensitiveActionRules } : {}), ...(syntheticFixtureApproval ? { synthetic_fixture_approval: true } : {}), ...(harnessRunMode === "standard" ? { harness_run_mode: "standard", ...(approvedTestData.length ? { approved_test_data: approvedTestData } : {}) } : {}) }),
     }),
 };
+
+// --- Phase 3: skill library (doc 22 section 12.2) ---------------------------
+
+// The six lifecycle states a skill version can sit in (the shared
+// table in markettwin_shared/app_map_common.py); the words for them
+// live in lib/status.ts under the "skill" source.
+export type SkillLifecycleStatus =
+  | "draft"
+  | "replay_verified"
+  | "active"
+  | "suspect"
+  | "quarantined"
+  | "retired";
+
+export interface AppMapSkillLibraryLine {
+  skill_id: string;
+  name: string;
+  skill_kind: string;
+  lifecycle_status: SkillLifecycleStatus | null;
+  version_id: string | null;
+  version_number: number | null;
+  last_replay_result: string | null;
+  last_replay_at: string | null;
+  replay_count: number;
+  heal_count: number;
+  retired_reason: string | null;
+  diagnosis_model_calls: number;
+  status_reason: string | null;
+  // The latest version's task-source kind: "document" marks a task
+  // candidate (doc 29 section 3.4). The skills endpoint does not send
+  // this yet, so it is undefined in practice and no line is classified
+  // as a candidate until the endpoint exposes it.
+  task_source_kind?: string | null;
+}
+
+export async function fetchAppMapSkills(
+  base: string,
+): Promise<{ items: AppMapSkillLibraryLine[] }> {
+  return request<{ items: AppMapSkillLibraryLine[] }>(`${base}/app-map/skills`);
+}
+
+export interface AppMapSkillUsageVersion {
+  version_id: string;
+  version_number: number;
+  lifecycle_status: SkillLifecycleStatus | null;
+  replay_count: number;
+  heal_count: number;
+  last_replay_result: string | null;
+  last_replay_at: string | null;
+  retired_reason: string | null;
+}
+
+export interface AppMapSkillUsage {
+  skill_id: string;
+  total_model_calls: number;
+  total_model_tokens: number;
+  diagnosis_model_calls: number;
+  events_by_kind: Record<string, number>;
+  latest_version: AppMapSkillUsageVersion | null;
+}
+
+export async function fetchAppMapSkillUsage(
+  base: string,
+  skillId: string,
+): Promise<AppMapSkillUsage> {
+  return request<AppMapSkillUsage>(`${base}/app-map/skills/${skillId}/usage`);
+}

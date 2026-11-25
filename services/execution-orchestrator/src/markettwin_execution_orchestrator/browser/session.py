@@ -16,6 +16,8 @@ from markettwin_execution_orchestrator.browser.contracts import (
     BrowserSessionState,
     NetworkPolicy,
 )
+from markettwin_execution_orchestrator.browser.live_pointer import LiveClickTarget
+from markettwin_execution_orchestrator.browser.offsite import OffsiteBrowsing
 from markettwin_execution_orchestrator.browser.network_diagnostics import HumanNetworkDiagnostics
 
 
@@ -54,12 +56,28 @@ class JourneyBrowserSession:
     js_capture: bool = False
     rejections_harvested: int = 0
     rejections_document: str = ""
+    # Rejection items dropped at harvest because neither the item nor
+    # its document carried a URL to attribute them to (doc 24 §4.1):
+    # counted, never silently lost and never guessed onto a page.
+    rejections_dropped: int = 0
+    rejection_harvest_failures: int = 0
+    last_rejection_harvest_failed: bool = False
+    # Set when a bounded sensitive-challenge inspection could not
+    # answer within its bound (MT-000237, Fix C); drained onto the
+    # page state by the inspecting workflow, never raised.
+    challenge_check_timed_out: bool = False
+    page_setup_failures: int = 0
     fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
     event_buffer: BrowserEventBuffer = field(default_factory=BrowserEventBuffer)
     human_network_diagnostics: HumanNetworkDiagnostics = field(
         default_factory=HumanNetworkDiagnostics,
     )
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    live_click_target: LiveClickTarget | None = None
+    keyboard_only: bool = False
+    live_view_changed: asyncio.Event = field(default_factory=asyncio.Event)
+    offsite: OffsiteBrowsing | None = None
+    provider_handoff_url: str | None = None
 
     def next_action_number(self) -> int:
         """Advance and return the monotonically increasing action number."""

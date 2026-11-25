@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-test("ingest, review, and select approved knowledge before test creation", async ({ page }, testInfo) => {
+test("add a source, review and approve it, then start a test for the attached app", async ({ page }, testInfo) => {
   test.setTimeout(90000);
   const entry = {
     id: "knowledge-one", workspace_id: "workspace", name: "Product requirements", source_name: "requirements.txt",
@@ -17,7 +17,7 @@ test("ingest, review, and select approved knowledge before test creation", async
   };
   let ingested = false;
   let processed = false;
-  let selected: string[] = [];
+  let createBody: Record<string, unknown> | undefined;
   const app = { id: "app", workspace_id: "workspace", name: "Demo application", status: "active" };
   const run = { id: "run", workspace_id: "workspace", application_id: "app", target_id: "target", status: "draft", target_snapshot: { name: "Staging", environment: "staging" }, configuration_snapshot: { study_brief: "Evaluate account creation" } };
   await page.route("**/api/v1/**", async (route) => {
@@ -48,7 +48,7 @@ test("ingest, review, and select approved knowledge before test creation", async
     else if (path === "/api/v1/applications/app/targets") data = [{ id: "target", application_id: "app", name: "Staging", environment: "staging", status: "active", base_url: "https://example.invalid" }];
     else if (path === "/api/v1/targets/target/authorization") data = { status: "authorized", expires_at: null };
     else if (path === "/api/v1/applications/app/test-runs") {
-      if (request.method() === "POST") { selected = request.postDataJSON().knowledge_entry_ids; data = run; }
+      if (request.method() === "POST") { createBody = request.postDataJSON(); data = run; }
       else data = [];
     }
     else if (path === "/api/v1/test-runs/run") data = run;
@@ -65,8 +65,8 @@ test("ingest, review, and select approved knowledge before test creation", async
     });
     await page.screenshot({ path: testInfo.outputPath(`${name}.png`), fullPage: true });
   }
-  await page.goto("/ingestion");
-  await expect(page.getByRole("heading", { name: "Ingestion", exact: true })).toBeVisible();
+  await page.goto("/knowledge/add");
+  await expect(page.getByRole("heading", { name: "Add a source", exact: true })).toBeVisible();
   if (testInfo.project.name === "mobile-chromium") {
     await page.getByRole("button", { name: "Open navigation" }).click();
     const drawer = page.getByRole("dialog", { name: "Workspace navigation" });
@@ -77,18 +77,18 @@ test("ingest, review, and select approved knowledge before test creation", async
     await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Knowledge", exact: true })).toBeVisible();
   }
   await expect(page.getByRole("navigation", { name: "Primary navigation", includeHidden: true }).getByRole("link", { name: "Knowledge", exact: true, includeHidden: true })).toHaveAttribute("aria-current", "page");
-  await inspect("ingestion");
-  await page.getByLabel("Source file", { exact: true }).setInputFiles({ name: "requirements.txt", mimeType: "text/plain", buffer: Buffer.from("Account creation requires an email address.") });
+  await inspect("add-source");
+  await page.getByLabel(/Source file/).setInputFiles({ name: "requirements.txt", mimeType: "text/plain", buffer: Buffer.from("Account creation requires an email address.") });
   await page.getByLabel("Source purpose").selectOption("product_knowledge");
   await page.getByLabel("Knowledge set name").fill("Product requirements");
-  await page.getByRole("button", { name: "Ingest knowledge", exact: true }).click();
+  await page.getByRole("button", { name: "Add source", exact: true }).click();
   await expect(page).toHaveURL(/knowledge\/review\/knowledge-one$/);
   await expect(page.getByRole("progressbar", { name: "Ingestion progress" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve knowledge" })).toHaveCount(0);
   await inspect("processing");
   processed = true;
   await page.getByRole("link", { name: "Back to review knowledge" }).click();
-  await page.getByRole("link", { name: "Review Product requirements", exact: true }).click();
+  await page.getByRole("link", { name: "Product requirements", exact: true }).click();
   await expect(page.getByText("Account requirements", { exact: true })).toBeVisible();
   await expect(page.getByText("Lines 1–4 · text", { exact: true })).toBeVisible();
   expect((await page.getByText("Lines 1–4 · text", { exact: true }).boundingBox())!.width).toBeGreaterThan(100);
@@ -101,7 +101,7 @@ test("ingest, review, and select approved knowledge before test creation", async
   await expect(page.getByText("Available for tests", { exact: true })).toBeVisible();
   await page.getByRole("checkbox", { name: "Demo application", exact: true }).check();
   await page.getByRole("button", { name: "Save applications", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Create test for Demo application", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Start a test for Demo application", exact: true })).toBeVisible();
   await inspect("applications");
   await page.goto("/knowledge/review");
   await expect(page.locator(".row-primary strong").filter({ hasText: "Unreviewed source" })).toBeVisible();
@@ -114,17 +114,20 @@ test("ingest, review, and select approved knowledge before test creation", async
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(page.getByRole("link", { name: "Unreviewed source", exact: true })).toBeVisible();
   await expect(page.getByLabel("Knowledge status")).toHaveValue("all");
-  await page.goto("/ingestion");
+  await page.goto("/knowledge/add");
   await expect(page.locator(".row-primary strong").filter({ hasText: "Product requirements" })).toBeVisible();
   await inspect("sources-list");
-  await page.goto("/applications/app/runs/new");
-  await page.locator(".composer-disclosure > summary").filter({ hasText: "Knowledge for this test" }).click();
-  await expect(page.getByRole("checkbox", { name: /Product requirements/ })).not.toBeChecked();
-  await expect(page.getByText("Unreviewed source", { exact: true })).toHaveCount(0);
-  await page.getByRole("checkbox", { name: /Product requirements/ }).check();
-  await page.getByLabel("Your testing goal").fill("Evaluate account creation against requirements");
-  await inspect("test-selection");
+  // Starting a test from the approved knowledge is a plain run creation:
+  // the retired knowledge picker is gone, so the create request carries
+  // no knowledge_entry_ids (the R0 contract).
+  await page.goto("/knowledge/review/knowledge-one");
+  await page.getByRole("link", { name: "Start a test for Demo application", exact: true }).click();
+  await expect(page).toHaveURL(/applications\/app\/runs\/new$/);
+  await page.getByLabel("What is this app and who is it for?").fill("Evaluate account creation against requirements");
+  await inspect("test-create");
   await page.getByRole("button", { name: /Create test/ }).click();
   await expect(page).toHaveURL(/runs\/run\/overview$/);
-  expect(selected).toEqual(["knowledge-one"]);
+  expect(createBody).toBeDefined();
+  expect(createBody).not.toHaveProperty("knowledge_entry_ids");
+  expect(createBody).toMatchObject({ target_id: "target", study_brief: "Evaluate account creation against requirements" });
 });

@@ -439,3 +439,122 @@ async def test_rerun_freezes_plan_and_preserves_source(
     with pytest.raises(HTTPException) as error:
         await api.create_agent_rerun(source.test_run_id, other, None)
     assert error.value.status_code == 403
+
+
+@pytest.mark.parametrize("incomplete", ["missing_attribute", "missing_study_brief"])
+async def test_rerun_rejects_an_incomplete_source_plan(
+    monkeypatch, snapshot: RuntimeSnapshotRecord, incomplete: str
+) -> None:
+    """A legacy source whose stored plan lacks keys the rerun builder needs
+    must fail with the named 409, not an unhandled KeyError (CTL26-04)."""
+    configuration = {
+        "testing_depth": "high",
+        "knowledge": [{"name": "Approved source"}],
+    }
+    if incomplete != "missing_study_brief":
+        configuration["study_brief"] = "Review application navigation"
+    source = RunRecord(
+        test_run_id=snapshot.test_run_id,
+        workspace_id=uuid4(),
+        application_id=uuid4(),
+        target_id=uuid4(),
+        created_by_user_id=uuid4(),
+        status="completed",
+        target_snapshot={"base_url": "https://example.com"},
+        configuration_snapshot=configuration,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        started_at=None,
+        completed_at=datetime.now(UTC),
+    )
+    personas = [
+        SimpleNamespace(
+            id=uuid4(),
+            ordinal=index,
+            name=f"User {index}",
+            description="A realistic user",
+            attributes={
+                "persona_key": f"persona_{index}",
+                "behavior_traits": ["careful"],
+                **({} if incomplete == "missing_attribute" and index == 2
+                   else {"priorities": ["clarity"]}),
+            },
+        )
+        for index in range(1, 4)
+    ]
+    missions = [
+        SimpleNamespace(
+            id=uuid4(),
+            ordinal=1,
+            title="Find information",
+            objective="Read information",
+            success_criteria=["Information is found"],
+            priority="high",
+        )
+    ]
+
+    class Session:
+        def begin(self):
+            return AsyncContext()
+
+        async def scalars(self, query):
+            rows = personas if "run_personas" in str(query) else missions
+            return SimpleNamespace(all=lambda: rows)
+
+        async def get(self, *_):
+            return SimpleNamespace(persona_id=personas[0].id, mission_id=missions[0].id)
+
+    session = Session()
+
+    async def return_source(**_):
+        return source
+
+    async def return_workspace(**_):
+        return SimpleNamespace(role="owner")
+
+    async def return_target(**_):
+        return SimpleNamespace(target_id=source.target_id)
+
+    async def return_snapshots(**_):
+        return (snapshot,)
+
+    async def never_create(**_):
+        raise AssertionError("an incomplete source must not create a rerun")
+
+    async def user(**_):
+        return source.created_by_user_id
+
+    monkeypatch.setattr(api, "get_authenticated_user_id", user)
+    monkeypatch.setattr(
+        api,
+        "get_database_runtime",
+        lambda _: SimpleNamespace(session_factory=lambda: AsyncContext(session)),
+    )
+    monkeypatch.setattr(
+        api,
+        "TestRunRepository",
+        lambda _: SimpleNamespace(get_for_user=return_source, create=never_create),
+    )
+    monkeypatch.setattr(
+        api, "WorkspaceRepository", lambda _: SimpleNamespace(get_for_user=return_workspace)
+    )
+    monkeypatch.setattr(
+        api, "TargetRepository", lambda _: SimpleNamespace(get_for_user=return_target)
+    )
+    monkeypatch.setattr(
+        api, "TargetAuthorizationRepository", lambda _: SimpleNamespace(get_active=return_target)
+    )
+    monkeypatch.setattr(
+        api, "RuntimeSnapshotRepository", lambda _: SimpleNamespace(list_for_run=return_snapshots)
+    )
+    document = api.prompt_document(snapshot)
+    document["instruction"] = "Review carefully and record confusion."
+    with pytest.raises(HTTPException) as error:
+        await api.create_agent_rerun(
+            source.test_run_id,
+            api.RerunAgentRequest(
+                snapshot_id=snapshot.snapshot_id, prompt_yaml=yaml.safe_dump(document)
+            ),
+            None,
+        )
+    assert error.value.status_code == 409

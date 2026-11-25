@@ -66,10 +66,3 @@ export function TabPanel({
   );
 }
 
-/* Compound form for call sites that render panels conditionally
-   outside the root (legacy shapes): a standalone list + triggers
-   wired to an external panel, keeping the same APG contract. */
-export const TabsList = TabsPrimitive.List;
-export const TabsTrigger = TabsPrimitive.Trigger;
-export const TabsRoot = TabsPrimitive.Root;
-export const TabsContent = TabsPrimitive.Content;

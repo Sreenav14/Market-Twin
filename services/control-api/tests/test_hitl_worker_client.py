@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from markettwin_control_api.api import human_actions
 from markettwin_control_api.config import Settings
-from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient
+from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient, ObserverUnavailableError
 from pydantic import SecretStr
 
 
@@ -64,6 +64,20 @@ async def test_issue_grant_signs_nonce_and_exact_raw_envelope() -> None:
     assert grant.ticket == "t" * 40
     assert grant.viewer_url.scheme == "wss"
     assert "t" * 40 not in repr(grant)
+
+
+@pytest.mark.asyncio
+async def test_observation_conflict_is_distinct_from_worker_outage() -> None:
+    client = HitlWorkerClient(
+        base_url="http://worker.test",
+        secret=SecretStr("unit-test-hitl-key"),
+        transport=httpx.MockTransport(lambda _: httpx.Response(409, text="private detail")),
+    )
+    with pytest.raises(ObserverUnavailableError, match="Browser observation unavailable"):
+        await client.issue_observer_grant(
+            actor_id=uuid4(), browser_session_id=uuid4(), execution_id=uuid4(),
+            journey_id=uuid4(), generation=0,
+        )
 
 
 @pytest.mark.asyncio

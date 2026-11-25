@@ -1,8 +1,8 @@
 """Cooperative operator pause at a completed, replay-safe browser boundary."""
 
 import asyncio
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractContextManager, asynccontextmanager, nullcontext
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
@@ -41,6 +41,7 @@ from markettwin_execution_orchestrator.persistence.human_action_lifecycle_reposi
 
 if TYPE_CHECKING:
     from markettwin_execution_orchestrator.workflow.case_execution import (
+        BrowserHandoffExecution,
         PersonaJourneyExecutionRequest,
     )
 
@@ -180,13 +181,14 @@ async def _authorized(
 
 async def cooperative_pause_checkpoint(
     *,
-    request: "PersonaJourneyExecutionRequest",
+    request: "PersonaJourneyExecutionRequest | BrowserHandoffExecution",
     controller: BrowserController,
     handle: BrowserSessionHandle,
     session: AsyncSession,
     policy: AuthVerificationPolicy | None = None,
     case_timeout: asyncio.Timeout | None = None,
     pause_allowance_seconds: float = COOPERATIVE_PAUSE_ALLOWANCE_SECONDS,
+    wait_context: Callable[[], AbstractContextManager[None]] | None = None,
 ) -> None:
     pause = await session.scalar(
         select(ExecutionPauseRequest)
@@ -202,10 +204,11 @@ async def cooperative_pause_checkpoint(
     if pause is None:
         return
     if case_timeout is None:
-        await _continue_cooperative_pause(
-            pause=pause, request=request, controller=controller, handle=handle,
-            session=session, policy=policy,
-        )
+        with wait_context() if wait_context is not None else nullcontext():
+            await _continue_cooperative_pause(
+                pause=pause, request=request, controller=controller, handle=handle,
+                session=session, policy=policy,
+            )
         return
     async with cooperative_pause_case_deadline(
         case_timeout, allowance_seconds=pause_allowance_seconds,
@@ -219,7 +222,7 @@ async def cooperative_pause_checkpoint(
 async def _continue_cooperative_pause(
     *,
     pause: ExecutionPauseRequest,
-    request: "PersonaJourneyExecutionRequest",
+    request: "PersonaJourneyExecutionRequest | BrowserHandoffExecution",
     controller: BrowserController,
     handle: BrowserSessionHandle,
     session: AsyncSession,
@@ -421,12 +424,16 @@ async def _continue_cooperative_pause(
                         session, pause, actor_id
                     ):
                         raise BrowserPolicyError("The released pause is no longer authorized.")
+                    run = await session.get(TestRun, request.test_run_id, populate_existing=True)
+                    if run is None or run.status != "awaiting_human":
+                        raise BrowserPolicyError("The paused run cannot safely resume.")
                     await lifecycle.finish_verification(
                         request_id=pause.human_request_id,
                         expected_generation=state.control_generation,
                         verified=True,
                     )
                     pause.status, pause.completed_at = "resumed", datetime.now(UTC)
+                    run.status = "running"
                     await session.commit()
                     await controller.end_human_control(
                         session_id=handle.session_id,

@@ -33,12 +33,12 @@ export function TargetsPage() {
           try {
             const authorization = await api.getAuthorization(target.id);
             const active = isAuthorizationActive(authorization);
-            return { target, authorization, active };
+            return { target, authorization, active, authUnknown: false };
           } catch (error) {
             if (error instanceof ApiError && error.status === 404) {
-              return { target, authorization: null, active: false };
+              return { target, authorization: null, active: false, authUnknown: false };
             }
-            return { target, authorization: null, active: false };
+            return { target, authorization: null, active: false, authUnknown: true };
           }
         }),
       );
@@ -136,7 +136,7 @@ export function TargetsPage() {
         />
       ) : (
         <div className="data-list" role="list">
-          {targets.map(({ target, authorization, active }) => {
+          {targets.map(({ target, authorization, active, authUnknown }) => {
             const authStatus = active
               ? "authorized"
               : authorization?.status === "revoked"
@@ -158,10 +158,14 @@ export function TargetsPage() {
                     <span style={{ wordBreak: "break-all" }}>{target.base_url}</span>
                   </div>
                   <NeutralTag>{target.environment}</NeutralTag>
-                  <StatusBadge status={authStatus} />
+                  {authUnknown ? (
+                    <NeutralTag>Not checked</NeutralTag>
+                  ) : (
+                    <StatusBadge status={authStatus} />
+                  )}
                   <Icon name="arrow" size={16} />
                 </Link>
-                {!active && canWrite ? (
+                {!active && !authUnknown && canWrite ? (
                   <Link
                     to={`/targets/${target.id}/authorization`}
                     className="secondary-button compact"

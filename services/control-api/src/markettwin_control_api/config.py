@@ -14,12 +14,8 @@ from sqlalchemy.engine import URL
 class Settings(BaseSettings):
     "Environment based control API settings."
     
-    app_name: str = "MarketTwin"
     app_env: Literal["local", "development", "test", "production"] = "local"
-    log_level: str = "Info"
     
-    control_api_host: str = "127.0.0.1"
-    control_api_port: int = Field(default=8000, ge=1, le=65535)
     web_origin: str = "http://localhost:5173"
     hitl_worker_url: str = "http://127.0.0.1:8020"
     hitl_internal_secret: SecretStr | None = Field(
@@ -52,11 +48,20 @@ class Settings(BaseSettings):
     ollama_model_name: str | None = None
     model_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
+    census_processor_slots: int = Field(default=2, gt=0)
     knowledge_worker_url: str = "http://127.0.0.1:8010"
     knowledge_internal_secret: SecretStr | None = None
     knowledge_model_timeout_seconds: float = Field(default=180, gt=0)
     knowledge_preview_timeout_seconds: float = Field(default=1800, gt=0)
     knowledge_preview_max_bytes: int = Field(default=52428800, gt=0)
+    census_poll_seconds: float = Field(default=5, gt=0)
+    census_orphan_minutes: int = Field(default=30, gt=0)
+    # Phase 4 (doc 23 section 11) [J]: the run-creation preflight —
+    # how long creation waits for one, how often it re-reads the row,
+    # and how recent a completed preflight must be to be reused.
+    preflight_wait_seconds: float = Field(default=600, gt=0)
+    preflight_wait_poll_seconds: float = Field(default=2, gt=0)
+    preflight_reuse_hours: float = Field(default=24, gt=0)
     kafka_bootstrap_servers: str = "localhost:9092"
     
     kafka_security_protocol: Literal[
@@ -100,6 +105,7 @@ class Settings(BaseSettings):
         if self.knowledge_preview_timeout_seconds <= self.knowledge_model_timeout_seconds:
             raise ValueError("Knowledge preview timeout must exceed model timeout.")
         return self
+
     @property
     def database_url(self) -> str:
         """Return the async PostgreSQL database URL."""

@@ -19,6 +19,46 @@ function mount(path: string) {
   return render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
 }
 
+it.each([
+  ["report?source=watch#ui-element-58-e161", "/runs/run", "?source=watch", "#ui-element-58-e161"],
+  ["findings?severity=major", "/runs/run", "?severity=major&view=findings", ""],
+  ["board", "/runs/run/activity", "?view=board", ""],
+  ["human-action", "/runs/run/watch", "", "#human-action-heading"],
+])("canonicalizes the run bookmark %s", async (from, pathname, search, hash) => {
+  vi.spyOn(api, "me").mockResolvedValue(user);
+  vi.spyOn(api, "listWorkspaces").mockResolvedValue([workspace]);
+  vi.spyOn(api, "getRun").mockResolvedValue({
+    id: "run", application_id: app.id, status: "failed", target_snapshot: {}, configuration_snapshot: {},
+  } as TestRun);
+  mount(`/runs/run/${from}`);
+  await waitFor(() => expect(window.location.pathname).toBe(pathname));
+  expect(window.location.search).toBe(search);
+  expect(window.location.hash).toBe(hash);
+});
+
+it("opens standalone Add a source from the sidebar without requiring an application", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(user);
+  vi.spyOn(api, "listWorkspaces").mockResolvedValue([workspace]);
+  vi.spyOn(api, "listApplications").mockResolvedValue([]);
+  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
+  const targets = vi.spyOn(api, "listTargets");
+  mount("/knowledge");
+  await screen.findByRole("heading", { name: "Knowledge", level: 1 });
+  const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+  expect(screen.queryByRole("link", { name: "Add an app" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("link", { name: "Add a source" }));
+  await screen.findByRole("heading", { name: "Add a source", level: 1 });
+  expect(screen.getByRole("textbox", { name: /Knowledge set name/ })).toBeVisible();
+  expect(window.location.pathname).toBe("/knowledge/add");
+  expect(targets).not.toHaveBeenCalled();
+  expect(within(navigation).getByRole("link", { name: "Knowledge" })).toHaveAttribute("aria-current", "page");
+  expect(within(navigation).getByRole("link", { name: "Apps" })).not.toHaveAttribute("aria-current");
+  // One form, no source-type selector: file and link fields together.
+  expect(screen.queryByRole("radiogroup", { name: "Source type" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText(/^Public source link/)).toBeVisible();
+  expect(screen.getByRole("textbox", { name: /Knowledge set name/ })).toBeVisible();
+});
+
 it("requires authentication for the live dashboard instead of displaying sample results", async () => {
   vi.spyOn(api, "me").mockRejectedValue(new ApiError("Sign in required", 401));
   const list = vi.spyOn(api, "listApplications");
@@ -27,6 +67,25 @@ it("requires authentication for the live dashboard instead of displaying sample 
   expect(window.location.pathname).toBe("/login");
   expect(screen.queryByText("Thread & Co.")).not.toBeInTheDocument();
   expect(list).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["/ui-slop", "/runs/new", "?mode=slop", "New test"],
+  ["/settings/members", "/settings/workspace", "", "Settings"],
+  ["/settings/security", "/settings/profile", "", "Settings"],
+])("preserves the legacy destination %s", async (from, path, search, heading) => {
+  vi.spyOn(api, "me").mockResolvedValue(user);
+  vi.spyOn(api, "listWorkspaces").mockResolvedValue([workspace]);
+  vi.spyOn(api, "listApplications").mockResolvedValue([]);
+  mount(from);
+  await screen.findByRole("heading", { name: heading, level: 1 });
+  await waitFor(() => expect(window.location.pathname).toBe(path));
+  expect(window.location.search).toBe(search);
+  if (heading === "Settings") {
+    const navigation = screen.getByRole("navigation", { name: "Settings sections" });
+    expect(within(navigation).getAllByRole("link").map(link => link.textContent))
+      .toEqual(["Profile", "Workspace"]);
+  }
 });
 
 it("keeps sample reports public only at an explicit example address", async () => {
@@ -59,12 +118,12 @@ it("uses actual workspace tests and sends contract approval to its owner review 
   const trayRegion = await screen.findByRole("region", { name: /NEEDS YOU/ });
   const trayLinks = within(trayRegion).getAllByRole("link", { name: /Open the run/ })
     .map((link) => link.getAttribute("href"));
-  expect(trayLinks).toEqual(expect.arrayContaining(["/runs/review/overview", "/runs/replay/overview"]));
+  expect(trayLinks).toEqual(expect.arrayContaining(["/runs/review", "/runs/replay"]));
   expect(screen.getByRole("link", { name: /Watch live/ })).toHaveAttribute("href", "/runs/live/watch");
-  expect(screen.getByRole("link", { name: /Read the full result/ })).toHaveAttribute("href", "/runs/done/results");
+  expect(screen.getByRole("link", { name: /Read the full result/ })).toHaveAttribute("href", "/runs/done");
   expect(screen.getAllByRole("link", { name: /Open the run/ })).toHaveLength(2);
   const drafts = within(screen.getByRole("region", { name: "RECENT TESTS" }));
-  expect(drafts.getByRole("link", { name: /Review draft/ })).toHaveAttribute("href", "/runs/draft/overview");
+  expect(drafts.getByRole("link", { name: /Review draft/ })).toHaveAttribute("href", "/runs/draft");
   expect(drafts.queryByText(/Approved source replay/)).not.toBeInTheDocument();
   expect(screen.getByText("Testing the checkout")).toBeVisible();
   expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
@@ -90,7 +149,7 @@ it("carries a landing URL through sign-in and app creation into target authoriza
   const createTarget = vi.spyOn(api, "createTarget");
   mount("/");
   const url = "https://storefront.example.test/checkout?plan=team";
-  const input = screen.getAllByRole("textbox", { name: "YOUR APP'S ADDRESS" })[0];
+  const input = (await screen.findAllByRole("textbox", { name: "YOUR APP'S ADDRESS" }))[0];
   fireEvent.change(input, { target: { value: url } });
   fireEvent.submit(input.closest("form")!);
   await screen.findByRole("textbox", { name: /email/i });

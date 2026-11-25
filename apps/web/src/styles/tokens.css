@@ -40,7 +40,7 @@
 
   /* The single product theme: Soft Proof (Phase 2a) — warm-neutral surfaces, ink, petrol accent.
      Every surface — public, auth, and workspace — resolves through these
-     tokens; the concept variables live in concept-tokens.css. */
+     tokens; the palette and compatibility aliases follow below. */
   --mt-canvas: var(--paper);
   --mt-surface: var(--card);
   --mt-surface-subtle: var(--notchecked-tint);
@@ -120,7 +120,7 @@
      button — the reference's measurements (36–40px height class,
      14–16px horizontal padding, 10px radius, medium-weight label,
      one soft shadow) expressed in the warm theme's tokens. The recipe
-     itself lives in concept-system.css (the last layer); older layers
+     itself lives in base-components.css (the last layer); older layers
      must not restate button geometry. */
   --btn-height: 38px;
   --btn-height-sm: 32px;
@@ -147,7 +147,7 @@
   --border: var(--mt-border);
   --border-strong: var(--mt-border-strong);
   /* Hallmark signed-in SI-7 (discharges public-round P1-15): the filled
-     primary was unified to flame-deep in concept-system.css, but the
+     primary was unified to flame-deep in base-components.css, but the
      token still resolved to ink, so everything painted from var(--primary)
      — selection, checkbox accents, progress segments, selected states,
      focus outlines — rendered black. One primary: accent-deep (petrol).
@@ -187,3 +187,111 @@
   --ledger-focus: var(--mt-focus);
 }
 
+/* Soft Proof palette and compatibility aliases */
+:root {
+  /* Soft Proof (Phase 2a, Candidate C): warm-neutral light theme.
+     Canonical names first; the legacy concept names below them are
+     aliases re-pointed at the same values so every existing consumer
+     resolves to Soft Proof. */
+  --bg: #F5F4F2;
+  --sidebar-bg: #ECECE9;
+  --surface-raised: #FFFFFF;
+  --sunken: #EFEDEA;
+  --border-soft: #E6E3DE;
+  --border-strong-c: #D6D1CB;
+  --ink-1-c: #1C1917;
+  --ink-2-c: #57534E;
+  --ink-3-c: #79716B;
+  --accent: #0E7490;
+  --accent-deep: #155E75;
+  --accent-deep-hover: #0E7490;
+  --accent-tint: #E6F2F5;
+  --pass: #1A7F37;
+  --fail: #CF222E;
+  --warn: #B54708;
+  --warn-bg: #FFFAEB;
+  --info-c: #475467;
+
+  --paper: var(--bg);
+  --card: #FFFFFF;
+  --ink: var(--ink-1-c);
+  --ink-on-dark: #FFFFFF;
+  --ink-2: var(--ink-2-c);
+  --ink-faint: var(--ink-3-c);
+  --line: var(--border-soft);
+  --plum: #1C1917;
+  --footer-deep: #141210;
+  --band-lilac: var(--sunken);
+  --band-peach: var(--sunken);
+  --band-rose: var(--sunken);
+  --flame: var(--accent);
+  --flame-deep: var(--accent-deep);
+  --flame-deep-hover: var(--accent-deep-hover);
+  --flame-label-band: var(--accent-deep);
+  --works: var(--pass);
+  --works-tint: #EAF6EE;
+  --broken: var(--fail);
+  --broken-tint: #FDECEC;
+  --couldnot: var(--warn);
+  --couldnot-tint: var(--warn-bg);
+  --notchecked: var(--info-c);
+  --notchecked-tint: #F0EEE9;
+  /* Chart categorical (Okabe-Ito, applied in this order, direct labels):
+     sequential data uses the cividis/viridis ramp. Tester colours ARE
+     chart series 1-6 so a tester reads identically in every chart. */
+  --chart-1: #0072B2;
+  --chart-2: #E69F00;
+  --chart-3: #009E73;
+  --chart-4: #D55E00;
+  --chart-5: #CC79A7;
+  --chart-6: #56B4E9;
+  --chart-yellow: #F0E442;
+  --tom: var(--chart-1);
+  --maya: var(--chart-2);
+  --priya: var(--chart-3);
+  --tester-4: var(--chart-4);
+  --tester-5: var(--chart-5);
+  --tester-6: var(--chart-6);
+  --focus-ring: 2px solid #155E75;
+  --focus-ring-dark: 2px solid #FFFFFF;
+  --shadow-soft: 0 1px 2px rgba(28,25,23,.05), 0 8px 24px -12px rgba(28,25,23,.10);
+  --shadow-panel: 0 4px 8px rgba(28,25,23,.06), 0 16px 40px -12px rgba(28,25,23,.16);
+  --shadow-raised: 0 1px 2px rgba(28,25,23,.07), 0 4px 14px rgba(28,25,23,.06);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #17191D;
+  --sidebar-bg: #121418;
+  --surface-raised: #22252B;
+  --card: #22252B;
+  --sunken: #1C1F24;
+  --border-soft: #383D46;
+  --border-strong-c: #626975;
+  --ink-1-c: #F1F0ED;
+  --ink-2-c: #C4C7CE;
+  --ink-3-c: #A3A9B4;
+  --accent: #67D0E8;
+  --accent-deep: #8EDFF0;
+  --accent-deep-hover: #B2EAF5;
+  --accent-tint: #153641;
+  --pass: #77D69A;
+  --fail: #FF9197;
+  --warn: #F6C174;
+  --warn-bg: #382B19;
+  --info-c: #BCC9E0;
+  --info-bg: #263244;
+  --info-border: #62728A;
+  --success-border: #437A56;
+  --danger-border: #A2515B;
+  --warning-border: #9A773F;
+  --on-primary: #17191D;
+  --plum: #121418;
+  --works-tint: #183526;
+  --broken-tint: #3C2229;
+  --notchecked-tint: #2A2E36;
+  --focus-ring: 2px solid #67D0E8;
+  --shadow-soft: 0 2px 12px rgb(0 0 0 / 20%);
+  --shadow-panel: 0 8px 30px rgb(0 0 0 / 35%);
+  --shadow-raised: 0 4px 16px rgb(0 0 0 / 25%);
+}

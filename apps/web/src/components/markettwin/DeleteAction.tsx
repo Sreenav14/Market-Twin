@@ -59,16 +59,6 @@ export function DeleteAction({
           query.queryKey.includes(id),
       });
     }
-    if (kind === "knowledge") {
-      queryClient.removeQueries({
-        predicate: (query) =>
-          ["knowledge-review", "knowledge-source"].includes(String(query.queryKey[0])) &&
-          query.queryKey.includes(workspaceId) && query.queryKey.includes(id),
-      });
-      await queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === "ingestion" && query.queryKey.includes(workspaceId),
-      });
-    }
     await queryClient.invalidateQueries({ queryKey: ["workspace-tests"] });
     if (kind === "target")
       await queryClient.invalidateQueries({ queryKey: ["test-targets"] });
@@ -123,7 +113,7 @@ export function DeleteAction({
       initialFocusRef={cancel}
       description={
         kind === "knowledge"
-          ? "This removes the set from your knowledge library and future test selection. Existing tests keep their saved knowledge and source history."
+          ? "This removes the knowledge set from the library and future selection. Existing tests keep their saved knowledge and source history."
           : kind === "test"
             ? "This permanently removes the test and its results and evidence records. This cannot be undone."
             : `This permanently removes the ${kind}. ${kind === "target" ? "Delete its tests first." : "Delete its tests and targets first."} This cannot be undone.`

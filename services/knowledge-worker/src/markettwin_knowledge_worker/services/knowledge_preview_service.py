@@ -25,6 +25,18 @@ class InvalidPreviewSourceError(ValueError):
     """The uploaded source cannot produce readable evidence."""
 
 
+def extraction_failure_message(error: Exception) -> str:
+    """User-safe reason for a failed extraction.
+
+    Extractors raise coded errors whose messages are written for users
+    (e.g. "Video requires too many clips."); preserve those verbatim.
+    Anything else collapses to the generic unreadable-source message.
+    """
+    if getattr(error, "code", None):
+        return str(error)
+    return "The source could not be read."
+
+
 class KnowledgePreviewService:
     def __init__(self, builder: KnowledgeBuilder, *, timeout_seconds: float = 600) -> None:
         self._builder = builder
@@ -41,7 +53,7 @@ class KnowledgePreviewService:
         except (UnsupportedSourceFormatError, TimeoutError):
             raise
         except Exception as exc:
-            raise InvalidPreviewSourceError("The source could not be read.") from exc
+            raise InvalidPreviewSourceError(extraction_failure_message(exc)) from exc
         if not extraction.units:
             raise InvalidPreviewSourceError("The source has no readable content.")
         result = await self._builder.build(extraction)

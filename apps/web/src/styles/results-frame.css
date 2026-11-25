@@ -1,0 +1,95 @@
+.report-frame {
+  display: grid;
+  gap: var(--mt-space-7);
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.report-frame > * { min-width: 0; }
+.report-frame.result-paper {
+  border-block-start: 0;
+  padding-block: var(--mt-space-5);
+  font-size: 0.9375rem;
+}
+.report-takeaway, .report-section {
+  padding: var(--mt-space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--mt-radius-md);
+}
+.report-takeaway {
+  padding: var(--mt-space-6);
+  border-radius: var(--mt-radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+.report-frame.result-paper h2 { font-size: 20px; line-height: 24px; letter-spacing: normal; }
+.report-frame h3 { font-size: 15px; line-height: 20px; }
+.report-frame p { max-width: 68ch; }
+.report-frame.result-paper .report-takeaway h2 { font-size: 24px; line-height: 32px; }
+.report-takeaway p { color: var(--text-2); margin-block: var(--mt-space-3); }
+.report-eyebrow {
+  color: var(--text-2);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.report-frame .report-verdict {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.report-skeleton { display: grid; gap: var(--mt-space-3); }
+.report-skeleton span { display: block; height: 1rem; width: 45%; border-radius: var(--mt-radius-sm); background: var(--surface-muted); }
+.report-skeleton span:nth-child(2) { height: 2rem; width: 80%; }
+.report-frame pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-matrix table { min-width: max-content; }
+.report-status { display: inline-block; font-weight: 600; }
+.report-status-works { color: var(--works); }
+.report-status-broken { color: var(--broken); }
+.report-status-couldnot { color: var(--couldnot); }
+.report-status-notchecked { color: var(--text-2); }
+.report-status-info { color: var(--primary); }
+.report-key-figures, .report-steps, .report-grid, .report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mt-space-5);
+}
+.report-steps, .report-rows { list-style: none; padding: 0; }
+.report-steps button { display: flex; align-items: center; gap: var(--mt-space-3); text-align: start; }
+.report-steps button, .report-controls button {
+  padding: var(--mt-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--mt-radius-sm);
+}
+.report-frame [aria-pressed="true"] { border-color: var(--primary); }
+.report-key-figures > div { display: flex; flex-direction: column-reverse; }
+.report-key-figures dd {
+  margin: 0;
+  font: 600 24px/30px var(--font-mono);
+}
+.report-key-figures dt, .report-facts { font-size: 12.5px; }
+.report-facts { color: var(--text-2); }
+.report-rows > li + li { border-top: 1px solid var(--border); }
+.report-rows > li, .report-frame details { padding-block: var(--mt-space-3); }
+.report-frame summary { cursor: pointer; }
+.report-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: var(--mt-space-4); align-items: start; }
+.report-frame .tester-panel { min-width: 0; border-radius: var(--mt-radius-md); box-shadow: var(--shadow-soft); }
+.report-frame .report-chart { background: var(--surface); border-radius: var(--mt-radius-md); }
+.report-frame .impression-quote { font-family: var(--font-editorial); font-style: italic; }
+.report-frame .impression-item { padding-block: var(--mt-space-3); }
+.report-frame .impression-item + .impression-item { border-top: 1px solid var(--border); }
+.report-frame .impression-item > p { margin-block: var(--mt-space-2); }
+.report-diff-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--mt-space-3); }
+.report-diff-groups > * { margin: 0; padding-block: var(--mt-space-3); }
+.report-matrix { max-width: 100%; overflow: auto; }
+.report-matrix caption { text-align: start; font-weight: 600; }
+.report-matrix th, .report-matrix td { padding: var(--mt-space-3); text-align: start; }
+.report-matrix button {
+  padding: var(--mt-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--mt-radius-sm);
+  background: var(--surface);
+}
+@media (max-width: 1023px) { .report-cards { grid-template-columns: 1fr; } }

@@ -2,8 +2,16 @@
 
 import pytest
 from markettwin_control_api.config import Settings
-from pydantic import ValidationError
 from sqlalchemy.engine import make_url
+
+
+@pytest.mark.parametrize("field", ["census_processor_slots", "census_poll_seconds", "census_orphan_minutes"])
+@pytest.mark.parametrize("value", [0, -1])
+def test_census_loop_settings_require_positive_values(field, value):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(**{field: value})
 
 
 def test_default_settings() -> None:
@@ -11,9 +19,7 @@ def test_default_settings() -> None:
 
     settings = Settings.model_construct()
 
-    assert settings.app_name == "MarketTwin"
     assert settings.app_env == "local"
-    assert settings.control_api_port == 8000
     assert settings.postgres_host == "localhost"
     assert settings.postgres_port == 5432
     assert settings.kafka_bootstrap_servers == "localhost:9092"
@@ -36,19 +42,13 @@ def test_hitl_secret_uses_worker_environment_name(monkeypatch: pytest.MonkeyPatc
     assert settings.hitl_internal_secret.get_secret_value() == "canonical" * 4
 
 
-@pytest.mark.parametrize("environment", ["development", "production"])
-def test_nonlocal_knowledge_worker_requires_secret(environment: str) -> None:
-    with pytest.raises(ValidationError, match="required outside local/test"):
-        Settings.model_validate({"app_env": environment, "knowledge_internal_secret": None})
+@pytest.mark.parametrize(
+    "field",
+    ["preflight_wait_seconds", "preflight_wait_poll_seconds", "preflight_reuse_hours"],
+)
+@pytest.mark.parametrize("value", [0, -1])
+def test_preflight_wait_settings_require_positive_values(field, value):
+    from pydantic import ValidationError
 
-
-@pytest.mark.parametrize("environment", ["local", "test", "production"])
-def test_configured_knowledge_secret_must_be_long_enough(environment: str) -> None:
-    with pytest.raises(ValidationError, match="at least 32 characters"):
-        Settings.model_validate({"app_env": environment, "knowledge_internal_secret": "short"})
-
-
-
-def test_knowledge_secret_rejects_whitespace_only() -> None:
-    with pytest.raises(ValidationError, match="at least 32 characters"):
-        Settings.model_validate({"knowledge_internal_secret": " " * 32})
+    with pytest.raises(ValidationError):
+        Settings(**{field: value})

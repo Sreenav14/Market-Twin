@@ -625,3 +625,17 @@ async def test_list_applications_carries_the_summary_per_application(
             [with_summary.application_id, without_summary.application_id],
         )
     ]
+
+
+def test_report_verdict_reads_projected_market_verdict() -> None:
+    """W1 (doc 19 section 6.2): the application-list reader returns the
+    Board pipeline's projected verdict word verbatim. The projected section
+    carries coverage and the confirmed count and deliberately NO journey
+    fields — the reader needs nothing else."""
+    payload = {
+        "market_verdict": {
+            "verdict": "not_ready", "coverage": 0.75, "confirmed_defects": 2,
+        },
+    }
+
+    assert report_verdict(payload) == "not_ready"

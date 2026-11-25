@@ -1,5 +1,6 @@
 """Persist source-backed knowledge sets using the existing asset boundary."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -10,11 +11,12 @@ from markettwin_database.models.knowledge import (
     BlueprintVersion,
     BlueprintVersionAsset,
     IngestionEntry,
+    KnowledgeFile,
     ProductBlueprint,
     SourceAsset,
 )
 from markettwin_shared.knowledge_preview import KnowledgePreviewResponse
-from sqlalchemy import select
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -25,6 +27,18 @@ class IngestionRecord:
     blueprint: ProductBlueprint
     asset: AssetVersion
     pin: BlueprintVersionAsset
+
+
+@dataclass(frozen=True)
+class KnowledgeFileInput:
+    """One rendered file to index, as produced by the processor (doc 33 §3.4)."""
+
+    slug: str
+    title: str
+    description: str
+    object_key: str
+    sha256: str
+    token_count: int
 
 
 class IngestionRepository:
@@ -164,6 +178,122 @@ class IngestionRepository:
         await self.session.refresh(version)
         return IngestionRecord(entry, version, blueprint, asset, pin)
 
+    async def current_knowledge_file_version(self, entry_id: UUID) -> int:
+        """Highest knowledge-file version written for the entry (0 = none)."""
+        value = await self.session.scalar(
+            select(func.max(KnowledgeFile.version)).where(
+                KnowledgeFile.ingestion_entry_id == entry_id
+            )
+        )
+        return int(value or 0)
+
+    async def record_knowledge_files(
+        self,
+        record: IngestionRecord,
+        *,
+        version: int,
+        files: Sequence[KnowledgeFileInput],
+    ) -> None:
+        """Index one processing pass's files at ``version`` (doc 33 §3.4).
+
+        The previous version's unapproved rows are superseded in the same
+        transaction; approved rows are never touched by a reprocess.
+        """
+        await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.ingestion_entry_id == record.entry.id,
+                KnowledgeFile.version < version,
+                KnowledgeFile.status == "generated",
+            )
+            .values(status="superseded")
+        )
+        self.session.add_all(
+            [
+                KnowledgeFile(
+                    id=uuid4(),
+                    workspace_id=record.entry.workspace_id,
+                    ingestion_entry_id=record.entry.id,
+                    slug=file.slug,
+                    title=file.title,
+                    description=file.description,
+                    object_key=file.object_key,
+                    sha256=file.sha256,
+                    token_count=file.token_count,
+                    version=version,
+                    status="generated",
+                )
+                for file in files
+            ]
+        )
+        await self.session.flush()
+
+    async def list_knowledge_files(self, entry_id: UUID) -> list[KnowledgeFile]:
+        """The entry's current-version files, superseded rows excluded."""
+        version = await self.current_knowledge_file_version(entry_id)
+        if not version:
+            return []
+        result = await self.session.execute(
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.ingestion_entry_id == entry_id,
+                KnowledgeFile.version == version,
+                KnowledgeFile.status != "superseded",
+            )
+            .order_by(KnowledgeFile.slug)
+        )
+        return list(result.scalars().all())
+
+    async def get_knowledge_file(
+        self, entry_id: UUID, slug: str
+    ) -> KnowledgeFile | None:
+        for file in await self.list_knowledge_files(entry_id):
+            if file.slug == slug:
+                return file
+        return None
+
+    async def knowledge_file_counts(
+        self, entry_ids: Sequence[UUID]
+    ) -> dict[UUID, int]:
+        """Current-version file count per entry, for list summaries."""
+        if not entry_ids:
+            return {}
+        latest = (
+            select(
+                KnowledgeFile.ingestion_entry_id.label("entry_id"),
+                func.max(KnowledgeFile.version).label("version"),
+            )
+            .where(KnowledgeFile.ingestion_entry_id.in_(entry_ids))
+            .group_by(KnowledgeFile.ingestion_entry_id)
+            .subquery()
+        )
+        result = await self.session.execute(
+            select(KnowledgeFile.ingestion_entry_id, func.count())
+            .join(
+                latest,
+                and_(
+                    KnowledgeFile.ingestion_entry_id == latest.c.entry_id,
+                    KnowledgeFile.version == latest.c.version,
+                ),
+            )
+            .where(KnowledgeFile.status != "superseded")
+            .group_by(KnowledgeFile.ingestion_entry_id)
+        )
+        return {entry_id: count for entry_id, count in result.all()}
+
+    async def update_knowledge_file(
+        self,
+        file: KnowledgeFile,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        if title is not None:
+            file.title = title
+        if description is not None:
+            file.description = description
+        await self.session.flush()
+
     async def approve(self, record: IngestionRecord, user_id: UUID) -> None:
         validate_approval(record)
         now = datetime.now(UTC)
@@ -173,6 +303,17 @@ class IngestionRepository:
         record.pin.roles_confirmed_by_user_id = user_id
         record.pin.roles_confirmed_at = now
         record.asset.status = "included"
+        file_version = await self.current_knowledge_file_version(record.entry.id)
+        if file_version:
+            await self.session.execute(
+                update(KnowledgeFile)
+                .where(
+                    KnowledgeFile.ingestion_entry_id == record.entry.id,
+                    KnowledgeFile.version == file_version,
+                    KnowledgeFile.status == "generated",
+                )
+                .values(status="approved")
+            )
         await self.session.flush()
 
 

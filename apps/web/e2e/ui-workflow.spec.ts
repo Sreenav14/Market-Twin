@@ -234,11 +234,10 @@ test("repeated persona claims stay under Needs Verification and out of confirmed
   await unverified.getByRole("button", { name: new RegExp(observations[1].title) }).click();
   await page.getByRole("link", { name: "Open finding details" }).click();
   await expect(page.getByText(/No evidence references were attached/)).toBeVisible();
-  await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report" }).click();
-  await expect(page.getByRole("region", { name: "Test result" })).toContainText("1 verified product issue");
-  await expect(page.locator("#report-verified .ledger-finding-card")).toHaveCount(1);
-  await expect(page.locator("#report-verified")).toContainText(observations[2].title);
-  await expect(page.locator("#report-verified")).not.toContainText(observations[0].title);
+  await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Summary" }).click();
+  const priorities = page.getByRole("heading", { name: "What to check first" }).locator("..");
+  await expect(priorities).toContainText(observations[2].title);
+  await expect(priorities).not.toContainText(observations[0].title);
 });
 
 test("completed test: triage, detail and report", async ({
@@ -247,7 +246,7 @@ test("completed test: triage, detail and report", async ({
   await mockApi(page);
   await page.goto(`/runs/${runId}/overview`);
   await expect(
-    page.getByRole("heading", { name: "2 findings to review" }),
+    page.getByRole("region", { name: "Takeaway" }),
   ).toBeVisible();
   await expect(page.getByText("Planning is not connected yet.")).toHaveCount(0);
   await checkLayoutAndAccessibility(page);
@@ -255,10 +254,7 @@ test("completed test: triage, detail and report", async ({
     path: testInfo.outputPath("overview.png"),
     fullPage: true,
   });
-  await page
-    .getByRole("navigation", { name: "Test sections" })
-    .getByRole("link", { name: /Findings/ })
-    .click();
+  await page.goto(`/runs/${runId}/findings`);
   await page.getByLabel("Severity", { exact: true }).selectOption("high");
   await expect(page).toHaveURL(/severity=high/);
   const selectedFinding = page.getByRole("button", { name: new RegExp(finding.title) });
@@ -280,13 +276,13 @@ test("completed test: triage, detail and report", async ({
   await checkLayoutAndAccessibility(page);
   await page
     .getByRole("navigation", { name: "Test sections" })
-    .getByRole("link", { name: "Report" })
+    .getByRole("link", { name: "Summary" })
     .click();
   await expect(
-    page.getByRole("region", { name: "Test result" }),
+    page.getByRole("region", { name: "Takeaway" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Journey Outcomes" }),
+    page.getByRole("heading", { name: "Journey outcomes" }),
   ).toBeVisible();
   await checkLayoutAndAccessibility(page);
   await page.screenshot({
@@ -322,8 +318,7 @@ test("pending evaluation automatically displays the persisted report when ready"
   await expect(page.getByRole("heading", { name: "Preparing evaluation" })).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
   ready = true;
-  await expect(page.getByRole("region", { name: "Test result" })).toBeVisible({ timeout: 15_000 });
-  await page.getByText("Read full generated narrative summary").click();
+  await expect(page.getByRole("region", { name: "Takeaway" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(results.report.executive_summary, { exact: true })).toBeVisible();
   expect(requests).toBeGreaterThan(1);
   await checkLayoutAndAccessibility(page);
@@ -370,7 +365,7 @@ test("test creation sends a real request with the chosen brief", async ({
 }, testInfo) => {
   await mockApi(page);
   await page.goto(`/applications/${appId}/runs/new`);
-  await expect(page.getByLabel("Your testing goal")).toBeVisible();
+  await expect(page.getByLabel("What is this app and who is it for?")).toBeVisible();
   await page.getByLabel("Test name", { exact: false }).fill("Pricing clarity");
   await expect(page.getByLabel("Testing depth")).toHaveValue("medium");
   await page.getByLabel("Testing depth").selectOption("low");
@@ -378,7 +373,7 @@ test("test creation sends a real request with the chosen brief", async ({
   await page
     .getByRole("button", { name: "Pricing clarity", exact: true })
     .click();
-  await expect(page.getByLabel("Your testing goal")).toHaveValue(
+  await expect(page.getByLabel("What is this app and who is it for?")).toHaveValue(
     /first-time customer/,
   );
   await checkLayoutAndAccessibility(page);
@@ -393,12 +388,13 @@ test("test creation sends a real request with the chosen brief", async ({
   await page.getByRole("button", { name: "Create test", exact: true }).click();
   expect((await request).postDataJSON()).toEqual({
     target_id: targetId,
-    knowledge_entry_ids: [],
-    testing_depth: "low",
-    runtime_human_assistance: true,
-    name: "Pricing clarity",
     study_brief:
       "Can a first-time customer understand our pricing and confidently choose the right plan?",
+    run_kind: "explore_test",
+    runtime_human_assistance: true,
+    allow_offsite_navigation: false,
+    testing_depth: "low",
+    name: "Pricing clarity",
   });
   await expect(page).toHaveURL(new RegExp(`/runs/${runId}/overview`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("MT-000042 · Checkout confidence");

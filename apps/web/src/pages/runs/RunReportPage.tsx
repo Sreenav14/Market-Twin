@@ -1,419 +1,132 @@
-import { Link, useOutletContext, useSearchParams } from "react-router-dom";
-import {
-  ArrowUpRight,
-  ShieldAlert,
-  AlertTriangle,
-  CheckCircle2,
-} from "lucide-react";
-import { RunContext } from "../../layouts/RunLayout";
-import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
-import { CopyButton } from "../../components/markettwin/CopyButton";
-import { SeverityBadge } from "../../components/ui/StatusBadge";
-import { ProgressBar } from "../../components/ui/Progress";
-import { RunAssessmentView } from "../../components/markettwin/RunAssessmentView";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useLocation, useOutletContext } from "react-router-dom";
 import { FeatureCases } from "../../components/markettwin/FeatureCases";
-import { ReportAnalytics, ReportNavigation, reportView } from "../../components/markettwin/ReportIntelligence";
-import {
-  formatDate,
-  findingClassification,
-  isConfirmedFinding,
-  reportMetrics,
-  reportVerdict,
-  sortFindings,
-} from "../../lib/results";
-import type { Finding } from "../../lib/api";
+import { StackedBar, type BarSegment } from "../../components/markettwin/ResultFigures";
+import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
+import { SlopEntryAssessment } from "../../components/markettwin/SlopEntryAssessment";
+import type { RunContext } from "../../layouts/RunLayout";
+import { api, type RunResults, type TestRun } from "../../lib/api";
+import { statusEntry } from "../../lib/status";
 import { ContractReport } from "./ContractReport";
 import { HarnessReport } from "./HarnessReport";
-import { PersonaImpressions, type PersonaImpressionsPayload } from "./PersonaImpressions";
-import { SlopReport, type SlopReportPayload } from "./SlopReport";
-import { statusLabel } from "../../lib/format";
-import { StackedBar, type BarSegment } from "../../components/markettwin/ResultFigures";
-import { statusEntry } from "../../lib/status";
-import type { JourneyOutcome } from "../../lib/api";
+import { PersonaImpressions, PersonaTakeaway, PersonaTasks } from "./PersonaImpressions";
+import {
+  Disclosure, FirstFindings, ReportActivity, ReportDiff, ReportEyebrow, ReportFacts,
+  ReportFindings, ReportFrame, count, record, records, reportKind, reportScopePartial, useReportFlow, useReportHandoffs,
+} from "./ReportFrame";
+import { SlopReport, lookDiffItems, type SlopReportPayload } from "./SlopReport";
 
-// Fixed order everywhere outcomes are shown: worked, broken, partly, could not check.
-const OUTCOME_ORDER: readonly string[] = ["passed", "failed", "partial", "inconclusive", "none"];
-function outcomeSegments(outcomes: [string, number][]): BarSegment[] {
-  const byKey = new Map(outcomes);
-  const ordered = OUTCOME_ORDER.filter((key) => byKey.has(key));
-  const extra = outcomes.map(([key]) => key).filter((key) => !OUTCOME_ORDER.includes(key));
-  return [...ordered, ...extra].map((key) => {
-    const known = key !== "none" && ["passed", "failed", "partial", "inconclusive"].includes(key)
-      ? statusEntry("journeyOutcome", key as JourneyOutcome)
-      : null;
-    return {
-      key,
-      word: key === "none" ? "Not reported" : known ? known.word : statusLabel(key),
-      count: byKey.get(key) ?? 0,
-      tone: known ? known.tone : "notchecked",
-    };
-  });
+function findingDiffItems(results: RunResults) {
+  return results.findings.map(item => ({
+    key: JSON.stringify([item.finding_kind, item.category, item.title]),
+    label: item.title, severity: item.severity, href: `/runs/${results.test_run_id}/findings/${item.id}`,
+  }));
 }
 
-function ReportFindingCard({ finding, runId }: { finding: Finding; runId: string }) {
-  const classification = findingClassification(finding);
-  const isConfirmed = isConfirmedFinding(finding);
-  return (
-    <li className="ledger-finding-card">
-      <div className="ledger-finding-meta">
-        <SeverityBadge severity={finding.severity} />
-        <span>{statusLabel(classification)} · {finding.category.replaceAll("_", " ")}</span>
-      </div>
-      <h4>
-        <Link to={`/runs/${runId}/findings/${finding.id}`}>
-          {finding.title}
-          <ArrowUpRight size={16} aria-hidden="true" />
-        </Link>
-      </h4>
-      <p>{finding.summary}</p>
-      {finding.recommendation ? (
-        <p><strong>Recommendation: </strong>{finding.recommendation}</p>
-      ) : null}
-      <div className="ledger-finding-actions">
-        {finding.evidence.step_ids.length > 0 && finding.journey_ids[0] ? (
-          <Link
-            to={finding.journey_ids.length === 1
-              ? `/runs/${runId}/journeys/${finding.journey_ids[0]}?step=${finding.evidence.step_ids[0]}`
-              : `/runs/${runId}/findings/${finding.id}`}
-            className="ledger-evidence-link"
-          >
-            {finding.journey_ids.length === 1 ? `Inspect step ${finding.evidence.step_ids[0]} evidence →` : "Review linked evidence →"}
-          </Link>
-        ) : (
-          <span className="ledger-fineprint">
-            {isConfirmed ? statusLabel(classification) : "Not confirmed"}
-          </span>
-        )}
-        <span className="ledger-fineprint">
-          {finding.journey_ids.length} {finding.journey_ids.length === 1 ? "journey" : "journeys"} affected
-        </span>
-      </div>
-    </li>
-  );
+function SavedReport({ run, data, userId }: { run: TestRun; data: RunResults; userId: string }) {
+  const { hash } = useLocation();
+  const { report, findings } = data;
+  const { payload } = report;
+  const kind = reportKind(payload, run);
+  const coverage = record(payload.coverage);
+  const boardCoverage = record(record(payload.board).coverage);
+  const budgets = record(payload.budget_counters);
+  const totals = record(payload.findings);
+  const flow = useReportFlow(run, userId);
+  const handoffs = useReportHandoffs(run.id, userId);
+  const journeys = useQuery({
+    queryKey: ["journeys", userId, run.id],
+    queryFn: ({ signal }) => api.getRunJourneys(run.id, signal),
+    enabled: kind === "explore_test",
+    retry: false,
+  });
+  const eyebrow = <ReportEyebrow run={run} kind={kind} />;
+  const getItems = kind === "slop"
+    ? (result: RunResults) => lookDiffItems(result.report.payload as SlopReportPayload, result.test_run_id)
+    : findingDiffItems;
+  const rerunDiff = <ReportDiff run={run} userId={userId} kind={kind} items={getItems(data)} getItems={getItems}
+    partial={reportScopePartial(payload)} desktopOnly={kind === "slop" && coverage.desktop_scan === true} />;
+  const activity = <ReportActivity flow={flow.data} coverage={coverage} slop={kind === "slop"} handoffs={handoffs.data}
+    checkpoints={payload.activity_checkpoints} />;
+  const facts = <ReportFacts run={run} report={report}>
+    {kind === "contract" && payload.contract_version != null && typeof payload.contract_hash === "string" ?
+      <p>contract v{count(payload.contract_version) ?? String(payload.contract_version)} · {payload.contract_hash}</p> : null}
+    {kind === "persona" && count(record(payload.collection).model_calls) !== undefined ?
+      <p>{count(record(payload.collection).model_calls)} model calls</p> : null}
+    {kind === "explore_test" && typeof budgets.items_started === "number" && typeof budgets.item_budget === "number" ?
+      <p>Item budget · {count(budgets.items_started)} used · {count(Math.max(0, budgets.item_budget - budgets.items_started))} remaining</p> : null}
+  </ReportFacts>;
+  const technical = <>
+    {kind !== "slop" ? <p className="button-row">
+      <Link to="?view=evaluation">Evaluation records</Link>
+      <Link to="?view=perspectives">Tester perspectives</Link>
+      <Link to="?view=findings">Findings list</Link>
+    </p> : null}
+    {flow.data ? <pre>{JSON.stringify({ edges: flow.data.edges, execution_policy: flow.data.execution_policy, revision: flow.data.revision }, null, 2)}</pre> : null}
+    {totals.severity_counts ? <pre>{JSON.stringify(totals.severity_counts, null, 2)}</pre> : null}
+    {(kind === "legacy" || kind === "deep_feature_v1") && payload.assessment ? <>
+      <h3>Model assessment</h3><pre>{JSON.stringify(payload.assessment, null, 2)}</pre>
+    </> : null}
+    {kind === "persona" ? records(payload.personas).flatMap(persona => records(persona.tasks).flatMap((task, index) => task.action_trace
+      ? [<Disclosure key={`${persona.persona_id}-${index}`} label={`Action trace · ${persona.persona_name ?? "Persona"}`}>
+        <pre>{JSON.stringify(task.action_trace, null, 2)}</pre>
+      </Disclosure>] : [])) : null}
+  </>;
+  const frame = { rerunDiff, activity, facts, technical };
+  const findingSections = {
+    first: <FirstFindings runId={run.id} findings={findings} checked={kind === "explore_test" && boardCoverage.checked === boardCoverage.denominator &&
+      record(boardCoverage.counts).broken === 0 ? count(boardCoverage.checked) : undefined} unit="checks" />,
+    observations: <ReportFindings runId={run.id} findings={findings} totals={totals} evaluation={payload.evaluation_records} />,
+  };
+  if (kind === "slop") return <SlopReport {...frame} runId={run.id} hash={hash} eyebrow={eyebrow} payload={payload as SlopReportPayload} />;
+  if (kind === "explore_test") return <HarnessReport {...frame} {...findingSections} eyebrow={eyebrow}
+    runId={run.id} payload={payload} summary={report.executive_summary} journeys={journeys.data ?? []} handoffs={handoffs.data} />;
+  if (kind === "contract") return <ContractReport {...frame} {...findingSections} eyebrow={eyebrow} runId={run.id} payload={payload} />;
+  if (kind === "persona") return <ReportFrame {...frame}
+    takeaway={<>{eyebrow}<PersonaTakeaway payload={payload} /></>}
+    middle={<PersonaImpressions payload={payload} />}
+    inventory={<PersonaTasks payload={payload} />} />;
+
+  const journeyStats = record(payload.journeys);
+  const feature = kind === "deep_feature_v1";
+  const composition = feature ? coverage : record(journeyStats.outcome_counts);
+  const keys = feature ? ["passed", "failed_cases", "blocked", "inconclusive", "not_run"] : ["passed", "failed", "partial", "inconclusive", "none"];
+  const total = feature ? coverage.planned : journeyStats.total;
+  const segments = keys.flatMap((key): BarSegment[] => {
+    const value = composition[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return [];
+    const status = key === "failed_cases" ? { word: "Failed", tone: "broken" } as const
+      : key === "not_run" ? { word: "Not checked", tone: "notchecked" } as const
+      : key === "blocked" ? { word: "Blocked", tone: "notchecked" } as const
+      : key === "none" ? { word: "Not recorded", tone: "notchecked" } as const
+      : statusEntry("journeyOutcome", key);
+    return [{ key, count: value, ...status }];
+  });
+  const totalAccountsForOutcomes = typeof total === "number" && total > 0 && segments.reduce((sum, item) => sum + item.count, 0) === total;
+  const assertionsFailed = count(coverage.failed_assertions);
+  const middle = totalAccountsForOutcomes || (feature && (count(total) !== undefined || assertionsFailed !== undefined)) ?
+    <section className="report-section"><h2>{feature ? "Case outcomes" : "Journey outcomes"}</h2>
+      {totalAccountsForOutcomes ? <StackedBar segments={segments} total={total} unit={feature ? "cases" : "journeys"} /> : <>
+        {count(total) !== undefined ? <p>{count(total)} cases planned</p> : null}
+        {segments.length ? <dl>{segments.map(outcome => <div key={outcome.key}><dt>{outcome.word}</dt><dd>{count(outcome.count)} cases</dd></div>)}</dl> : null}
+      </>}
+      {feature && assertionsFailed !== undefined ? <dl><div><dt>Failed assertions</dt><dd>{assertionsFailed}</dd></div></dl> : null}
+    </section> : null;
+  return <ReportFrame {...frame} {...findingSections} middle={middle}
+    takeaway={<>{eyebrow}{report.executive_summary ? <h2 className="report-verdict">{report.executive_summary}</h2> : null}
+      {!feature ? <p role="note">This report was produced by the older exploratory mode. Its findings are unverified observations.</p> : null}</>}
+    inventory={feature ? <Disclosure id="report-feature-cases" label="Feature cases" initiallyOpen={hash === "#report-feature-cases"}>
+      <FeatureCases runId={run.id} userId={userId} showCoverage={!middle} />
+    </Disclosure> : null} />;
 }
 
 export function RunReportPage() {
   const { run, results, user } = useOutletContext<RunContext>();
-  const [parameters] = useSearchParams();
-  const selectedView = reportView(parameters.get("reportView"));
-  const data = results.status === "ready" ? results.data : null;
-  const metrics = data ? reportMetrics(data) : null;
-  const featureRun =
-    data?.report.payload.mode === "deep_feature_v1" ||
-    run.configuration_snapshot.execution_mode === "deep_feature_v1";
-
-  if (!data || !metrics) {
-    return <ResultsBoundary>{null}</ResultsBoundary>;
-  }
-  if (data.report.payload.mode === "discovery_contract_v1") {
-    return <ResultsBoundary><ContractReport runId={run.id} payload={data.report.payload} /></ResultsBoundary>;
-  }
-  if (data.report.payload.mode === "harness_v1") {
-    return <ResultsBoundary><HarnessReport runId={run.id} payload={data.report.payload} /></ResultsBoundary>;
-  }
-  if (data.report.payload.run_kind === "slop") {
-    return (
-      <ResultsBoundary>
-        <SlopReport payload={data.report.payload as SlopReportPayload} />
-      </ResultsBoundary>
-    );
-  }
-  if (data.report.payload.run_kind === "persona") {
-    return (
-      <ResultsBoundary>
-        <PersonaImpressions payload={data.report.payload as PersonaImpressionsPayload} />
-      </ResultsBoundary>
-    );
-  }
-
-  // Findings Partitioning
-  const verifiedFindings = sortFindings(data.findings.filter(isConfirmedFinding));
-  const diagnostics = data.findings.filter(
-    (f) =>
-      findingClassification(f) === "Test execution issue" ||
-      ["policy", "execution_reliability"].includes(f.category)
-  );
-  const observations = sortFindings(
-    data.findings.filter((f) => !isConfirmedFinding(f) && !diagnostics.includes(f))
-  );
-
-  // Grouped Diagnostics (cluster similar timeouts/errors)
-  const diagnosticClusters = new Map<string, Finding[]>();
-  for (const item of diagnostics) {
-    const key = item.title || item.category || "Execution Diagnostic";
-    const existing = diagnosticClusters.get(key) ?? [];
-    existing.push(item);
-    diagnosticClusters.set(key, existing);
-  }
-
-  const verdict = reportVerdict(data, featureRun);
-  const { completed, total: journeyTotal, completionRate } = verdict;
-  const executionMode = data.report.payload.mode ?? run.configuration_snapshot.execution_mode ?? "legacy_persona";
-
-  return (
-    <ResultsBoundary>
-      {executionMode === "legacy_persona" ? <p className="inline-note" role="note">This report was produced by the older exploratory mode. Its findings are unverified observations.</p> : null}
-      <ReportNavigation view={selectedView} />
-      {selectedView !== "overview" ? <ReportAnalytics run={run} results={data} userId={user.id} view={selectedView} /> : <div className="evidence-ledger">
-        <article className="ledger-paper">
-          {/* Evidence-based result */}
-          <div
-            id="report-verdict"
-            className={`ledger-verdict-banner verdict-${verdict.tone}`}
-            role="region"
-            aria-label="Test result"
-          >
-            <div className="verdict-header-row">
-              <span className="verdict-status-pill">
-                {verdict.tone === "failed" ? (
-                  <ShieldAlert size={16} aria-hidden="true" />
-                ) : verdict.tone === "caution" ? (
-                  <AlertTriangle size={16} aria-hidden="true" />
-                ) : (
-                  <CheckCircle2 size={16} aria-hidden="true" />
-                )}
-                {verdict.label}
-              </span>
-              {data.report.executive_summary ? (
-                <CopyButton
-                  text={data.report.executive_summary}
-                  label="Copy generated summary"
-                />
-              ) : null}
-            </div>
-            <h2 className="verdict-title">{verdict.title}</h2>
-            <p className="verdict-subtitle">{verdict.description}</p>
-            <p className="ledger-fineprint">
-              Version {data.report.version} ·{" "}
-              <time dateTime={data.report.generated_at ?? undefined}>
-                Generated {formatDate(data.report.generated_at)}
-              </time>
-            </p>
-            <nav className="inline-actions" aria-label="Report findings">
-              <a className="secondary-button compact" href="#report-verified">
-                {verifiedFindings.length} verified {verifiedFindings.length === 1 ? "issue" : "issues"}
-              </a>
-              <a className="secondary-button compact" href="#report-observations">
-                {observations.length} to review
-              </a>
-              <a className="secondary-button compact" href="#report-reliability">
-                {diagnostics.length} execution {diagnostics.length === 1 ? "issue" : "issues"}
-              </a>
-            </nav>
-          </div>
-
-          {featureRun ? (
-            <section id="report-feature-cases" className="report-feature-results">
-              <FeatureCases id="report-feature-cases-table" runId={run.id} userId={user.id} />
-            </section>
-          ) : null}
-          {/* Two-Column Body */}
-          <div className="ledger-columns">
-            <div className="ledger-main">
-              {/* Section 01: Verified Defect Findings */}
-              <section id="report-verified" className="ledger-section">
-                <h3>Verified product issues</h3>
-                {verifiedFindings.length > 0 ? (
-                  <ul className="ledger-findings">
-                    {verifiedFindings.map((f) => (
-                      <ReportFindingCard key={f.id} finding={f} runId={run.id} />
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="ledger-finding-card">
-                    <p>
-                      No verified product issues recorded. Review the coverage and any
-                      unconfirmed observations before drawing conclusions.
-                    </p>
-                  </div>
-                )}
-              </section>
-
-          {/* Feature Cases (if deep_feature_v1) */}
-          {!featureRun ? (
-            <section id="report-outcomes" className="ledger-lower">
-              <span className="ledger-kicker">04 / Recorded Coverage</span>
-              <h3>Journey Outcomes</h3>
-              <p>
-                Execution status and evaluated product outcomes are separate measures.
-                An unfinished journey is neither a pass nor a confirmed product bug.
-              </p>
-              {metrics.outcomes.length > 0 ? (
-                <StackedBar
-                  total={metrics.outcomes.reduce((sum, [, outcomeCount]) => sum + outcomeCount, 0)}
-                  unit="journeys"
-                  segments={outcomeSegments(metrics.outcomes)}
-                />
-              ) : (
-                <p className="ledger-fineprint">Outcome counts are not available.</p>
-              )}
-            </section>
-          ) : null}
-
-
-              <details className="report-secondary-sections" open={observations.length > 0 || diagnostics.length > 0 ? true : undefined}>
-                <summary>Observations and execution limitations <span>{observations.length} to verify · {diagnostics.length} execution issues</span></summary>
-              {/* Section 02: Observations to Verify */}
-              <section id="report-observations" className="ledger-section">
-                <span className="ledger-kicker">02 / Further Investigation</span>
-                <h3>Observations to Verify</h3>
-                <p>
-                  These items have not met this report's evidence requirements for a
-                  verified product issue. Inspect their evidence before drawing conclusions.
-                </p>
-                {observations.length > 0 ? (
-                  <ul className="ledger-findings">
-                    {observations.map((f) => (
-                      <ReportFindingCard key={f.id} finding={f} runId={run.id} />
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="ledger-fineprint">No unconfirmed observations were recorded.</p>
-                )}
-              </section>
-
-              {/* Section 03: Execution Reliability */}
-              <section id="report-reliability" className="ledger-section">
-                <span className="ledger-kicker">03 / Test Quality</span>
-                <h3>Execution Reliability</h3>
-                <p>
-                  Technical interruptions (timeouts, origin policy denials, tool errors)
-                  are limitations of the test, <strong>not defects of the product</strong>.
-                  Similar issues are grouped below:
-                </p>
-                {diagnosticClusters.size > 0 ? (
-                  [...diagnosticClusters.entries()].map(([title, items]) => (
-                    <details className="ledger-cluster" key={title}>
-                      <summary>
-                        <span>{title}</span>
-                        <small>
-                          {items.length} {items.length === 1 ? "journey" : "journeys"}
-                        </small>
-                      </summary>
-                      <ul>
-                        {items.map((item) => (
-                          <li key={item.id}>
-                            <Link to={`/runs/${run.id}/findings/${item.id}`}>
-                              {item.title}
-                            </Link>
-                            <p>{item.summary}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ))
-                ) : (
-                  <p className="ledger-fineprint">
-                    No test execution diagnostics or timeouts were recorded.
-                  </p>
-                )}
-              </section>
-              </details>
-            </div>
-
-            {/* Sticky Aside Rail */}
-            <aside className="ledger-aside" aria-label="Coverage and next action">
-              <span className="ledger-kicker">Execution Coverage</span>
-              <h3>{featureRun ? "Case execution" : "Execution completion"}</h3>
-              <p>
-                {journeyTotal === 0
-                  ? `No ${verdict.unit} recorded.`
-                  : completionRate === null
-                  ? "Completion data unavailable."
-                  : `${completed} of ${journeyTotal} ${featureRun ? "cases recorded as executed" : "journeys completed normally"}.`}
-              </p>
-              {completionRate !== null ? (
-                <>
-                  <div className="ledger-rate-display">
-                    <strong className="ledger-rate">{completed} of {journeyTotal}</strong>
-                    <span className="ledger-fineprint">{featureRun ? "executed" : "finished"}</span>
-                  </div>
-                  <ProgressBar
-                    value={completed ?? 0}
-                    max={journeyTotal ?? 0}
-                    label={`${completed} of ${journeyTotal} ${verdict.unit} ${featureRun ? "executed" : "finished"}`}
-                  />
-                  <p className="ledger-fineprint">
-                    Execution completion is an operational measure, not a product pass rate.
-                  </p>
-                </>
-              ) : null}
-
-              <h4>Next action</h4>
-              {diagnostics.length > 0 ? (
-                <p>
-                  Review execution logs or target origin authorization to eliminate timeouts
-                  before rerunning affected journeys.
-                </p>
-              ) : verifiedFindings.length > 0 ? (
-                <p>
-                  Inspect the cited steps and screenshots for verified defects, then triage
-                  remediations with engineering.
-                </p>
-              ) : (
-                <p>
-                  Review the documented scope and criteria coverage to expand test depth.
-                </p>
-              )}
-              <Link to={`/runs/${run.id}/journeys`} className="ledger-aside-cta">
-                Inspect Journeys <ArrowUpRight size={16} aria-hidden="true" />
-              </Link>
-            </aside>
-          </div>
-
-          <details className="report-outcome-details">
-            <summary>Recorded task outcomes and coverage</summary>
-            <ReportAnalytics run={run} results={data} userId={user.id} view="overview" />
-          </details>
-
-          {/* Assessment Section */}
-          <section id="report-assessment" className="ledger-lower">
-            <span className="ledger-kicker">05 / Synthesis</span>
-            <RunAssessmentView assessment={data.report.payload.assessment} runId={run.id} />
-          </section>
-
-          {/* Original Executive Summary Disclosure */}
-          {data.report.executive_summary ? (
-            <details className="ledger-original">
-              <summary>Read full generated narrative summary</summary>
-              <p>{data.report.executive_summary}</p>
-            </details>
-          ) : null}
-
-          {/* Scope & Provenance */}
-          <details id="report-scope" className="ledger-original">
-            <summary>Scope, method and report identifiers</summary>
-            <p>
-              {metrics.deterministic
-                ? "This report was generated from recorded checks. "
-                : "This report contains the evaluation recorded for this test. "}
-              Simulated testers use hypothetical perspectives; they are not real customers.
-              Unconfirmed outcomes cannot establish that a flow works or fails in production.
-              Verified assertions and exact cited evidence determine what can be concluded.
-            </p>
-            <dl className="ledger-identifiers">
-              <div>
-                <dt>Report ID</dt>
-                <dd className="monospace">{data.report.id}</dd>
-              </div>
-              <div>
-                <dt>Test ID</dt>
-                <dd className="monospace">{run.id}</dd>
-              </div>
-              <div>
-                <dt>Mode</dt>
-                <dd className="monospace">
-                  {typeof data.report.payload.mode === "string"
-                    ? statusLabel(data.report.payload.mode)
-                    : typeof run.configuration_snapshot.execution_mode === "string"
-                    ? statusLabel(run.configuration_snapshot.execution_mode)
-                    : "standard"}
-                </dd>
-              </div>
-            </dl>
-          </details>
-        </article>
-      </div>}
-    </ResultsBoundary>
-  );
+  if (results.status === "loading") return <article className="report-frame" role="status" aria-label="Loading results">
+    <div className="report-takeaway report-skeleton" aria-hidden="true"><span /><span /><span /></div>
+  </article>;
+  return <>
+    {results.status === "waiting" ? <SlopEntryAssessment runId={run.id} snapshot={run.configuration_snapshot} /> : null}
+    <ResultsBoundary>{results.status === "ready" ? <SavedReport run={run} data={results.data} userId={user.id} /> : null}</ResultsBoundary>
+  </>;
 }

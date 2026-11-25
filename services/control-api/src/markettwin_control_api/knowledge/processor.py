@@ -10,6 +10,14 @@ from typing import BinaryIO, cast
 from uuid import UUID
 
 from markettwin_database.models.knowledge import AssetVersion, IngestionEntry, ProductBlueprint
+from markettwin_shared.knowledge_markdown import (
+    KnowledgeEvidenceIndex,
+    KnowledgeManifest,
+    KnowledgeManifestFile,
+    KnowledgeMarkdownResponse,
+    estimate_tokens,
+    render_knowledge_file,
+)
 from markettwin_shared.knowledge_preview import KnowledgePreviewResponse
 from sqlalchemy import select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
@@ -21,7 +29,7 @@ from markettwin_control_api.knowledge.link_research import (
     decode_link_marker,
     research_link,
 )
-from markettwin_control_api.knowledge.repository import IngestionRepository
+from markettwin_control_api.knowledge.repository import IngestionRepository, KnowledgeFileInput
 from markettwin_control_api.knowledge.storage import KnowledgeSourceStorage
 
 logger = logging.getLogger(__name__)
@@ -107,6 +115,8 @@ class IngestionProcessor:
                     record.asset.original_filename, record.asset.bucket, record.asset.object_key
                 )
                 content_type = record.asset.declared_content_type
+                stored_preview = KnowledgePreviewResponse.model_validate(record.entry.preview)
+                original_url = stored_preview.source.original_url
         try:
             with TemporaryFile(prefix="markettwin-ingestion-") as temporary:
                 stream = cast(BinaryIO, temporary)
@@ -124,8 +134,24 @@ class IngestionProcessor:
                     stream.truncate()
                     stream.write(payload)
                     stream.seek(0)
+                # SKR step 3 (content-addressed publish): BOTH worker
+                # outputs are generated before anything is written. The
+                # rendered files then go to their versioned keys, and
+                # _save flips the single pointer (preview + file rows +
+                # status in one transaction). A failure before _save
+                # publishes nothing; blobs already under the version
+                # prefix stay unreferenced, and a retry overwrites the
+                # same keys with identical bytes.
+                markdown = await self._markdown_with_retry(
+                    filename=filename, content_type=content_type, stream=stream,
+                    workspace_id=workspace_id, entry_id=entry_id,
+                )
                 result = await self._preview_with_retry(
                     filename=filename, content_type=content_type, stream=stream
+                )
+                written = await self._write_markdown_files(
+                    connection, workspace_id=workspace_id, entry_id=entry_id,
+                    markdown=markdown, original_url=original_url,
                 )
         except LinkResearchFailed as error:
             await self._save(connection, workspace_id, entry_id, error=error.message)
@@ -138,7 +164,10 @@ class IngestionProcessor:
                 error="Knowledge processing failed. Please try again.",
             )
         else:
-            await self._save(connection, workspace_id, entry_id, result=result)
+            await self._save(
+                connection, workspace_id, entry_id, result=result,
+                knowledge_files=written,
+            )
 
     async def _note(
         self, connection: AsyncConnection, workspace_id: UUID, entry_id: UUID, message: str,
@@ -179,6 +208,12 @@ class IngestionProcessor:
             filename, content = task.result()
         except ValueError as error:
             raise LinkResearchFailed(str(error)[:500]) from error
+        except PermissionError as error:
+            logger.exception("Public-link research could not launch its browser")
+            raise LinkResearchFailed(
+                "Link research could not start because the server denied browser access. "
+                "Please contact your workspace administrator."
+            ) from error
         except OSError as error:
             raise LinkResearchFailed(
                 "The linked source could not be reached. Check the link or upload a document."
@@ -235,10 +270,126 @@ class IngestionProcessor:
                 await asyncio.sleep(2 ** (attempt + 1))
         raise RuntimeError("Knowledge preview exhausted its retry attempts.")
 
+    async def _markdown_with_retry(
+        self, *, filename: str, content_type: str | None, stream: BinaryIO,
+        workspace_id: UUID, entry_id: UUID,
+    ) -> KnowledgeMarkdownResponse:
+        client = KnowledgeWorkerClient(self.settings)
+        for attempt in range(3):
+            stream.seek(0)
+            try:
+                return await client.markdown(
+                    filename=filename, content_type=content_type, stream=stream,
+                    entry_id=entry_id, workspace_id=workspace_id,
+                )
+            except KnowledgeWorkerError as error:
+                terminal = (
+                    error.status_code not in {502, 503, 504}
+                    or error.message.startswith("Knowledge generation reached its output limit.")
+                )
+                if terminal or attempt == 2:
+                    raise
+                logger.warning(
+                    "Knowledge worker returned %s; retrying attempt %s of 3",
+                    error.status_code, attempt + 2,
+                )
+                await asyncio.sleep(2 ** (attempt + 1))
+        raise RuntimeError("Knowledge markdown exhausted its retry attempts.")
+
+    async def _write_markdown_files(
+        self,
+        connection: AsyncConnection,
+        *,
+        workspace_id: UUID,
+        entry_id: UUID,
+        markdown: KnowledgeMarkdownResponse,
+        original_url: str | None,
+    ) -> tuple[int, list[KnowledgeFileInput]]:
+        """Render the understood files and store them under versioned keys.
+
+        Returns the version written and the index rows for ``_save`` to
+        record in the same transaction as the preview (the publish flip).
+        Each recorded sha256 is computed over the exact payload bytes
+        handed to storage, so the index rows and the manifest verify the
+        blobs by construction. The entry's advisory lock is held by the
+        caller, so the version read cannot race another processing pass
+        for this entry.
+        """
+        async with AsyncSession(connection, expire_on_commit=False) as session:
+            version = (
+                await IngestionRepository(session).current_knowledge_file_version(entry_id)
+            ) + 1
+        evidence = {unit.ordinal: unit for unit in markdown.evidence}
+        if markdown.evidence:
+            extractors = sorted(
+                {f"{unit.extractor_name} {unit.extractor_version}" for unit in markdown.evidence}
+            )
+            ordinals = [unit.ordinal for unit in markdown.evidence]
+            generated_from = (
+                "; ".join(extractors) + f"; evidence units {min(ordinals)}-{max(ordinals)}"
+            )
+        else:
+            generated_from = "no evidence units recorded"
+        prefix = f"knowledge/{workspace_id}/{entry_id}/files/v{version}"
+        storage = KnowledgeSourceStorage(self.settings)
+        rows: list[KnowledgeFileInput] = []
+        manifest_files: list[KnowledgeManifestFile] = []
+        for file in markdown.files:
+            text = render_knowledge_file(
+                file,
+                source_entry=str(entry_id),
+                source_name=markdown.source.name,
+                file_version=version,
+                generated_from=generated_from,
+                evidence=evidence,
+                original_url=original_url,
+            )
+            object_key = f"{prefix}/{file.slug}.md"
+            payload = text.encode("utf-8")
+            await storage.put(
+                key=object_key, stream=BytesIO(payload), content_type="text/markdown",
+            )
+            digest = hashlib.sha256(payload).hexdigest()
+            token_count = estimate_tokens(text)
+            rows.append(KnowledgeFileInput(
+                slug=file.slug, title=file.title, description=file.description,
+                object_key=object_key, sha256=digest, token_count=token_count,
+            ))
+            manifest_files.append(KnowledgeManifestFile(
+                slug=file.slug, title=file.title, description=file.description,
+                object_key=object_key, sha256=digest, token_count=token_count,
+                section_headings=tuple(section.heading for section in file.sections),
+                evidence_ordinals=tuple(sorted({
+                    ordinal
+                    for section in file.sections
+                    for ordinal in section.evidence_ordinals
+                })),
+            ))
+        manifest = KnowledgeManifest(
+            entry_id=str(entry_id), workspace_id=str(workspace_id),
+            source_name=markdown.source.name, original_url=original_url,
+            version=version, files=tuple(manifest_files), usage=markdown.usage,
+        )
+        await storage.put(
+            key=f"{prefix}/manifest.json",
+            stream=BytesIO(manifest.model_dump_json().encode("utf-8")),
+            content_type="application/json",
+        )
+        index = KnowledgeEvidenceIndex(
+            units=markdown.evidence, issues=markdown.extraction_issues,
+        )
+        await storage.put(
+            key=f"{prefix}/evidence.json",
+            stream=BytesIO(index.model_dump_json().encode("utf-8")),
+            content_type="application/json",
+        )
+        return version, rows
+
     @staticmethod
     async def _save(
         connection: AsyncConnection, workspace_id: UUID, entry_id: UUID, *,
         result: KnowledgePreviewResponse | None = None, error: str | None = None,
+        knowledge_files: tuple[int, list[KnowledgeFileInput]] | None = None,
     ) -> None:
         async with AsyncSession(connection, expire_on_commit=False) as session:
             async with session.begin():
@@ -253,6 +404,11 @@ class IngestionProcessor:
                     record.entry.preview = result.model_copy(update={"source": source}).model_dump(
                         mode="json"
                     )
+                    if knowledge_files is not None:
+                        version, file_rows = knowledge_files
+                        await IngestionRepository(session).record_knowledge_files(
+                            record, version=version, files=file_rows,
+                        )
                 record.asset.status = "parsing_failed" if error else "needs_user_review"
                 record.asset.status_message = error
                 record.asset.processed_at = datetime.now(UTC)

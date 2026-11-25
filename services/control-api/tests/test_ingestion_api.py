@@ -22,6 +22,17 @@ from markettwin_shared.knowledge_preview import KnowledgePreviewResponse
 from starlette.datastructures import Headers
 
 
+def test_main_app_connects_workspace_upload_and_optional_attachment_routes():
+    from markettwin_control_api.main import create_app
+
+    paths = create_app().openapi()["paths"]
+    base = "/api/v1/workspaces/{workspace_id}/ingestion"
+    assert "post" in paths[base] and "get" in paths[base]
+    assert "post" in paths[f"{base}/link"]
+    assert "post" in paths[f"{base}/{{entry_id}}/approve"]
+    assert "put" in paths[f"{base}/{{entry_id}}/applications"]
+
+
 class Context:
     def __init__(self, value=None):
         self.value = value
@@ -243,7 +254,10 @@ async def test_approval_requires_generated_content(monkeypatch, empty):
     monkeypatch.setattr(
         ingestion,
         "IngestionRepository",
-        lambda _: SimpleNamespace(get=get, approve=approve),
+        lambda _: SimpleNamespace(
+            get=get, approve=approve,
+            list_knowledge_files=AsyncMock(return_value=[]),
+        ),
     )
     if empty:
         with pytest.raises(HTTPException) as failure:
@@ -405,3 +419,158 @@ async def test_repository_rejects_invalid_approval_without_mutating(
     assert saved.version.status == version_status
     assert saved.asset.status == "needs_user_review"
     session.flush.assert_not_awaited()
+
+
+def test_main_app_connects_knowledge_file_routes():
+    from markettwin_control_api.main import create_app
+
+    paths = create_app().openapi()["paths"]
+    base = "/api/v1/workspaces/{workspace_id}/ingestion"
+    file_path = f"{base}/{{entry_id}}/files/{{slug}}"
+    assert "get" in paths[file_path] and "patch" in paths[file_path]
+
+
+def test_ingestion_response_files_match_the_review_shape():
+    from markettwin_database.models.knowledge import KnowledgeFile
+
+    saved = record()
+    row = KnowledgeFile(
+        id=uuid4(), workspace_id=saved.entry.workspace_id,
+        ingestion_entry_id=saved.entry.id, slug="pricing", title="Pricing",
+        description="Plan prices.", object_key="knowledge/x/files/v1/pricing.md",
+        sha256="b" * 64, token_count=120, version=1, status="generated",
+    )
+    response = ingestion.ingestion_response(saved, files=[row])
+    assert response.file_count == 1
+    assert set(response.files[0].model_dump()) == {
+        "id", "slug", "title", "description", "token_count", "sha256",
+        "version", "status",
+    }
+    assert response.files[0].slug == "pricing"
+    legacy = ingestion.ingestion_response(saved)
+    assert legacy.files == [] and legacy.file_count == 0
+
+
+def _file_objects(markdown: bytes, cited: tuple[int, ...] = (1,)):
+    from markettwin_shared.knowledge_markdown import (
+        KnowledgeEvidenceIndex,
+        KnowledgeManifest,
+        KnowledgeManifestFile,
+        MarkdownEvidenceUnit,
+    )
+
+    def unit(ordinal: int) -> MarkdownEvidenceUnit:
+        return MarkdownEvidenceUnit(
+            ordinal=ordinal, evidence_type="text", content_text=f"unit {ordinal}",
+            content_json=None, source_locator={"item_index": ordinal},
+            extractor_name="markdown", extractor_version="1",
+        )
+
+    manifest = KnowledgeManifest(
+        entry_id="e", workspace_id="w", source_name="pricing.md", original_url=None,
+        version=1,
+        files=(KnowledgeManifestFile(
+            slug="pricing", title="Pricing", description="Plan prices.",
+            object_key="k", sha256="b" * 64, token_count=10,
+            section_headings=("Plans",), evidence_ordinals=cited,
+        ),),
+        usage={"model": "m", "calls": 1, "prompt_tokens": 1,
+               "completion_tokens": 1, "total_tokens": 2},
+    )
+    index = KnowledgeEvidenceIndex(units=(unit(1), unit(2)), issues=())
+    return manifest, index, markdown
+
+
+async def test_get_knowledge_file_content_returns_markdown_and_cited_evidence(monkeypatch):
+    patch_database(monkeypatch)
+    saved = record()
+    entry_id = saved.entry.id
+    prefix = f"knowledge/{saved.entry.workspace_id}/{entry_id}/files/v1"
+    manifest, index, _ = _file_objects(b"# Pricing\n")
+    objects = {
+        f"{prefix}/pricing.md": b"# Pricing\n\nThe Pro plan costs $49 per month.\n",
+        f"{prefix}/manifest.json": manifest.model_dump_json().encode(),
+        f"{prefix}/evidence.json": index.model_dump_json().encode(),
+    }
+
+    async def download(*, bucket, key, stream):
+        stream.write(objects[key])
+        stream.seek(0)
+
+    row = SimpleNamespace(
+        slug="pricing", title="Pricing", description="Plan prices.",
+        object_key=f"{prefix}/pricing.md",
+    )
+    monkeypatch.setattr(ingestion, "require_ingestion_access", AsyncMock(return_value=uuid4()))
+    monkeypatch.setattr(
+        ingestion, "IngestionRepository",
+        lambda _: SimpleNamespace(
+            get=AsyncMock(return_value=saved),
+            get_knowledge_file=AsyncMock(return_value=row),
+        ),
+    )
+    monkeypatch.setattr(
+        ingestion, "KnowledgeSourceStorage",
+        lambda _: SimpleNamespace(bucket="kb", download=download),
+    )
+    response = await ingestion.get_knowledge_file_content(
+        saved.entry.workspace_id, entry_id, "pricing", request(),
+    )
+    assert response.markdown.startswith("# Pricing")
+    assert "$49 per month" in response.markdown
+    assert [unit.ordinal for unit in response.evidence] == [1]
+    assert response.title == "Pricing" and response.description == "Plan prices."
+
+
+async def test_patch_knowledge_file_updates_row_and_manifest(monkeypatch):
+    patch_database(monkeypatch)
+    saved = record()
+    entry_id = saved.entry.id
+    prefix = f"knowledge/{saved.entry.workspace_id}/{entry_id}/files/v1"
+    manifest, _index, _md = _file_objects(b"# Pricing\n")
+    puts: dict[str, bytes] = {}
+
+    async def download(*, bucket, key, stream):
+        assert key == f"{prefix}/manifest.json"
+        stream.write(manifest.model_dump_json().encode())
+        stream.seek(0)
+
+    async def put(*, key, stream, content_type):
+        puts[key] = stream.read()
+
+    row = SimpleNamespace(
+        id=uuid4(), slug="pricing", title="Pricing", description="Plan prices.",
+        object_key=f"{prefix}/pricing.md", token_count=10, sha256="b" * 64,
+        version=1, status="generated",
+    )
+
+    async def update(file, *, title=None, description=None):
+        if title is not None:
+            file.title = title
+        if description is not None:
+            file.description = description
+
+    monkeypatch.setattr(ingestion, "require_ingestion_access", AsyncMock(return_value=uuid4()))
+    monkeypatch.setattr(
+        ingestion, "IngestionRepository",
+        lambda _: SimpleNamespace(
+            get=AsyncMock(return_value=saved),
+            get_knowledge_file=AsyncMock(return_value=row),
+            update_knowledge_file=AsyncMock(side_effect=update),
+        ),
+    )
+    monkeypatch.setattr(
+        ingestion, "KnowledgeSourceStorage",
+        lambda _: SimpleNamespace(bucket="kb", download=download, put=put),
+    )
+    response = await ingestion.update_knowledge_file(
+        saved.entry.workspace_id, entry_id, "pricing",
+        ingestion.UpdateKnowledgeFileRequest(title="Plans and pricing"), request(),
+    )
+    assert response.title == "Plans and pricing"
+    assert row.title == "Plans and pricing" and row.description == "Plan prices."
+    from markettwin_shared.knowledge_markdown import KnowledgeManifest
+
+    synced = KnowledgeManifest.model_validate_json(puts[f"{prefix}/manifest.json"])
+    assert synced.files[0].title == "Plans and pricing"
+    assert synced.files[0].description == "Plan prices."

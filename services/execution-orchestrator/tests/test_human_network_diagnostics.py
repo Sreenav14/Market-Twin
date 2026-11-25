@@ -40,7 +40,9 @@ def test_counters_are_bounded_expiring_fixed_labels() -> None:
      "dns_resolution_failed", "authorized_target"),
     (UnsafeDestinationAddressError("SECRET address"), "https://target.invalid/login",
      "unsafe_destination_ip", "authorized_target"),
-    (TargetUrlValidationError("SECRET path"), "https://www.google.com/private?token=SECRET",
+    (TargetUrlValidationError("SECRET path"), "https://www.google.com/g/collect?token=SECRET",
+     "target_origin_denied", "known_provider"),
+    (TargetUrlValidationError("SECRET path"), "https://www.google.com/recaptcha/api.js?token=SECRET",
      "captcha_resource_denied", "known_provider"),
     (TargetUrlValidationError("SECRET origin"), "https://third.invalid/private?token=SECRET",
      "target_origin_denied", "unknown_third_party"),
@@ -123,6 +125,7 @@ def test_proxy_diagnostics_reject_other_session_ownership() -> None:
 async def test_actual_route_denial_counts_without_restoring_capture(socket: bool) -> None:
     session = cast(JourneyBrowserSession, SimpleNamespace(
         control_mode="human", network_policy="public_only", capture_enabled=False,
+        offsite=SimpleNamespace(), page=SimpleNamespace(url="https://target.invalid/login"),
         authenticated_session=True,
         allowed_origins=(AllowedOrigin("https", "target.invalid", None),),
         human_network_diagnostics=HumanNetworkDiagnostics(),
@@ -131,6 +134,7 @@ async def test_actual_route_denial_counts_without_restoring_capture(socket: bool
     controller = BrowserController()
     request = cast(Request, SimpleNamespace(
         url="https://third.invalid/private?credential=SECRET",
+        method="POST", resource_type="fetch",
         is_navigation_request=lambda: False,
     ))
     abort, close = AsyncMock(), AsyncMock()

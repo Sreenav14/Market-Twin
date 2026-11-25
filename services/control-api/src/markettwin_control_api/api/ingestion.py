@@ -9,8 +9,13 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
-from markettwin_database.models.knowledge import ApplicationKnowledgeEntry
+from markettwin_database.models.knowledge import ApplicationKnowledgeEntry, KnowledgeFile
 from markettwin_database.models.testing import Application
+from markettwin_shared.knowledge_markdown import (
+    KnowledgeEvidenceIndex,
+    KnowledgeManifest,
+    MarkdownEvidenceUnit,
+)
 from markettwin_shared.knowledge_preview import (
     KnowledgePreviewResponse,
     KnowledgePreviewSourceResponse,
@@ -56,6 +61,27 @@ SOURCE_ROLES = frozenset(
 )
 
 
+class KnowledgeFileIndexResponse(BaseModel):
+    """One knowledge_files index row (doc 33 §3.5); bodies are not served here."""
+
+    id: UUID
+    slug: str
+    title: str
+    description: str
+    token_count: int
+    sha256: str
+    version: int
+    status: str
+
+
+class KnowledgeFileContentResponse(BaseModel):
+    slug: str
+    title: str
+    description: str
+    markdown: str
+    evidence: list[MarkdownEvidenceUnit]
+
+
 class IngestionSummaryResponse(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -69,6 +95,7 @@ class IngestionSummaryResponse(BaseModel):
     artifact_count: int
     skill_count: int
     issue_count: int
+    file_count: int = 0
     processing_status: Literal["queued", "processing", "ready", "failed"]
     processing_error: str | None
     original_source_url: str | None = None
@@ -78,6 +105,34 @@ class IngestionSummaryResponse(BaseModel):
 
 class IngestionEntryResponse(IngestionSummaryResponse):
     preview: KnowledgePreviewResponse
+    files: list[KnowledgeFileIndexResponse] = Field(default_factory=list)
+
+
+class UpdateKnowledgeFileRequest(BaseModel):
+    """Title/description edit (doc 33 §3.5, OD-K2: bodies are not editable)."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=200)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("A file title is required.")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def clean_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if "\n" in value or "\r" in value:
+            raise ValueError("A file description is one line.")
+        return value
 
 
 class RenameKnowledgeRequest(BaseModel):
@@ -133,7 +188,20 @@ async def ingest_link(
         await source.close()
 
 
-def ingestion_response(record: IngestionRecord) -> IngestionEntryResponse:
+def knowledge_file_response(row: KnowledgeFile) -> KnowledgeFileIndexResponse:
+    return KnowledgeFileIndexResponse(
+        id=row.id, slug=row.slug, title=row.title, description=row.description,
+        token_count=row.token_count, sha256=row.sha256, version=row.version,
+        status=row.status,
+    )
+
+
+def ingestion_response(
+    record: IngestionRecord,
+    *,
+    files: list[KnowledgeFile] | None = None,
+    file_count: int | None = None,
+) -> IngestionEntryResponse:
     preview = KnowledgePreviewResponse.model_validate(record.entry.preview)
     asset_status = record.asset.status
     return IngestionEntryResponse(
@@ -149,6 +217,12 @@ def ingestion_response(record: IngestionRecord) -> IngestionEntryResponse:
         artifact_count=len(preview.artifacts),
         skill_count=len(preview.skills),
         issue_count=len(preview.extraction_issues),
+        file_count=(
+            file_count if file_count is not None
+            else len(files) if files is not None
+            else 0
+        ),
+        files=[knowledge_file_response(row) for row in files] if files is not None else [],
         processing_status=(
             "queued" if record.asset.status == "uploaded"
             else "processing" if record.asset.status == "processing"
@@ -203,8 +277,15 @@ async def list_ingestion(
             ):
                 raise HTTPException(status_code=404, detail="Application not found.")
             records = await repository.list_for_application(workspace_id, application_id)
+        counts = await repository.knowledge_file_counts(
+            [record.entry.id for record in records]
+        )
         return [
-            IngestionSummaryResponse.model_validate(ingestion_response(record).model_dump())
+            IngestionSummaryResponse.model_validate(
+                ingestion_response(
+                    record, file_count=counts.get(record.entry.id, 0)
+                ).model_dump()
+            )
             for record in records
         ]
 
@@ -216,10 +297,12 @@ async def get_ingestion(
     await require_ingestion_access(request, workspace_id, write=False)
     database = get_database_runtime(request)
     async with database.session_factory() as session:
-        record = await IngestionRepository(session).get(workspace_id, entry_id)
+        repository = IngestionRepository(session)
+        record = await repository.get(workspace_id, entry_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Knowledge set not found.")
-        return ingestion_response(record)
+        files = await repository.list_knowledge_files(entry_id)
+        return ingestion_response(record, files=files)
 
 
 @router.post("", response_model=IngestionEntryResponse, status_code=202)
@@ -396,7 +479,8 @@ async def approve_ingestion(
             except ValueError as error:
                 raise HTTPException(status_code=409, detail=str(error)) from error
             await repository.approve(record, user_id)
-            return ingestion_response(record)
+            files = await repository.list_knowledge_files(entry_id)
+            return ingestion_response(record, files=files)
 
 
 @router.post("/{entry_id}/retry", response_model=IngestionEntryResponse, status_code=202)
@@ -442,3 +526,109 @@ async def source_access(workspace_id: UUID, entry_id: UUID, request: Request) ->
                 download_filename=record.asset.original_filename,
             )
         }
+
+
+async def _read_knowledge_object(storage: KnowledgeSourceStorage, key: str) -> bytes:
+    buffer = BytesIO()
+    await storage.download(bucket=storage.bucket, key=key, stream=buffer)
+    return buffer.getvalue()
+
+
+@router.get("/{entry_id}/files/{slug}", response_model=KnowledgeFileContentResponse)
+async def get_knowledge_file_content(
+    workspace_id: UUID, entry_id: UUID, slug: str, request: Request
+) -> KnowledgeFileContentResponse:
+    await require_ingestion_access(request, workspace_id, write=False)
+    database = get_database_runtime(request)
+    async with database.session_factory() as session:
+        repository = IngestionRepository(session)
+        record = await repository.get(workspace_id, entry_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Knowledge set not found.")
+        row = await repository.get_knowledge_file(entry_id, slug)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Knowledge file not found.")
+    storage = KnowledgeSourceStorage(get_settings())
+    prefix = row.object_key.rsplit("/", 1)[0]
+    try:
+        markdown = await _read_knowledge_object(storage, row.object_key)
+        manifest = KnowledgeManifest.model_validate_json(
+            await _read_knowledge_object(storage, f"{prefix}/manifest.json")
+        )
+        index = KnowledgeEvidenceIndex.model_validate_json(
+            await _read_knowledge_object(storage, f"{prefix}/evidence.json")
+        )
+    except Exception as exc:
+        logger.exception("Could not read knowledge file %s for entry %s", slug, entry_id)
+        raise HTTPException(
+            status_code=503, detail="Knowledge file content is unavailable."
+        ) from exc
+    cited = next(
+        (file.evidence_ordinals for file in manifest.files if file.slug == slug), ()
+    )
+    wanted = set(cited)
+    return KnowledgeFileContentResponse(
+        slug=row.slug, title=row.title, description=row.description,
+        markdown=markdown.decode("utf-8"),
+        evidence=[unit for unit in index.units if unit.ordinal in wanted],
+    )
+
+
+@router.patch("/{entry_id}/files/{slug}", response_model=KnowledgeFileIndexResponse)
+async def update_knowledge_file(
+    workspace_id: UUID, entry_id: UUID, slug: str,
+    payload: UpdateKnowledgeFileRequest, request: Request,
+) -> KnowledgeFileIndexResponse:
+    await require_ingestion_access(request, workspace_id, write=True)
+    if payload.title is None and payload.description is None:
+        raise HTTPException(
+            status_code=422, detail="Provide a title or a description to update."
+        )
+    database = get_database_runtime(request)
+    storage = KnowledgeSourceStorage(get_settings())
+    async with database.session_factory() as session:
+        async with session.begin():
+            repository = IngestionRepository(session)
+            record = await repository.get(workspace_id, entry_id, lock=True)
+            if record is None:
+                raise HTTPException(status_code=404, detail="Knowledge set not found.")
+            row = await repository.get_knowledge_file(entry_id, slug)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Knowledge file not found.")
+            await repository.update_knowledge_file(
+                row, title=payload.title, description=payload.description,
+            )
+            # Title/description are the selection surface (§3.5): the
+            # version's manifest carries the same fields for run-start
+            # selection, so it is updated in step. The .md bytes and
+            # their sha never change (OD-K3). A storage failure aborts
+            # the transaction, leaving row and manifest in step.
+            prefix = row.object_key.rsplit("/", 1)[0]
+            try:
+                manifest = KnowledgeManifest.model_validate_json(
+                    await _read_knowledge_object(storage, f"{prefix}/manifest.json")
+                )
+                manifest = manifest.model_copy(update={
+                    "files": tuple(
+                        file.model_copy(update={
+                            "title": row.title, "description": row.description,
+                        }) if file.slug == slug else file
+                        for file in manifest.files
+                    ),
+                })
+                await storage.put(
+                    key=f"{prefix}/manifest.json",
+                    stream=BytesIO(manifest.model_dump_json().encode("utf-8")),
+                    content_type="application/json",
+                )
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "Could not sync manifest for knowledge file %s of entry %s",
+                    slug, entry_id,
+                )
+                raise HTTPException(
+                    status_code=503, detail="Knowledge file storage is unavailable."
+                ) from exc
+            return knowledge_file_response(row)

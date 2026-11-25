@@ -26,6 +26,10 @@ EXECUTION_CONSUMER_NAME = "markettwin-execution-worker"
 EXECUTION_REJECTION_CONSUMER_NAME = f"{EXECUTION_CONSUMER_NAME}:rejected"
 
 
+class InvalidRunRequestError(ValueError):
+    """A command cannot be interpreted by this consumer version."""
+
+
 class MissingRunRequestError(ValueError):
     """A successfully read command refers to a run that no longer exists."""
 
@@ -66,12 +70,12 @@ async def accept_run_requested(
     """
 
     if envelope.event_type != RUN_REQUESTED_EVENT_TYPE:
-        raise ValueError(
+        raise InvalidRunRequestError(
             f'Unsupported event type "{envelope.event_type}".'
         )
 
     if envelope.event_version != RUN_REQUESTED_EVENT_VERSION:
-        raise ValueError(
+        raise InvalidRunRequestError(
             "Unsupported run.requested event version."
         )
 
@@ -80,7 +84,7 @@ async def accept_run_requested(
     )
 
     if not isinstance(raw_test_run_id, str):
-        raise ValueError(
+        raise InvalidRunRequestError(
             "run.requested payload must contain "
             "a string test_run_id."
         )
@@ -88,7 +92,7 @@ async def accept_run_requested(
     try:
         test_run_id = UUID(raw_test_run_id)
     except ValueError as error:
-        raise ValueError(
+        raise InvalidRunRequestError(
             "run.requested test_run_id must be a UUID."
         ) from error
 

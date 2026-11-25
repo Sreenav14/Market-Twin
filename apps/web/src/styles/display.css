@@ -1,10 +1,10 @@
 /* MarketTwin DISPLAY family — Phase 2b canonical recipes.
-   Imported after concept-system.css on purpose: this layer is the ONE
+   Imported after base-components.css on purpose: this layer is the ONE
    definition for each display family (cards, tables/rows, lists, badges,
    avatars, breadcrumbs/headers, pagination, progress, chart chrome).
    Older sheets must not restate these geometries — a recipe that lives
    in two places is not a recipe. Values come only from the Soft Proof
-   tokens (concept-tokens.css / tokens.css): surface #FFF, border
+   tokens (tokens.css): surface #FFF, border
    #E6E3DE (--line), radius 12 cards, soft two-stop shadow, petrol
    accent, accent tint #E6F2F5 for SELECTION ONLY (never status).
    Motion: register only (110/150ms colour here), no arrival animation. */

@@ -12,11 +12,18 @@ from markettwin_database.worker_heartbeat import run_worker_heartbeat
 from opentelemetry import trace
 from sqlalchemy import or_, select, text, update
 from sqlalchemy.engine import URL
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+from markettwin_evaluation_worker.errors import InvalidEvaluationInput
 
 from markettwin_evaluation_worker.workflow import (
     EvaluationWorkflowResult,
     evaluate_and_generate_report,
+)
+from markettwin_evaluation_worker.graph_audit import (
+    AUDIT_INTERVAL_SECONDS,
+    run_scheduled_audit,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,20 +57,35 @@ async def process_run(engine: AsyncEngine, test_run_id: UUID) -> EvaluationWorkf
                 ):
                     return None
                 attempts = run.evaluation_attempts + 1
+                budget = (getattr(run, "configuration_snapshot", None) or {}).get(
+                    "slop_desktop_budget", {},
+                )
+                reserve = budget.get("finalization_reserve_seconds") if isinstance(budget, dict) else None
+                timeout = reserve if isinstance(reserve, (int, float)) and reserve > 0 else None
                 try:
-                    result = await evaluate_and_generate_report(
-                        test_run_id=test_run_id, session=session
-                    )
+                    async with asyncio.timeout(timeout):
+                        result = await evaluate_and_generate_report(
+                            test_run_id=test_run_id, session=session
+                        )
                 except Exception as error:
                     now = datetime.now(UTC)
+                    if isinstance(error, InvalidEvaluationInput):
+                        code = error.code
+                    elif isinstance(error, TimeoutError):
+                        code = "evaluation_timeout"
+                    elif isinstance(error, OperationalError):
+                        code = "evaluation_database_unavailable"
+                    else:
+                        code = "evaluation_failed"
+                    quarantined = isinstance(error, InvalidEvaluationInput) or attempts >= 5
                     await session.rollback()
                     await session.execute(update(TestRun).where(TestRun.id == test_run_id).values(
                         evaluation_attempts=attempts,
-                        evaluation_last_error=type(error).__name__,
-                        evaluation_next_attempt_at=now + timedelta(
+                        evaluation_last_error=code,
+                        evaluation_next_attempt_at=None if quarantined else now + timedelta(
                             seconds=min(3600, 30 * 2 ** min(attempts - 1, 7))
                         ),
-                        evaluation_quarantined_at=now if attempts >= 5 else None,
+                        evaluation_quarantined_at=now if quarantined else None,
                     ))
                     await session.commit()
                     raise
@@ -102,34 +124,55 @@ async def _run_worker(engine: AsyncEngine) -> None:
     concurrency = int(os.getenv("MARKETTWIN_EVALUATION_CONCURRENCY", "2"))
     if not 1 <= concurrency <= 4:
         raise ValueError("Evaluation concurrency must be between 1 and 4.")
-    capacity = asyncio.Semaphore(concurrency)
-
     async def process_pending(test_run_id: UUID) -> None:
-        async with capacity:
-            try:
-                await process_run(engine, test_run_id)
-            except Exception:
-                logger.exception("Evaluation failed for TestRun %s; will retry", test_run_id)
+        try:
+            if await process_run(engine, test_run_id) is None:
+                # Another evaluator can hold the advisory lock. Avoid spinning
+                # on the same oldest candidate while that evaluator finishes.
+                await asyncio.sleep(1)
+        except InvalidEvaluationInput as error:
+            logger.warning("Evaluation input rejected for TestRun %s: %s", test_run_id, error.code)
+        except Exception:
+            logger.exception("Evaluation attempt failed for TestRun %s", test_run_id)
 
+    active: dict[UUID, asyncio.Task[None]] = {}
+    async with asyncio.TaskGroup() as group:
+        group.create_task(_run_graph_audit_worker(engine))
+        while True:
+            active = {run_id: task for run_id, task in active.items() if not task.done()}
+            available = concurrency - len(active)
+            if available:
+                try:
+                    async with AsyncSession(engine) as session:
+                        pending = (await session.scalars(select(TestRun.id).where(
+                            TestRun.status == "completed",
+                            TestRun.id.not_in(tuple(active)),
+                            TestRun.evaluation_quarantined_at.is_(None),
+                            or_(TestRun.evaluation_next_attempt_at.is_(None),
+                                TestRun.evaluation_next_attempt_at <= datetime.now(UTC)),
+                            ~select(Report.id).where(
+                                Report.test_run_id == TestRun.id, Report.version == 1,
+                                Report.status == "completed",
+                            ).exists(),
+                        ).order_by(TestRun.completed_at, TestRun.id).limit(available))).all()
+                    for test_run_id in pending:
+                        active[test_run_id] = group.create_task(process_pending(test_run_id))
+                except Exception:
+                    logger.exception("Could not discover completed tests for evaluation")
+            if active:
+                await asyncio.wait(active.values(), timeout=5, return_when=asyncio.FIRST_COMPLETED)
+            else:
+                await asyncio.sleep(5)
+
+
+async def _run_graph_audit_worker(engine: AsyncEngine) -> None:
+    session_factory = create_session_factory(engine)
     while True:
         try:
-            async with AsyncSession(engine) as session:
-                pending = (await session.scalars(select(TestRun.id).where(
-                    TestRun.status == "completed",
-                    TestRun.evaluation_quarantined_at.is_(None),
-                    or_(TestRun.evaluation_next_attempt_at.is_(None),
-                        TestRun.evaluation_next_attempt_at <= datetime.now(UTC)),
-                    ~select(Report.id).where(
-                        Report.test_run_id == TestRun.id, Report.version == 1,
-                        Report.status == "completed",
-                    ).exists(),
-                ).order_by(TestRun.completed_at).limit(20))).all()
-            async with asyncio.TaskGroup() as group:
-                for test_run_id in pending:
-                    group.create_task(process_pending(test_run_id))
+            await run_scheduled_audit(session_factory)
         except Exception:
-            logger.exception("Could not discover completed tests for evaluation")
-        await asyncio.sleep(5)
+            logger.exception("Graph audit failed; will retry next interval")
+        await asyncio.sleep(AUDIT_INTERVAL_SECONDS)
 
 
 async def main() -> None:

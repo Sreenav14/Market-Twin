@@ -12,7 +12,7 @@ import {
   type TestRun,
 } from "../../lib/api";
 import { testReference, testTitle } from "../../lib/format";
-import { formatDate, marketVerdictWord } from "../../lib/results";
+import { formatDate } from "../../lib/results";
 import { statusEntry } from "../../lib/status";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { useWorkspaceTests } from "../../lib/useWorkspaceTests";
@@ -21,7 +21,7 @@ import { InlineAlert } from "../../components/ui/Feedback";
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { splitMetrics } from "../runs/ContractReport";
-import { CANONICAL_DEMO_DATA } from "../../lib/concept-dataset";
+import { reportKind, Verdict } from "../runs/ReportFrame";
 import {
   canAnimateDesk,
   DeskMotionContext,
@@ -45,16 +45,16 @@ function isApprovedReplayDraft(test: TestRun): boolean {
 
 export function testDestination(test: TestRun): { to: string; label: string } {
   const base = `/runs/${test.id}`;
-  if (isApprovedReplayDraft(test)) return { to: `${base}/overview`, label: "Review the run" };
+  if (isApprovedReplayDraft(test)) return { to: `${base}`, label: "Review the run" };
   if (test.configuration_snapshot.discovery_stage === "awaiting_approval") {
-    return { to: `${base}/overview`, label: "Review the run" };
+    return { to: `${base}`, label: "Review the run" };
   }
-  if (test.status === "awaiting_human") return { to: `${base}/human-action`, label: "Help this tester" };
-  if (test.status === "completed") return { to: `${base}/results`, label: "See test results" };
+  if (test.status === "awaiting_human") return { to: `${base}/watch#human-action-heading`, label: "Help this tester" };
+  if (test.status === "completed") return { to: `${base}`, label: "See test results" };
   // Only a run that is actually executing has a live browser to watch;
   // a queued or planning run gets its details page, not a live claim.
   if (test.status === "running") return { to: `${base}/watch`, label: "Watch live" };
-  return { to: `${base}/overview`, label: test.status === "draft" ? "Review draft" : "See test details" };
+  return { to: `${base}`, label: test.status === "draft" ? "Review draft" : "See test details" };
 }
 
 /** The one-line outcome of a finished run, from its real report payload:
@@ -243,10 +243,6 @@ export function WorkspaceDashboardPage() {
       refetchInterval: 5_000,
     })),
   });
-  const knowledge = useQuery({
-    queryKey: ["home-knowledge-review", user.id, workspace.id],
-    queryFn: () => api.listIngestion(workspace.id),
-  });
   const featuredResults = useQuery({
     queryKey: ["home-featured-results", user.id, workspace.id, latestCompleted?.id],
     queryFn: ({ signal }) => api.getRunResults(latestCompleted!.id, signal),
@@ -276,12 +272,10 @@ export function WorkspaceDashboardPage() {
   const newTestPath = applications.length === 1 ? `/applications/${applications[0].id}/runs/new` : "/applications";
 
   /* ----- Needs-you items, in the tray's order: the Lead Agent's
-     requests first (earliest waiting first), then test approvals,
-     then knowledge reviews. ----- */
+     requests first (earliest waiting first), then test approvals. ----- */
   type TrayItem =
     | { kind: "human"; run: TestRun; action: HumanAction }
-    | { kind: "approval"; run: TestRun }
-    | { kind: "knowledge"; id: string; name: string; sourceName: string };
+    | { kind: "approval"; run: TestRun };
   const trayItems: TrayItem[] = [];
   awaitingRuns.slice(0, 3).forEach((run, index) => {
     const actions = (humanActionQueries[index]?.data ?? [])
@@ -290,17 +284,10 @@ export function WorkspaceDashboardPage() {
     for (const action of actions) trayItems.push({ kind: "human", run, action });
   });
   for (const run of approvalRuns) trayItems.push({ kind: "approval", run });
-  for (const entry of knowledge.data ?? []) {
-    if (entry.status === "draft" && entry.processing_stage === "review") {
-      trayItems.push({ kind: "knowledge", id: entry.id, name: entry.name, sourceName: entry.source_name });
-    }
-  }
   const blocked = trayItems.length > 0;
 
   const trayItemKey = (item: TrayItem): string =>
-    item.kind === "human" ? `human-${item.action.id}`
-      : item.kind === "approval" ? `approval-${item.run.id}`
-        : `knowledge-${item.id}`;
+    item.kind === "human" ? `human-${item.action.id}` : `approval-${item.run.id}`;
 
   /* ----- The one attention event: a Needs-you item arriving while the
      user is present. The first set of items only seeds the seen-set —
@@ -322,8 +309,7 @@ export function WorkspaceDashboardPage() {
   // and seed an empty set during the loading panel.)
   const traySourcesSettled =
     Boolean(state.data) &&
-    humanActionQueries.every((query) => query.data !== undefined || query.isError) &&
-    (knowledge.data !== undefined || knowledge.isError);
+    humanActionQueries.every((query) => query.data !== undefined || query.isError);
   useEffect(() => {
     const current = new Set(trayItems.map(trayItemKey));
     if (seenTrayRef.current === null) {
@@ -365,6 +351,7 @@ export function WorkspaceDashboardPage() {
       <button type="button" className="secondary-button" onClick={openCommandMenu}>
         Start a test · Go to… <kbd className="kbd">⌘K</kbd>
       </button>
+      {writable ? <Link className="secondary-button" to="/knowledge/add">Add a source</Link> : null}
       {writable && applications.length > 0 ? <Link className="primary-button" to={newTestPath}>+ New test</Link> : null}
     </div>
   </div>;
@@ -391,7 +378,7 @@ export function WorkspaceDashboardPage() {
           key={segment.key}
           className="desk-outcome-segment"
           style={{ flexGrow: segment.count }}
-          to={`/runs/${run.id}/results?outcome=${segment.key}`}
+          to={`/runs/${run.id}?outcome=${segment.key}`}
         >
           <DeskScaleFill frac={segment.count / total} className={`desk-outcome-fill tone-${segment.tone}`} />
           <span className="desk-outcome-label">
@@ -409,36 +396,40 @@ export function WorkspaceDashboardPage() {
       const previous = previousCompleted && mastheadResults
         ? { run: previousCompleted, results: mastheadResults } : null;
       const previousVerdict = previous ? obj(previous.results.report.payload).market_verdict : null;
-      const previousWord = previousVerdict && typeof obj(previousVerdict).verdict === "string"
-        ? marketVerdictWord(strOf(obj(previousVerdict).verdict)) : null;
+      const previousKind = previous ? reportKind(previous.results.report.payload, previous.run) : undefined;
       return <section className="desk-masthead desk-masthead-failed" aria-labelledby="desk-masthead-heading">
         <DeskSwap swapKey={`${latestFailed.id}|failed`}>
           <p className="desk-eyebrow">LATEST RUN — {appName(latestFailed).toUpperCase()} · {testReference(latestFailed)}</p>
           <h2 id="desk-masthead-heading" className="desk-verdict-word">Latest run failed</h2>
           {latestFailed.status_reason ? <p className="desk-basis">{latestFailed.status_reason}</p> : null}
           {previous ? <p className="desk-previous">
-            Previous result — {appName(previous.run)}: {previousWord ? <strong>{previousWord}</strong> : null}
+            Previous result — {appName(previous.run)}: {previousKind === "explore_test"
+              ? <Verdict kind="harness" value={previous.results.report.payload.verdict} inline />
+              : typeof obj(previousVerdict).verdict === "string"
+                ? <Verdict kind="contract" value={obj(previousVerdict).verdict} inline /> : null}
             {previous.results.report.generated_at ? <> · Finished {formatDate(previous.results.report.generated_at)}</> : null}{" "}
-            <Link className="text-link" to={`/runs/${previous.run.id}/results`}>Read the full result →</Link>
+            <Link className="text-link" to={`/runs/${previous.run.id}`}>Read the full result →</Link>
           </p> : null}
         </DeskSwap>
       </section>;
     }
     const run = latestCompleted!;
     const results = featuredResults.data ?? null;
+    const kind = results ? reportKind(results.report.payload, run) : undefined;
     const finishedLabel = results?.report.generated_at ? formatDate(results.report.generated_at) : null;
     return <section className={`desk-masthead${verdictKey === "ready" ? " desk-masthead-ready" : ""}${compact ? " desk-masthead-compact" : ""}`} aria-labelledby="desk-masthead-heading">
       <DeskSwap swapKey={`${run.id}|${results ? (verdictKey ?? "legacy") : "pending"}`}>
       <p className="desk-eyebrow">LATEST RESULT — {appName(run).toUpperCase()}{finishedLabel ? ` · FINISHED ${finishedLabel.toUpperCase()}` : ""} · {testReference(run)}</p>
       {results ? <>
-        {verdictKey ? <h2 id="desk-masthead-heading" className="desk-verdict-word">{marketVerdictWord(verdictKey)}</h2>
+        {kind === "explore_test" ? <Verdict id="desk-masthead-heading" className="desk-verdict-word" kind="harness" value={results.report.payload.verdict} />
+          : verdictKey ? <Verdict id="desk-masthead-heading" className="desk-verdict-word" kind="contract" value={verdictKey} />
           : <h2 id="desk-masthead-heading" className="desk-verdict-word">{testTitle(run)}</h2>}
         {outcomeBar(results, run)}
         {results.report.executive_summary ? <p className="desk-basis">
           {truncateWords(results.report.executive_summary, 140)}{" "}
-          <Link className="text-link" to={`/runs/${run.id}/results`}>Read the full result →</Link>
+          <Link className="text-link" to={`/runs/${run.id}`}>Read the full result →</Link>
         </p> : <p className="desk-basis">
-          <Link className="text-link" to={`/runs/${run.id}/results`}>Read the full result →</Link>
+          <Link className="text-link" to={`/runs/${run.id}`}>Read the full result →</Link>
         </p>}
         {(() => {
           const evidence = evidenceOf(results, verdictKey, voices);
@@ -479,7 +470,7 @@ export function WorkspaceDashboardPage() {
                 {action.requested_by_step_id ? `Tester paused at step ${action.requested_by_step_id}` : "Tester paused"}
                 {action.expires_at ? ` · Request expires ${new Date(action.expires_at).toLocaleString()}` : ""}
               </p>
-              <Link className="primary-button" to={`/runs/${run.id}/human-action`}>Help now →</Link>
+              <Link className="primary-button" to={`/runs/${run.id}/watch#human-action-heading`}>Help now →</Link>
             </article>;
           }
           if (item.kind === "approval") {
@@ -487,14 +478,10 @@ export function WorkspaceDashboardPage() {
             return <article key={`approval-${run.id}`} {...cardMotionProps(item)}>
               <p className="desk-card-eyebrow">TEST PLAN · {appName(run).toUpperCase()}</p>
               <p className="desk-card-quote">{testTitle(run)} — created with the retired contract flow; it cannot be approved or started.</p>
-              <Link className="primary-button" to={`/runs/${run.id}/overview`}>Open the run →</Link>
+              <Link className="primary-button" to={`/runs/${run.id}`}>Open the run →</Link>
             </article>;
           }
-          return <article key={`knowledge-${item.id}`} {...cardMotionProps(item)}>
-            <p className="desk-card-eyebrow">KNOWLEDGE · {item.sourceName.toUpperCase()}</p>
-            <p className="desk-card-quote">{item.name} is ready for review.</p>
-            <Link className="primary-button" to={`/knowledge/review/${item.id}`}>Review knowledge →</Link>
-          </article>;
+          return null;
         })}
       </div>
     </> : <p className="desk-calm" id="desk-tray-heading">Nothing needs you.</p>}
@@ -515,7 +502,7 @@ export function WorkspaceDashboardPage() {
       return <article className="desk-strip-run" key={run.id}>
         <p className="desk-strip-run-head">
           <span className={`desk-dot tone-${statusEntry("run", run.status)?.tone ?? "neutral"}`} aria-hidden="true" />
-          <strong>{word}</strong> · <Link to={`/runs/${run.id}/overview`}>{testTitle(run)}</Link> · {appName(run)}
+          <strong>{word}</strong> · <Link to={`/runs/${run.id}`}>{testTitle(run)}</Link> · {appName(run)}
           {run.status === "running" ? <Link className="text-link" to={`/runs/${run.id}/watch`}>Watch live →</Link> : null}
         </p>
         {run.status_reason ? <p className="desk-strip-counts" style={{ margin: "0 0 8px" }}>{run.status_reason}</p> : null}
@@ -553,10 +540,12 @@ export function WorkspaceDashboardPage() {
         <span className="desk-app-tile" style={{ background: tileTint(app.id) }} aria-hidden="true">{app.name.charAt(0).toUpperCase()}</span>
         <div className="desk-app-copy">
           <h3 className="font-h3"><Link to={`/applications/${app.id}`}>{app.name}</Link></h3>
+          <Link className="text-link" to={`/applications/${app.id}/knowledge`} aria-label={`${app.name} knowledge`}>Knowledge</Link>
           {app.description ? <p className="font-body-small">{app.description}</p> : null}
           {app.latest_run_summary && (app.latest_run_summary.verdict || app.latest_run_summary.finished_at) ? (
             <p className="font-body-small">
-              {app.latest_run_summary.verdict ? <strong>{marketVerdictWord(app.latest_run_summary.verdict)}</strong> : null}
+              {app.latest_run_summary.verdict ? <Verdict kind={app.latest_run_summary.verdict === "ready_with_issues" ? "contract" : "shipping"}
+                value={app.latest_run_summary.verdict} inline /> : null}
               {app.latest_run_summary.verdict && app.latest_run_summary.finished_at ? " · " : null}
               {app.latest_run_summary.finished_at ? <>Finished {formatDate(app.latest_run_summary.finished_at)}</> : null}
             </p>
@@ -675,28 +664,15 @@ export function WorkspaceDashboardPage() {
   const deskClass = `desk${documentHidden ? " desk-suspended" : ""}`;
 
   if (applications.length === 0) {
-    // State A: welcome + a clearly labelled example of the briefing.
-    const demo = CANONICAL_DEMO_DATA;
     return <DeskMotionContext.Provider value={motion}>
     <div className={deskClass}>
       {header}
       {state.isError ? <InlineAlert severity="warning" title="Could not refresh your home page" role="alert" action={<button className="text-link" onClick={() => void state.refetch()}>Try again</button>}>Showing the last loaded data.</InlineAlert> : null}
-      <section className="desk-welcome">
-        <h2 className="font-h2-marketing">Your briefing desk.</h2>
+      <section className="desk-welcome" aria-labelledby="desk-welcome">
+        <h2 className="font-h2-marketing" id="desk-welcome">Your briefing desk.</h2>
         <p className="font-body">Add an app and the Lead Agent will test it like a person would, then brief you here: what worked, what broke, and what it could not check.</p>
         {writable ? <Link className="primary-button" to="/applications/new">Add an app</Link>
           : <p>An owner or administrator can add an app.</p>}
-      </section>
-      <section className="desk-example" aria-labelledby="desk-example-heading">
-        <p className="desk-example-label" id="desk-example-heading">EXAMPLE — HOW YOUR BRIEFING WILL LOOK</p>
-        <p className="desk-eyebrow">LATEST RESULT — THREAD &amp; CO. · FINISHED {demo.testDateLabel.toUpperCase()}</p>
-        <p className="desk-verdict-word">{demo.verdict.word}</p>
-        <p className="desk-basis">{demo.verdict.reason}</p>
-        <div className="desk-evidence">
-          <p className="desk-evidence-title">{demo.problems[0].title}</p>
-          <p className="desk-evidence-detail">{demo.problems[0].description} Reproduced in a fresh browser.</p>
-        </div>
-        <VoiceCard name={demo.testers.find((tester) => tester.id === demo.feelings[0].tester)?.name ?? "Maya"} quote={demo.feelings[0].quote} role={`Simulated tester · ${demo.feelings[0].task}`} />
       </section>
       <p className="desk-footer-line">MarketTwin only counts defects reproduced in a fresh browser.</p>
     </div>

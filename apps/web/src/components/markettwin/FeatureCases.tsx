@@ -23,6 +23,7 @@ interface CaseResults {
 }
 
 interface HitlSummary {
+  truncated?: boolean;
   executor_mode: string;
   reused_auth_cases: number;
   human_requests: Record<string, number>;
@@ -42,6 +43,7 @@ function AuthenticatedCoverage({ runId, userId }: { runId: string; userId: strin
   const summary = query.data;
   return <details className="authenticated-coverage" aria-label="Authenticated coverage">
     <summary><strong>Authentication and human contribution</strong><span>{summary.human_requests?.completed ?? 0} completed handoffs · {summary.reused_auth_cases ?? 0} reused cases · {summary.action_approvals?.consumed ?? 0} consumed approvals</span></summary>
+    {summary.truncated && <p role="status">Execution history exceeds this summary’s limit. Coverage counts are incomplete.</p>}
     <p>{summary.executor_mode === "deterministic_case_steps" ? "Planned feature checks" : "Tester journeys"}.
       Human login and approval decisions are recorded separately from tester steps.</p>
     <p>{summary.human_requests?.completed ?? 0} completed human handoffs · {summary.reused_auth_cases ?? 0} cases with reused authentication · {summary.action_approvals?.consumed ?? 0} consumed action approvals.</p>
@@ -55,7 +57,7 @@ function AuthenticatedCoverage({ runId, userId }: { runId: string; userId: strin
   </details>;
 }
 
-export function FeatureCases({ runId, userId, id }: { runId: string; userId: string; id?: string }) {
+export function FeatureCases({ runId, userId, id, showCoverage = true }: { runId: string; userId: string; id?: string; showCoverage?: boolean }) {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["feature-cases", userId, runId],
@@ -66,14 +68,14 @@ export function FeatureCases({ runId, userId, id }: { runId: string; userId: str
   if (query.isError) return <ErrorPanel message={query.error.message} />;
   const { cases, coverage, evaluation_pending: pending, available } = query.data;
   const selected = cases.find((item) => item.case_id === selectedCaseId)
-    ?? cases.find((item) => item.verdict === "not_satisfied") ?? cases[0];
+    ?? (showCoverage ? cases.find((item) => item.verdict === "not_satisfied") ?? cases[0] : undefined);
   return <section id={id} aria-label="Feature case coverage">
     <h2>Feature cases</h2>
     <p>Coverage applies to the planned feature. Inferred expectations do not establish a product defect.</p>
-    <AuthenticatedCoverage runId={runId} userId={userId} />
+    {showCoverage ? <AuthenticatedCoverage runId={runId} userId={userId} /> : null}
     {query.data.failure ? <ErrorPanel message={`Feature planning stopped before cases were saved. ${query.data.failure.message}`} /> : !available ? <p>The feature plan has not been saved yet.</p> : null}
     {pending ? <p>Evaluation is pending. Completed verdicts appear after evidence verification.</p> : null}
-    {coverage ? <dl className="feature-coverage-summary" aria-label="Recorded case counts">
+    {showCoverage && coverage ? <dl className="feature-coverage-summary" aria-label="Recorded case counts">
       {([
         ["planned", "Planned"], ["passed", "Passed"], ["failed_assertions", "Failed assertions"],
         ["blocked", "Blocked"], ["inconclusive", "Could not check"], ["not_run", "Not checked"],

@@ -28,7 +28,7 @@ from markettwin_database.models import (
     Workspace,
     WorkspaceMember,
 )
-from sqlalchemy import Row, Select, String, and_, cast, literal, or_, select
+from sqlalchemy import Row, Select, String, and_, case, cast, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -39,6 +39,14 @@ from markettwin_control_api.persistence.repositories.test_run_results_repository
 RowValues = TypeVar("RowValues", bound=tuple[Any, ...])
 
 EVENTS = {
+    "app.plan.created": ("planner", "completed", "Application expectations saved."),
+    "slop.page.started": ("browser_agent", "started", "UI page inspection started."),
+    "slop.page.inspected": ("browser_agent", "completed", "UI page inspection recorded."),
+    "slop.state.progress": ("browser_agent", "completed", "UI control inspection recorded."),
+    "lead.checkpoint": ("system", "completed", "Lead progress review recorded."),
+    "offsite.continue": ("system", "completed", "Lead continued outside browsing."),
+    "offsite.stop": ("system", "policy_blocked", "Lead stopped the journey."),
+    "offsite.domain_changed": ("system", "completed", "Browser domain changed."),
     "agent.runtime": ("planner", "completed", "Agent runtime recorded."),
     "test_plan.created": ("planner", "completed", "Feature plan saved."),
     "test_case.started": ("deterministic_case", "started", "Feature case started."),
@@ -164,15 +172,28 @@ class LiveBrowserRepository:
             .join(AgentExecution, AgentExecution.id == BrowserSession.execution_id)
             .where(
                 BrowserSession.test_run_id == run.id,
-                BrowserSession.session_role == "room",
                 BrowserSession.state == "open",
             )
-            .order_by(BrowserSession.created_at.desc(), BrowserSession.id.desc())
             .limit(1)
             .execution_options(populate_existing=True)
         )
         if browser_session_id is not None:
-            statement = statement.where(BrowserSession.id == browser_session_id)
+            statement = statement.where(
+                BrowserSession.id == browser_session_id,
+                BrowserSession.session_role.in_(("room", "worker")),
+            )
+        else:
+            room = BrowserSession.session_role == "room"
+            worker_handoff = and_(
+                BrowserSession.session_role == "worker",
+                BrowserSession.control_mode.in_(("human_pending", "human", "verifying")),
+            )
+            statement = statement.where(
+                or_(room, worker_handoff) if run.status == "awaiting_human" else room,
+            ).order_by(
+                case((worker_handoff, 0), else_=1), BrowserSession.created_at.desc(),
+                BrowserSession.id.desc(),
+            )
         row = (await self.session.execute(statement)).one_or_none()
         if row is None:
             return None
@@ -275,6 +296,20 @@ class LiveBrowserRepository:
             RunEvent.occurred_at, RunEvent.id, "event",
         ):
             source, status, title = EVENTS[event.event_type]
+            if event.event_type == "slop.page.started":
+                lane_id = event.payload.get("lane_id")
+                if event.payload.get("watched_browser") is True:
+                    title = "Watched browser started a UI inspection."
+                elif event.payload.get("watched_browser") is False and type(lane_id) is int:
+                    title = f"Background browser {lane_id} started a UI inspection."
+            if event.event_type == "slop.state.progress" and event.payload.get("result") not in {
+                "observed", "duplicate_state"
+            }:
+                status, title = "unverified", "UI control could not be assessed."
+            if event.event_type.startswith("offsite."):
+                destination = str(event.payload.get("to", ""))[:200]
+                reason = str(event.payload.get("reason", ""))[:300]
+                title = f"{title} {destination} {reason}".strip()
             add(f"event:{event.id}", event.occurred_at, source, event.event_type, status,
                 title, event.journey_id, event.execution_id)
         for request, journey_id in await rows(

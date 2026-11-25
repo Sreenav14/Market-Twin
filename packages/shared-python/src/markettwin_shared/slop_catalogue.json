@@ -1,6 +1,6 @@
 {
  "definitions_version": "slop-detect@2026.11",
- "catalogue_version": 2,
+ "catalogue_version": 3,
  "formula_version": 1,
  "skill_package": "ui-quality",
  "versioning_note": "Definitions version follows the slop-detect scheme (definitions@YYYY.MM) from the calculation research report. Any tell/threshold change = new definitions version + CHANGELOG line; scores are comparable only within a version.",
@@ -644,6 +644,23 @@
    "source": "SPEC 3"
   },
   {
+   "id": "SLOP_CLIPPED_CONTROL_LABEL",
+   "family": "slop",
+   "name": "Clipped control label",
+   "detection_class": "deterministic",
+   "spec_class": "DET",
+   "severity": "severe",
+   "tier": "strong",
+   "unit": "element",
+   "judged_via": "instance",
+   "trigger": "A rendered button label is partly clipped by more than two CSS pixels on either axis by a non-scrollable overflow boundary.",
+   "thresholds": {
+    "clip_px": 2
+   },
+   "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
+   "source": "SPEC 3 viewport integrity"
+  },
+  {
    "id": "SLOP_VIEWPORT_INTEGRITY",
    "family": "slop",
    "name": "Viewport integrity",
@@ -892,14 +909,14 @@
   {
    "id": "SLOP_DEFAULT_FONT",
    "family": "slop",
-   "name": "Default font (bundle form)",
+   "name": "Shared display and body font",
    "detection_class": "deterministic",
    "spec_class": "DET",
-   "severity": "minor",
+   "severity": "info",
    "tier": "moderate",
    "unit": "page/app",
    "judged_via": "cluster (page aggregate)",
-   "trigger": "Bundle form only - a default font alone never fires. All three: (1) computed font-family of h1/h2 (first non-generic family) is in data_lists.default_fonts; (2) the same family serves display and body with no display/body contrast; (3) neither offset applies (family attested in brand_tokens; display_face or optical_tracking credit earned).",
+   "trigger": "Record a design observation when the heading's first font family is on the default-font list and matches the dominant body family. Shared family alone does not establish hierarchy or harm.",
    "thresholds": {},
    "formula_ref": "SPEC 6.1/6.4 via GATE-FLAG-01",
    "source": "SPEC 3",

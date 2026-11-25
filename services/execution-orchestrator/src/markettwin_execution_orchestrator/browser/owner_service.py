@@ -26,6 +26,7 @@ from markettwin_execution_orchestrator.browser.viewer_gateway import (
     ViewerGateway,
 )
 
+OWNER_SHUTDOWN_TIMEOUT_SECONDS = 10
 _active_service: HITLWorkerService | None = None
 
 
@@ -349,10 +350,14 @@ class HITLWorkerService:
             self._prune_task = None
         if server is not None:
             server.should_exit = True
-        if task is not None:
-            await task
-        if _active_service is self:
-            _active_service = None
+        try:
+            if task is not None:
+                await asyncio.wait_for(task, timeout=OWNER_SHUTDOWN_TIMEOUT_SECONDS)
+        except TimeoutError:
+            logging.getLogger(__name__).warning("HITL server shutdown timed out; task cancelled")
+        finally:
+            if _active_service is self:
+                _active_service = None
 
 
 async def wait_for_human_action_resume(request_id: UUID, timeout_seconds: float) -> None:

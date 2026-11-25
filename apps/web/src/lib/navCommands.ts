@@ -20,11 +20,9 @@ export interface NavCommand {
 
 export const NAV_COMMANDS: NavCommand[] = [
   { id: "home", title: "Home", description: "Applications and test activity", href: "/dashboard", icon: "home", keywords: "dashboard briefing desk" },
-  { id: "apps", title: "Your apps", description: "Choose a product or start a test", href: "/applications", icon: "apps", keywords: "applications products", activePrefixes: ["/applications", "/targets"] },
-  { id: "tests", title: "Tests", description: "Find a test and inspect its results", href: "/runs", icon: "runs", keywords: "runs results", activePrefixes: ["/runs"] },
-  { id: "knowledge", title: "Knowledge", description: "Review and approve knowledge for tests", href: "/knowledge/review", icon: "knowledge", keywords: "review approve sources", activePrefixes: ["/knowledge"] },
-  { id: "add-knowledge", title: "Add knowledge", description: "Add knowledge from source files or links", href: "/ingestion", icon: "ingestion", keywords: "ingest upload link source" },
-  { id: "testers", title: "Testers", description: "Inspect tester instructions and prepare another test", href: "/agents", icon: "user", keywords: "agents personas instructions" },
+  { id: "apps", title: "Apps", description: "Choose an application or manage its personas", href: "/applications", icon: "apps", keywords: "your apps products testers instructions", activePrefixes: ["/applications", "/targets"] },
+  { id: "knowledge", title: "Knowledge", description: "Build application knowledge and review learned skills", href: "/knowledge", icon: "knowledge", keywords: "ingestion learn map skills", activePrefixes: ["/knowledge"] },
+  { id: "tests", title: "Tests", description: "Start a test or inspect its results", href: "/runs", icon: "runs", keywords: "runs results visual audit slop look quality", activePrefixes: ["/runs"] },
   { id: "settings", title: "Settings", description: "Your account and workspace", href: "/settings", icon: "settings", keywords: "profile account workspace billing" },
 ];
 

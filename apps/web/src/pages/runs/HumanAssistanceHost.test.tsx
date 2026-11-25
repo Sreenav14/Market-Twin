@@ -6,7 +6,7 @@ import { Link, MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import type { RunContext } from "../../layouts/RunLayout";
 import { api } from "../../lib/api";
-import { HumanActionPage, HumanAssistanceHost } from "./HumanActionPage";
+import { HumanActionPage, HumanAssistanceHost, useHumanControlSurface } from "./HumanActionPage";
 
 const counts = vi.hoisted(() => ({ mounted: 0, removed: 0 }));
 vi.mock("./HumanBrowserViewer", () => ({ HumanBrowserViewer: () => {
@@ -27,7 +27,9 @@ it("keeps one lease owner and the same viewer through live, legacy and other run
   const claim = vi.spyOn(api, "claimHumanAction").mockResolvedValue({ request_id: "request", browser_session_id: "browser", lease_id: "lease", lease_token: "secret-token", generation: 1, expires_at: "2026-10-18T12:30:00Z", viewer_available: true, viewer_url: "wss://fixture.test/viewer", viewer_ticket: "secret-ticket" });
   const release = vi.spyOn(api, "releaseHumanAction").mockResolvedValue({ generation: 2 });
   const context = { run: { id: "run", status: "awaiting_human" }, user: { id: "owner" }, workspace: { id: "workspace", role: "owner" } } as RunContext;
+  function Observer() { return useHumanControlSurface() ? null : <div data-testid="observer">Observer</div>; }
   function Layout() { return <HumanAssistanceHost context={context}>
+    <Observer />
     <nav><Link to="/runs/run/watch">Live route</Link><Link to="/runs/run/human-action">Legacy route</Link><Link to="/runs/run/overview">Summary route</Link></nav>
     <Outlet context={context} />
   </HumanAssistanceHost>; }
@@ -36,6 +38,7 @@ it("keeps one lease owner and the same viewer through live, legacy and other run
   </Routes></MemoryRouter></QueryClientProvider>);
   await user.click(await screen.findByRole("button", { name: /Take browser control/ }));
   const original = await screen.findByTestId("protected-viewer");
+  expect(screen.queryByTestId("observer")).not.toBeInTheDocument();
   await user.click(screen.getByRole("link", { name: "Legacy route" }));
   expect(screen.getByTestId("protected-viewer")).toBe(original);
   await user.click(screen.getByRole("link", { name: "Summary route" }));
@@ -48,5 +51,6 @@ it("keeps one lease owner and the same viewer through live, legacy and other run
   expect(claim).toHaveBeenCalledOnce();
   await user.click(screen.getByRole("button", { name: "Hand back" }));
   expect(release).toHaveBeenCalledOnce();
+  expect(await screen.findByTestId("observer")).toBeInTheDocument();
   expect(JSON.stringify(client.getMutationCache().getAll().map((item) => item.state))).not.toContain("secret-token");
 });

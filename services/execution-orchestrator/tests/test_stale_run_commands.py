@@ -413,3 +413,62 @@ async def test_accepted_receipt_with_mismatched_workspace_cannot_fail_active_run
     fail.assert_not_awaited()
     execute.assert_not_awaited()
     assert run.status == "running"
+
+
+@pytest.mark.asyncio
+async def test_tombstone_message_is_dead_lettered_and_next_valid_command_executes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # DAT-5: a Kafka tombstone (value=None) is not decodable at all.
+    # Before the fix its AttributeError escaped process_command, the
+    # worker loop restarted without committing, and the same offset
+    # redelivered forever, wedging every later command behind it.
+    valid_id = uuid4()
+    workspace_id = UUID("99999999-9999-4999-8999-999999999999")
+    tombstone = KafkaMessage(
+        topic="markettwin.execution.commands",
+        partition=0,
+        offset=30,
+        key=None,
+        value=None,
+    )
+    valid = _message(valid_id, offset=31)
+    run = SimpleNamespace(id=valid_id, workspace_id=workspace_id, status="planning")
+
+    session = SimpleNamespace(
+        begin=Mock(side_effect=lambda: _BeginContext()),
+        get=AsyncMock(return_value=run),
+    )
+    _install_acceptance_repositories(monkeypatch)
+    invalid_receipts: list[dict[str, object]] = []
+
+    async def record_invalid(**kwargs: object) -> bool:
+        invalid_receipts.append(kwargs)
+        return True
+
+    monkeypatch.setattr(
+        worker,
+        "ProcessedMessageRepository",
+        Mock(return_value=SimpleNamespace(
+            mark_processed=AsyncMock(side_effect=record_invalid))),
+    )
+    monkeypatch.setattr(worker, "build_run_request", Mock(return_value=object()))
+    execute = AsyncMock()
+    monkeypatch.setattr(worker, "execute_markettwin_run", execute)
+    consumer = _consumer([tombstone, valid])
+
+    with pytest.raises(asyncio.CancelledError):
+        await worker.run_worker(
+            cast(KafkaConsumer, consumer),
+            cast(async_sessionmaker[AsyncSession], lambda: _SessionContext(session)),
+            retry_delay_seconds=0,
+        )
+
+    # The tombstone was receipted under the :invalid consumer name,
+    # the worker never restarted, both deliveries were committed,
+    # and the valid command behind the tombstone executed.
+    assert [receipt["kafka_offset"] for receipt in invalid_receipts] == [30]
+    assert invalid_receipts[0]["consumer_name"] == "markettwin-execution-worker:invalid"
+    assert consumer.start.await_count == 1
+    assert consumer.commit.await_count == 2
+    execute.assert_awaited_once()

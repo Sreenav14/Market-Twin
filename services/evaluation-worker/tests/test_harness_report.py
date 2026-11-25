@@ -11,17 +11,30 @@ from markettwin_evaluation_worker.persistence.evaluation_repository import Evalu
 async def test_report_supports_both_boards_and_only_links_owned_journeys(monkeypatch, as_mapping):
     run_id, owned, foreign, report_id = uuid4(), uuid4(), uuid4(), uuid4()
     items = [
-        {"item_id": "0", "name": "Save", "status": "worked", "journey_id": str(owned)},
+        {"item_id": "0", "name": "Save", "status": "worked", "journey_id": str(owned),
+         "css_path": "#save", "occurrence_index": 0,
+         "locator": {"role": "button", "tier": "confirmed", "skill_body_md": "execution input"},
+         "durations_ms": [300], "mission_id": "unused"},
         {"item_id": "1", "name": "Delete", "status": "broken", "journey_id": str(foreign),
          "reason": "observed_once"},
         {"item_id": "2", "name": "Next", "status": "blocked", "journey_id": "bad"},
     ]
-    board = {"items": {str(i): item for i, item in enumerate(items)} if as_mapping else items}
-    session = Mock(scalars=AsyncMock(return_value=Mock(all=Mock(return_value=[owned]))))
+    board = {"items": {str(i): item for i, item in enumerate(items)} if as_mapping else items,
+             "budget_counters": {"items_started": 1}}
+    session = Mock(scalars=AsyncMock(side_effect=[
+        Mock(all=Mock(return_value=[owned])),
+        [{"decision": "continue", "reason": "Board advanced", "source": "lead"},
+         {"decision": "stop", "reason": "Access blocked"}],
+    ]))
+    proof = {
+        "safety_class": "read_only", "test_value_key": "query", "attempts": 1,
+        "duration_ms": 300, "requirement_refs": ["R1"], "js_errors": [],
+        "state_id": "home", "skill_replay": False, "expectation_id": "E1",
+    }
     reports = Mock(create_completed_report=AsyncMock(return_value=report_id))
     monkeypatch.setattr(harness_report, "EvaluationRepository", lambda _: Mock(
         list_board_item_results=AsyncMock(return_value={
-            item["item_id"]: {"board_status": item["status"]} for item in items
+            item["item_id"]: {"board_status": item["status"], **proof} for item in items
         }),
     ))
     monkeypatch.setattr(harness_report, "ReportRepository", lambda _: reports)
@@ -36,6 +49,18 @@ async def test_report_supports_both_boards_and_only_links_owned_journeys(monkeyp
     assert payload["verdict"] == "Can't tell yet"
     assert payload["board"]["coverage"]["checked"] == 1
     assert payload["items"][2]["reason"] is None
+    worked, foreign_result, _ = payload["board"]["items"]
+    assert {key: worked[key] for key in proof} == proof
+    assert worked["css_path"] == "#save"
+    assert worked["occurrence_index"] == 0
+    assert worked["locator"] == {"role": "button", "tier": "confirmed"}
+    assert "durations_ms" not in worked and "mission_id" not in worked
+    assert "attempts" not in foreign_result
+    assert payload["budget_counters"] == {"items_started": 1}
+    assert payload["activity_checkpoints"] == [
+        {"decision": "continue", "reason": "Board advanced"},
+        {"decision": "stop", "reason": "Access blocked"},
+    ]
 
 
 async def test_empty_board_is_honest_and_missing_board_is_rejected(monkeypatch):
@@ -44,13 +69,19 @@ async def test_empty_board_is_honest_and_missing_board_is_rejected(monkeypatch):
     monkeypatch.setattr(harness_report, "EvaluationRepository", lambda _: Mock(
         list_board_item_results=AsyncMock(return_value={}),
     ))
-    session = Mock(scalars=AsyncMock(return_value=Mock(all=Mock(return_value=[]))))
+    session = Mock(scalars=AsyncMock(side_effect=[Mock(all=Mock(return_value=[])), []]))
     await harness_report.generate_harness_report(
         test_run_id=uuid4(), snapshot={"harness_state": {"items": []}}, session=session,
     )
     assert reports.create_completed_report.await_args.kwargs["report_payload"]["items"] == []
     payload = reports.create_completed_report.await_args.kwargs["report_payload"]
     assert payload["verdict"] == "Can't tell yet"
+    assert "budget_counters" not in payload and "activity_checkpoints" not in payload
+    # W1 (doc 19): the market_verdict key is present even when the honest
+    # answer is cannot-tell — readers never infer from a missing key.
+    assert payload["market_verdict"] == {
+        "verdict": "insufficient_evidence", "coverage": 0.0, "confirmed_defects": 0,
+    }
     with pytest.raises(ValueError, match="no recorded work board"):
         await harness_report.generate_harness_report(
             test_run_id=uuid4(), snapshot={}, session=session,
@@ -120,3 +151,36 @@ async def test_strict_board_results_reject_invalid_records(kind):
                    get=AsyncMock(side_effect=get))
     with pytest.raises(ValueError):
         await EvaluationRepository(session).list_board_item_results(test_run_id=run_id, strict=True)
+
+
+async def test_harness_report_payload_contains_market_verdict(monkeypatch):
+    """W1 (doc 19 section 6.2): a completed Board report's stored payload
+    carries the projected market_verdict — the reader vocabulary, the Board
+    coverage, and the reproduced-broken count — with no journey fields."""
+    run_id, owned, report_id = uuid4(), uuid4(), uuid4()
+    items = [
+        {"item_id": "0", "name": "Search submits", "status": "worked",
+         "journey_id": str(owned)},
+        {"item_id": "1", "name": "Pay button submits", "status": "broken",
+         "journey_id": str(owned)},
+    ]
+    session = Mock(scalars=AsyncMock(side_effect=[Mock(all=Mock(return_value=[owned])), []]))
+    reports = Mock(create_completed_report=AsyncMock(return_value=report_id))
+    monkeypatch.setattr(harness_report, "EvaluationRepository", lambda _: Mock(
+        list_board_item_results=AsyncMock(return_value={
+            "0": {"board_status": "worked"},
+            "1": {"board_status": "broken"},
+        }),
+    ))
+    monkeypatch.setattr(harness_report, "ReportRepository", lambda _: reports)
+
+    await harness_report.generate_harness_report(
+        test_run_id=run_id, snapshot={"harness_state": {"items": items}},
+        session=session,
+    )
+
+    payload = reports.create_completed_report.await_args.kwargs["report_payload"]
+    assert payload["verdict"] == "Not ready yet"
+    assert payload["market_verdict"] == {
+        "verdict": "not_ready", "coverage": 1.0, "confirmed_defects": 1,
+    }

@@ -32,7 +32,7 @@ function mount(role = "owner", entry = "/runs") {
 
 it("opens applications first, then loads only the selected application's tests", async () => {
   vi.spyOn(api, "listApplications").mockResolvedValue(applications);
-  const list = vi.spyOn(api, "listRuns").mockResolvedValue(runs);
+  const list = vi.spyOn(api, "listRunsPage").mockResolvedValue(runs);
   vi.spyOn(api, "getApplication").mockResolvedValue(applications[0]);
   mount();
   await screen.findByText("Jev");
@@ -41,8 +41,8 @@ it("opens applications first, then loads only the selected application's tests",
   expect(screen.queryByText("Other")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("link", { name: /Jev.*View tests/ }));
   await screen.findByText(/Checkout/);
-  expect(list).toHaveBeenCalledExactlyOnceWith("app-0");
-  expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/runs/run-1/human-action");
+  expect(list).toHaveBeenCalledExactlyOnceWith("app-0", 0);
+  expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/runs/run-1/watch#human-action-heading");
   await userEvent.selectOptions(screen.getByRole("combobox", { name: "Filter tests by status" }), "awaiting_human");
   expect(screen.queryByText(/Checkout/)).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
@@ -59,7 +59,7 @@ it("honours ?status= with a workspace-wide filtered tests view", async () => {
   mount("owner", "/runs?status=awaiting_human");
   await screen.findByText(/Sign in/);
   expect(screen.queryByText(/Checkout/)).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/runs/run-1/human-action");
+  expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/runs/run-1/watch#human-action-heading");
   await userEvent.click(screen.getByRole("button", { name: "Clear filter" }));
   await screen.findByText("Other");
 });
@@ -75,7 +75,7 @@ it("retries an application load and keeps the empty directory useful for readers
 
 it("sorts by actual creation time and keeps the application's status current", async () => {
   vi.spyOn(api, "listApplications").mockResolvedValue(applications);
-  const list = vi.spyOn(api, "listRuns").mockResolvedValue(runs);
+  const list = vi.spyOn(api, "listRunsPage").mockResolvedValue(runs);
   vi.spyOn(api, "getApplication").mockResolvedValue(applications[0]);
   const client = mount();
   await userEvent.click(await screen.findByRole("link", { name: /Jev.*View tests/ }));

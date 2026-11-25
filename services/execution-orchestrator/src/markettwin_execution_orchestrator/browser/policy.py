@@ -1,14 +1,23 @@
 """Deterministic URL/origin policy for MarketTwin browser execution."""
 
 import ipaddress
+import json
+import re
 from dataclasses import dataclass
-from urllib.parse import SplitResult, urlsplit, urlunsplit
+from urllib.parse import SplitResult, parse_qsl, urlsplit, urlunsplit
 
+from markettwin_execution_orchestrator.browser.action_policy import (
+    _SENSITIVE_AUTOCOMPLETE_VALUES,
+    _SENSITIVE_LABEL_PHRASES,
+)
 from markettwin_execution_orchestrator.browser.contracts import (
     AllowedOrigin,
     NetworkPolicy,
 )
-from markettwin_execution_orchestrator.browser.errors import TargetUrlValidationError
+from markettwin_execution_orchestrator.browser.errors import (
+    SuspiciousEgressError,
+    TargetUrlValidationError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +189,7 @@ _CAPTCHA_PROVIDERS: tuple[_CaptchaProvider, ...] = (
     _CaptchaProvider("www.gstatic.com", "/recaptcha/"),
     _CaptchaProvider("hcaptcha.com", "/", include_subdomains=True),
     _CaptchaProvider("challenges.cloudflare.com", "/turnstile/"),
+    _CaptchaProvider("challenges.cloudflare.com", "/cdn-cgi/challenge-platform/"),
 )
 
 
@@ -262,3 +272,124 @@ def validate_websocket_url(
         (mapped_scheme, parsed.netloc, parsed.path, parsed.query, parsed.fragment)
     )
     return validate_target_url(mapped, allowed_origins, network_policy)
+# --- Cross-origin submissions (owner rule, 2026-11-24) -------------------
+#
+# A page under test may send requests to public third parties (its own
+# analytics, embeds, captcha token calls). A send is suspicious — blocked,
+# with the block recorded — only when it carries sensitive data off the
+# page's own origin: a field named like the browser policy's sensitive
+# classification (password / passcode / OTP / payment card ...), or a
+# payment-card value. The classifier returns a named reason — the
+# sensitive class only, never a field value or body content — or None
+# when the send is clean.
+
+_SUBMISSION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def _normalized_field_key(value: str) -> str:
+    return "".join(char for char in value.lower() if char.isalnum())
+
+
+# The scan reuses the interaction policy's sensitive classification, minus
+# "captcha": a captcha-named field is the widget's own token field, not a
+# credential. The agent still may not type into captcha fields — that
+# interaction guard lives in action_policy and is untouched by this scan.
+_SENSITIVE_FIELD_KEYS: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        normalized
+        for normalized in (
+            _normalized_field_key(phrase)
+            for phrase in (*_SENSITIVE_LABEL_PHRASES, *_SENSITIVE_AUTOCOMPLETE_VALUES)
+        )
+        if normalized and normalized != "captcha"
+    )
+)
+
+
+def _body_pairs(post_data: str) -> list[tuple[str | None, str]]:
+    """(field name, value) pairs from one request body.
+
+    Form and JSON bodies give named fields; any other body comes back as
+    one nameless value so it is still value-scanned.
+    """
+
+    text = post_data.strip()
+    if not text:
+        return []
+    if text[0] in "{[":
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            pairs: list[tuple[str | None, str]] = []
+
+            def walk(node: object, key: str | None) -> None:
+                if isinstance(node, dict):
+                    for name, item in node.items():
+                        walk(item, str(name))
+                elif isinstance(node, list):
+                    for item in node:
+                        walk(item, key)
+                elif node is not None:
+                    pairs.append((key, str(node)))
+
+            walk(parsed, None)
+            return pairs
+    if "=" in text:
+        return parse_qsl(text, keep_blank_values=True)
+    return [(None, text)]
+
+
+def _luhn_valid(digits: str) -> bool:
+    total = 0
+    for index, char in enumerate(reversed(digits)):
+        digit = int(char)
+        if index % 2:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        total += digit
+    return total % 10 == 0
+
+
+def _carries_card_number(value: str) -> bool:
+    for run in re.findall(r"\d[\d -]{11,}\d", value):
+        candidate = run.replace(" ", "").replace("-", "")
+        if 13 <= len(candidate) <= 19 and _luhn_valid(candidate):
+            return True
+    return False
+
+
+def cross_origin_submission_reason(
+    method: str,
+    post_data: str | None,
+) -> str | None:
+    """Name why one cross-origin submission is suspicious, or return None.
+
+    Only submissions (POST/PUT/PATCH/DELETE) are classified; loads stay
+    free. A bodyless submission carries nothing and is always clean.
+    """
+
+    if method.upper() not in _SUBMISSION_METHODS or not post_data:
+        return None
+    for name, value in _body_pairs(post_data):
+        if name is not None:
+            key = _normalized_field_key(name)
+            for phrase in _SENSITIVE_FIELD_KEYS:
+                if phrase in key:
+                    return f"sensitive_field:{phrase}"
+        if _carries_card_number(value):
+            return "payment_card_value"
+    return None
+
+
+def ensure_unsuspicious_submission(method: str, post_data: str | None) -> None:
+    """Raise SuspiciousEgressError when a cross-origin submission is suspicious."""
+
+    reason = cross_origin_submission_reason(method, post_data)
+    if reason is not None:
+        raise SuspiciousEgressError(
+            "Cross-origin submission carries sensitive data off the target origin.",
+            reason=reason,
+        )

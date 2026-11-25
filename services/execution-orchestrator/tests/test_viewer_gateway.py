@@ -546,3 +546,166 @@ async def test_tls_gateway_operates_the_original_browser_context(
         await asyncio.to_thread(server.shutdown)
         server.server_close()
         thread.join(timeout=2)
+
+
+# -- Connect-path refusal classes (doc 24 section 5.3) ---------------
+
+
+async def _connect_and_send(url, tls, token, cookie="synthetic-session"):
+    return connect(
+        url,
+        ssl=tls,
+        origin="https://fixture.invalid",
+        additional_headers={"Cookie": f"markettwin_session={cookie}"},
+    )
+
+
+async def test_consumed_ticket_refuses_as_ticket_consumed(
+    gateway_server,
+) -> None:
+    """T-P5-V1a: a ticket that was issued and used, presented again,
+    closes with the ticket_consumed class — distinct from a ticket
+    that never existed."""
+    url, tls, gateway, _, owner, lease = gateway_server
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    async with await _connect_and_send(url, tls, token) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        assert await websocket.recv() == b"synthetic-frame"
+    await asyncio.wait_for(owner.detached_event.wait(), 2)
+    async with await _connect_and_send(url, tls, token) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        with pytest.raises(ConnectionClosed) as closed:
+            await websocket.recv()
+    assert closed.value.rcvd is not None
+    assert closed.value.rcvd.code == 1008
+    assert closed.value.rcvd.reason == "ticket_consumed"
+
+
+async def test_expired_lease_at_connect_refuses_as_lease_expired(
+    gateway_server,
+) -> None:
+    """T-P5-V1b: the stored lease expiring between issue and connect
+    refuses with lease_expired (the same refusal the _permitted
+    expiry check always produced, now classified)."""
+    url, tls, gateway, _, owner, lease = gateway_server
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    gateway._leases[lease.lease_id] = replace(
+        lease, expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    async with await _connect_and_send(url, tls, token) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        with pytest.raises(ConnectionClosed) as closed:
+            await websocket.recv()
+    assert closed.value.rcvd is not None
+    assert closed.value.rcvd.code == 1008
+    assert closed.value.rcvd.reason == "lease_expired"
+
+
+async def test_screencast_refusal_closes_as_screencast_not_allowed(
+    gateway_server, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-P5-V1c: an observer whose screencast is refused at start
+    closes with screencast_not_allowed, not owner_gone."""
+    from markettwin_execution_orchestrator.browser.owner import (
+        ViewerRejectedError,
+    )
+    from markettwin_execution_orchestrator.browser.viewer_gateway import (
+        ObserverLease,
+    )
+
+    url, tls, gateway, authority, owner, lease = gateway_server
+
+    async def observer_permitted(actor_id, handle, generation):
+        return actor_id == authority.actor_id
+
+    async def refused_screencast(handle, *, generation):
+        raise ViewerRejectedError("Browser observation is unavailable.")
+
+    monkeypatch.setattr(
+        authority, "observer_permitted", observer_permitted, raising=False,
+    )
+    monkeypatch.setattr(
+        owner, "start_screencast", refused_screencast, raising=False,
+    )
+    observer_lease = ObserverLease(
+        handle=lease.handle,
+        actor_id=lease.actor_id,
+        generation=lease.generation,
+        expires_at=datetime.now(UTC) + timedelta(seconds=30),
+    )
+    token = await gateway.issue_observer_ticket(
+        observer_lease.actor_id, observer_lease,
+    )
+    async with await _connect_and_send(url, tls, token) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        with pytest.raises(ConnectionClosed) as closed:
+            await websocket.recv()
+    assert closed.value.rcvd is not None
+    assert closed.value.rcvd.code == 1008
+    assert closed.value.rcvd.reason == "screencast_not_allowed"
+
+
+async def test_unauthenticated_callers_get_no_refusal_class(
+    gateway_server,
+) -> None:
+    """T-P5-V2: no valid cookie — the single legacy rejection, with
+    no class observable on the wire."""
+    url, tls, gateway, _, owner, lease = gateway_server
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    for cookie in ("foreign-session", None):
+        headers = (
+            {"Cookie": f"markettwin_session={cookie}"}
+            if cookie is not None else {}
+        )
+        with pytest.raises(InvalidStatus) as rejected:
+            async with connect(
+                url,
+                ssl=tls,
+                origin="https://fixture.invalid",
+                additional_headers=headers,
+            ) as websocket:
+                await websocket.send(json.dumps({"ticket": token}))
+                await websocket.recv()
+        assert rejected.value.response.status_code == 403
+    assert owner.inputs == 0
+
+
+async def test_boundary_log_records_class_without_secrets(
+    gateway_server, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """T-P5-V3: the boundary log line holds the class, the detail and
+    the session id — never the ticket, its digest, the cookie, or
+    exception text."""
+    import hashlib
+    import logging
+
+    url, tls, gateway, _, owner, lease = gateway_server
+    token = await gateway.issue_ticket(lease.actor_id, lease)
+    async with await _connect_and_send(url, tls, token) as websocket:
+        await websocket.send(json.dumps({"ticket": token}))
+        assert await websocket.recv() == b"synthetic-frame"
+    await asyncio.wait_for(owner.detached_event.wait(), 2)
+    with caplog.at_level(
+        logging.WARNING,
+        logger="markettwin_execution_orchestrator.browser.viewer_gateway",
+    ):
+        async with await _connect_and_send(url, tls, token) as websocket:
+            await websocket.send(json.dumps({"ticket": token}))
+            with pytest.raises(ConnectionClosed):
+                await websocket.recv()
+    lines = [
+        record.getMessage() for record in caplog.records
+        if "viewer connect refused" in record.getMessage()
+    ]
+    # The first connection's teardown also reaches the boundary (a
+    # disconnect ExceptionGroup, class gateway_error) — the refusal
+    # under test is the consumed ticket's own line, exactly one.
+    refusals = [line for line in lines if "class=ticket_consumed" in line]
+    assert len(refusals) == 1
+    line = refusals[0]
+    assert "detail=ticket_reused" in line
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    for any_line in lines:
+        assert token not in any_line
+        assert digest not in any_line
+        assert "synthetic-session" not in any_line

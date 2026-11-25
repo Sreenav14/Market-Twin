@@ -1,6 +1,8 @@
 """Live PostgreSQL authority checks for the worker-hosted browser viewer."""
 
 import hashlib
+from contextlib import asynccontextmanager, nullcontext
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -37,6 +39,19 @@ class DatabaseViewerAuthority:
     ) -> None:
         self._session_factory = session_factory
         self._registry = registry
+        self._stream_session: ContextVar[AsyncSession | None] = ContextVar(
+            "viewer_stream_session", default=None)
+
+    @asynccontextmanager
+    async def observer_stream(self):
+        """Reuse a connection, not an authorization result, for one viewer."""
+        async with self._session_factory() as session:
+            await session.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
+            token = self._stream_session.set(session)
+            try:
+                yield
+            finally:
+                self._stream_session.reset(token)
 
     async def actor(self, session_cookie: str) -> UUID | None:
         if not session_cookie:
@@ -191,12 +206,23 @@ class DatabaseViewerAuthority:
                 ))
             return (await session.scalar(statement)) is not None
 
+    async def observer_permitted_session(
+        self, session_cookie: str, actor_id: UUID, handle: BrowserSessionHandle, generation: int,
+    ) -> bool:
+        if not session_cookie:
+            return False
+        return await self.observer_permitted(
+            actor_id, handle, generation, session_cookie=session_cookie,
+        )
+
     async def observer_permitted(
         self, actor_id: UUID, handle: BrowserSessionHandle, generation: int,
+        *, session_cookie: str | None = None,
     ) -> bool:
         """Read-only pixels: exact browser, owner/admin, active target. Grants no input."""
         now = datetime.now(UTC)
-        async with self._session_factory() as session:
+        active = self._stream_session.get()
+        async with (nullcontext(active) if active is not None else self._session_factory()) as session:
             statement = (
                 select(BrowserSession.id)
                 .join(AgentExecution, AgentExecution.id == BrowserSession.execution_id)
@@ -237,6 +263,21 @@ class DatabaseViewerAuthority:
                 )
                 .limit(1)
             )
+            if session_cookie is not None:
+                statement = statement.where(text("""
+                    EXISTS (
+                        SELECT 1 FROM auth.user_sessions AS viewer_session
+                        WHERE viewer_session.user_id = :viewer_actor_id
+                          AND viewer_session.session_token_hash = :viewer_token_hash
+                          AND viewer_session.revoked_at IS NULL
+                          AND viewer_session.idle_expires_at > :viewer_now
+                          AND viewer_session.absolute_expires_at > :viewer_now
+                    )
+                """).bindparams(
+                    viewer_actor_id=actor_id,
+                    viewer_token_hash=hashlib.sha256(session_cookie.encode("utf-8")).hexdigest(),
+                    viewer_now=now,
+                ))
             return (await session.scalar(statement)) is not None
 
     async def refresh_lease(self, actor_id: UUID, lease_id: UUID) -> OwnerLease | None:

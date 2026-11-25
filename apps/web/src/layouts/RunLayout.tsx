@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
@@ -17,12 +17,10 @@ import {
   LoadingPanel,
   Spinner,
 } from "../components/ui/StateViews";
-import { CountBadge, StatusBadge, TestStatusBadge } from "../components/ui/StatusBadge";
+import { StatusBadge, TestStatusBadge } from "../components/ui/StatusBadge";
 import { DeleteAction } from "../components/markettwin/DeleteAction";
-import { KafkaStatusBadge } from "../components/markettwin/KafkaStatusBadge";
-import { canManageLifecycle } from "../lib/permissions";
+import { canManageLifecycle, canWriteWorkspace } from "../lib/permissions";
 import { Button } from "../components/ui/button";
-import { NavDisclosure } from "../components/ui/Menu";
 import { ApiError, TestRun, RunResults, api } from "../lib/api";
 import { CONTRACT_STAGE_STATUS, MODE_STATUS, statusEntry } from "../lib/status";
 import { testTitle, testReference, textValue } from "../lib/format";
@@ -44,10 +42,20 @@ export interface RunContext extends AppShellContext {
 }
 
 export function RunLayout() {
+  const { runId = "" } = useParams();
+  return <RunLayoutForRun key={runId} runId={runId} />;
+}
+
+function RunLayoutForRun({ runId }: { runId: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const appContext = useOutletContext<AppShellContext>();
-  const { runId = "" } = useParams();
+  const canWrite = canWriteWorkspace(appContext.workspace.role);
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const runQuery = useQuery({
@@ -58,10 +66,16 @@ export function RunLayout() {
         ? 5_000
         : false,
   });
+  const retiredReplay = runQuery.data?.status === "draft" &&
+    Boolean(runQuery.data.configuration_snapshot.frozen_contract_source_run_id);
+  const startableDraft = runQuery.data?.status === "draft" && !retiredReplay;
   const preflight = useQuery({ queryKey: ["run-preflight", appContext.user.id, runId],
-    queryFn: () => api.getRunPreflight(runId), enabled: runQuery.data?.status === "draft", retry: false });
+    queryFn: () => api.getRunPreflight(runId), enabled: startableDraft, retry: false,
+    refetchInterval: (query) => query.state.data?.checks.some(
+      (check) => check.name === "app_map" && !check.ready
+    ) ? 5000 : false });
   async function startRun() {
-    if (starting || runQuery.data?.status !== "draft") return;
+    if (starting || !startableDraft || !canWrite) return;
 
     setStarting(true);
     setStartError(null);
@@ -69,7 +83,7 @@ export function RunLayout() {
     try {
       await api.startRun(runId);
       await runQuery.refetch();
-      navigate(`/runs/${runId}/watch`);
+      if (active.current) navigate(`/runs/${runId}/watch`);
     } catch (error) {
       setStartError(
         error instanceof Error
@@ -135,6 +149,10 @@ export function RunLayout() {
           : resultsQuery.data
             ? { status: "ready", data: resultsQuery.data, error: null }
             : { status: "loading", data: null, error: null };
+  const runPath = `/runs/${run.id}`;
+  const summary = [runPath, `${runPath}/`, ...["overview", "results", "report"].map(tab => `${runPath}/${tab}`)].includes(location.pathname)
+    || location.pathname.startsWith(`${runPath}/findings/`);
+  const journeyDetail = location.pathname.startsWith(`${runPath}/journeys/`);
 
   return (
     <>
@@ -152,10 +170,8 @@ export function RunLayout() {
         action={
           <div className="header-actions">
             {run.configuration_snapshot.execution_mode === "discovery_contract_v1" && results.status !== "ready" && stageEntry ? <StatusBadge status={discoveryStage} source="contractStage" /> : <TestStatusBadge status={run.status} />}
-            {canManageLifecycle(appContext.workspace.role) &&
-            run.status === "draft" ? (
+            {canWrite && startableDraft ? (
               <>
-                <KafkaStatusBadge />
                 <Button
                   className="start-test-button"
                   onClick={() => void startRun()}
@@ -201,51 +217,53 @@ export function RunLayout() {
           {startError}
         </InlineAlert>
       ) : null}
-      {run.status === "draft" ? <RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /> : null}
-      {run.configuration_snapshot.discovery_stage === "awaiting_approval" ? <section className="panel"><h2>Contract flow retired</h2><p>This run was created with the retired contract-approval flow and cannot be approved here. Its stored contract and results remain readable from the run overview.</p><Link to={`/runs/${run.id}/overview`}>Open the overview</Link></section> : null}
+      {retiredReplay ? (
+        <Banner severity="warning" titleAs="h2" title="Contract replay retired" action={canWrite ? (
+          <Link className="primary-button" to={`/applications/${run.application_id}/runs/new?${new URLSearchParams({
+            mode: "explore_test", target: run.target_id,
+          })}`}>Create a new test</Link>
+        ) : undefined}>
+          <p>{canWrite
+            ? "Create a fresh Explore & Test run for this target. This saved draft remains available."
+            : "This saved draft is read-only."}</p>
+        </Banner>
+      ) : null}
+      {startableDraft ? <RunPreflightPanel data={preflight.data} error={preflight.error?.message} loading={preflight.isFetching} onRefresh={() => void preflight.refetch()} /> : null}
+      {["queued", "planning", "running"].includes(run.status) && run.status_reason ? (
+        <Banner severity="warning" titleAs="h2" title="Execution needs attention">
+          <p>{run.status_reason}</p>
+        </Banner>
+      ) : null}
+      {run.configuration_snapshot.discovery_stage === "awaiting_approval" ? <section className="panel"><h2>Contract flow retired</h2><p>This run was created with the retired contract-approval flow. Stored contract results remain available here.</p></section> : null}
       {run.status === "awaiting_human" && run.configuration_snapshot.discovery_stage !== "awaiting_approval" && !location.pathname.endsWith("/human-action") && !location.pathname.endsWith("/activity") && !location.pathname.endsWith("/watch") ? (
-        <Banner severity="warning" titleAs="h2" title={<>{statusEntry("run", run.status).word} — the tester is paused</>} action={<Link className="primary-button" to={`/runs/${run.id}/human-action`}>Help this tester</Link>}>{run.status_reason ? <p>{run.status_reason}</p> : <p>The tester is paused until you complete or skip the affected work.</p>}</Banner>
+        <Banner severity="warning" titleAs="h2" title={<>{statusEntry("run", run.status).word} — the tester is paused</>} action={<Link className="primary-button" to={`/runs/${run.id}/watch#human-action-heading`}>Help this tester</Link>}>{run.status_reason ? <p>{run.status_reason}</p> : <p>The tester is paused until you complete or skip the affected work.</p>}</Banner>
       ) : null}
       <div className="run-workspace">
       <div className="run-workspace-content">
       <nav className="tab-strip" aria-label="Test sections">
-        {["overview", "watch", "journeys", "findings", "evidence", "results"].map((tab) => (
+        <Link to={`/runs/${run.id}`} aria-current={summary ? "page" : undefined} className={`tab-link ${summary ? "active" : ""}`}>Summary</Link>
+        {["watch", "activity", "evidence"].map((tab) => (
           <NavLink
             key={tab}
             to={`/runs/${run.id}/${tab}`}
-            className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}
+            aria-current={tab === "activity" && journeyDetail ? "location" : undefined}
+            className={({ isActive }) => `tab-link ${isActive || (tab === "activity" && journeyDetail) ? "active" : ""}`}
           >
-            {tab === "overview" ? "Summary" : tab === "watch" ? (run.status === "running" || run.status === "awaiting_human" ? "Watch live" : "Watch") : tab === "results" ? "Test results" : tab[0].toUpperCase() + tab.slice(1)}
-            {tab === "findings" && results.status === "ready" ? (
-              <CountBadge count={results.data.findings.length} label="findings" />
-            ) : null}
+            {tab[0].toUpperCase() + tab.slice(1)}
           </NavLink>
         ))}
-        <NavDisclosure
-          label="More test sections"
-          buttonClassName="run-more-button tab-link"
-          buttonContent={<span>More</span>}
-        >
-          <div className="run-more-menu" aria-label="More test sections">
-            {["board", "human-action", "evaluation", "missions", "perspectives", "agents"].map((tab) => (
-              <NavLink key={tab} to={`/runs/${run.id}/${tab}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>
-                {tab === "human-action" ? "Human Assistance" : tab === "agents" ? "Testers & Agents" : tab[0].toUpperCase() + tab.slice(1)}
-              </NavLink>
-            ))}
-          </div>
-        </NavDisclosure>
       </nav>
       <HumanAssistanceHost key={`${appContext.user.id}:${appContext.workspace.id}:${appContext.workspace.role}:${run.id}`}
         context={{ ...appContext, run, results, refresh }}><Outlet
         context={{ ...appContext, run, results, refresh } satisfies RunContext}
       /></HumanAssistanceHost>
       </div>
-      <RunFlowPanel
+      {!summary ? <RunFlowPanel
         runId={run.id}
         userId={appContext.user.id}
         runStatus={run.status}
         reportReady={results.status === "ready"}
-      />
+      /> : null}
       </div>
     </>
   );

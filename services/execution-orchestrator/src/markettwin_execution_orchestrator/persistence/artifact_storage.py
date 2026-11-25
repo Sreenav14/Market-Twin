@@ -6,8 +6,9 @@ import asyncio
 import hashlib
 import os
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import BinaryIO, Literal, Protocol, cast
 
 from boto3.session import Session
 
@@ -23,6 +24,13 @@ class S3UploadClient(Protocol):
         Bucket: str,
         Key: str,
         ExtraArgs: dict[str, str],
+    ) -> None: ...
+
+    def download_fileobj(
+        self,
+        Bucket: str,
+        Key: str,
+        Fileobj: BinaryIO,
     ) -> None: ...
 
 
@@ -122,6 +130,17 @@ class S3ArtifactStorage:
             size_bytes=size_bytes,
             sha256=sha256,
         )
+
+    async def download_text(self, *, object_key: str) -> str:
+        """Read one object back as UTF-8 text (doc 33 grounding wiring)."""
+        buffer = BytesIO()
+        await asyncio.to_thread(
+            self._client.download_fileobj,
+            self._bucket,
+            object_key,
+            buffer,
+        )
+        return buffer.getvalue().decode("utf-8")
 
     @staticmethod
     def _sha256(path: Path) -> str:

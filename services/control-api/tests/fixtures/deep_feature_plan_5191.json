@@ -1,0 +1,833 @@
+{
+ "contract_id": null,
+ "contract_version": null,
+ "contract_hash": null,
+ "schema_version": 1,
+ "mode": "deep_feature_v1",
+ "scope": {
+  "feature_key": "registration",
+  "goal": "Test registration validation, recovery, delayed address checks and guide navigation.",
+  "starting_url": "http://127.0.0.1:5191/index.html",
+  "allowed_origins": [
+   "http://127.0.0.1:5191"
+  ],
+  "requirements": [
+   {
+    "requirement_id": "valid",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "Valid synthetic name/email shows Fixture profile registered.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "valid_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": null,
+       "text": "Fixture profile registered.",
+       "scope_role": "form",
+       "scope_name": "Registration"
+      },
+      "expected_value": "Fixture profile registered.",
+      "requirement_refs": [
+       "valid"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "valid"
+   },
+   {
+    "requirement_id": "empty",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "Empty display name shows Display name is required.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "empty_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": null,
+       "text": "Display name is required.",
+       "scope_role": "form",
+       "scope_name": "Registration"
+      },
+      "expected_value": "Display name is required.",
+      "requirement_refs": [
+       "empty"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "validation_bypass"
+   },
+   {
+    "requirement_id": "invalid_email",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "Invalid email shows Enter a valid email.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "invalid_email_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": null,
+       "text": "Enter a valid email.",
+       "scope_role": "form",
+       "scope_name": "Registration"
+      },
+      "expected_value": "Enter a valid email.",
+      "requirement_refs": [
+       "invalid_email"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "validation_bypass"
+   },
+   {
+    "requirement_id": "name_boundary",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "A name longer than 12 characters shows the documented length error.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "name_boundary_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": null,
+       "text": "Display name must be at most 12 characters.",
+       "scope_role": "form",
+       "scope_name": "Registration"
+      },
+      "expected_value": "Display name must be at most 12 characters.",
+      "requirement_refs": [
+       "name_boundary"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "validation_bypass"
+   },
+   {
+    "requirement_id": "dependent_role",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "Choosing Research enables the Role field.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "dependent_role_result",
+      "oracle": "enabled",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": "Role",
+       "text": null,
+       "scope_role": "form",
+       "scope_name": "Registration"
+      },
+      "expected_value": true,
+      "requirement_refs": [
+       "dependent_role"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "dependent_role"
+   },
+   {
+    "requirement_id": "recovery",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "Correcting invalid input clears error and shows registration confirmation.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "recovery_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": null,
+       "text": "Fixture profile registered.",
+       "scope_role": "form",
+       "scope_name": "Registration"
+      },
+      "expected_value": "Fixture profile registered.",
+      "requirement_refs": [
+       "recovery"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "recovery"
+   },
+   {
+    "requirement_id": "async_address",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "The delayed address check completes with Address available.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "async_address_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": null,
+       "name": null,
+       "label": null,
+       "text": "Address available.",
+       "scope_role": null,
+       "scope_name": null
+      },
+      "expected_value": "Address available.",
+      "requirement_refs": [
+       "async_address"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "async_address"
+   },
+   {
+    "requirement_id": "navigation",
+    "source": "fixture",
+    "source_id": "deep-fixture-v1",
+    "text": "Open registration guide displays Registration guide as the heading.",
+    "assertions": [
+     {
+      "after_step_ordinal": null,
+      "assertion_id": "navigation_result",
+      "oracle": "visible_text",
+      "target": {
+       "role": "heading",
+       "name": "Registration guide",
+       "label": null,
+       "text": null,
+       "scope_role": null,
+       "scope_name": null
+      },
+      "expected_value": "Registration guide",
+      "requirement_refs": [
+       "navigation"
+      ],
+      "origin": "fixture_truth"
+     }
+    ],
+    "defect_key": "navigation"
+   }
+  ],
+  "safe_test_data": [
+   {
+    "key": "name",
+    "value": "Visitor"
+   },
+   {
+    "key": "email",
+    "value": "fixture@example.test"
+   },
+   {
+    "key": "invalid_email",
+    "value": "invalid"
+   },
+   {
+    "key": "long_name",
+    "value": "ABCDEFGHIJKLM"
+   },
+   {
+    "key": "research",
+    "value": "research"
+   }
+  ],
+  "unknown_requirements": [],
+  "out_of_scope": [
+   "credentials",
+   "uploads",
+   "payments",
+   "external side effects"
+  ],
+  "safety_class": "read_only_or_low_risk"
+ },
+ "budget": {
+  "max_cases": 8,
+  "max_steps": 96,
+  "max_total_seconds": 300,
+  "max_model_cost_usd": 0.25
+ },
+ "cases": [
+  {
+   "case_id": "async_address",
+   "feature_key": "registration",
+   "title": "Registration async_address",
+   "kind": "state_transition",
+   "priority": "high",
+   "requirement_refs": [
+    "async_address"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Check address",
+      "label": null,
+      "text": null,
+      "scope_role": null,
+      "scope_name": null
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "async_address_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": null,
+      "text": "Address available.",
+      "scope_role": null,
+      "scope_name": null
+     },
+     "expected_value": "Address available.",
+     "requirement_refs": [
+      "async_address"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "empty",
+   "feature_key": "registration",
+   "title": "Registration empty",
+   "kind": "negative",
+   "priority": "high",
+   "requirement_refs": [
+    "empty"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Save",
+      "label": null,
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "empty_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": null,
+      "text": "Display name is required.",
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "expected_value": "Display name is required.",
+     "requirement_refs": [
+      "empty"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "name_boundary",
+   "feature_key": "registration",
+   "title": "Registration name_boundary",
+   "kind": "boundary",
+   "priority": "high",
+   "requirement_refs": [
+    "name_boundary"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Display name",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "long_name",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Email",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "email",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Save",
+      "label": null,
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "name_boundary_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": null,
+      "text": "Display name must be at most 12 characters.",
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "expected_value": "Display name must be at most 12 characters.",
+     "requirement_refs": [
+      "name_boundary"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "recovery",
+   "feature_key": "registration",
+   "title": "Registration recovery",
+   "kind": "recovery",
+   "priority": "high",
+   "requirement_refs": [
+    "recovery"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Save",
+      "label": null,
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Display name",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "name",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Email",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "email",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Save",
+      "label": null,
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "recovery_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": null,
+      "text": "Fixture profile registered.",
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "expected_value": "Fixture profile registered.",
+     "requirement_refs": [
+      "recovery"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "valid",
+   "feature_key": "registration",
+   "title": "Registration valid",
+   "kind": "happy_path",
+   "priority": "high",
+   "requirement_refs": [
+    "valid"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Display name",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "name",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Email",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "email",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Save",
+      "label": null,
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": "registration_submit"
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "valid_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": null,
+      "text": "Fixture profile registered.",
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "expected_value": "Fixture profile registered.",
+     "requirement_refs": [
+      "valid"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "dependent_role",
+   "feature_key": "registration",
+   "title": "Registration dependent_role",
+   "kind": "state_transition",
+   "priority": "high",
+   "requirement_refs": [
+    "dependent_role"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "select",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Team",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "research",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "dependent_role_result",
+     "oracle": "enabled",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Role",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "expected_value": true,
+     "requirement_refs": [
+      "dependent_role"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "invalid_email",
+   "feature_key": "registration",
+   "title": "Registration invalid_email",
+   "kind": "negative",
+   "priority": "high",
+   "requirement_refs": [
+    "invalid_email"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Display name",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "name",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "fill",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": "Email",
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": "invalid_email",
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    },
+    {
+     "action": "click",
+     "target": {
+      "role": "button",
+      "name": "Save",
+      "label": null,
+      "text": null,
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "invalid_email_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": null,
+      "name": null,
+      "label": null,
+      "text": "Enter a valid email.",
+      "scope_role": "form",
+      "scope_name": "Registration"
+     },
+     "expected_value": "Enter a valid email.",
+     "requirement_refs": [
+      "invalid_email"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  },
+  {
+   "case_id": "navigation",
+   "feature_key": "registration",
+   "title": "Registration navigation",
+   "kind": "state_transition",
+   "priority": "high",
+   "requirement_refs": [
+    "navigation"
+   ],
+   "preconditions": [],
+   "steps": [
+    {
+     "action": "click",
+     "target": {
+      "role": "link",
+      "name": "Open registration guide",
+      "label": null,
+      "text": null,
+      "scope_role": null,
+      "scope_name": null
+     },
+     "test_value_key": null,
+     "url": null,
+     "preset": null,
+     "milliseconds": null,
+     "action_id": null
+    }
+   ],
+   "expected": [
+    {
+     "after_step_ordinal": null,
+     "assertion_id": "navigation_result",
+     "oracle": "visible_text",
+     "target": {
+      "role": "heading",
+      "name": "Registration guide",
+      "label": null,
+      "text": null,
+      "scope_role": null,
+      "scope_name": null
+     },
+     "expected_value": "Registration guide",
+     "requirement_refs": [
+      "navigation"
+     ],
+     "origin": "fixture_truth"
+    }
+   ],
+   "safety": "non_destructive",
+   "estimated_seconds": 30,
+   "estimated_cost_usd": 0.0
+  }
+ ],
+ "skipped": [],
+ "coverage_gaps": []
+}

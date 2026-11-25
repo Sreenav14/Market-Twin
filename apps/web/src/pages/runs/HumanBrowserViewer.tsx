@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react";
 
 interface HumanBrowserViewerProps {
   url: string;
@@ -207,6 +208,12 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
           canvas.width = image.width;
           canvas.height = image.height;
           canvasWrapRef.current?.style.setProperty("--viewer-aspect-ratio", `${image.width} / ${image.height}`);
+          const viewport = canvasWrapRef.current?.parentElement;
+          if (viewport && image.width > 0 && image.height > 0) {
+            // Include the 32px scroll strip without enlarging the captured page.
+            viewport.style.width = `min(100%, ${image.width + 32}px, calc(${70 * image.width / image.height}vh + 32px))`;
+            viewport.style.marginInline = "auto";
+          }
           const context = canvas.getContext("2d");
           if (!context) {
             fail("The live browser frame could not be displayed. Reconnect to try again.");
@@ -291,6 +298,14 @@ export function HumanBrowserViewer({ url, ticket, onReconnect, autoConnect = fal
 
       {/* ── Top toolbar: status line + connect/reconnect button ── */}
       <div className="hbv-toolbar">
+        <div className="hbv-navigation" role="group" aria-label="Protected browser navigation">
+          <button type="button" aria-label="Back" title="Back" disabled={!readyRef.current}
+            onClick={() => send({ event: "back" })}><ArrowLeft size={16} aria-hidden="true" /></button>
+          <button type="button" aria-label="Forward" title="Forward" disabled={!readyRef.current}
+            onClick={() => send({ event: "forward" })}><ArrowRight size={16} aria-hidden="true" /></button>
+          <button type="button" aria-label="Reload" title="Reload" disabled={!readyRef.current}
+            onClick={() => send({ event: "reload" })}><RotateCw size={16} aria-hidden="true" /></button>
+        </div>
         <p role="status" className="hbv-status">{status}</p>
         {delivery ? <span aria-label="Input delivery">{delivery}</span> : null}
         {!socketRef.current

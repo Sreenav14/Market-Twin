@@ -329,6 +329,29 @@ async def pointer_owner(
         yield owner, lease, session
 
 
+async def test_leased_navigation_controls_use_the_same_browser_and_history(
+    pointer_owner: tuple[ControllerBrowserOwner, OwnerLease, JourneyBrowserSession],
+) -> None:
+    owner, lease, session = pointer_owner
+    page = session.page
+    original = page.url
+    next_url = f"{original}?view=login"
+    await page.goto(next_url)
+    await owner.input(lease, ViewerInput(sequence=1, event="back"))
+    await page.wait_for_url(original)
+    await owner.input(lease, ViewerInput(sequence=2, event="forward"))
+    await page.wait_for_url(next_url)
+    await page.evaluate("window.__reloadTest = true")
+    await owner.input(lease, ViewerInput(sequence=3, event="reload"))
+    assert await page.evaluate("typeof window.__reloadTest") == "undefined"
+    assert session.page is page
+    assert session.control_mode == "human"
+    assert not session.capture_enabled and not session.tracing_active
+    await owner.detach(lease)
+    with pytest.raises(ViewerRejectedError):
+        await owner.input(lease, ViewerInput(sequence=4, event="reload"))
+
+
 async def test_real_pointer_drag_and_click_are_distinct_gestures(
     pointer_owner: tuple[ControllerBrowserOwner, OwnerLease, JourneyBrowserSession],
 ) -> None:

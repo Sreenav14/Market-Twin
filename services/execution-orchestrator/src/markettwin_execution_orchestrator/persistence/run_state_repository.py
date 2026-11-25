@@ -95,7 +95,30 @@ class RunStateRepository:
             
         run.status = "failed"
         run.completed_at = datetime.now(UTC)
-        
+
+        await self._session.flush()
+
+    async def mark_cancelled(
+        self,
+        *,
+        test_run_id: UUID,
+    ) -> None:
+        run = await self._get_run(test_run_id)
+
+        if run.status not in {
+            "planning",
+            "queued",
+            "running",
+            "awaiting_human",
+        }:
+            raise RuntimeError(
+                f'Cannot move TestRun from "{run.status}"'
+                'to "cancelled".'
+            )
+
+        run.status = "cancelled"
+        run.completed_at = datetime.now(UTC)
+
         await self._session.flush()
         
         

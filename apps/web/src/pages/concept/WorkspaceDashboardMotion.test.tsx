@@ -100,7 +100,6 @@ async function mount(sources: Sources, options: { delayApps?: boolean } = {}) {
   vi.spyOn(api, "listRuns").mockImplementation(async () => sources.runs);
   vi.spyOn(api, "listHumanActions").mockImplementation(async () => sources.humanActions);
   vi.spyOn(api, "getRunJourneys").mockImplementation(async () => sources.journeys);
-  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
   vi.spyOn(api, "getRunResults").mockImplementation(async () => sources.results);
   const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
   function ContextOutlet() { return <Outlet context={context} />; }

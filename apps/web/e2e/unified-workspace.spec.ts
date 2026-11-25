@@ -45,9 +45,9 @@ async function layout(page: Page) {
     const css = getComputedStyle(element);
     return { font: css.fontFamily, paper: css.getPropertyValue("--paper").trim(), ink: css.color, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
   });
-  expect(style.font).toContain("Inter");
-  expect(style.paper.toLowerCase()).toBe("#faf7f1");
-  expect(style.ink).toBe("rgb(17, 17, 17)");
+  expect(style.font).toContain("Hanken Grotesk");
+  expect(style.paper.toLowerCase()).toBe("#f5f4f2");
+  expect(style.ink).toBe("rgb(28, 25, 23)");
   expect(style.overflow).toBe(false);
 }
 

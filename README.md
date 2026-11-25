@@ -27,7 +27,7 @@ regression tests, screenshots/manifests, benchmark data and backups are unchange
 | FastAPI Control API | [services/control-api](services/control-api) | Identity/workspace permissions, targets, run/review/report APIs |
 | Execution Orchestrator | [services/execution-orchestrator](services/execution-orchestrator) | ADK planning, controlled Playwright execution and protected takeover |
 | Evaluation Worker | [services/evaluation-worker](services/evaluation-worker) | Evidence checks, optional models and atomic reports |
-| Knowledge Worker | [services/knowledge-worker](services/knowledge-worker) | Bounded extraction, grounded drafts and reviewed knowledge |
+| Knowledge Worker | [services/knowledge-worker](services/knowledge-worker) | Extract documents/media and generate source-grounded workspace knowledge |
 
 PostgreSQL stores domain/outbox/events, Kafka transports run commands, and configured
 S3/MinIO stores artifacts. Browser registry ownership is process-local and protected;
@@ -63,15 +63,35 @@ new errors. Enable `OUTBOX_RELAY_ENABLED=true` for local Kafka run dispatch.
 
 ```powershell
 npm.cmd --workspace @markettwin/web run dev
+uv run --env-file .env uvicorn markettwin_control_api.main:app --host 127.0.0.1 --port 8000
+uv run --no-sync --env-file .env uvicorn markettwin_knowledge_worker.main:app --host 127.0.0.1 --port 8010
 uv run --env-file .env python services/execution-orchestrator/scripts/run_execution_worker.py
 uv run --env-file .env python -m markettwin_evaluation_worker.worker
 ```
+
+**Knowledge → Add knowledge** accepts documents, videos, images and public links
+without requiring an application. The Control API stores the source and dispatches
+processing to the Knowledge Worker on port8010. Review the generated knowledge,
+then optionally attach it to applications. Source guidance is not replay verification.
+Application-map discovery runs in the Control API's census processor. Browser
+harvest, grounding, skill verification and freshness run in the execution worker.
 
 The UI requires the configured Control API, database and authenticated workspace.
 Starting runs also requires Kafka/outbox dispatch and execution; reports require
 evaluation. Pages do not inject demo data when APIs are unavailable. The
 [handoff](docs/SESSION_HANDOFF.md#service-operation-and-configuration) consolidates
 setup, configuration, ownership, migration and retry-recovery details.
+
+After resolving a worker error, an operator with database access can return one
+quarantined run to its worker queue. Use the run UUID from the run URL.
+
+```text
+uv run --env-file .env python scripts/retry_quarantined_run.py dispatch RUN_UUID
+uv run --env-file .env python scripts/retry_quarantined_run.py evaluation RUN_UUID
+```
+
+Dispatch retries publication of the existing command. Evaluation retries report
+generation using the saved execution results.
 
 ## Design and acceptance
 

@@ -113,7 +113,7 @@ async def preview_knowledge(
             raise HTTPException(status_code=504, detail="Knowledge preview timed out.") from exc
         except InvalidPreviewSourceError as exc:
             logger.warning("Knowledge preview could not read the source (%s)", type(exc).__name__)
-            raise HTTPException(status_code=422, detail="The source could not be read.") from exc
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except KnowledgeOutputLimitError as exc:
             logger.warning("Knowledge generation reached its output limit (%s)", type(exc).__name__)
             raise HTTPException(

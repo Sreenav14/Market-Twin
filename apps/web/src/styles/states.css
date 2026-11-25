@@ -102,7 +102,7 @@
   height: 32px;
   display: grid;
   place-items: center;
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
 .empty-state h2 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ink); margin: 0; }
 .empty-state p { font-size: 14px; line-height: 20px; color: var(--ink-2); margin: 0; max-width: 52ch; }
@@ -127,7 +127,7 @@
 .error-page h1 { font-size: 20px; line-height: 28px; font-weight: 650; color: var(--ink); margin: 0; }
 .error-page p { font-size: 14px; line-height: 20px; color: var(--ink-2); margin: 0; max-width: 480px; }
 .error-page-actions { display: flex; gap: var(--mt-space-3); margin-top: var(--mt-space-4); flex-wrap: wrap; justify-content: center; }
-.error-diagnostic { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+.error-diagnostic { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
 
 /* ---------- §6 Dividers: ONE recipe ----------
    1px only (2px is the focus outline / stepper connector).

@@ -10,7 +10,12 @@ from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.deep_testing import CaseExecutionResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
+from markettwin_execution_orchestrator.agents.schemas.test_case import (
+    SafeTestValue,
+)
 from markettwin_execution_orchestrator.browser import AllowedOrigin
 from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
@@ -47,6 +52,14 @@ class MarketTwinRunRequest:
     # value and NO legacy execution_mode in its snapshot (U-P1-06).
     unified_native: bool = False
     feature_plan: dict[str, object] | None = None
+    app_plan: dict[str, object] | None = None
+    app_map: dict[str, object] | None = None
+    # Doc 33 section 3.6: the run's pinned source-knowledge block
+    # (files + collections), parsed from the snapshot by run_request.
+    source_knowledge: dict[str, object] | None = None
+    approved_test_data: tuple[SafeTestValue, ...] = ()
+    brand_tokens: dict[str, object] | None = None
+    slop_classes_enabled: tuple[str, ...] | None = None
     fixture_truth: bool = False
     auth_verification: AuthVerificationPolicy | None = None
     auth_mode: Literal["required", "optional"] = "required"
@@ -67,8 +80,21 @@ async def execute_markettwin_run(
     """Bind durable provider limits for every execution entry point."""
     from markettwin_database.model_budget import model_budget
 
-    with model_budget(session, request.run_id):
-        return await _execute_markettwin_run(request, session=session)
+    initialize_adk_observability()
+    # Native engines do not invoke ADK, so they need their own run span.
+    # Exceptions are recorded by type only: validation input and browser URLs
+    # can contain customer data and must not enter telemetry implicitly.
+    with trace.get_tracer(__name__).start_as_current_span(
+        "markettwin.run", record_exception=False, set_status_on_exception=False,
+        attributes={"markettwin.test_run_id": str(request.run_id),
+                    "markettwin.run_kind": request.run_kind},
+    ) as span, model_budget(session, request.run_id):
+        try:
+            return await _execute_markettwin_run(request, session=session)
+        except Exception as error:
+            span.set_attribute("error.type", type(error).__name__)
+            span.set_status(Status(StatusCode.ERROR))
+            raise
 
 
 async def _execute_markettwin_run(
@@ -109,6 +135,9 @@ async def _execute_markettwin_run(
         request.network_policy,
     )
 
+    from markettwin_execution_orchestrator.workflow.app_plan import prepare_app_plan
+
+    request = await prepare_app_plan(request, session)
     if request.run_kind == "persona":
         if not request.unified_native:
             raise ValueError(
@@ -130,7 +159,7 @@ async def _execute_markettwin_run(
             execute_slop_run,
         )
 
-        return await execute_slop_run(request=request, session=session)
+        return await execute_slop_run(request=request, session=session, desktop_scan=True)
     from markettwin_execution_orchestrator.workflow.harness_run import (
         execute_harness_run,
     )

@@ -9,7 +9,7 @@ import { RunEvidencePage } from "./RunEvidencePage";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function Context({ runId }: { runId: string }) {
-  return <Outlet context={{ run: { id: runId }, user: { id: "user" } }} />;
+  return <Outlet context={{ run: { id: runId }, user: { id: "user" }, results: { status: "waiting" } }} />;
 }
 function Page({ client, runId }: { client: QueryClient; runId: string }) {
   return <QueryClientProvider client={client}><MemoryRouter><Routes>

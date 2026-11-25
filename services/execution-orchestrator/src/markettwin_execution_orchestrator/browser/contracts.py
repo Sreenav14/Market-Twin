@@ -189,12 +189,18 @@ class BrowserEventBuffer:
     """Per-session event buffers with incremental and cumulative views."""
 
     js_records: list[JsErrorRecord] = field(default_factory=_js_record_list)
+    dropped_js_records: int = 0
+    dropped_console_errors: int = 0
+    dropped_page_errors: int = 0
+    dropped_failed_requests: int = 0
 
     def record_js(self, record: JsErrorRecord) -> None:
         # Hard cap per session: a pathological page must not grow the
         # buffer without bound (plan: 1,000/item-scale cap).
         if len(self.js_records) < 1000:
             self.js_records.append(record)
+        else:
+            self.dropped_js_records += 1
 
     console_errors: list[str] = field(default_factory=_string_list)
     page_errors: list[str] = field(default_factory=_string_list)
@@ -208,14 +214,23 @@ class BrowserEventBuffer:
     )
 
     def record_console_error(self, message: str) -> None:
+        if len(self.all_console_errors) >= 1000:
+            self.dropped_console_errors += 1
+            return
         self.console_errors.append(message)
         self.all_console_errors.append(message)
 
     def record_page_error(self, message: str) -> None:
+        if len(self.all_page_errors) >= 1000:
+            self.dropped_page_errors += 1
+            return
         self.page_errors.append(message)
         self.all_page_errors.append(message)
 
     def record_failed_request(self, request: FailedRequestRecord) -> None:
+        if len(self.all_failed_requests) >= 1000:
+            self.dropped_failed_requests += 1
+            return
         self.failed_requests.append(request)
         self.all_failed_requests.append(request)
 
@@ -229,6 +244,10 @@ class BrowserEventBuffer:
         self.all_page_errors.clear()
         self.all_failed_requests.clear()
         self.js_records.clear()
+        self.dropped_js_records = 0
+        self.dropped_console_errors = 0
+        self.dropped_page_errors = 0
+        self.dropped_failed_requests = 0
 
 
 @dataclass(frozen=True, slots=True)

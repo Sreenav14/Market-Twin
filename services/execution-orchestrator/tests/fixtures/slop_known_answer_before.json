@@ -1,0 +1,23 @@
+{
+  "catalogue_version": 2,
+  "viewport": "desktop1280",
+  "measured_pages": 7,
+  "model_review": "disabled",
+  "cases": {
+    "/": "false_positive",
+    "/editorial": "false_positive",
+    "/layout": "true_negative",
+    "/setup": "missed",
+    "/team": "review_only",
+    "/resources": "true_positive",
+    "/account": "untested"
+  },
+  "counts": {
+    "false_positive": 2,
+    "missed": 1,
+    "review_only": 1,
+    "true_negative": 1,
+    "true_positive": 1,
+    "untested": 1
+  }
+}

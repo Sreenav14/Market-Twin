@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it } from "vitest";
@@ -16,16 +17,24 @@ function mount(page: "findings" | "summary", findings: Finding[] = []) {
     results: { status: "ready", data: results, error: null }, refresh: () => {},
   };
   function Layout() { return <Outlet context={context} />; }
-  render(<MemoryRouter><Routes><Route element={<Layout />}><Route path="*" element={page === "findings" ? <RunFindingsPage /> : <RunOverviewPage />} /></Route></Routes></MemoryRouter>);
+  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Routes><Route element={<Layout />}><Route path="*" element={page === "findings" ? <RunFindingsPage /> : <RunOverviewPage />} /></Route></Routes></MemoryRouter></QueryClientProvider>);
 }
 
-it.each(["findings", "summary"] as const)("shows failed assertion coverage rather than implying a clean product on %s", (page) => {
-  mount(page);
+it("shows failed assertion coverage in the legacy findings view", () => {
+  mount("findings");
   expect(screen.getByRole("heading", { name: "No verified findings" })).toBeInTheDocument();
   expect(screen.getByText(/Assertions failed, but/)).toBeInTheDocument();
   expect(screen.getByText("Failed assertions").nextElementSibling).toHaveTextContent("2");
   expect(screen.getByText("Planner-inferred assertions").nextElementSibling).toHaveTextContent("2");
-  if (page === "findings") expect(screen.getByRole("link", { name: "Review case outcomes and assertions" })).toHaveAttribute("href", "/runs/run/results#report-feature-cases");
+  expect(screen.getByRole("link", { name: "Review case outcomes and assertions" })).toHaveAttribute("href", "/runs/run/results#report-feature-cases");
+});
+
+it("reports failed assertions separately from cases on Summary", () => {
+  mount("summary");
+  expect(screen.getByText("2 cases planned")).toBeInTheDocument();
+  expect(screen.getByText("Failed assertions").nextElementSibling).toHaveTextContent("2");
+  expect(screen.queryByText(/Nothing needs fixing first/)).not.toBeInTheDocument();
+  expect(screen.getByText("Feature cases").closest("details")).toHaveAttribute("id", "report-feature-cases");
 });
 
 it("renders a verified deterministic assertion finding in Confirmed issues", () => {

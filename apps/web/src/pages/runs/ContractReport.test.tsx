@@ -1,46 +1,7 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { api } from "../../lib/api";
+import { expect, it } from "vitest";
 import { ContractReport } from "./ContractReport";
-
-beforeEach(() => {
-  vi.spyOn(api, "getArtifactAccess").mockResolvedValue({
-    artifact_id: "art-1", artifact_type: "screenshot", content_type: "image/png",
-    url: "https://example.invalid/shot.png", expires_in_seconds: 600,
-  });
-});
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-it("keeps unconfirmed observations outside broken and shows verdict inputs", () => {
-  render(<MemoryRouter><ContractReport runId="run" payload={{
-    coverage: { tested_features: 2, discovered_features: 3 }, what_works: [], confirmed: [],
-    unverified: [{ check: "Search did not finish", reason: "did_not_reproduce" }],
-    market_verdict: { verdict: "insufficient_evidence", journeys_executed: 2, journeys_approved: 4,
-      confirmed_defects: 0, persona_means: { Expert: 4.2 } },
-  }} /></MemoryRouter>);
-  const broken = screen.getByRole("region", { name: "What's broken" });
-  expect(within(broken).queryByText(/Search did not finish/)).not.toBeInTheDocument();
-  expect(screen.getByText(/Search did not finish — did not happen again on re-check/)).toBeInTheDocument();
-  expect(screen.getByText("Coverage: tested 2 of 3 discovered features.")).toBeInTheDocument();
-  expect(screen.getByText("Tested 2 of 4 approved journeys · 0 confirmed problems.")).toBeInTheDocument();
-  expect(screen.queryByText(/Tester scores:/)).not.toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Is it market-ready?" })).toBeInTheDocument();
-});
-it("attributes saved experience comments to the tester without displaying numeric feelings scores", () => {
-  render(<MemoryRouter><ContractReport runId="run" payload={{
-    experience: { personas: [{ persona_name: "Expert", status: "completed", facts: {},
-      scores: { ease: { score: 4, justification: "I found the search controls easy to follow." } },
-    }] },
-  }} /></MemoryRouter>);
-  expect(screen.getByText("I found the search controls easy to follow.").closest("blockquote"))
-    .toHaveTextContent("— Expert, simulated tester");
-  expect(screen.queryByText(/4\/5/)).not.toBeInTheDocument();
-});
-it("does not invent tested features when the API does not supply their count", () => {
-  render(<MemoryRouter><ContractReport runId="run" payload={{ coverage: { executed: 5, discovered_features: 6 } }} /></MemoryRouter>);
-  expect(screen.getByText("Coverage: tested unavailable of 6 discovered features.")).toBeInTheDocument();
-});
-
 // Mirrors the owner's MT-000113 export: 2 of 7 features, 1 confirmed break,
 // 1 policy-blocked journey, three testers (Mobile blocked at 1 of 2).
 const completedRunPayload = {
@@ -82,49 +43,39 @@ function renderCompletedRun() {
   return render(<MemoryRouter><ContractReport runId="run" payload={completedRunPayload} /></MemoryRouter>);
 }
 
-it("leads with the verdict and its figures, not a text wall", () => {
-  const { container } = renderCompletedRun();
-  const firstPanel = container.querySelector(".contract-report > section");
-  expect(firstPanel).toHaveAttribute("aria-labelledby", "contract-market");
-  expect(within(firstPanel as HTMLElement).getByText("Ready with issues")).toBeInTheDocument();
-  expect(within(firstPanel as HTMLElement).getByText("Tested 2 of 2 approved journeys · 1 confirmed problem.")).toBeInTheDocument();
-  expect(screen.getByText("Most of the app was not reached — 5 of 7 features unchecked")).toBeInTheDocument();
-  expect(screen.getByText("Plus 5 more discovered features that no approved test covers.")).toBeInTheDocument();
-  expect(screen.getByText("Problems confirmed in 1 of 2 journeys")).toBeInTheDocument();
-  expect(screen.getByText("Of 2 journeys: 0 worked, 1 broke, 1 could not be checked.")).toBeInTheDocument();
-});
-
-it("filters journeys and findings by outcome, states the filter in words, and clears on a second click", () => {
+it("shows the stored verdict and separates frozen criterion failures from coverage gaps", () => {
   renderCompletedRun();
-  fireEvent.click(screen.getByRole("button", { name: /Broken: 1 of 2 journeys/ }));
-  expect(screen.getByText(/Showing only journeys that broke — 1 of 2 journeys/)).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "What works" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Seen once — not confirmed" })).not.toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "What's broken" })).toBeInTheDocument();
-  expect(screen.queryByText("Review pricing options and calculator")).not.toBeInTheDocument();
-  expect(screen.getAllByText("Explore homepage and primary navigation").length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole("button", { name: /Broken: 1 of 2 journeys/ }));
-  expect(screen.queryByText(/Showing only journeys that broke/)).not.toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "What works" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Seen once — not confirmed" })).toBeInTheDocument();
+  const takeaway = screen.getByRole("region", { name: "Takeaway" });
+  expect(within(takeaway).getByRole("heading", { name: "Ready, with issues" })).toBeInTheDocument();
+  expect(within(takeaway).getByText("Confirmed defects").closest("div")).toHaveTextContent("1");
+  expect(screen.getByText("Tested 2 of 7 discovered features.")).toBeInTheDocument();
+  expect(screen.getByText(/button 'Products' is visible/).closest("li")).toHaveTextContent("Not met");
+  expect(screen.getByText(/Pricing tiers are listed/).closest("li")).toHaveTextContent("Can't tell");
+  expect(screen.getByText(/Pricing tiers are listed/).closest("li")).toHaveTextContent("Blocked by the safety policy");
 });
 
-it("badges confirmed problems as reproduced and seen-once items as a separate group", () => {
+it("opens tester and journey details on demand", async () => {
   renderCompletedRun();
-  expect(screen.getByText("Failed again on re-check")).toBeInTheDocument();
-  expect(screen.getByText(/1 confirmed problem — each was seen again on re-check/)).toBeInTheDocument();
-  expect(screen.getByText("Seen once")).toBeInTheDocument();
-  expect(screen.getByText(/1 seen once — not reproduced or not re-checkable/)).toBeInTheDocument();
+  expect(screen.queryByRole("table", { name: "Tester by journey" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Tester by journey"));
+  const matrix = await screen.findByRole("table", { name: "Tester by journey" });
+  fireEvent.click(within(matrix).getByRole("button", { name: "Not run" }));
+  fireEvent.click(screen.getByText("1 journeys"));
+  expect(await screen.findByText("Review pricing options and calculator ·")).toBeInTheDocument();
 });
 
-it("shows testers as identical panels, most-blocked first, quotes cleaned of machine metric keys", () => {
-  const { container } = renderCompletedRun();
-  const panels = [...container.querySelectorAll(".tester-panel")].map(el => el.getAttribute("aria-label"));
-  expect(panels).toEqual(["Mobile user", "First-time user", "Experienced user"]);
-  expect(screen.getByText("The screenshots show clearly labeled navigation and product categories.")).toBeInTheDocument();
-  expect(screen.getByText("Evidence · checks passed 6")).toBeInTheDocument();
-  expect(screen.getByText("Evidence · journeys completed 2 · failed actions 0")).toBeInTheDocument();
-  expect(container.textContent).not.toContain("[checks_passed=6]");
-  expect(container.textContent).not.toContain("[journeys_completed=2]");
-  expect(screen.getByText("Completed 1 of 2 journeys · 8 steps · 0 failed actions · 0 timeouts.")).toBeInTheDocument();
+it("attributes experience comments to the tester and drops the numeric score", async () => {
+  renderCompletedRun();
+  expect(screen.queryByText(/clearly labeled navigation/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Tester impressions"));
+  const quote = await screen.findByText("The screenshots show clearly labeled navigation and product categories.");
+  expect(quote.closest("blockquote")).toHaveTextContent("— First-time user, simulated tester");
+  expect(screen.getByText("checks passed 6")).toBeInTheDocument();
+  expect(screen.queryByText(/checks_passed=6|4\/5/)).not.toBeInTheDocument();
+});
+
+it("does not substitute for missing feature coverage or verdict", () => {
+  render(<MemoryRouter><ContractReport runId="run" payload={{ coverage: { executed: 5, discovered_features: 6 } }} /></MemoryRouter>);
+  expect(screen.getByText("Feature coverage was not recorded in this report.")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "No verdict recorded in this report" })).toBeInTheDocument();
 });

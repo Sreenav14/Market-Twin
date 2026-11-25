@@ -122,6 +122,30 @@ class FakeRecorder:
 
 
 @pytest.mark.asyncio
+async def test_scroll_requires_purpose_and_stops_repeated_states_until_interaction():
+    controller = FakeController()
+    tools = {tool.__name__: tool for tool in create_browser_tools(
+        controller=cast(BrowserController, controller),
+        handle=BrowserSessionHandle(uuid4(), uuid4(), uuid4()),
+    )}
+    missing = await tools["browser_scroll"](direction="down", reason=" ")
+    assert missing["error_code"] == "scroll_reason_required"
+    assert not controller.calls
+    await tools["browser_get_state"]()
+    await tools["browser_scroll"](direction="down", reason="Find the signup control")
+    await tools["browser_scroll"](direction="up", reason="Find the signup control")
+    # Observation and screenshots must not reset the no-progress guard.
+    await tools["browser_get_state"]()
+    await tools["browser_take_screenshot"]()
+    blocked = await tools["browser_scroll"](direction="down", reason="Find the signup control")
+    assert blocked["error_code"] == "scroll_no_progress"
+    assert sum(name == "scroll" for name, _ in controller.calls) == 2
+    await tools["browser_click"](role="button", name="Continue")
+    await tools["browser_scroll"](direction="down", reason="Find the next form field")
+    assert sum(name == "scroll" for name, _ in controller.calls) == 3
+
+
+@pytest.mark.asyncio
 async def test_concurrent_tools_serialize_recording_and_browser_actions() -> None:
     events: list[str] = []
 

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import type { RunContext } from "../../layouts/RunLayout";
-import { api, type ExecutionPause, type LiveExecution, type RunActivityItem } from "../../lib/api";
+import { ApiError, api, type ExecutionPause, type LiveExecution, type RunActivityItem } from "../../lib/api";
 import { RunActivityPage } from "./RunActivityPage";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -77,12 +77,14 @@ it("distinguishes accepted pause request from worker acknowledgement and fences 
   const resume = vi.spyOn(api, "resumeExecutionPause").mockImplementation(async () => { latest = { ...latest, pause: { ...pause, status: "resume_requested" } }; return latest.pause!; });
   const claim = vi.spyOn(api, "claimHumanAction");
   const client = mount();
-  await waitFor(() => expect(screen.getByRole("button", { name: "Request pause" })).toBeEnabled());
-  await user.click(screen.getByRole("button", { name: "Request pause" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Take over" })).toBeEnabled());
+  await user.click(screen.getByRole("button", { name: "Take over" }));
   expect(request).toHaveBeenCalledWith("run", expect.objectContaining({ browser_session_id: "browser", generation: 1 }));
   await waitFor(() => expect(screen.getByRole("status", { name: "Manual pause status" })).toHaveTextContent("Pause requested; waiting"));
   expect(screen.queryByRole("button", { name: "Hand back" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Take browser control/ })).not.toBeInTheDocument();
+  // An operator can resume a pause whose takeover intent is no longer active.
+  client.setQueryData(["takeover-intent", "operator", "workspace", "owner", "run"], null);
   latest = { ...latest, browser: { ...latest.browser!, control_state: "human_pending" }, pause: { ...pause, status: "paused", human_request_id: "request", acknowledged_at: item.occurred_at } };
   actions.mockResolvedValue([{ id: "request", test_run_id: "run", execution_id: "execution", browser_session_id: "browser", request_type: "other", status: "pending", created_at: item.occurred_at, expires_at: pause.expires_at, control_generation: 1, lease_id: null, lease_expires_at: null }]);
   await client.invalidateQueries({ queryKey: ["live-execution"] });
@@ -96,7 +98,32 @@ it("distinguishes accepted pause request from worker acknowledgement and fences 
 });
 
 
-it("fetches a live grant for the available browser and shows the board banner", async () => {
+it("takes control after one click only when the matching pause is acknowledged", async () => {
+  const user = userEvent.setup();
+  const expires = new Date(Date.now() + 300_000).toISOString();
+  const pause: ExecutionPause = { id: "takeover-pause", status: "requested", execution_id: "execution", journey_id: "journey", browser_session_id: "browser", generation: 1, human_request_id: null, created_at: item.occurred_at, expires_at: expires, acknowledged_at: null, completed_at: null };
+  let latest: LiveExecution = { run_id: "run", run_status: "running", server_observed_at: item.occurred_at, browser: { browser_session_id: "browser", execution_id: "execution", journey_id: "journey", generation: 1, control_state: "agent", viewer_state: "suppressed", journey_title: "Registration", requesting_agent: "Tester" }, activity: { items: [], next_cursor: null } };
+  vi.spyOn(api, "getLiveExecution").mockImplementation(async () => latest);
+  vi.spyOn(api, "getRunJourneys").mockResolvedValue([]);
+  const actions = vi.spyOn(api, "listHumanActions").mockResolvedValue([]);
+  vi.spyOn(api, "listActionApprovals").mockResolvedValue([]);
+  vi.spyOn(api, "requestExecutionPause").mockImplementation(async () => { latest = { ...latest, pause }; return pause; });
+  const claim = vi.spyOn(api, "claimHumanAction").mockResolvedValue({ request_id: "request", browser_session_id: "browser", lease_id: "lease", lease_token: "private-token", generation: 2, expires_at: expires, viewer_available: false });
+  const client = mount();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Take over" })).toBeEnabled());
+  await user.click(screen.getByRole("button", { name: "Take over" }));
+  expect(claim).not.toHaveBeenCalled();
+  latest = { ...latest, browser: { ...latest.browser!, control_state: "human_pending" }, pause: { ...pause, status: "paused", human_request_id: "request" } };
+  actions.mockResolvedValue([{ id: "request", test_run_id: "run", execution_id: "execution", browser_session_id: "browser", request_type: "other", status: "pending", created_at: item.occurred_at, expires_at: expires, control_generation: 1, lease_id: null, lease_expires_at: null }]);
+  await client.invalidateQueries({ queryKey: ["live-execution"] });
+  await client.invalidateQueries({ queryKey: ["human-actions"] });
+  expect(await screen.findByRole("heading", { name: "Controlling browser" })).toBeInTheDocument();
+  await client.invalidateQueries({ queryKey: ["human-actions"] });
+  expect(claim).toHaveBeenCalledExactlyOnceWith("request");
+  expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain("private-token");
+});
+
+it.each([false, true])("fetches a live grant and reports a ticket error when it fails (%s)", async (fails) => {
   const browser = {
     browser_session_id: "browser-1", execution_id: "execution", journey_id: "journey",
     generation: 0, control_state: "agent", viewer_state: "available" as const,
@@ -113,7 +140,14 @@ it("fetches a live grant for the available browser and shows the board banner", 
   const grant = vi.spyOn(api, "getLiveGrant").mockResolvedValue({
     ticket: "t".repeat(40), viewer_url: "ws://localhost:9/hitl-viewer", browser,
   });
+  if (fails) grant.mockRejectedValueOnce(new ApiError("The supervised browser owner is unavailable.", 503));
   mount();
   await screen.findByText("Item 23 of 112 — Save (button)");
   await waitFor(() => expect(grant).toHaveBeenCalledWith("run", "browser-1", expect.anything()));
+  if (fails) {
+    expect(await screen.findByText("The viewer could not connect")).toBeVisible();
+    expect(screen.queryByText("Waiting for the first live frame.")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry viewing" }));
+    await waitFor(() => expect(grant.mock.calls.length).toBeGreaterThan(1));
+  }
 });

@@ -11,6 +11,7 @@ from markettwin_shared.messaging import KafkaProducer
 from pydantic import BaseModel
 
 from markettwin_control_api.api.agent_prompts import router as agent_prompts_router
+from markettwin_control_api.api.app_maps import router as app_maps_router
 from markettwin_control_api.api.applications import router as applications_router
 from markettwin_control_api.api.artifacts import router as artifacts_router
 from markettwin_control_api.api.auth import router as auth_router
@@ -20,6 +21,9 @@ from markettwin_control_api.api.execution_pause import router as execution_pause
 from markettwin_control_api.api.hitl_summary import router as hitl_summary_router
 from markettwin_control_api.api.human_actions import router as human_actions_router
 from markettwin_control_api.api.ingestion import router as ingestion_router
+from markettwin_control_api.api.internal_knowledge_files import (
+    router as internal_knowledge_files_router,
+)
 from markettwin_control_api.api.lifecycle import router as lifecycle_router
 from markettwin_control_api.api.live_browser import router as live_browser_router
 from markettwin_control_api.api.mutation_origin import require_mutation_origin
@@ -33,6 +37,7 @@ from markettwin_control_api.api.test_run_results import router as test_run_resul
 from markettwin_control_api.api.workspaces import router as workspaces_router
 from markettwin_control_api.config import get_settings
 from markettwin_control_api.database import DatabaseRuntime
+from markettwin_control_api.knowledge.census_processor import run_census_processor
 from markettwin_control_api.knowledge.processor import run_ingestion_processor
 from markettwin_control_api.services import (
     OutboxRelay,
@@ -61,6 +66,17 @@ class KafkaHealthResponse(BaseModel):
     outbox_relay_enabled: bool
 
 
+def report_background_task_exit(task: asyncio.Task[None]) -> None:
+    """Observe task death immediately, including an unexpected normal return."""
+    if task.cancelled():
+        return
+    error = task.exception()
+    logging.getLogger(__name__).error(
+        "Background task %s exited unexpectedly", task.get_name(),
+        exc_info=(type(error), error, error.__traceback__) if error is not None else None,
+    )
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
@@ -79,12 +95,18 @@ def create_app() -> FastAPI:
 
         database = DatabaseRuntime(settings)
         application.state.database = database
-        ingestion_task = asyncio.create_task(
-            run_ingestion_processor(database.engine, settings), name="markettwin-ingestion"
+        census_task = asyncio.create_task(
+            run_census_processor(database.engine, settings), name="markettwin-census"
         )
         hitl_reaper_task = asyncio.create_task(
             run_human_action_reaper(database.session_factory), name="markettwin-hitl-reaper"
         )
+        census_task.add_done_callback(report_background_task_exit)
+        ingestion_task = asyncio.create_task(
+            run_ingestion_processor(database.engine, settings), name="markettwin-ingestion",
+        )
+        ingestion_task.add_done_callback(report_background_task_exit)
+        hitl_reaper_task.add_done_callback(report_background_task_exit)
         relay_task: asyncio.Task[None] | None = None
 
         if settings.outbox_relay_enabled:
@@ -101,27 +123,17 @@ def create_app() -> FastAPI:
             ),
             name = "markettwin-outbox-relay",
             )
+            relay_task.add_done_callback(report_background_task_exit)
         
         try:
             yield
         finally:
-            ingestion_task.cancel()
-            try:
-                await ingestion_task
-            except asyncio.CancelledError:
-                pass
+            tasks = [census_task, ingestion_task, hitl_reaper_task]
             if relay_task is not None:
-                relay_task.cancel()
-                
-                try:
-                    await relay_task
-                except asyncio.CancelledError:
-                    pass
-            hitl_reaper_task.cancel()
-            try:
-                await hitl_reaper_task
-            except asyncio.CancelledError:
-                pass
+                tasks.append(relay_task)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             await database.close()
 
     application = FastAPI(
@@ -204,7 +216,9 @@ def create_app() -> FastAPI:
     application.include_router(lifecycle_router)
     application.include_router(workspaces_router)
     application.include_router(applications_router)
+    application.include_router(app_maps_router)
     application.include_router(ingestion_router)
+    application.include_router(internal_knowledge_files_router)
     application.include_router(targets_router)
     application.include_router(target_authorizations_router)
     application.include_router(test_run_router)

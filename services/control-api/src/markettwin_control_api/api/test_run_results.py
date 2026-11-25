@@ -18,6 +18,7 @@ from fastapi import (
 from markettwin_database.models.evaluation import Report
 from markettwin_database.models.execution import RunEvent
 from markettwin_shared.finding_classification import classify_finding
+from markettwin_shared.run_kind import resolve_run_kind
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -202,6 +203,7 @@ def build_run_flow(
     report_status: str | None,
     execution_mode: str = "legacy_persona",
     plan_recorded: bool | None = None,
+    run_kind: str | None = None,
 ) -> dict[str, object]:
     """Build a read-only map from saved planning, execution and evaluation records."""
     discovery = [journey for journey in journeys if (
@@ -220,7 +222,11 @@ def build_run_flow(
         {
             "id": "meta",
             "kind": "meta",
-            "label": "Feature plan" if execution_mode == "deep_feature_v1" else "Meta Agent",
+            "label": "Audit scope" if run_kind == "slop" else (
+                "Feature plan" if execution_mode == "deep_feature_v1" else (
+                    "Test plan" if run_kind is not None else "Meta Agent"
+                )
+            ),
             "status": "completed"
             if has_plan
             else "running"
@@ -234,7 +240,9 @@ def build_run_flow(
         {
             "id": f"journey:{journey['id']}",
             "kind": "journey",
-            "label": f"{journey['persona_name']} · {journey['mission_title']}",
+            "label": "UI page and state audit" if run_kind == "slop" else (
+                f"{journey['persona_name']} · {journey['mission_title']}"
+            ),
             "status": str(journey["execution_status"] or "not_started"),
         }
         for journey in cases
@@ -244,7 +252,7 @@ def build_run_flow(
             {
                 "id": "collector",
                 "kind": "collector",
-                "label": "Collector",
+                "label": "Evidence collection" if run_kind == "slop" else "Collector",
                 "status": "completed"
                 if collected
                 else "not_recorded"
@@ -254,7 +262,7 @@ def build_run_flow(
             {
                 "id": "evaluation",
                 "kind": "evaluation",
-                "label": "Evaluation",
+                "label": "UI quality evaluation" if run_kind == "slop" else "Evaluation",
                 "status": "completed"
                 if report_status == "completed"
                 else "failed"
@@ -266,7 +274,7 @@ def build_run_flow(
             {
                 "id": "report",
                 "kind": "report",
-                "label": "Report",
+                "label": "UI quality report" if run_kind == "slop" else "Report",
                 "status": report_status or "not_started",
             },
         ]
@@ -279,7 +287,7 @@ def build_run_flow(
     return {
         "nodes": nodes,
         "edges": edges,
-        "execution_policy": "once_per_journey",
+        "execution_policy": "supervised_ui_audit" if run_kind == "slop" else "once_per_journey",
         "revision": revision,
     }
 
@@ -325,6 +333,9 @@ async def get_test_run_flow(test_run_id: UUID, request: Request) -> dict[str, ob
         collected=collected is not None,
         report_status=report_status,
         execution_mode=str(run.configuration_snapshot.get("execution_mode", "legacy_persona")),
+        run_kind=resolve_run_kind(
+            run_kind_column=run.run_kind, configuration_snapshot=run.configuration_snapshot,
+        ),
         plan_recorded=(plan_recorded is not None)
         if run.configuration_snapshot.get("execution_mode") == "deep_feature_v1" else None,
     )

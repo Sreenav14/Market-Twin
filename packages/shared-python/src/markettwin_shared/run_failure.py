@@ -4,6 +4,7 @@ import re
 from typing import cast
 
 MESSAGES = {
+    "execution_stalled": "The worker stopped this attempt after a period with no recorded progress.",
     "execution_failed": (
         'Execution stopped before results were collected. The '
         'original error was not retained.'
@@ -33,6 +34,23 @@ MESSAGES = {
     ),
     "interrupted": (
         "This run was interrupted (the runner restarted) and was not resumed. Start a new run."
+    ),
+    "slop_lanes_exhausted": (
+        "All audit browser lanes retired before any usable desktop evidence was recorded."
+    ),
+    "slop_stopped_without_evidence": (
+        "Audit supervision stopped the run before any usable desktop evidence was recorded."
+    ),
+    "slop_no_evidence": (
+        "The desktop audit ended without usable measurements. "
+        "Check whether the site rendered or allowed browser access."
+    ),
+    "slop_budget_without_evidence": (
+        "The desktop scan reached its time budget before recording a usable measurement."
+    ),
+    "slop_finalization": (
+        "The desktop audit could not finalize its report. "
+        "Committed measurements are still available for recovery."
     ),
 }
 
@@ -199,7 +217,7 @@ def failure_site(error: BaseException) -> str:
 
 
 def failure_event_payload(error: BaseException) -> dict[str, str]:
-    payload = {**classify_run_failure(error), "error_type": type(error).__name__}
+    payload = {**classify_run_failure(error), "error_type": type(error).__name__, "site": failure_site(error)}
     reason = reviewed_failure_reason(error)
     if reason is not None:
         payload["reason"] = reason
@@ -212,6 +230,8 @@ def public_failure_details(payload: object) -> dict[str, str]:
         raw_code = cast(dict[object, object], payload).get("code")
         if isinstance(raw_code, str):
             code = raw_code
+        if code == "execution_failed" and payload.get("error_type") == "StallWatchdogError":
+            code = "execution_stalled"
     details = failure_details(code)
     if isinstance(payload, dict):
         reason = accept_stored_reason(cast(dict[object, object], payload).get("reason"))
@@ -222,6 +242,8 @@ def public_failure_details(payload: object) -> dict[str, str]:
 
 def classify_run_failure(error: BaseException) -> dict[str, str]:
     codes = {
+        "StallWatchdogError": "execution_stalled",
+        "SlopFinalizationError": "slop_finalization",
         "AuthenticationError": "model_authentication",
         "PermissionDeniedError": "model_permission",
         "NotFoundError": "model_not_found",

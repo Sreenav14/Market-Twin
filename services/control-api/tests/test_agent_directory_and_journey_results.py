@@ -295,6 +295,18 @@ async def test_flow_collection_evaluation_reads_reject_foreign_runs(monkeypatch,
     assert error.value.status_code == 404
 
 
+def test_ui_audit_flow_names_actual_stages_without_persona_agents():
+    flow = test_run_results.build_run_flow(
+        run_status="completed", run_kind="slop", collected=True, report_status="completed",
+        journeys=[{"id": uuid4(), "persona_name": "Slop checker", "mission_title": "Audit",
+                   "execution_status": "completed"}],
+    )
+    assert [node["label"] for node in flow["nodes"]] == [
+        "Audit scope", "UI page and state audit", "Evidence collection", "UI quality evaluation", "UI quality report",
+    ]
+    assert flow["execution_policy"] == "supervised_ui_audit"
+
+
 @pytest.mark.parametrize("runtime_name", ["human_auth_bootstrap_v1", "browser_discovery_v1", None])
 def test_discovery_is_before_plan_and_never_counts_as_a_feature_case(runtime_name):
     discovery = {

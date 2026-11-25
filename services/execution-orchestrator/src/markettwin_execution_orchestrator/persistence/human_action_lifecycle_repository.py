@@ -46,6 +46,7 @@ class HumanActionLifecycleRepository:
         assistance_reason: Literal[
             "absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target"
         ] | None = None,
+        encountered_challenge: bool = False,
     ) -> UUID:
         if assistance_reason is not None and assistance_reason not in {
             "absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target",
@@ -88,6 +89,8 @@ class HumanActionLifecycleRepository:
             "auth-preflight-v1" if browser.control_generation == 0
             else f"auth-preflight-v1:{browser.control_generation}"
         )
+        if encountered_challenge:
+            idempotency_key = f"browser-gate-v1:{browser.id}:{browser.control_generation}"
         if assistance_reason is not None:
             idempotency_key = f"case-recovery-v1:{browser.control_generation}"
         existing = await self._session.scalar(
@@ -119,6 +122,9 @@ class HumanActionLifecycleRepository:
                     "verify the original target and recheck policy before continuing. "
                     "Cancel if the plan describes a control that does not exist."
                     if assistance_reason else
+                    "Complete the required sign-in, account setup, or verification in this browser, "
+                    "then release control. Use only an authorized test account."
+                    if encountered_challenge else
                     "Sign in to the authorized test account, then release control."
                 ),
                 expires_at=expires_at,

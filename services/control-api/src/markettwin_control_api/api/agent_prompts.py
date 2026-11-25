@@ -511,6 +511,17 @@ async def create_agent_rerun(
                     raise HTTPException(
                         409, "The source test does not have a complete reusable plan."
                     )
+                if "study_brief" not in config or any(
+                    type(item.attributes) is not dict
+                    or any(
+                        attribute not in item.attributes
+                        for attribute in ("persona_key", "behavior_traits", "priorities")
+                    )
+                    for item in personas
+                ):
+                    raise HTTPException(
+                        409, "The source test does not have a complete reusable plan."
+                    )
                 config["replay_plan"] = {
                     "mission_summary": str(config["study_brief"])[:500],
                     "personas": [

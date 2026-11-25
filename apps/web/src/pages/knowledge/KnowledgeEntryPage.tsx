@@ -1,0 +1,353 @@
+import { useState } from "react";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, Clock, ExternalLink, FileCheck, ShieldCheck } from "lucide-react";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { DeleteAction } from "../../components/markettwin/DeleteAction";
+import { Button } from "../../components/ui/button";
+import { InlineAlert } from "../../components/ui/Feedback";
+import { StatusPill } from "../../components/ui/StatusBadge";
+import { ErrorPanel, LoadingPanel, Spinner } from "../../components/ui/StateViews";
+import { api, type IngestionEntry } from "../../lib/api";
+import { statusEntry } from "../../lib/status";
+import { canWriteWorkspace } from "../../lib/permissions";
+import { type AppShellContext } from "../../layouts/AppShell";
+import { KnowledgeResult } from "./KnowledgeResult";
+import { KnowledgeFileReview } from "./KnowledgeFileReview";
+import { sourceRoles } from "./IngestionPage";
+import { ingestionStageLabel, IngestionProgress, isIngestionPending } from "./IngestionProgress";
+import { KnowledgeApplications, RenameKnowledge } from "./KnowledgeSettings";
+
+export function KnowledgeEntryPage() {
+  const navigate = useNavigate();
+  const { entryId = "" } = useParams();
+  const { workspace, user } = useOutletContext<AppShellContext>();
+  const queryClient = useQueryClient();
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
+  const reviewKey = `${workspace.id}:${entryId}`;
+  const confirmed = confirmedFor === reviewKey;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const state = useQuery({
+    queryKey: ["knowledge-review", user.id, workspace.id, entryId],
+    queryFn: () => api.getIngestion(workspace.id, entryId),
+    refetchInterval: (query) => query.state.data && isIngestionPending(query.state.data) ? 1500 : false,
+  });
+
+  const source = useQuery({
+    queryKey: ["knowledge-source", user.id, workspace.id, entryId, state.data?.source_name],
+    queryFn: () => api.getKnowledgeSourceAccess(workspace.id, entryId),
+    enabled: Boolean(state.data),
+    staleTime: 120_000,
+    refetchInterval: 120_000,
+  });
+
+  function saved(entry: IngestionEntry) {
+    queryClient.setQueryData(["knowledge-review", user.id, workspace.id, entryId], entry);
+    void queryClient.invalidateQueries({ queryKey: ["ingestion", user.id, workspace.id] });
+  }
+
+  async function approve() {
+    setBusy(true);
+    setError(null);
+    try {
+      const approved = await api.approveIngestion(workspace.id, entryId);
+      queryClient.setQueryData(["knowledge-review", user.id, workspace.id, entryId], approved);
+      await queryClient.invalidateQueries({ queryKey: ["ingestion", user.id, workspace.id] });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not approve knowledge.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retry() {
+    setBusy(true);
+    setError(null);
+    try {
+      const queued = await api.retryIngestion(workspace.id, entryId);
+      queryClient.setQueryData(["knowledge-review", user.id, workspace.id, entryId], queued);
+      await queryClient.invalidateQueries({ queryKey: ["ingestion", user.id, workspace.id] });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not retry ingestion.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (state.isPending) return <LoadingPanel label="Loading knowledge for review" />;
+  if (!state.data) {
+    return (
+      <ErrorPanel
+        message={state.error?.message || "Could not load knowledge."}
+        action={<Button variant="secondary" onClick={() => void state.refetch()}>Try again</Button>}
+      />
+    );
+  }
+
+  const entry = state.data;
+  const previewExtracted =
+    entry.preview.application_knowledge.length + entry.preview.artifacts.length + entry.preview.skills.length;
+  const summaryExtracted = entry.knowledge_count + entry.artifact_count + entry.skill_count;
+  const files = entry.files ?? [];
+  const hasFiles = files.length > 0;
+  const hasKnowledge = hasFiles || previewExtracted > 0;
+  const extractedUnlisted = summaryExtracted > 0 && previewExtracted === 0;
+  const pending = isIngestionPending(entry);
+  const failed = entry.processing_status === "failed";
+  const isApproved = entry.status === "approved";
+  const isLink = Boolean(entry.original_source_url) ||
+    entry.source_name.endsWith("-link.txt") ||
+    entry.source_name.startsWith("http://") ||
+    entry.source_name.startsWith("https://");
+
+  const statusPill = pending ? (
+    <StatusPill tone="info" glyph="•">
+      {statusEntry("lifecycle", entry.processing_stage ?? entry.processing_status ?? "processing").word}
+    </StatusPill>
+  ) : failed ? (
+    <StatusPill tone="danger" glyph="✕">Processing failed</StatusPill>
+  ) : isApproved ? (
+    <StatusPill tone="success" glyph="✓">Approved</StatusPill>
+  ) : (
+    <StatusPill tone="neutral" glyph="!">Needs review</StatusPill>
+  );
+
+  return (
+    <div className="knowledge-review-page">
+      <Link className="back-link" to="/knowledge/review">Back to review knowledge</Link>
+      <PageHeader
+        eyebrow="Knowledge"
+        title={entry.name}
+        description={entry.source_name}
+        action={
+          <div className="knowledge-row-actions">
+            {statusPill}
+            {entry.original_source_url ? (
+              <a className="secondary-button" href={entry.original_source_url} target="_blank" rel="noreferrer">
+                <ExternalLink size={16} aria-hidden="true" />
+                <span>Open original public source</span>
+              </a>
+            ) : null}
+            {source.data ? (
+              <a className="secondary-button" href={source.data.url} target="_blank" rel="noreferrer">
+                <ExternalLink size={16} aria-hidden="true" />
+                <span>Open retained source evidence</span>
+              </a>
+            ) : null}
+            {canWriteWorkspace(workspace.role) ? <RenameKnowledge entry={entry} onSaved={saved} /> : null}
+            {canWriteWorkspace(workspace.role) ? (
+              <DeleteAction
+                kind="knowledge"
+                workspaceId={workspace.id}
+                id={entry.id}
+                name={entry.name}
+                disabled={busy}
+                onDeleted={() => navigate("/knowledge/review")}
+              />
+            ) : null}
+          </div>
+        }
+      />
+
+      {state.isError ? (
+        <InlineAlert severity="warning" title="Could not refresh knowledge" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void state.refetch()}>Try again</Button>}>Showing the last loaded data.</InlineAlert>
+      ) : null}
+
+      {source.isError ? (
+        <InlineAlert severity="error" title="Could not open retained source evidence" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void source.refetch()}>Try again</Button>} />
+      ) : null}
+
+      <div
+        className="knowledge-meta-strip"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "16px",
+          flexWrap: "wrap",
+          marginBottom: "20px",
+        }}
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          Source purpose:{" "}
+          <strong style={{ color: "var(--text)" }}>
+            {entry.roles.map((role) => sourceRoles.find(([value]) => value === role)?.[1] ?? role).join(", ")}
+          </strong>
+        </p>
+        <StatusPill tone="neutral" size="sm">{isLink ? "Public Link" : "Document"}</StatusPill>
+      </div>
+
+      {pending ? (
+        <section className="panel section-block">
+          <div className="section-heading">
+            <h2>Ingestion in progress</h2>
+            <StatusPill tone="warning">In progress</StatusPill>
+          </div>
+          <IngestionProgress entry={entry} />
+          <div
+            className="stage-ledger"
+            style={{
+              display: "grid",
+              gap: "10px",
+              margin: "20px 0",
+              padding: "16px",
+              background: "var(--surface-muted)",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--success)" }}>
+              <CheckCircle2 size={16} />
+              <span><strong>Stage 1:</strong> Source saved</span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                color: entry.processing_status === "processing" ? "var(--primary)" : "var(--text-3)",
+              }}
+            >
+              {entry.processing_status === "processing" ? <Spinner /> : <Clock size={16} />}
+              <span>
+                <strong>Stage 2:</strong>{" "}
+                {entry.processing_stage ? ingestionStageLabel(entry)
+                  : entry.processing_status === "processing" ? "Processing source" : "Queued for processing"}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text-3)" }}>
+              <FileCheck size={16} />
+              <span><strong>Stage 3:</strong> Awaiting generated knowledge for review</span>
+            </div>
+          </div>
+          <p className="muted">You can leave this page. Processing will continue, and the knowledge will appear here when ready.</p>
+        </section>
+      ) : failed ? (
+        <section className="panel section-block">
+          <div className="section-heading">
+            <h2>Processing failed</h2>
+            <StatusPill tone="danger">Failed</StatusPill>
+          </div>
+          <InlineAlert severity="error" title={entry.processing_error || "Knowledge processing failed."} role="alert" />
+          {error ? <InlineAlert severity="error" title="Could not retry processing" role="alert">{error}</InlineAlert> : null}
+          <p className="muted" style={{ margin: "12px 0 16px" }}>
+            The source could not be converted into testable knowledge. Check that the source is readable and matches the supported formats, or try again.
+          </p>
+          {canWriteWorkspace(workspace.role) ? (
+            <Button variant="secondary" disabled={busy} onClick={() => void retry()}>
+              {busy ? "Retrying…" : "Retry processing"}
+            </Button>
+          ) : null}
+        </section>
+      ) : (
+        <div className="knowledge-review-layout">
+          {hasFiles ? (
+            <KnowledgeFileReview workspaceId={workspace.id} entryId={entry.id} files={files} />
+          ) : previewExtracted > 0 ? (
+            <KnowledgeResult preview={entry.preview} />
+          ) : (
+            <section className="panel section-block">
+              <h2>No knowledge files yet</h2>
+              <p className="muted">
+                This source produced no knowledge files to review. When a source is processed into
+                Markdown files, they will appear here for review.
+              </p>
+            </section>
+          )}
+          <aside className="knowledge-review-rail" aria-label="Knowledge approval and applications">
+            {isApproved ? (
+              <>
+                <div
+                  className="panel"
+                  style={{
+                    display: "grid",
+                    gap: "12px",
+                    marginBottom: "20px",
+                    padding: "20px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    background: "var(--surface)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <h2 style={{ margin: 0, fontSize: "16px" }}>Knowledge Status</h2>
+                    <StatusPill tone="success">Available for tests</StatusPill>
+                  </div>
+                  <p className="knowledge-approved-status" style={{ margin: 0, fontSize: "13px", color: "var(--text-2)" }}>
+                    This knowledge set has been approved and is available for inclusion in tests across your workspace.
+                  </p>
+                </div>
+                <KnowledgeApplications
+                  key={`${entry.id}:${entry.application_ids?.join()}`}
+                  entry={entry}
+                  onSaved={saved}
+                />
+              </>
+            ) : canWriteWorkspace(workspace.role) ? (
+              <section className="panel form-grid knowledge-approval">
+                <h2>Approve for use in tests</h2>
+                <p className="muted">Check each item against the original source before approving.</p>
+                <div
+                  className="review-checklist"
+                  style={{
+                    margin: "8px 0 12px",
+                    padding: "12px",
+                    background: "var(--surface-muted)",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    fontSize: "13px",
+                    display: "grid",
+                    gap: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      color: hasKnowledge ? "var(--success)" : "var(--text-3)",
+                    }}
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>{hasFiles ? `Files: ${files.length} ready` : `Extracted items: ${previewExtracted} ready`}</span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      color: entry.preview.extraction_issues.length === 0 ? "var(--success)" : "var(--warning)",
+                    }}
+                  >
+                    <ShieldCheck size={16} />
+                    <span>Extraction issues: {entry.preview.extraction_issues.length} recorded</span>
+                  </div>
+                </div>
+                <label className="knowledge-confirmation">
+                  <input
+                    type="checkbox"
+                    className="mt-checkbox"
+                    checked={confirmed}
+                    onChange={(event) => setConfirmedFor(event.target.checked ? reviewKey : null)}
+                    disabled={busy || !hasKnowledge}
+                  />
+                  <span>I reviewed this knowledge against its source and confirmed the source purpose.</span>
+                </label>
+                {error ? <InlineAlert severity="error" title="Could not approve knowledge" role="alert">{error}</InlineAlert> : null}
+                {!hasKnowledge ? <p className="form-note">{extractedUnlisted ? "The extracted items for this source could not be listed here, so there is nothing to review or approve yet." : "This source produced no knowledge to approve."}</p> : null}
+                <div className="form-actions">
+                  <Button disabled={!confirmed || busy || !hasKnowledge} onClick={() => void approve()}>
+                    {busy ? <><Spinner /> Approving…</> : "Approve knowledge"}
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <p className="muted">Your workspace role can review this set. Write access is required to approve it.</p>
+            )}
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}

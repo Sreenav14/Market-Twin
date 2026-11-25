@@ -232,3 +232,51 @@ async def test_connect_preserves_end_to_end_tls_hostname_validation(
         await proxy.close()
         server.close()
         await server.wait_closed()
+
+
+async def test_close_returns_while_connect_tunnel_still_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression (MT-000160, 2026-11-18): close() must not wait
+    forever on the server's wait_closed() while a CONNECT tunnel
+    is still open - a live tunnel holds the accepted connection
+    open, session teardown wedges, and the run dies by stall
+    watchdog instead of closing."""
+
+    async def destination(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            await reader.read()
+        finally:
+            writer.close()
+
+    async def lookup(_host: str) -> tuple[ResolvedAddress, ...]:
+        return (ResolvedAddress("127.0.0.1", 4),)
+
+    monkeypatch.setattr(
+        "markettwin_execution_orchestrator.browser.egress.system_host_lookup", lookup,
+    )
+    server = await asyncio.start_server(destination, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    proxy = PinnedEgressProxy("local_development")
+    target = urlsplit(await proxy.start())
+    writer: asyncio.StreamWriter | None = None
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", target.port)
+        writer.write(f"CONNECT rebind.invalid:{port} HTTP/1.1\r\n\r\n".encode())
+        await writer.drain()
+        assert b"200" in await reader.readuntil(b"\r\n\r\n")
+        # The tunnel is now open and idle. close() must still
+        # return promptly: the bounded wait expires and the
+        # writer closes / task cancels below tear the tunnel down.
+        await asyncio.wait_for(proxy.close(), timeout=10)
+    finally:
+        # Hang-proof cleanup: closing the client end unwinds the
+        # tunnel even when close() itself wedged (fail-before).
+        if writer is not None:
+            writer.close()
+        server.close()
+        try:
+            await asyncio.wait_for(server.wait_closed(), timeout=5)
+        except TimeoutError:
+            pass
+

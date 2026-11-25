@@ -10,17 +10,26 @@ from typing import Literal, Protocol, cast
 from uuid import UUID
 
 from playwright.async_api import CDPSession, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, ConfigDict, Field
 
 from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
 from markettwin_execution_orchestrator.browser.controller import BrowserController
 from markettwin_execution_orchestrator.browser.errors import BrowserSessionStateError
-from markettwin_execution_orchestrator.browser.policy import validate_target_url
+from markettwin_execution_orchestrator.browser.offsite import validate_browsing_url, validate_human_url
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 
 class ViewerRejectedError(RuntimeError):
     """Safe error with no input data, page content, or underlying browser error."""
+
+    def __init__(
+        self, message: str = "", *, reason: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.detail = detail
 
 
 # Read-only observation: agent work and pending assistance only. Human control is excluded
@@ -34,6 +43,7 @@ SCREENCAST_QUALITY = 70
 SCREENCAST_MAX_WIDTH = 1280
 SCREENCAST_FRAME_SECONDS = 5.0
 POINTER_EVENTS = frozenset({"pointer_down", "pointer_move", "pointer_up", "pointer_cancel"})
+NAVIGATION_COMMIT_TIMEOUT_MS = 1500
 
 
 class ViewerInput(BaseModel):
@@ -44,6 +54,7 @@ class ViewerInput(BaseModel):
     event: Literal[
         "click", "text", "key", "scroll", "resize",
         "pointer_down", "pointer_move", "pointer_up", "pointer_cancel",
+        "back", "forward", "reload",
     ]
     x: int = Field(default=0, ge=0, le=1920)
     y: int = Field(default=0, ge=0, le=1080)
@@ -90,6 +101,8 @@ class _ScreencastSource:
     frame_event: asyncio.Event = field(default_factory=asyncio.Event)
     viewers: int = 0
     stopped: bool = False
+    ack_failures: int = 0
+    decode_failures: int = 0
 
 
 class BrowserOwner(Protocol):
@@ -101,6 +114,7 @@ class BrowserOwner(Protocol):
     async def start_screencast(self, handle: BrowserSessionHandle, *, generation: int) -> None: ...
     async def next_screencast_frame(self, handle: BrowserSessionHandle, *, generation: int) -> bytes: ...
     async def stop_screencast(self, handle: BrowserSessionHandle) -> None: ...
+    def screencast_stats(self, session_id: UUID) -> dict[str, int]: ...
     async def revoke(self, handle: BrowserSessionHandle, generation: int) -> None: ...
 
 
@@ -116,6 +130,9 @@ class ControllerBrowserOwner:
         self._controller = controller
         self._connections: dict[UUID, _ViewerConnection] = {}
         self._screencasts: dict[UUID, _ScreencastSource] = {}
+        # Separate from session.lock: agent actions hold that lock for whole
+        # page scans, which would starve viewer attach past its timeout.
+        self._screencast_locks: dict[UUID, asyncio.Lock] = {}
 
     def _session(self, handle: BrowserSessionHandle) -> JourneyBrowserSession:
         return self._controller._get_session(  # pyright: ignore[reportPrivateUsage]
@@ -134,6 +151,15 @@ class ControllerBrowserOwner:
             connection = self._connections.get(session.session_id)
             if connection is not None and connection.lease == lease:
                 self._abandon_pointer(session, connection, connection.lease.generation)
+            raise ViewerRejectedError("Viewer operation timed out.") from None
+
+    @asynccontextmanager
+    async def _screencast_locked(self, session_id: UUID) -> AsyncGenerator[None]:
+        lock = self._screencast_locks.setdefault(session_id, asyncio.Lock())
+        try:
+            async with asyncio.timeout(VIEWER_OPERATION_SECONDS), lock:
+                yield
+        except TimeoutError:
             raise ViewerRejectedError("Viewer operation timed out.") from None
 
     def _abandon_pointer(
@@ -176,7 +202,7 @@ class ControllerBrowserOwner:
             session.control_mode = "none"
             return False
         try:
-            validate_target_url(page.url, session.allowed_origins, session.network_policy)
+            validate_human_url(session, page.url)
             async with asyncio.timeout(POINTER_RELEASE_SECONDS):
                 await page.mouse.up(button="left")
             return True
@@ -223,7 +249,7 @@ class ControllerBrowserOwner:
         ):
             raise ViewerRejectedError("Viewer authority is unavailable.")
         try:
-            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            validate_human_url(session, session.page.url)
         except Exception:
             raise ViewerRejectedError("Viewer origin is not authorized.") from None
         return session
@@ -354,6 +380,16 @@ class ControllerBrowserOwner:
                 await session.page.set_viewport_size({
                     "width": event.width, "height": event.height,
                 })
+            elif event.event in {"back", "forward", "reload"}:
+                navigate = {
+                    "back": page.go_back, "forward": page.go_forward, "reload": page.reload,
+                }[event.event]
+                try:
+                    await navigate(wait_until="commit", timeout=NAVIGATION_COMMIT_TIMEOUT_MS)
+                except PlaywrightTimeoutError:
+                    # The command was dispatched. A slow target can still commit
+                    # after this wait, so keep the lease and do not retry it.
+                    pass
         except BaseException as error:
             # Playwright exceptions can include entered text/URLs. Fence
             # uncertain input and expose only this safe error.
@@ -439,7 +475,10 @@ class ControllerBrowserOwner:
         ):
             raise ViewerRejectedError("Browser observation is unavailable.")
         try:
-            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            if session.control_mode == "human":
+                validate_human_url(session, session.page.url)
+            else:
+                validate_browsing_url(session, session.page.url)
         except Exception:
             raise ViewerRejectedError("Browser observation is unavailable.") from None
 
@@ -451,12 +490,16 @@ class ControllerBrowserOwner:
             )
             await send("Page.screencastFrameAck", {"sessionId": session_id})
         except Exception:
-            pass
+            source.ack_failures += 1
+
+    def screencast_stats(self, session_id: UUID) -> dict[str, int]:
+        source = self._screencasts.get(session_id)
+        return {"ack_failures": source.ack_failures, "decode_failures": source.decode_failures} if source else {}
 
     async def start_screencast(self, handle: BrowserSessionHandle, *, generation: int) -> None:
         """Start (or join) the one persistent screencast for a watched session."""
         session = self._session(handle)
-        async with self._locked(session):
+        async with self._screencast_locked(handle.session_id):
             self._screencast_allowed(session, generation)
             existing = self._screencasts.get(handle.session_id)
             if existing is not None and existing.generation == generation and not existing.stopped:
@@ -466,22 +509,26 @@ class ControllerBrowserOwner:
                 await self._stop_screencast_source(existing)
             channel = await session.context.new_cdp_session(session.page)
             source = _ScreencastSource(handle=handle, generation=generation, channel=channel, viewers=1)
+            source.frame_event = session.live_view_changed
+            source.frame_event.clear()
 
             def on_frame(params: dict[str, object]) -> None:
                 if source.stopped:
                     return
+                # Even rejected frames must be acknowledged or CDP can stop sending.
+                frame_session = params.get("sessionId")
+                if isinstance(frame_session, int):
+                    asyncio.ensure_future(self._ack_screencast_frame(source, frame_session))
                 try:
                     data = base64.b64decode(cast(str, params["data"]), validate=True)
                 except Exception:
+                    source.decode_failures += 1
                     return
                 if len(data) > OBSERVATION_MAX_BYTES:
                     return
                 # Latest-frame-only coalescing: a slow viewer never builds a backlog.
                 source.latest_frame = data
                 source.frame_event.set()
-                frame_session = params.get("sessionId")
-                if isinstance(frame_session, int):
-                    asyncio.ensure_future(self._ack_screencast_frame(source, frame_session))
 
             channel.on("Page.screencastFrame", on_frame)
             send = cast(
@@ -500,6 +547,28 @@ class ControllerBrowserOwner:
                     pass
                 raise ViewerRejectedError("Browser observation is unavailable.") from None
             self._screencasts[handle.session_id] = source
+        # A static page may not repaint after startScreencast. Seed the first
+        # view once, then use repaint-driven frames for the rest of the stream.
+        # Do not replace a fresher frame that arrived while capture awaited CDP.
+        if source.latest_frame is None:
+            try:
+                async with asyncio.timeout(VIEWER_OPERATION_SECONDS):
+                    initial = await send("Page.captureScreenshot", {
+                        "format": "jpeg", "quality": SCREENCAST_QUALITY,
+                        "captureBeyondViewport": False,
+                    })
+                self._screencast_allowed(session, generation)
+                data = base64.b64decode(cast(str, initial["data"]), validate=True)
+                if (not source.stopped and source.latest_frame is None
+                        and len(data) <= OBSERVATION_MAX_BYTES):
+                    source.latest_frame = data
+                    source.frame_event.set()
+            except ViewerRejectedError:
+                await self._stop_screencast_source(source)
+                raise
+            except Exception:
+                # Native screencast delivery can still provide the first view.
+                pass
 
     async def next_screencast_frame(self, handle: BrowserSessionHandle, *, generation: int) -> bytes:
         """Wait for the newest screencast frame. Never captures a screenshot and
@@ -511,12 +580,39 @@ class ControllerBrowserOwner:
         try:
             async with asyncio.timeout(SCREENCAST_FRAME_SECONDS):
                 await source.frame_event.wait()
+                while source.latest_frame is None and not source.stopped:
+                    source.frame_event.clear()
+                    await source.frame_event.wait()
         except TimeoutError:
-            raise ViewerRejectedError("Browser frame is unavailable.") from None
+            # CDP only emits on repaint; a still page must keep the stream open.
+            if source.latest_frame is None:
+                raise ViewerRejectedError("Browser frame is unavailable.") from None
         source.frame_event.clear()
+        if source.stopped:
+            raise ViewerRejectedError("Browser observation is unavailable.")
         if source.latest_frame is None:
             raise ViewerRejectedError("Browser frame is unavailable.")
+        session = self._session(handle)
+        self._screencast_allowed(session, generation)
         return source.latest_frame
+
+    def current_observer_frame(
+        self, handle: BrowserSessionHandle, *, generation: int,
+    ) -> tuple[bytes, dict[str, object]]:
+        """Read newest pixels after DB authorization, without JPEG recompression."""
+        session = self._session(handle)
+        self._screencast_allowed(session, generation)
+        source = self._screencasts.get(handle.session_id)
+        if (source is None or source.stopped or source.generation != generation
+                or source.latest_frame is None):
+            raise ViewerRejectedError("Browser observation is unavailable.")
+        target = session.live_click_target if session.control_mode == "agent" else None
+        pointer = None
+        if (target is not None
+                and target.width > 0 and target.height > 0
+                and 0 <= target.x < target.width and 0 <= target.y < target.height):
+            pointer = {"x": target.x / target.width, "y": target.y / target.height}
+        return source.latest_frame, {"type": "agent_pointer", "pointer": pointer}
 
     async def stop_screencast(self, handle: BrowserSessionHandle) -> None:
         """Detach one viewer; the screencast stops with its last viewer."""
@@ -526,8 +622,7 @@ class ControllerBrowserOwner:
         source.viewers -= 1
         if source.viewers > 0:
             return
-        session = self._session(handle)
-        async with self._locked(session):
+        async with self._screencast_locked(handle.session_id):
             await self._stop_screencast_source(source)
 
     async def _stop_screencast_source(self, source: _ScreencastSource) -> None:

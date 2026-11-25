@@ -167,6 +167,8 @@ class AuthSessionBroker:
     async def install_snapshot(
         *, snapshot: AuthSessionSnapshot, context: _InstallableContext,
     ) -> None:
+        if snapshot.expires_at <= datetime.now(UTC):
+            raise AuthSessionReuseRejected("Authenticated state has expired.")
         scope = snapshot.scope
         cookies = snapshot.browser_storage_state.get("cookies", [])
         if not isinstance(cookies, list):
@@ -238,12 +240,44 @@ class AuthSessionBroker:
     def revoke(self, scope: AuthSessionScope | HumanSessionScope) -> None:
         self._snapshots.pop(scope, None)
         self._used_cases.pop(scope, None)
+        if self is not task_verification_sessions:
+            task_verification_sessions.revoke(scope)
+
+    def retain_for_task_verification(self, scope: AuthSessionScope | HumanSessionScope) -> None:
+        """Keep bounded, expiring state after the source controller closes."""
+        snapshot = self._snapshots.get(scope)
+        if snapshot is None:
+            raise AuthSessionReuseRejected("No captured session is available.")
+        store = task_verification_sessions
+        store.purge_expired()
+        if scope not in store._snapshots and len(store._snapshots) >= 50:
+            oldest = min(store._snapshots, key=lambda key: store._snapshots[key].expires_at)
+            store.revoke(oldest)
+        store._snapshots[scope] = snapshot
+        store._used_cases[scope] = set()
+
+    def take_for_task_verification(
+        self, *, run_id: UUID, target_id: UUID, origin: str, case_id: str,
+        role: str | None = None, account_reference: str | None = None,
+    ) -> AuthSessionSnapshot:
+        self.purge_expired()
+        scopes = [scope for scope in self._snapshots
+                  if scope.run_id == run_id and scope.target_id == target_id and scope.origin == origin
+                  and (role is None or isinstance(scope, AuthSessionScope) and scope.role == role)
+                  and (account_reference is None or isinstance(scope, AuthSessionScope)
+                       and scope.account_reference == account_reference)]
+        if not scopes:
+            raise AuthSessionReuseRejected("No scoped task verification session is available.")
+        scope = max(scopes, key=lambda key: self._snapshots[key].expires_at)
+        return self.take(scope=scope, case_id=case_id)
 
     def revoke_human_sessions(self, *, run_id: UUID, target_id: UUID) -> None:
         for scope in tuple(self._snapshots):
             if (isinstance(scope, HumanSessionScope) and scope.run_id == run_id
                     and scope.target_id == target_id):
                 self.revoke(scope)
+        if self is not task_verification_sessions:
+            task_verification_sessions.revoke_human_sessions(run_id=run_id, target_id=target_id)
 
     def clear(self) -> None:
         """Erase every in-memory authenticated snapshot at run teardown."""
@@ -260,3 +294,8 @@ class AuthSessionBroker:
         for scope in expired:
             self.revoke(scope)
         return len(expired)
+
+
+# Process-local only: no credentials or browser storage enter the database/events.
+# The original expiry and per-case use limit survive the source controller's close.
+task_verification_sessions = AuthSessionBroker()

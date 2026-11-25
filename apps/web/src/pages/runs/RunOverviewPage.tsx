@@ -1,243 +1,65 @@
-import { Banner } from "../../components/ui/Feedback";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
-import { Check, FileText, ArrowUpRight } from "lucide-react";
-import { RunContext } from "../../layouts/RunLayout";
-import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
-import { FindingListItem } from "../../components/markettwin/FindingListItem";
-import { CopyButton } from "../../components/markettwin/CopyButton";
-import { reportMetrics, sortFindings, findingClassification, isConfirmedFinding } from "../../lib/results";
-import { textValue, testBrief } from "../../lib/format";
-import { emptyFindingsSummary } from "../../lib/emptyFindingsSummary";
+import { StopRunButton } from "../../components/markettwin/StopRunButton";
+import type { RunContext } from "../../layouts/RunLayout";
+import { api } from "../../lib/api";
+import { canAuthorizeTarget } from "../../lib/permissions";
+import { terminalTestStatuses } from "../../lib/results";
+import { ReportActivity, ReportEyebrow, ReportFrame, ReportStatus, number, record, reportKind, useReportFlow } from "./ReportFrame";
+import { RunReportPage } from "./RunReportPage";
+
+function ProvisionalReport({ run, user, workspace }: RunContext) {
+  const kind = reportKind({}, run);
+  const flow = useReportFlow(run, user.id, false);
+  const waiting = run.status === "awaiting_human" && run.configuration_snapshot.discovery_stage !== "awaiting_approval";
+  const allowed = canAuthorizeTarget(workspace.role);
+  const live = useQuery({
+    queryKey: ["live-execution", user.id, workspace.id, workspace.role, run.id],
+    queryFn: ({ signal }) => api.getLiveExecution(run.id, undefined, signal),
+    enabled: allowed && run.status === "running",
+    retry: false,
+    refetchInterval: 5000,
+  });
+  const pictureUnavailable = allowed && run.status === "running" && live.data !== undefined
+    && (live.data.browser?.viewer_state === "suppressed" || !live.data.browser);
+  const checkpoint = run.configuration_snapshot.slop_checkpoint as {
+    visited?: string[]; pending?: string[]; in_flight?: { url: string }[]; active_url?: string;
+  } | undefined;
+  const active = checkpoint?.in_flight?.map(page => page.url) ?? (checkpoint?.active_url ? [checkpoint.active_url] : []);
+  const title = waiting ? "Waiting for you" : kind === "slop" ? "Audit running — findings so far" : "Test in progress — findings so far";
+  return <ReportFrame
+    takeaway={<><ReportEyebrow run={run} kind={kind} /><h2 className="report-verdict">{title}</h2>
+      {waiting && run.status_reason ? <p>{run.status_reason}</p> : null}
+      <Link className="primary-button" to={`/runs/${run.id}/watch${waiting ? "#human-action-heading" : ""}`}>{waiting ? "Help this tester" : "Watch live"}</Link>
+      {allowed ? <StopRunButton run={run} /> : null}
+      {pictureUnavailable ? <div>
+        <p role="status"><ReportStatus word="Live picture unavailable" tone="notchecked" />. The test is still running. The live picture is unavailable right now.</p>
+        <div className="report-controls">
+          <button type="button" disabled={live.isFetching} onClick={() => void live.refetch()}>Retry the live picture</button>
+          <Link to={`/runs/${run.id}/activity`}>Open Activity</Link>
+        </div>
+      </div> : null}
+    </>}
+    activity={<ReportActivity flow={flow.data} coverage={record(checkpoint)} slop={kind === "slop"} />}
+    middle={<RunReportPage />}
+    coverage={kind === "slop" && checkpoint ? <section className="report-section" aria-label="UI audit progress">
+      <h2>Provisional coverage</h2>
+      <p>Processed {number(Math.max(0, (checkpoint.visited?.length ?? 0) - active.length))} · In progress {number(active.length)} · Queued {number(checkpoint.pending?.length ?? 0)}</p>
+      {active.length ? <ul aria-label="Pages being inspected">{active.map(url => <li key={url}>{url}</li>)}</ul> : null}
+    </section> : null}
+  />;
+}
 
 export function RunOverviewPage() {
-  const { run, results } = useOutletContext<RunContext>();
-  const ready = results.status === "ready";
-  const awaitingApproval = run.configuration_snapshot.discovery_stage === "awaiting_approval";
-  const discoveryMode = run.configuration_snapshot.execution_mode === "discovery_contract_v1";
-  const stages = discoveryMode
-    ? ["Explore the app", "Approve the tests", "Check the journeys", "Test results"]
-    : ["Created", "Planning", "Execution", "Evaluation"];
-  const pausedForHuman = run.status === "awaiting_human" && !awaitingApproval;
-  const stage = ready
-    ? 4
-    : run.status === "completed"
-      ? 3
-      : awaitingApproval
-        ? 1
-      : pausedForHuman
-        ? -1
-      : run.status === "running"
-        ? discoveryMode && run.configuration_snapshot.discovery_stage !== "executing" ? 0 : 2
-        : ["planning", "queued"].includes(run.status)
-          ? discoveryMode ? 0 : 1
-          : 0;
-  const stopped = [
-    "failed",
-    "cancelled",
-    "timed_out",
-    "policy_blocked",
-  ].includes(run.status);
-  const metrics = ready ? reportMetrics(results.data) : null;
-  const emptySummary = ready && results.data.findings.length === 0 ? emptyFindingsSummary(results.data) : null;
-  return (
-    <>
-      {run.status_reason ? <p className="panel" role="status">{run.status_reason}</p> : null}
-      {!["draft", "failed", "cancelled"].includes(run.status) ? (
-        <Banner titleAs="h2" severity={awaitingApproval || pausedForHuman ? "warning" : "info"} title={awaitingApproval ? "Contract flow retired" : pausedForHuman
-                ? "Human assistance required"
-                : run.status === "completed"
-                ? ready
-                  ? "Test results ready"
-                  : "Execution completed · Evaluation in progress"
-                : run.status === "queued"
-                ? "Waiting to start"
-                : run.status === "planning"
-                ? "Planning the test"
-                : "Watch this test execute"} action={<Link
-            className="primary-button"
-            to={
-              awaitingApproval ? `/runs/${run.id}/overview` : pausedForHuman
-                ? `/runs/${run.id}/watch`
-                : run.status === "completed"
-                ? ready
-                  ? `/runs/${run.id}/results`
-                  : `/runs/${run.id}/journeys`
-                : `/runs/${run.id}/watch`
-            }
-          >
-            {awaitingApproval ? "Open the overview" : pausedForHuman
-              ? "Watch live"
-              : run.status === "completed"
-              ? ready
-                ? "See test results"
-                : "Inspect Journeys"
-              : run.status === "queued" || run.status === "planning"
-              ? "Open Watch"
-              : "Watch live"}
-          </Link>}>{awaitingApproval ? "This run was created with the retired contract-approval flow and cannot be approved. Its stored contract and results remain readable here." : pausedForHuman
-                ? "Open the requesting journey and protected browser. The tester waits while you assist."
-                : run.status === "completed"
-                ? ready
-                  ? "Review confirmed issues, observations, and supporting visual evidence."
-                  : "Evaluation is currently compiling recorded journeys and step assertions."
-                : run.status === "queued" || run.status === "planning"
-                ? "The Watch page shows the test browser and recorded actions as soon as execution starts."
-                : "Follow the actual test browser, recorded actions and evidence. Watching does not grant browser control."}</Banner>
-      ) : null}
-      {pausedForHuman && !awaitingApproval ? <p className="lifecycle-pause" role="status">Human action is pending. No later execution phase is confirmed.</p> : null}
-      <ol className="lifecycle-rail" aria-label="Test lifecycle">
-        {stages.map((label, index) => (
-          <li
-            key={label}
-            className={
-              stopped
-                ? "stage-stopped"
-                : index < stage
-                  ? "stage-done"
-                  : index === stage
-                    ? "stage-current"
-                    : ""
-            }
-          >
-            <span className="stage-marker" aria-hidden="true">
-              {!stopped && index < stage ? <Check size={16} /> : index + 1}
-            </span>
-            <span>
-              {label}
-              <small>
-                {stopped
-                  ? index === 0
-                    ? "Test ended"
-                    : "Not confirmed"
-                  : pausedForHuman
-                    ? "Not confirmed"
-                  : index < stage
-                    ? "Done"
-                    : index === stage
-                      ? "Current stage"
-                      : "Up next"}
-              </small>
-            </span>
-          </li>
-        ))}
-      </ol>
-      <ResultsBoundary>
-        {ready && metrics ? (
-          <>
-            <div className="study-summary">
-              <div className="summary-reading">
-                <p className="section-label">The test at a glance</p>
-                <h2>
-                  {results.data.findings.length === 0
-                    ? emptySummary?.title
-                    : `${results.data.findings.length} ${results.data.findings.length === 1 ? "finding" : "findings"} to review`}
-                </h2>
-                <p>
-                  {emptySummary?.copy || results.data.report.executive_summary ||
-                    "Open the findings to inspect the evaluation and its supporting references."}
-                </p>
-                <Link
-                  className="text-link inline-link"
-                  to={`/runs/${run.id}/results`}
-                >
-                  See test results{" "}
-                  <ArrowUpRight size={16} aria-hidden="true" />
-                </Link>
-              </div>
-              <dl className="result-metrics">
-                <div><dt>Confirmed issues</dt><dd>{results.data.findings.filter(isConfirmedFinding).length}</dd></div>
-                <div><dt>Needs checking</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Needs Verification").length}</dd></div>
-                <div><dt>Execution issues</dt><dd>{results.data.findings.filter((finding) => findingClassification(finding) === "Test execution issue").length}</dd></div>
-                <div>
-                  <dt>Journeys evaluated</dt>
-                  <dd>{metrics.journeyTotal ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>High priority confirmed issues</dt>
-                  <dd>{metrics.criticalCount}</dd>
-                </div>
-                <div>
-                  <dt>Linked artifacts</dt>
-                  <dd>{metrics.artifactCount}</dd>
-                </div>
-              </dl>
-            </div>
-            {emptySummary?.counts.length ? <dl className="outcome-list" aria-label="Recorded evaluation outcomes">{emptySummary.counts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl> : null}
-            {results.data.findings.length > 0 ? (
-              <section className="section-block">
-                <div className="section-heading">
-                  <h2>Start with these findings</h2>
-                  <Link className="text-link" to={`/runs/${run.id}/findings`}>
-                    View all findings
-                  </Link>
-                </div>
-                <ul className="finding-list">
-                  {sortFindings(results.data.findings)
-                    .slice(0, 3)
-                    .map((finding) => (
-                      <FindingListItem
-                        key={finding.id}
-                        finding={finding}
-                        runId={run.id}
-                      />
-                    ))}
-                </ul>
-              </section>
-            ) : (
-              <p className="inline-note">
-                No findings does not guarantee a problem-free experience. Review
-                the report’s scope and journey outcomes.
-              </p>
-            )}
-            <div className="provenance-note">
-              <FileText size={16} aria-hidden="true" />
-              <span>
-                {metrics.deterministic
-                  ? "Recorded checks"
-                  : "Evaluation report"}{" "}
-                · Report version {results.data.report.version}. References
-                identify the evidence linked to each finding.
-              </span>
-            </div>
-          </>
-        ) : null}
-      </ResultsBoundary>
-      <details className="study-details">
-        <summary>Test configuration</summary>
-        <dl className="definition-list">
-          <div><dt>Testing goal</dt><dd>{testBrief(run.configuration_snapshot)}</dd></div>
-          <div><dt>Testing depth</dt><dd>{typeof run.configuration_snapshot.testing_depth === "string" && run.configuration_snapshot.testing_depth.length > 0 ? run.configuration_snapshot.testing_depth[0].toUpperCase() + run.configuration_snapshot.testing_depth.slice(1) : "Older exploratory coverage (up to 4 goals)"}</dd></div>
-          <div>
-            <dt>Target</dt>
-            <dd>{textValue(run.target_snapshot.name, "Target")}</dd>
-          </div>
-          <div>
-            <dt>Environment</dt>
-            <dd>{textValue(run.target_snapshot.environment)}</dd>
-          </div>
-          <div>
-            <dt>Authentication</dt>
-            <dd>
-              {run.target_snapshot.requires_auth
-                ? "Protected target"
-                : "Public target"}
-            </dd>
-          </div>
-          <div>
-            <dt>Knowledge</dt>
-            <dd>{Array.isArray(run.configuration_snapshot.knowledge) && run.configuration_snapshot.knowledge.length
-              ? run.configuration_snapshot.knowledge.map((entry: unknown) => typeof entry === "object" && entry !== null ? textValue((entry as Record<string, unknown>).name, "Knowledge set") : "Knowledge set").join(", ")
-              : run.configuration_snapshot.knowledge === undefined || Array.isArray(run.configuration_snapshot.knowledge) ? "No knowledge selected" : "Knowledge metadata unavailable"}</dd>
-          </div>
-          <div>
-            <dt>Test identifier</dt>
-            <dd>
-              <span className="monospace">{run.id}</span>{" "}
-              <CopyButton text={run.id} label="Copy ID" />
-            </dd>
-          </div>
-        </dl>
-      </details>
-    </>
-  );
+  const context = useOutletContext<RunContext>();
+  const { run, results } = context;
+  if (results.status !== "waiting" || run.status === "draft" || terminalTestStatuses.has(run.status)
+    || run.configuration_snapshot.discovery_stage === "awaiting_approval") return <RunReportPage />;
+  return <>
+    <ProvisionalReport {...context} />
+    {run.configuration_snapshot.learn_task === true ? <section className="panel section-block">
+      <h2>Task learning</h2><p>The app’s skill library shows whether the recorded task passed replay.</p>
+      <div className="knowledge-row-actions"><Link to={`/runs/${run.id}/board`}>View the Board</Link> <Link to={`/applications/${run.application_id}/knowledge`}>View the app’s skills</Link></div>
+    </section> : null}
+  </>;
 }

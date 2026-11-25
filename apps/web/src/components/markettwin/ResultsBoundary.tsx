@@ -29,6 +29,14 @@ export function ResultsBoundary({ children }: { children: ReactNode }) {
       "timed_out",
       "policy_blocked",
     ].includes(run.status);
+    const checkpoint = run.configuration_snapshot.slop_checkpoint as {
+      visited?: string[];
+      pending?: string[];
+      in_flight?: { url: string }[];
+      active_url?: string | null;
+    } | undefined;
+    const inFlight = checkpoint?.in_flight?.length ??
+      (checkpoint?.active_url ? 1 : 0);
     return (
       <section className="waiting-state">
         <span className="state-icon">
@@ -49,7 +57,7 @@ export function ResultsBoundary({ children }: { children: ReactNode }) {
           {completed
             ? "Browser execution is complete. Evaluation is still pending, so product findings are not ready. This page checks automatically. If it continues waiting, ask your workspace operator to check the evaluation worker; its status is also shown in the test flow."
             : stopped
-              ? "Review the test status and target configuration before starting another test."
+              ? run.status_reason ?? "Review the test status and target configuration before starting another test."
               : run.configuration_snapshot.discovery_stage === "awaiting_approval"
                 ? "Exploration is complete. Approve the tests before the approved journeys are checked."
               : run.status === "awaiting_human"
@@ -62,8 +70,17 @@ export function ResultsBoundary({ children }: { children: ReactNode }) {
                   ? "This test is waiting for an execution worker. Evaluation starts after its journeys finish."
                   : featureRun
                     ? "Feature-case planning or browser execution is in progress. Evaluation follows execution; findings and the final report are not ready yet."
-                    : "Testers are still preparing or checking journeys. Evaluation follows execution; findings and the final report are not ready yet."}
+                    : run.configuration_snapshot.slop_entry_assessment
+                      ? "The audit is still checking the rest of the site."
+                      : "Testers are still preparing or checking journeys. Evaluation follows execution; findings and the final report are not ready yet."}
         </p>
+        {stopped && checkpoint && (
+          <p>
+            Page URLs processed: {Math.max(0, (checkpoint.visited?.length ?? 0) - inFlight)}.
+            {" "}Awaiting inspection or completion: {(checkpoint.pending?.length ?? 0) + inFlight}.
+            {" "}Final UI score unavailable.
+          </p>
+        )}
         <Button variant="secondary" onClick={refresh}>
           Check again
         </Button>

@@ -1,5 +1,7 @@
 """Case access inherits run ownership; private fixture data is never serialized."""
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -7,12 +9,15 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from markettwin_control_api.api import deep_cases
-from markettwin_execution_orchestrator.workflow.test_case_planner import (
-    DeepFeaturePlanningRequest,
-    fixture_case_candidates,
-    fixture_feature_scope,
-    select_feature_cases,
-)
+
+_PLAN_FIXTURE = Path(__file__).parent / "fixtures" / "deep_feature_plan_5191_good.json"
+
+
+def _captured_plan() -> dict:
+    """A deep-feature plan payload captured verbatim from the retired
+    test-case planner (round-2 cleanup); case_view consumes plan
+    payloads as data, so the captured payload keeps it covered."""
+    return json.loads(_PLAN_FIXTURE.read_text(encoding="utf-8"))
 from markettwin_shared.deep_testing import CaseExecutionResult
 
 
@@ -94,15 +99,9 @@ async def test_case_reads_authorize_before_reading_events(monkeypatch, accessibl
 
 
 async def test_partial_plan_omits_private_scope_data_and_never_claims_pass() -> None:
-    scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
-    plan = select_feature_cases(
-        request=DeepFeaturePlanningRequest(
-            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True
-        ),
-        candidates=fixture_case_candidates(scope),
-    )
+    plan = _captured_plan()
     session = SimpleNamespace(
-        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan.model_dump(mode="json")), None]),
+        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan), None]),
         execute=AsyncMock(return_value=SimpleNamespace(all=lambda: [])),
     )
     response = await deep_cases.case_view(session, uuid4())
@@ -126,17 +125,11 @@ def test_case_pages_are_bounded() -> None:
 
 
 async def test_recorded_result_is_visible_but_not_confirmed() -> None:
-    scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
-    plan = select_feature_cases(
-        request=DeepFeaturePlanningRequest(
-            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True
-        ),
-        candidates=fixture_case_candidates(scope),
-    )
-    case = plan.cases[0]
+    plan = _captured_plan()
+    case = plan["cases"][0]
     journey_id = uuid4()
     recorded = CaseExecutionResult(
-        case_id=case.case_id,
+        case_id=case["case_id"],
         execution_id=uuid4(),
         execution_status="policy_blocked",
         verdict="unverified",
@@ -145,7 +138,7 @@ async def test_recorded_result_is_visible_but_not_confirmed() -> None:
         blocker="policy_blocked",
     )
     session = SimpleNamespace(
-        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan.model_dump(mode="json")), None]),
+        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan), None]),
         execute=AsyncMock(side_effect=[
             SimpleNamespace(all=lambda: []),
             SimpleNamespace(all=lambda: [(recorded.model_dump(mode="json"), journey_id)]),
@@ -153,7 +146,7 @@ async def test_recorded_result_is_visible_but_not_confirmed() -> None:
         ]),
     )
     response = await deep_cases.case_view(session, uuid4())
-    shown = next(item for item in response["cases"] if item["case_id"] == case.case_id)
+    shown = next(item for item in response["cases"] if item["case_id"] == case["case_id"])
     assert response["evaluation_pending"] is True
     assert shown["verdict"] == "awaiting_verification"
     assert shown["recorded_verdict"] == "unverified"
@@ -188,18 +181,13 @@ async def test_legacy_run_has_explicit_unavailable_cases() -> None:
 
 
 async def test_skipped_human_assistance_is_not_run_before_evaluation() -> None:
-    scope = fixture_feature_scope("http://127.0.0.1:5191/index.html?variant=good")
-    plan = select_feature_cases(
-        request=DeepFeaturePlanningRequest(
-            test_run_id=uuid4(), scope=scope, allow_fixture_truth=True,
-        ), candidates=fixture_case_candidates(scope),
-    )
+    plan = _captured_plan()
     recorded = CaseExecutionResult(
-        case_id=plan.cases[0].case_id, execution_id=uuid4(), execution_status="skipped",
+        case_id=plan["cases"][0]["case_id"], execution_id=uuid4(), execution_status="skipped",
         verdict="unverified", blocker="human_assistance_skipped", elapsed_ms=10,
     )
     session = SimpleNamespace(
-        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan.model_dump(mode="json")), None]),
+        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan), None]),
         execute=AsyncMock(side_effect=[
             SimpleNamespace(all=lambda: []),
             SimpleNamespace(all=lambda: [(recorded.model_dump(mode="json"), uuid4())]),
@@ -211,3 +199,64 @@ async def test_skipped_human_assistance_is_not_run_before_evaluation() -> None:
     assert shown["execution_status"] == "skipped"
     assert shown["reason"] == "human_assistance_skipped"
     assert shown["assertions"] == []
+
+
+@pytest.mark.asyncio
+async def test_case_view_flags_truncated_recorded_results() -> None:
+    plan = _captured_plan()
+    journey_id = uuid4()
+    recorded_rows = [
+        (
+            CaseExecutionResult(
+                case_id=case["case_id"],
+                execution_id=uuid4(),
+                execution_status="policy_blocked",
+                verdict="unverified",
+                action_step_ids=(),
+                elapsed_ms=5,
+                blocker="policy_blocked",
+            ).model_dump(mode="json"),
+            journey_id,
+        )
+        for case in plan["cases"]
+    ]
+    # One more completion event than the plan has cases: the fetch cap
+    # (plan size + 1) was reached, so the view must say so instead of
+    # silently dropping the extra results.
+    recorded_rows.append(recorded_rows[0])
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan), None]),
+        execute=AsyncMock(side_effect=[
+            SimpleNamespace(all=lambda: []),
+            SimpleNamespace(all=lambda: recorded_rows),
+        ]),
+    )
+    response = await deep_cases.case_view(session, uuid4())
+    assert response["truncated"] is True
+    planned_ids = {case["case_id"] for case in plan["cases"]}
+    shown = [item for item in response["cases"] if item["case_id"] in planned_ids]
+    assert len(shown) == len(plan["cases"])
+    assert all(item["recorded_verdict"] == "unverified" for item in shown)
+
+
+@pytest.mark.asyncio
+async def test_case_view_reports_no_truncation_within_the_plan() -> None:
+    plan = _captured_plan()
+    recorded = CaseExecutionResult(
+        case_id=plan["cases"][0]["case_id"],
+        execution_id=uuid4(),
+        execution_status="policy_blocked",
+        verdict="unverified",
+        action_step_ids=(),
+        elapsed_ms=5,
+        blocker="policy_blocked",
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[SimpleNamespace(payload=plan), None]),
+        execute=AsyncMock(side_effect=[
+            SimpleNamespace(all=lambda: []),
+            SimpleNamespace(all=lambda: [(recorded.model_dump(mode="json"), uuid4())]),
+        ]),
+    )
+    response = await deep_cases.case_view(session, uuid4())
+    assert response["truncated"] is False

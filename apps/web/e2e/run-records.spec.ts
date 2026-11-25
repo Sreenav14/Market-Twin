@@ -198,9 +198,8 @@ for (const [name, payload, copy] of [
     await expect(page.getByText(copy, { exact: true })).toBeVisible();
     await expect(page.getByRole("article")).toHaveCount(0);
     await checkLayout(page, testInfo);
-    await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Report", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Test result" })).toBeVisible();
-    await page.getByText("Read full generated narrative summary").click();
+    await page.getByRole("navigation", { name: "Test sections" }).getByRole("link", { name: "Summary", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Takeaway" })).toBeVisible();
     await expect(page.getByText("Checkout needs correction; account access could not be verified.", { exact: true })).toBeVisible();
     expect(state.starts).toBe(0);
   });

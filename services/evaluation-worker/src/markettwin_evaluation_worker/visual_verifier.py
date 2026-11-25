@@ -24,7 +24,6 @@ VisualVerificationStatus = Literal[
     "unverified",
 ]
 
-DEFAULT_VISUAL_MODEL = "openai/gpt-4o-mini"
 VISUAL_TEMPERATURE = 0
 VISUAL_MAX_TOKENS = 300
 VISUAL_RATE_LIMIT_MAX_ATTEMPTS = 4
@@ -125,11 +124,13 @@ def _visual_model_name() -> str:
     """Return the model reserved for visual verification."""
 
     model = (
-        os.getenv("VISUAL_MODEL_NAME") or os.getenv("MODEL_NAME") or DEFAULT_VISUAL_MODEL
+        os.getenv("VISUAL_MODEL_NAME") or os.getenv("MODEL_NAME") or ""
     ).strip()
 
     if not model:
-        return DEFAULT_VISUAL_MODEL
+        raise RuntimeError(
+            "VISUAL_MODEL_NAME or MODEL_NAME is required for visual verification."
+        )
 
     if "/" not in model:
         return f"openai/{model}"

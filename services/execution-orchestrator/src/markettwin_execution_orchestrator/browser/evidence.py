@@ -1,11 +1,11 @@
 """Local browser-evidence capture for MarketTwin Journey execution."""
 
+import asyncio
 import json
 from dataclasses import asdict
 from pathlib import Path
 
 from PIL import Image
-from playwright.async_api import Locator
 
 from markettwin_execution_orchestrator.browser.contracts import (
     ElementBoundingBox,
@@ -14,6 +14,14 @@ from markettwin_execution_orchestrator.browser.errors import HumanControlActiveE
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
 
 FOCUSED_CROP_PADDING_PX = 48
+
+# Bounded like the egress-proxy close (MT-000160): session teardown
+# must never wait on an unbounded trace flush. A run-long trace
+# segment can reach gigabytes (MT-000166: 2.4 GB), and
+# tracing.stop() zipping it inside session close held the run
+# silent past the 900 s stall watchdog. 30 s is far below that
+# bound and far above a normal segment flush.
+TRACE_STOP_TIMEOUT_SECONDS = 30
 
 
 def bounding_box_intersects_viewport(
@@ -40,8 +48,12 @@ async def start_trace(session: JourneyBrowserSession) -> None:
     if session.tracing_active or not session.capture_enabled or session.authenticated_session:
         return
     session.trace_segment += 1
+    # No screenshots inside the trace: per-action frames dominated the
+    # zip (2.4 GB on MT-000166) and nothing reads them back — report
+    # evidence uses capture_screenshot PNGs, and Watch is a separate
+    # CDP screencast. Snapshots and sources keep the trace replayable.
     await session.context.tracing.start(
-        screenshots=True,
+        screenshots=False,
         snapshots=True,
         sources=True,
     )
@@ -54,7 +66,17 @@ async def stop_trace(session: JourneyBrowserSession) -> Path | None:
     if not session.tracing_active:
         return None
     path = session.artifact_directory / f"trace-{session.trace_segment:03d}.zip"
-    await session.context.tracing.stop(path=path)
+    try:
+        await asyncio.wait_for(
+            session.context.tracing.stop(path=path),
+            timeout=TRACE_STOP_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        # The flush is abandoned: the caller still closes the
+        # context and browser, and the partial zip is not
+        # returned as evidence.
+        session.tracing_active = False
+        return None
     session.tracing_active = False
     return path
 
@@ -112,31 +134,6 @@ async def write_event_logs(session: JourneyBrowserSession) -> tuple[Path, Path, 
         encoding="utf-8",
     )
     return console_path, page_path, failed_path
-async def capture_element_screenshot(
-    session: JourneyBrowserSession,
-    *,
-    locator: Locator,
-) -> Path | None:
-    """Capture one visible element as focused PNG evidence."""
-
-    if not session.capture_enabled:
-        return None
-
-    path = session.artifact_directory / (
-        f"action-{session.action_number:04d}-element.png"
-    )
-
-    if session.authenticated_session:
-        await locator.screenshot(
-            path=path, timeout=session.timeout_ms,
-            mask=[session.page.locator(
-                "input, textarea, [contenteditable], pre, code, [data-sensitive], [data-secret]"
-            )],
-        )
-    else:
-        await locator.screenshot(path=path, timeout=session.timeout_ms)
-
-    return path
 
 def crop_viewport_screenshot(
     *,

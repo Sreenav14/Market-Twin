@@ -3,7 +3,7 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 import type { RunContext } from "../../layouts/RunLayout";
 import { HumanActionPage } from "./HumanActionPage";
 
@@ -12,6 +12,28 @@ vi.mock("./HumanBrowserViewer", () => ({
 }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it("refreshes a failed claim and explains browser-owner unavailability", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const refresh = vi.spyOn(client, "invalidateQueries");
+  vi.spyOn(api, "listHumanActions").mockResolvedValue([{
+    id: "request", test_run_id: "run", execution_id: "execution", browser_session_id: "browser",
+    request_type: "other", status: "pending", created_at: "2026-10-18T12:00:00Z",
+    expires_at: null, control_generation: 0, lease_id: null, lease_expires_at: null,
+  }]);
+  vi.spyOn(api, "listActionApprovals").mockResolvedValue([]);
+  vi.spyOn(api, "claimHumanAction").mockRejectedValue(new ApiError("Owner unavailable", 503));
+  const context = { run: { id: "run", status: "running" }, user: { id: "owner" },
+    workspace: { id: "workspace", role: "owner" } } as RunContext;
+  function Layout() { return <Outlet context={context} />; }
+  render(<QueryClientProvider client={client}><MemoryRouter><Routes>
+    <Route element={<Layout />}><Route path="*" element={<HumanActionPage />} /></Route>
+  </Routes></MemoryRouter></QueryClientProvider>);
+  await userEvent.click(await screen.findByRole("button", { name: /Take browser control/ }));
+  expect(await screen.findByText(/browser owner could not provide control/)).toBeInTheDocument();
+  expect(screen.queryByText(/request remains available until it expires/)).not.toBeInTheDocument();
+  expect(refresh).toHaveBeenCalledWith({ queryKey: ["human-actions", "owner", "workspace", "run"] });
+});
 
 it.each(["completed", "failed", "cancelled"])("explains an ended %s run with no human request", async (status) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -168,7 +190,6 @@ it.each([false, true])("skips only the blocked work while controlling=%s and cle
     list.mockResolvedValue([{ ...action, status: "skipped" }]);
     return { id: action.id, status: "skipped" };
   });
-  const cancel = vi.spyOn(api, "cancelHumanAction");
   const release = vi.spyOn(api, "releaseHumanAction");
   const context = { run: { id: "run-1" }, user: { id: "user-1" }, workspace: { id: "workspace-1", role: "owner" } } as unknown as RunContext;
   function ContextOutlet() { return <Outlet context={context} />; }
@@ -188,7 +209,6 @@ it.each([false, true])("skips only the blocked work while controlling=%s and cle
   confirmSkip?.();
   expect(await screen.findByRole("heading", { name: "Not tested—human assistance skipped" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Controlling browser" })).not.toBeInTheDocument();
-  expect(cancel).not.toHaveBeenCalled();
   expect(release).not.toHaveBeenCalled();
   expect(JSON.stringify(client.getMutationCache().getAll().map((mutation) => mutation.state))).not.toContain("token-secret");
 });

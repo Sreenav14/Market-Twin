@@ -23,7 +23,6 @@ it.each([
     base_url: "https://second.test", environment: "production", allowed_origins: [],
   } as unknown as Target]);
   vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
-  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
   const create = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
   const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
   function ContextOutlet() { return <Outlet context={context} />; }
@@ -45,15 +44,15 @@ it.each([
   } else expect(targetBox()).toHaveValue(requested);
   expect(screen.queryByLabelText(/marker|account reference|authentication origin|Enable verified/i)).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Authentication assistance" })).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Kind of test")).toHaveValue(kind);
+  expect(screen.getByRole("radio", { name: kind === "persona" ? "Persona Test" : "Explore & Test" })).toBeChecked();
   fireEvent.change(screen.getByLabelText(kind === "persona" ? /^Your testing goal/ : /^What is this app and who is it for/), { target: { value: "Check the protected account page" } });
   await user.click(screen.getByRole("button", { name: "Create test" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]?.[1]).toBe(requested === "missing" ? "second" : requested);
-  expect(create.mock.calls[0]?.[6]).toBe(kind);
-  expect(create.mock.calls[0]?.[7]).toBeUndefined();
-  expect(create.mock.calls[0]?.[11]).toBeUndefined();
-  expect(create.mock.calls[0]?.[12]).toBe(true);
+  expect(create.mock.calls[0]?.[5]).toBe(kind);
+  expect(create.mock.calls[0]?.[6]).toBeUndefined();
+  expect(create.mock.calls[0]?.[10]).toBeUndefined();
+  expect(create.mock.calls[0]?.[11]).toBe(true);
   expect(await screen.findByText("Created run")).toBeInTheDocument();
 });
 
@@ -65,7 +64,6 @@ it("defaults new tests to Explore & Test and opens the overview after creating",
     base_url: "https://fixture.test", environment: "production", allowed_origins: [],
   } as unknown as Target]);
   vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
-  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
   const create = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
   const start = vi.spyOn(api, "startRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.startRun>>);
   const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
@@ -76,7 +74,7 @@ it("defaults new tests to Explore & Test and opens the overview after creating",
       <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Create test" });
-  expect(screen.getByLabelText("Kind of test")).toHaveValue("explore_test");
+  expect(screen.getByRole("radio", { name: "Explore & Test" })).toBeChecked();
   const app = screen.getByRole("combobox", { name: /^App \(required\)/ });
   const appUrl = screen.getByRole("textbox", { name: "App URL" });
   expect(appUrl).toHaveValue("https://fixture.test");
@@ -88,8 +86,8 @@ it("defaults new tests to Explore & Test and opens the overview after creating",
   await user.click(screen.getByRole("button", { name: "Create test" }));
   expect(await screen.findByText("Created run")).toBeInTheDocument();
   expect(create).toHaveBeenCalledOnce();
-  expect(create.mock.calls[0]?.[6]).toBe("explore_test");
-  expect(create.mock.calls[0]?.[12]).toBe(true);
+  expect(create.mock.calls[0]?.[5]).toBe("explore_test");
+  expect(create.mock.calls[0]?.[11]).toBe(true);
   expect(start).not.toHaveBeenCalled();
 });
 
@@ -100,7 +98,6 @@ it("offers Explore & Test as the enabled default kind", async () => {
     base_url: "https://fixture.test", environment: "production", allowed_origins: [],
   } as unknown as Target]);
   vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
-  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
   vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
   const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
   function ContextOutlet() { return <Outlet context={context} />; }
@@ -109,10 +106,10 @@ it("offers Explore & Test as the enabled default kind", async () => {
     <Routes><Route element={<ContextOutlet />}><Route path="/applications/:applicationId/runs/new" element={<NewRunPage />} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Create test" });
-  expect(screen.getByLabelText("Kind of test")).toHaveValue("explore_test");
-  expect(screen.getByRole("option", { name: "Explore & Test — checks every interaction" })).not.toBeDisabled();
-  expect(screen.getByRole("option", { name: "Persona Test — how it feels to use" })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: "Check the look — design quality and JavaScript errors" })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Explore & Test" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "Explore & Test" })).not.toBeDisabled();
+  expect(screen.getByRole("radio", { name: "Persona Test" })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Check the look" })).toBeInTheDocument();
 });
 
 it("maps a preselected harness_v1 link to Explore & Test", async () => {
@@ -123,7 +120,6 @@ it("maps a preselected harness_v1 link to Explore & Test", async () => {
     base_url: "https://fixture.test", environment: "production", allowed_origins: [],
   } as unknown as Target]);
   vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
-  vi.spyOn(api, "listIngestion").mockResolvedValue([]);
   const create = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
   const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
   function ContextOutlet() { return <Outlet context={context} />; }
@@ -133,11 +129,52 @@ it("maps a preselected harness_v1 link to Explore & Test", async () => {
       <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("button", { name: "Create test" });
-  expect(screen.getByLabelText("Kind of test")).toHaveValue("explore_test");
+  expect(screen.getByRole("radio", { name: "Explore & Test" })).toBeChecked();
   expect(screen.getByText(/The agent explores your app, checks every button, field and link it finds/)).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText(/^What is this app and who is it for/), { target: { value: "Check the protected account page" } });
   await user.click(screen.getByRole("button", { name: "Create test" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
-  expect(create.mock.calls[0]?.[6]).toBe("explore_test");
+  expect(create.mock.calls[0]?.[5]).toBe("explore_test");
+  expect(await screen.findByText("Created run")).toBeInTheDocument();
+});
+
+it("offers the run mode for Explore & Test only, with the data editor behind Standard (W2)", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "getApplication").mockResolvedValue({ id: "app", name: "Fixture", status: "active" } as Awaited<ReturnType<typeof api.getApplication>>);
+  vi.spyOn(api, "listTargets").mockResolvedValue([{
+    id: "target", name: "Authorized fixture", status: "active", requires_auth: false,
+    base_url: "https://fixture.test", environment: "production", allowed_origins: [],
+  } as unknown as Target]);
+  vi.spyOn(api, "getAuthorization").mockResolvedValue({ status: "authorized", expires_at: null } as Awaited<ReturnType<typeof api.getAuthorization>>);
+  const create = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run" } as Awaited<ReturnType<typeof api.createRun>>);
+  const context = { user: { id: "user" }, workspace: { id: "workspace", role: "owner" } } as AppShellContext;
+  function ContextOutlet() { return <Outlet context={context} />; }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/applications/app/runs/new?target=target"]}>
+    <Routes><Route element={<ContextOutlet />}><Route path="/applications/:applicationId/runs/new" element={<NewRunPage />} />
+      <Route path="/runs/:runId/overview" element={<p>Created run</p>} /></Route></Routes>
+  </MemoryRouter></QueryClientProvider>);
+  await screen.findByRole("button", { name: "Create test" });
+  // Read-only is pre-selected and the approved-data editor is absent.
+  expect(screen.getByRole("radio", { name: "Read-only" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "Standard" })).not.toBeChecked();
+  expect(screen.queryByRole("button", { name: "Add test data" })).not.toBeInTheDocument();
+  // Selecting Standard reveals the editor; a row can be filled in.
+  await user.click(screen.getByRole("radio", { name: "Standard" }));
+  await user.click(screen.getByRole("button", { name: "Add test data" }));
+  fireEvent.change(screen.getByLabelText("Test data key 1"), { target: { value: "company_name" } });
+  fireEvent.change(screen.getByLabelText("Test data value 1"), { target: { value: "Thread & Co. Test" } });
+  // Switching to Persona Test hides the whole run-mode control.
+  await user.click(screen.getByRole("radio", { name: "Persona Test" }));
+  expect(screen.queryByRole("radio", { name: "Read-only" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("radio", { name: "Standard" })).not.toBeInTheDocument();
+  // Back on Explore & Test the selection survives and reaches createRun.
+  await user.click(screen.getByRole("radio", { name: "Explore & Test" }));
+  expect(screen.getByRole("radio", { name: "Standard" })).toBeChecked();
+  fireEvent.change(screen.getByLabelText(/^What is this app and who is it for/), { target: { value: "A storefront for local shoppers." } });
+  await user.click(screen.getByRole("button", { name: "Create test" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0]?.[13]).toBe("standard");
+  expect(create.mock.calls[0]?.[14]).toEqual([{ key: "company_name", value: "Thread & Co. Test" }]);
   expect(await screen.findByText("Created run")).toBeInTheDocument();
 });

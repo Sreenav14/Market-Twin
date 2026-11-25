@@ -3,12 +3,19 @@
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import time
 from uuid import UUID
 
 import httpx
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, SecretStr
+
+logger = logging.getLogger(__name__)
+
+
+class ObserverUnavailableError(RuntimeError):
+    """The browser owner refused the observed session or its generation."""
 
 
 class ViewerGrant(BaseModel):
@@ -89,6 +96,7 @@ class HitlWorkerClient:
                 "generation": generation,
             },
             response_model=ViewerGrant,
+            observation=True,
         )
         if response is None:
             raise RuntimeError("The supervised browser owner is unavailable.")
@@ -116,6 +124,7 @@ class HitlWorkerClient:
         path: str,
         payload: dict[str, object],
         response_model: type[ViewerGrant] | None = None,
+        observation: bool = False,
     ) -> ViewerGrant | None:
         body, headers = self._signed_request(payload)
         try:
@@ -131,7 +140,14 @@ class HitlWorkerClient:
                 if response_model is None:
                     return None
                 return response_model.model_validate(response.json())
-        except (httpx.HTTPError, ValueError, TypeError):
+        except httpx.HTTPStatusError as error:
+            status = error.response.status_code
+            if observation and status == 409:
+                raise ObserverUnavailableError("Browser observation unavailable.") from None
+            logger.warning("Browser owner request %s returned HTTP %s", path, status)
+            raise RuntimeError("The supervised browser owner is unavailable.") from None
+        except (httpx.HTTPError, ValueError, TypeError) as error:
+            logger.warning("Browser owner request %s failed (%s)", path, type(error).__name__)
             # Do not include downstream content, token, or exception in API errors.
             raise RuntimeError("The supervised browser owner is unavailable.") from None
 

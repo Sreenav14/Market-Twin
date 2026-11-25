@@ -39,6 +39,7 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
     if plan_event is None:
         result: dict[str, object] = {
             "schema_version": 1, "available": False, "coverage": None, "cases": [],
+            "truncated": False,
         }
         run = await session.get(TestRun, run_id)
         if run is not None and run.status == "failed":
@@ -78,7 +79,7 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
                 RunEvent.event_type == "test_case.started",
             )
             .order_by(RunEvent.id)
-            .limit(12)
+            .limit(len(plan.cases) + 1)
         )
     ).all()
     live = {
@@ -93,9 +94,10 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
                 RunEvent.event_type == "test_case.completed",
             )
             .order_by(RunEvent.id)
-            .limit(20)
+            .limit(len(plan.cases) + 1)
         )
     ).all()
+    truncated = len(live_rows) > len(plan.cases) or len(recorded_rows) > len(plan.cases)
     recorded: dict[str, tuple[CaseExecutionResult, object]] = {}
     for row in recorded_rows:
         try:
@@ -235,6 +237,7 @@ async def case_view(session: AsyncSession, run_id: UUID) -> dict[str, object]:
         "schema_version": 1,
         "available": True,
         "evaluation_pending": report is None,
+        "truncated": truncated,
         "cases": rows,
         "coverage": report.report_payload.get("coverage") if report else None,
         "unknown_requirements": list(plan.scope.unknown_requirements),

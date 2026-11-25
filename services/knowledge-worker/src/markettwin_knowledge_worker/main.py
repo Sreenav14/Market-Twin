@@ -10,11 +10,18 @@ from opentelemetry import trace
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
+from markettwin_knowledge_worker.api.markdown import router as markdown_router
 from markettwin_knowledge_worker.api.preview import router as preview_router
 from markettwin_knowledge_worker.config import KnowledgeWorkerSettings
 from markettwin_knowledge_worker.knowledge_builder import KnowledgeBuilder
+from markettwin_knowledge_worker.markdown_builder import MarkdownBuilder
 from markettwin_knowledge_worker.observability import initialize_knowledge_observability
+from markettwin_knowledge_worker.services.knowledge_markdown_service import (
+    KnowledgeMarkdownService,
+)
 from markettwin_knowledge_worker.services.knowledge_preview_service import KnowledgePreviewService
+
+_INTERNAL_PATHS = {"/internal/v1/knowledge/preview", "/internal/v1/knowledge/markdown"}
 
 
 @asynccontextmanager
@@ -39,7 +46,7 @@ def create_app(settings: KnowledgeWorkerSettings | None = None) -> FastAPI:
         request: Request, call_next: RequestResponseEndpoint,
     ) -> Response:
         # Authenticate before FastAPI parses or spools the multipart body.
-        if request.url.path.rstrip("/") == "/internal/v1/knowledge/preview":
+        if request.url.path.rstrip("/") in _INTERNAL_PATHS:
             secret = settings.knowledge_internal_secret
             if secret is not None and not hmac.compare_digest(
                 request.headers.get("authorization", "").encode(),
@@ -64,7 +71,11 @@ def create_app(settings: KnowledgeWorkerSettings | None = None) -> FastAPI:
     app.state.preview_service = KnowledgePreviewService(
         KnowledgeBuilder(), timeout_seconds=settings.preview_timeout_seconds,
     )
+    app.state.markdown_service = KnowledgeMarkdownService(
+        MarkdownBuilder(), timeout_seconds=settings.preview_timeout_seconds,
+    )
     app.include_router(preview_router)
+    app.include_router(markdown_router)
     return app
 
 

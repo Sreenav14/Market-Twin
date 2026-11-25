@@ -187,7 +187,7 @@ function ArtifactItems({ items }: { items: ProcedureArtifactDraft[] }) {
 }
 
 function SkillItems({ items }: { items: GeneratedSkillDraft[] }) {
-  if (!items.length) return <p className="muted">No testable Skills found in this source.</p>;
+  if (!items.length) return <p className="muted">No workflow guidance found in this source.</p>;
   return items.map((item, index) => (
     <article className="knowledge-item" key={`${item.name}-${index}`}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
@@ -238,7 +238,7 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
           Artifacts <span>{preview.artifacts.length}</span>
         </a>
         <a href="#skills-heading">
-          Skills <span>{preview.skills.length}</span>
+          Workflow guidance <span>{preview.skills.length}</span>
         </a>
         <a href="#evidence-heading">
           Evidence <span>{preview.evidence.length}</span>
@@ -287,13 +287,13 @@ export function KnowledgeResult({ preview }: { preview: KnowledgePreviewResponse
         aria-labelledby="skills-heading"
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h2 id="skills-heading">Skills</h2>
+          <h2 id="skills-heading">Workflow guidance</h2>
           <span className="knowledge-meta" style={{ fontSize: "11px" }}>
-            {preview.skills.length} {preview.skills.length === 1 ? "skill" : "skills"}
+            {preview.skills.length} {preview.skills.length === 1 ? "draft" : "drafts"}
           </span>
         </div>
         {preview.skills.length ? (
-          <p className="knowledge-section-help">Capabilities testers can test, with conditions and expected outcomes.</p>
+          <p className="knowledge-section-help">Source-derived guidance with conditions and expected outcomes. Browser observation and replay verification are required before it becomes executable automation.</p>
         ) : null}
         <SkillItems items={preview.skills} />
       </section>

@@ -15,6 +15,14 @@ RunKind = Literal["explore_test", "persona", "slop"]
 
 RUN_KINDS: tuple[str, ...] = ("explore_test", "persona", "slop")
 
+UI_AUDIT_OBJECTIVE = (
+    "Audit UI quality across all discovered authorized pages and states. "
+    "Progress is new pages/states inspected, not completing a user workflow. "
+    "Account setup and product tasks are reference context only. Do not stop because "
+    "a public page lacks account setup or because ordinary UI controls fail. "
+    "Stop for actual unsafe/blocked execution or repeated unproductive traversal."
+)
+
 _LEGACY_MODE_TO_KIND: dict[str, RunKind] = {
     "harness_v1": "explore_test",
     "discovery_contract_v1": "explore_test",

@@ -7,6 +7,7 @@ import { EmptyState, ErrorPanel, LoadingPanel, SkeletonPanel } from "../../compo
 import { TestStatusBadge } from "../../components/ui/StatusBadge";
 import { api, type TestRun } from "../../lib/api";
 import { testTitle } from "../../lib/format";
+import { partialExplorationLabel } from "../../lib/results";
 import { canWriteWorkspace } from "../../lib/permissions";
 import { useAsync } from "../../lib/useAsync";
 import { useWorkspaceTests } from "../../lib/useWorkspaceTests";
@@ -42,11 +43,12 @@ function StatusRunsView({ filterKey }: { filterKey: string }) {
         action={<button className="secondary-button" onClick={clearFilter}>Clear filter</button>} />
       {runs.length ? <div className="data-list" role="list" aria-label={filter.label}>
         {runs.map((test) => {
+          const coverage = partialExplorationLabel(test);
           const action = testDestination(test);
           return <div role="listitem" key={test.id}>
             <Link className="data-row" to={action.to}>
               <Avatar kind="app" name={appNames.get(test.application_id) ?? "?"} size="lg" />
-              <div className="row-primary"><strong>{testTitle(test)}</strong><span>{appNames.get(test.application_id) ?? "Application"}</span></div>
+              <div className="row-primary"><strong>{testTitle(test)}</strong><span>{appNames.get(test.application_id) ?? "Application"}</span>{coverage ? <span>{coverage}</span> : null}</div>
               <TestStatusBadge status={test.status} />
               <span className="text-link">{action.label}</span><Icon name="arrow" size={16} />
             </Link>
@@ -77,7 +79,9 @@ function ApplicationPicker() {
     <>
       <PageHeader title="Tests" description="Choose an application to see its tests."
         action={canWriteWorkspace(workspace.role)
-          ? <Link className="primary-button" to="/applications/new">Add an app</Link> : undefined} />
+          ? <Link className="primary-button" to={applications.length ? "/runs/new" : "/applications/new"}>
+              {applications.length ? "New test" : "Add an app"}
+            </Link> : undefined} />
       {state.status === "loading" ? <LoadingPanel label="Loading applications" />
         : state.status === "error" ? <ErrorPanel message={state.error}
           action={<button className="secondary-button" onClick={() => setRevision((value) => value + 1)}>Try again</button>} />

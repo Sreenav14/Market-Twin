@@ -84,6 +84,10 @@ class BrowserOwnerRegistry:
     async def stop_screencast(self, handle: BrowserSessionHandle) -> None:
         await self._owner(handle).stop_screencast(handle)
 
+    def screencast_stats(self, session_id: UUID) -> dict[str, int]:
+        entry = self._sessions.get(session_id)
+        return entry[2].screencast_stats(session_id) if entry else {}
+
     async def diagnostics(self, lease: OwnerLease) -> tuple[dict[str, str | int], ...]:
         return await self._owner(lease.handle).diagnostics(lease)
 

@@ -6,7 +6,6 @@ import type { AppShellContext } from "../../layouts/AppShell";
 import {
   api,
   type HumanAction,
-  type IngestionSummary,
   type JourneyExecution,
   type LatestRunSummary,
   type RunResults,
@@ -27,7 +26,6 @@ interface DetailMocks {
   humanActions?: HumanAction[];
   journeys?: JourneyExecution[];
   results?: RunResults;
-  ingestion?: IngestionSummary[];
   applications?: { id: string; name: string; latest_run_summary?: LatestRunSummary | null }[];
 }
 
@@ -41,7 +39,6 @@ async function mount(runs: TestRun[], detail: DetailMocks = {}) {
   vi.spyOn(api, "listRuns").mockResolvedValue(runs);
   vi.spyOn(api, "listHumanActions").mockResolvedValue(detail.humanActions ?? []);
   vi.spyOn(api, "getRunJourneys").mockResolvedValue(detail.journeys ?? []);
-  vi.spyOn(api, "listIngestion").mockResolvedValue(detail.ingestion ?? []);
   vi.spyOn(api, "getRunResults").mockResolvedValue(detail.results ?? {
     test_run_id: "done", report: { id: "report", version: 1, status: "completed", executive_summary: null, payload: {}, generated_at: null }, findings: [],
   } as RunResults);
@@ -52,8 +49,13 @@ async function mount(runs: TestRun[], detail: DetailMocks = {}) {
     <Routes><Route element={<ContextOutlet />}><Route path="/dashboard" element={<WorkspaceDashboardPage />} /></Route></Routes>
   </MemoryRouter></QueryClientProvider>);
   await screen.findByRole("heading", { name: "Home", level: 1 });
-  await screen.findByRole("region", { name: /YOUR APPS|EXAMPLE/ });
+  await screen.findByRole("region", { name: /YOUR APPS|Your briefing desk/ });
 }
+
+it("shows Add a source beside the Home actions and links to application selection", async () => {
+  await mount([]);
+  expect(screen.getByRole("link", { name: "Add a source" })).toHaveAttribute("href", "/knowledge/add");
+});
 
 const contractResults: RunResults = {
   test_run_id: "done",
@@ -91,11 +93,11 @@ it("state E: the masthead leads with the locked verdict word, outcome links and 
   expect(await screen.findByRole("heading", { name: "Not ready yet", level: 2 })).toBeInTheDocument();
   expect(screen.getByText(/LATEST RESULT — FIXTURE APP/)).toBeInTheDocument();
   // Outcome segments deep-link into the filtered result.
-  expect(screen.getByRole("link", { name: /1 Broken/ })).toHaveAttribute("href", "/runs/done/results?outcome=broken");
-  expect(screen.getByRole("link", { name: /1 Worked/ })).toHaveAttribute("href", "/runs/done/results?outcome=worked");
+  expect(screen.getByRole("link", { name: /1 Broken/ })).toHaveAttribute("href", "/runs/done?outcome=broken");
+  expect(screen.getByRole("link", { name: /1 Worked/ })).toHaveAttribute("href", "/runs/done?outcome=worked");
   // Basis is the report's own summary, truncated, with the full-result link.
   expect(screen.getByText(/The pay button did nothing when Maya tapped it/)).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Read the full result/ })).toHaveAttribute("href", "/runs/done/results");
+  expect(screen.getByRole("link", { name: /Read the full result/ })).toHaveAttribute("href", "/runs/done");
   // Evidence: the confirmed problem, titled as a failure, reproduced.
   expect(screen.getByText("Failed: Pay button submits the order")).toBeInTheDocument();
   expect(screen.getByText(/Reproduced in a fresh browser\./)).toBeInTheDocument();
@@ -123,21 +125,7 @@ it("the tray quotes the Lead Agent's request verbatim and links to help", async 
   expect(await within(tray).findByText("Please log in so the tester can continue.")).toBeInTheDocument();
   expect(within(tray).getByText(/THE LEAD AGENT · ON BUY A T-SHIRT · FIXTURE APP/)).toBeInTheDocument();
   expect(within(tray).getByText(/Tester paused at step 4/)).toBeInTheDocument();
-  expect(within(tray).getByRole("link", { name: /Help now/ })).toHaveAttribute("href", "/runs/parked/human-action");
-});
-
-it("a knowledge entry awaiting review joins the tray without an inline approve", async () => {
-  await mount([runFixture("done", "completed", "2026-11-03T10:00:00Z", "Finished test")], {
-    ingestion: [{
-      id: "k1", workspace_id: "workspace", name: "Pricing guide", source_name: "pricing.pdf",
-      status: "draft", roles: [], created_at: "2026-11-02T10:00:00Z", approved_at: null,
-      knowledge_count: 3, artifact_count: 0, skill_count: 1, issue_count: 0,
-      processing_status: "ready", processing_stage: "review",
-    } as IngestionSummary],
-  });
-  const tray = screen.getByRole("region", { name: /NEEDS YOU — 1/ });
-  expect(within(tray).getByRole("link", { name: /Review knowledge/ })).toHaveAttribute("href", "/knowledge/review/k1");
-  expect(within(tray).queryByRole("button", { name: /Approve/ })).not.toBeInTheDocument();
+  expect(within(tray).getByRole("link", { name: /Help now/ })).toHaveAttribute("href", "/runs/parked/watch#human-action-heading");
 });
 
 it("an empty tray is exactly one calm line", async () => {
@@ -161,11 +149,10 @@ it("state B: apps but no runs invites the first test", async () => {
   expect(screen.getByRole("link", { name: "Start first test" })).toHaveAttribute("href", "/applications/app/runs/new");
 });
 
-it("state A: no apps shows a labelled example briefing, never fake live data", async () => {
+it("state A: no apps prompts the owner to add an app", async () => {
   await mount([], { applications: [] });
   expect(await screen.findByText("Your briefing desk.")).toBeInTheDocument();
-  expect(screen.getByText(/EXAMPLE — HOW YOUR BRIEFING WILL LOOK/)).toBeInTheDocument();
-  expect(screen.getByText("Pay button does nothing")).toBeInTheDocument();
+  expect(screen.queryByText("Pay button does nothing")).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Add an app" })).toHaveAttribute("href", "/applications/new");
 });
 
@@ -236,7 +223,7 @@ it("the apps rail prints the locked word for a ready verdict", async () => {
     }],
   });
   const rail = screen.getByRole("region", { name: "YOUR APPS" });
-  expect(within(rail).getByText("Ready with issues")).toBeInTheDocument();
+  expect(within(rail).getByText("Ready, with issues")).toBeInTheDocument();
   expect(within(rail).getByText(/Finished .*2026/)).toBeInTheDocument();
 });
 
@@ -256,7 +243,32 @@ it("an app whose last report has no verdict shows its finish time without a verd
 });
 
 it("testDestination never offers a live watch for a run that is not running", () => {
-  expect(testDestination(runFixture("q", "queued", "2026-11-03T10:00:00Z", "Queued"))).toEqual({ to: "/runs/q/overview", label: "See test details" });
-  expect(testDestination(runFixture("p", "planning", "2026-11-03T10:00:00Z", "Planning"))).toEqual({ to: "/runs/p/overview", label: "See test details" });
+  expect(testDestination(runFixture("q", "queued", "2026-11-03T10:00:00Z", "Queued"))).toEqual({ to: "/runs/q", label: "See test details" });
+  expect(testDestination(runFixture("p", "planning", "2026-11-03T10:00:00Z", "Planning"))).toEqual({ to: "/runs/p", label: "See test details" });
   expect(testDestination(runFixture("r", "running", "2026-11-03T10:00:00Z", "Running"))).toEqual({ to: "/runs/r/watch", label: "Watch live" });
+});
+
+
+const boardResults: RunResults = {
+  test_run_id: "done",
+  report: {
+    id: "report", version: 1, status: "completed",
+    executive_summary: "Two checks failed when reproduced in a fresh browser, and two more could not be checked.",
+    payload: {
+      market_verdict: { verdict: "not_ready", coverage: 0.6667, confirmed_defects: 2 },
+      verdict: "Not ready yet",
+      board: {
+        verdict: "Not ready yet",
+        coverage: { total_items: 6, denominator: 6, checked: 4, coverage: 0.6667, counts: { worked: 2, broken: 2, could_not_check: 2 }, missing_result_events: 0 },
+        items: [],
+      },
+    },
+    generated_at: "2026-11-06T11:00:00Z",
+  },
+  findings: [],
+} as unknown as RunResults;
+
+it("test_dashboard_renders_verdict_word_from_projected_market_verdict", async () => {
+  await mount([runFixture("done", "completed", "2026-11-06T10:00:00Z", "Board test")], { results: boardResults });
+  expect(await screen.findByRole("heading", { name: "Not ready yet", level: 2 })).toBeInTheDocument();
 });

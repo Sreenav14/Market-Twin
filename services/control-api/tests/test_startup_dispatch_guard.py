@@ -24,7 +24,6 @@ async def test_startup_dispatch_guard(
     monkeypatch.setattr(main, "get_settings", lambda: settings)
     database = Mock(close=AsyncMock())
     monkeypatch.setattr(main, "DatabaseRuntime", Mock(return_value=database))
-    monkeypatch.setattr(main, "run_ingestion_processor", AsyncMock())
     monkeypatch.setattr(main, "run_human_action_reaper", AsyncMock())
     monkeypatch.setattr(main, "run_outbox_relay", AsyncMock())
     monkeypatch.setattr(main, "KafkaProducer", Mock())

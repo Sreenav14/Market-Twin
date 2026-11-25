@@ -17,8 +17,6 @@ RUN_REQUESTED_EVENT_TYPE: Final[str] = (
 )
 RUN_REQUESTED_EVENT_VERSION: Final[int] = 1
 
-RUN_REQUEST_SCHEMA_VERSION: Final[int] = 1
-
 EXECUTION_COMMANDS_TOPIC: Final[str] = (
     "markettwin.execution.commands"
 )

@@ -6,9 +6,12 @@ import { Button } from "../../components/ui/button";
 import { RunContext } from "../../layouts/RunLayout";
 import { api, request, type JourneyDetail } from "../../lib/api";
 import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
+import { records, reportKind } from "./ReportFrame";
 
 export function RunEvidencePage() {
-  const { run, user } = useOutletContext<RunContext>();
+  const { run, user, results } = useOutletContext<RunContext>();
+  const report = results.status === "ready" ? results.data.report.payload : undefined;
+  const hasLookEvidence = report && reportKind(report, run) === "slop" && records(report.states).length > 0;
   const [journeyId, setJourneyId] = useState("");
   const journeys = useQuery({
     queryKey: ["run-journeys", user.id, run.id],
@@ -27,10 +30,11 @@ export function RunEvidencePage() {
   if (journeys.isError) return <ErrorPanel message={journeys.error.message} action={<Button variant="secondary" onClick={() => void journeys.refetch()}>Try again</Button>} />;
   return (
     <section className="evidence-workbench" aria-labelledby="evidence-heading">
-      <div className="section-heading"><div><h2 id="evidence-heading">Recorded evidence</h2><p className="muted">Artifacts are requested through the authenticated access endpoint and loaded only when selected.</p></div>
+      <div className="section-heading"><h2 id="evidence-heading">Recorded evidence</h2>
         {journeys.data.length ? <label className="filter-select">Journey<select aria-label="Select journey evidence" value={selectedJourneyId} onChange={(event) => setJourneyId(event.target.value)}>{journeys.data.map((journey) => <option value={journey.id} key={journey.id}>{journey.persona_name} · {journey.mission_title}</option>)}</select></label> : null}
       </div>
-      {!journeys.data.length ? <p className="inline-note">No recorded journeys are available for this test. Planned work does not imply that evidence was captured.</p> : null}
+      {hasLookEvidence && <p><Link to={`/runs/${run.id}#look-inventory`}>Inspect page states and measurements</Link></p>}
+      {!journeys.data.length && !hasLookEvidence ? <p className="inline-note">No journey evidence was recorded for this run.</p> : null}
       {evidence.isPending && selectedJourneyId ? <LoadingPanel label="Loading evidence metadata" /> : null}
       {evidence.isError ? <ErrorPanel message={evidence.error.message} action={<Button variant="secondary" onClick={() => void evidence.refetch()}>Try again</Button>} /> : null}
       {evidence.data ? <>

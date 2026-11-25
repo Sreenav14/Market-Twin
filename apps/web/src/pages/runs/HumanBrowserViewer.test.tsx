@@ -107,6 +107,34 @@ describe("HumanBrowserViewer", () => {
     expect((input as HTMLInputElement).value).toBe("");
   });
 
+  it("sends navigation only when the protected browser is connected", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    render(<HumanBrowserViewer url={viewerUrl} ticket="single-use-ticket" />);
+    const actions = ["Back", "Forward", "Reload"] as const;
+    for (const name of actions) expect(screen.getByRole("button", { name })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Connect to protected browser" }));
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+    await socket.frame();
+    for (const name of actions) fireEvent.click(screen.getByRole("button", { name }));
+    expect(socket.sent.slice(1).map(message => JSON.parse(message))).toEqual(
+      actions.map((name, index) => ({ sequence: index + 1, event: name.toLowerCase() })),
+    );
+  });
+
+  it("keeps a mobile takeover frame at or below its captured width", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.stubGlobal("createImageBitmap", vi.fn().mockResolvedValue({
+      width: 320, height: 900, close: vi.fn(),
+    }));
+    render(<HumanBrowserViewer autoConnect url={viewerUrl} ticket="one-use" />);
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+    await socket.frame();
+    const viewport = screen.getByLabelText("Live protected browser").closest(".hbv-viewport");
+    expect((viewport as HTMLElement).style.width).toContain("352px");
+  });
+
   it("requests a fresh ticket after disconnect and resets input sequence", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     const reconnect = vi.fn().mockResolvedValue({

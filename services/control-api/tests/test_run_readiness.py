@@ -38,7 +38,7 @@ async def test_missing_heartbeat_migration_fails_readiness_without_aborting_auth
     session.begin_nested.assert_called_once()
 
 
-@pytest.mark.parametrize("failed_check", ["dispatch", "kafka", "execution", "evaluation", "model"])
+@pytest.mark.parametrize("failed_check", ["dispatch", "kafka", "execution", "evaluation"])
 async def test_preflight_rejects_each_unavailable_dependency(monkeypatch, failed_check):
     monkeypatch.setattr(readiness, "worker_statuses", AsyncMock(return_value=[
         readiness.WorkerStatus(service=service, ready=service != failed_check)
@@ -58,7 +58,8 @@ async def test_preflight_rejects_each_unavailable_dependency(monkeypatch, failed
 
 
 @pytest.mark.parametrize("runner_ready,expected", [
-    (False, "Waiting for the test runner"), (True, "Runner is busy with another test"),
+    (False, "The test runner is offline. No test actions are running. Start or restart the execution worker."),
+    (True, "Runner is busy with another test"),
 ])
 async def test_queued_stall_reason_tracks_worker_start(monkeypatch, runner_ready, expected):
     session = Mock(scalar=AsyncMock(return_value=None))
@@ -82,6 +83,31 @@ async def test_recent_progress_has_no_stall_reason(monkeypatch):
         created_at=datetime.now(UTC) - timedelta(minutes=3),
     ) is None
     workers.assert_not_awaited()
+
+
+async def test_quarantined_dispatch_is_reported_without_waiting_for_a_stall(monkeypatch):
+    run_id = uuid4()
+    session = Mock(scalar=AsyncMock(return_value=run_id))
+    workers = AsyncMock()
+    monkeypatch.setattr(readiness, "worker_statuses", workers)
+    assert await readiness.stalled_run_reason(
+        session, run_id=run_id, status="queued", created_at=datetime.now(UTC),
+    ) == "Dispatch stopped after repeated failures. Ask your workspace operator to recover dispatch."
+    workers.assert_not_awaited()
+
+
+async def test_api_model_hint_is_advisory_not_a_worker_readiness_claim(monkeypatch):
+    monkeypatch.setattr(readiness, "worker_statuses", AsyncMock(return_value=[
+        readiness.WorkerStatus(service=service, ready=True)
+        for service in ("execution", "evaluation")
+    ]))
+    monkeypatch.setattr(readiness, "kafka_reachable", AsyncMock(return_value=True))
+    settings = Settings.model_construct(outbox_relay_enabled=True)
+    result = await readiness.run_preflight(Mock(), settings)
+    hint = next(check for check in result.checks if check.name == "model")
+    assert result.ready and hint.advisory and not hint.ready
+    assert "worker's model configuration has not been verified" in hint.reason
+    await readiness.require_run_ready(Mock(), settings)
 
 
 async def test_foreign_workspace_preflight_does_not_probe_infrastructure(monkeypatch):
@@ -126,6 +152,16 @@ async def test_interrupted_reason_uses_fixed_user_message():
     )
 
 
+@pytest.mark.parametrize("code", ["execution_stalled", "execution_failed"])
+async def test_watchdog_reason_supports_current_and_historical_runs(code):
+    session = Mock(scalar=AsyncMock(return_value=SimpleNamespace(
+        payload={"code": code, "error_type": "StallWatchdogError", "message": "private"},
+    )))
+    assert await readiness.stalled_run_reason(
+        session, run_id=uuid4(), status="failed", created_at=datetime.now(UTC),
+    ) == "The worker stopped this attempt after a period with no recorded progress."
+
+
 async def test_completed_report_removes_waiting_reason():
     session = Mock(scalar=AsyncMock(return_value=uuid4()))
     assert await readiness.stalled_run_reason(
@@ -133,3 +169,34 @@ async def test_completed_report_removes_waiting_reason():
         created_at=datetime.now(UTC) - timedelta(hours=1),
     ) is None
     session.scalar.assert_awaited_once()
+
+
+async def test_run_page_batches_evidence_and_worker_reads(monkeypatch):
+    now = datetime.now(UTC)
+    runs = [SimpleNamespace(test_run_id=uuid4(), status="running",
+                            created_at=now - timedelta(minutes=2)) for _ in range(100)]
+    failed = SimpleNamespace(test_run_id=uuid4(), status="failed", created_at=now)
+    runs.append(failed)
+    session = Mock(
+        execute=AsyncMock(side_effect=[Mock(all=lambda: []), Mock(all=lambda: [
+            (failed.test_run_id, {"code": "interrupted"}),
+        ])]),
+        scalars=AsyncMock(return_value=Mock(all=lambda: [])), scalar=AsyncMock(),
+    )
+    workers = AsyncMock(return_value=[
+        readiness.WorkerStatus(service="execution", ready=False),
+        readiness.WorkerStatus(service="evaluation", ready=True),
+    ])
+    monkeypatch.setattr(readiness, "worker_statuses", workers)
+    reasons = await readiness.stalled_run_reasons(session, runs)
+    workers.assert_awaited_once()
+    assert session.execute.await_count == 2
+    session.scalars.assert_awaited_once()
+    session.scalar.assert_not_awaited()
+    assert all("offline" in reasons[run.test_run_id] for run in runs[:-1])
+    assert "interrupted" in reasons[failed.test_run_id]
+
+
+async def test_empty_run_page_does_not_read_evidence():
+    session = Mock()
+    assert await readiness.stalled_run_reasons(session, []) == {}

@@ -72,6 +72,17 @@ class ExecutionRepository:
 
         await self._session.flush()
 
+    async def record_reproduced_failure(self, *, execution_id: UUID, proof_id: UUID) -> None:
+        """Record the browser outcome after both completed checks agreed."""
+        await self._session.execute(
+            update(AgentExecution)
+            .where(
+                AgentExecution.id.in_((execution_id, proof_id)),
+                AgentExecution.status == "completed",
+            )
+            .values(outcome="failed")
+        )
+
     async def create_browser_session(
         self,
         *,
@@ -142,20 +153,6 @@ class ExecutionRepository:
         )
 
         browser_session.state = "closed"
-        browser_session.closed_at = _utc_now()
-
-        await self._session.flush()
-
-    async def mark_browser_session_failed(
-        self,
-        *,
-        browser_session_id: UUID,
-    ) -> None:
-        browser_session = await self._get_browser_session(
-            browser_session_id
-        )
-
-        browser_session.state = "failed"
         browser_session.closed_at = _utc_now()
 
         await self._session.flush()

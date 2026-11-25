@@ -1,5 +1,6 @@
 """Regression tests for browser screenshot evidence."""
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -12,6 +13,8 @@ from markettwin_execution_orchestrator.browser.contracts import (
 from markettwin_execution_orchestrator.browser.evidence import (
     capture_screenshot,
     crop_viewport_screenshot,
+    start_trace,
+    stop_trace,
 )
 from markettwin_execution_orchestrator.browser.session import (
     JourneyBrowserSession,
@@ -154,3 +157,101 @@ def test_focused_crop_rejects_fully_offscreen_element(
         )
 
     assert not crop_path.exists()
+
+@pytest.mark.asyncio
+async def test_stop_trace_returns_path_when_flush_completes(
+    tmp_path: Path,
+) -> None:
+    """A normal trace stop returns the segment path and clears the flag."""
+
+    stop = AsyncMock()
+    session = cast(
+        JourneyBrowserSession,
+        SimpleNamespace(
+            tracing_active=True,
+            trace_segment=3,
+            artifact_directory=tmp_path,
+            context=SimpleNamespace(
+                tracing=SimpleNamespace(stop=stop),
+            ),
+        ),
+    )
+
+    result = await stop_trace(session)
+
+    assert result == tmp_path / "trace-003.zip"
+    stop.assert_awaited_once_with(path=tmp_path / "trace-003.zip")
+    assert session.tracing_active is False
+
+
+@pytest.mark.asyncio
+async def test_stop_trace_abandons_a_hung_trace_flush(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A trace flush that never returns must not hang session teardown.
+
+    MT-000166: the Room session's run-long trace reached 2.4 GB and
+    tracing.stop() was still zipping when the stall watchdog killed
+    the run. stop_trace must give up within its bound instead; the
+    outer wait_for here only bounds the pre-fix failure.
+    """
+
+    monkeypatch.setattr(
+        "markettwin_execution_orchestrator.browser.evidence"
+        ".TRACE_STOP_TIMEOUT_SECONDS",
+        0.2,
+        raising=False,
+    )
+
+    async def hang_forever(*, path: Path) -> None:
+        await asyncio.Event().wait()
+
+    session = cast(
+        JourneyBrowserSession,
+        SimpleNamespace(
+            tracing_active=True,
+            trace_segment=3,
+            artifact_directory=tmp_path,
+            context=SimpleNamespace(
+                tracing=SimpleNamespace(stop=hang_forever),
+            ),
+        ),
+    )
+
+    result = await asyncio.wait_for(stop_trace(session), timeout=10)
+
+    assert result is None
+    assert session.tracing_active is False
+
+
+@pytest.mark.asyncio
+async def test_start_trace_omits_screenshots() -> None:
+    """Run traces carry snapshots and sources but no per-action
+    screenshots: the frames dominated the zip (2.4 GB on MT-000166),
+    slowed the close flush, and nothing reads them back — report
+    evidence uses capture_screenshot PNGs instead."""
+
+    start = AsyncMock()
+    session = cast(
+        JourneyBrowserSession,
+        SimpleNamespace(
+            tracing_active=False,
+            capture_enabled=True,
+            authenticated_session=False,
+            trace_segment=0,
+            context=SimpleNamespace(
+                tracing=SimpleNamespace(start=start),
+            ),
+        ),
+    )
+
+    await start_trace(session)
+
+    start.assert_awaited_once_with(
+        screenshots=False,
+        snapshots=True,
+        sources=True,
+    )
+    assert session.tracing_active is True
+    assert session.trace_segment == 1

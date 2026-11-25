@@ -273,15 +273,22 @@ class TargetRepository:
         )
         self._session.add(target)
         await self._session.flush()
-        for origin in origins:
-            self._session.add(TargetAllowedOrigin(
+        stored_origins = [
+            TargetAllowedOrigin(
                 target_id=target.id, scheme=origin.scheme, hostname=origin.hostname,
                 port=origin.port, include_subdomains=False,
-            ))
+            )
+            for origin in origins
+        ]
+        for stored in stored_origins:
+            self._session.add(stored)
         await self._session.flush()
         return TargetRecord(
             target_id=target.id, application_id=target.application_id, name=target.name,
             environment=target.environment, base_url=target.base_url,
             requires_auth=target.requires_auth, status=target.status,
-            allowed_origins=origins, scope_parent_id=parent.target_id,
+            allowed_origins=tuple(
+                _origin_record(stored) for stored in stored_origins
+            ),
+            scope_parent_id=parent.target_id,
         )

@@ -8,36 +8,25 @@ from markettwin_execution_orchestrator.models.model_factory import (
     DEFAULT_OLLAMA_API_BASE,
     DEFAULT_OLLAMA_MODEL_NAME,
     DEFAULT_OLLAMA_NUM_CTX,
-    DEFAULT_OPENAI_MODEL_NAME,
     DEFAULT_OPENAI_NUM_RETRIES,
     create_model,
     resolve_model_runtime_configuration,
 )
 
 
-def test_create_model_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, Any] = {}
-
-    def capture_model(model: str, **kwargs: Any) -> object:
-        captured.update(model=model, **kwargs)
-        return object()
-
-    monkeypatch.delenv("MODEL_REASONING_EFFORT", raising=False)
+def test_create_model_requires_model_name_for_openai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("MODEL_PROVIDER", raising=False)
     monkeypatch.delenv("MODEL_NAME", raising=False)
-    monkeypatch.delenv("MODEL_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(model_factory, "LiteLlm", capture_model)
 
-    create_model()
+    with pytest.raises(
+        ValueError, match='MODEL_NAME is required for MODEL_PROVIDER "openai"'
+    ):
+        create_model()
 
-    assert isinstance(captured.pop("llm_client"), BudgetedLiteLLMClient)
-    assert captured == {
-        "model": DEFAULT_OPENAI_MODEL_NAME,
-        "max_completion_tokens": DEFAULT_MAX_TOKENS,
-        "num_retries": DEFAULT_OPENAI_NUM_RETRIES,
-        "temperature": 0.05,
-    }
+    with pytest.raises(ValueError, match="MODEL_NAME is required"):
+        resolve_model_runtime_configuration()
 
 
 def test_create_model_uses_openai_key_and_model_name(

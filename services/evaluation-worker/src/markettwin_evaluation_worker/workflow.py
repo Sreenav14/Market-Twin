@@ -10,11 +10,13 @@ from markettwin_database.models import Report, TestRun
 from markettwin_shared.run_kind import resolve_run_kind
 from markettwin_shared.observability import use_observability_correlation
 from opentelemetry import trace
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_evaluation_worker.deterministic_evaluator import (
     evaluate_completed_run,
 )
+from markettwin_evaluation_worker.errors import InvalidEvaluationInput
 from markettwin_evaluation_worker.observability import (
     initialize_litellm_observability,
 )
@@ -50,6 +52,17 @@ class EvaluationWorkflowResult:
     finding_ids: tuple[UUID, ...]
     report_id: UUID
     visual_evaluation_count: int = 0
+    skip_reason: str | None = None
+
+
+class ContractReportNotRebuildableError(InvalidEvaluationInput):
+    """A discovery_contract_v1 run has no preserved contract report.
+
+    The generic evaluation below fabricates a report from run events;
+    for a contract run that would overwrite the report the
+    control-api's validated import wrote (the 409 guard, doc 24
+    section 5). With no report preserved there is nothing lawful to
+    serve, so the evaluation refuses loudly and writes nothing."""
 
 
 async def evaluate_and_generate_report(
@@ -82,6 +95,9 @@ async def _evaluate_and_generate_report(
     A failure after the provenance commit leaves its deduplicated runtime snapshot
     available for retry; findings and the final report roll back together.
     """
+
+    def __init__(self, message: str) -> None:
+        super().__init__("contract_report_missing", message)
 
     try:
         run = await session.get(TestRun, test_run_id)
@@ -133,10 +149,37 @@ async def _evaluate_and_generate_report(
             await EvaluationRepository(session).validate_run_ready(test_run_id=test_run_id)
             finding_ids, report_id = await evaluate_slop_run(
                 test_run_id=test_run_id, session=session,
+                require_contract=(
+                    run.configuration_snapshot.get("slop_evaluation_contract_required") is True
+                ),
             )
             await session.commit()
             return EvaluationWorkflowResult(
                 test_run_id=test_run_id, finding_ids=finding_ids, report_id=report_id,
+            )
+        if run is not None and (
+            run.configuration_snapshot.get("execution_mode")
+            == "discovery_contract_v1"
+        ):
+            # The 409 guard (doc 24 section 5): a contract run's
+            # report is preserved and served, never rebuilt. The mode
+            # string is the legacy snapshot value shared/run_kind.py
+            # maps for both contract and harness modes.
+            existing_report_id = await session.scalar(
+                select(Report.id)
+                .where(Report.test_run_id == test_run_id)
+                .order_by(Report.version.desc())
+                .limit(1)
+            )
+            if existing_report_id is None:
+                raise ContractReportNotRebuildableError(
+                    "Contract run has no preserved report to serve; "
+                    "the generic rebuild must not fabricate one."
+                )
+            return EvaluationWorkflowResult(
+                test_run_id=test_run_id, finding_ids=(),
+                report_id=existing_report_id,
+                skip_reason="contract_report_preserved",
             )
         readiness_repository = EvaluationRepository(session)
 
@@ -218,6 +261,7 @@ async def _evaluate_and_generate_report(
             if kind == "explore_test" and isinstance(board_document, dict):
                 from markettwin_evaluation_worker.board_evaluator import (
                     compute_board_verdict,
+                    market_verdict_section,
                 )
 
                 board_results = await repository.list_board_item_results(
@@ -234,6 +278,7 @@ async def _evaluate_and_generate_report(
                         "run_kind": "explore_test",
                         "verdict": board_section["verdict"],
                         "board": board_section,
+                        "market_verdict": market_verdict_section(board_section),
                     }
 
         await session.commit()

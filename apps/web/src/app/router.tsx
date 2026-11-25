@@ -1,17 +1,18 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 
 import { CurrentUser } from "../lib/api";
 import { AppShell } from "../layouts/AppShell";
 import { RunLayout } from "../layouts/RunLayout";
 import { SettingsLayout } from "../layouts/SettingsLayout";
 import { WorkspaceDashboardPage } from "../pages/concept/WorkspaceDashboardPage";
-import { LiveTestPage } from "../pages/concept/LiveTestPages";
+import { RunActivityPage } from "../pages/runs/RunActivityPage";
 import { ApplicationsPage } from "../pages/applications/ApplicationsPage";
 import { NewApplicationPage } from "../pages/applications/NewApplicationPage";
 import { ApplicationOverviewPage } from "../pages/applications/ApplicationOverviewPage";
+import { ApplicationKnowledgePage } from "../pages/knowledge/ApplicationKnowledgePage";
 import { IngestionPage } from "../pages/knowledge/IngestionPage";
-import { ReviewKnowledgePage } from "../pages/knowledge/ReviewKnowledgePage";
-import { KnowledgeReviewPage } from "../pages/knowledge/KnowledgeReviewPage";
+import { KnowledgeListPage } from "../pages/knowledge/KnowledgeListPage";
+import { KnowledgeEntryPage } from "../pages/knowledge/KnowledgeEntryPage";
 import { ApplicationPersonasPage } from "../pages/applications/ApplicationPersonasPage";
 import { ApplicationRunsPage } from "../pages/applications/ApplicationRunsPage";
 import { EditApplicationPage } from "../pages/applications/EditApplicationPage";
@@ -23,6 +24,7 @@ import { EditTargetPage } from "../pages/targets/EditTargetPage";
 import { TargetNetworkPolicyPage } from "../pages/targets/TargetNetworkPolicyPage";
 import { RunsPage } from "../pages/runs/RunsPage";
 import { NewRunPage } from "../pages/runs/NewRunPage";
+import { UiSlopPage } from "../pages/runs/UiSlopPage";
 import { RunOverviewPage } from "../pages/runs/RunOverviewPage";
 import { RunBoardPage } from "../pages/runs/RunBoardPage";
 import { AgentPromptsPage } from "../pages/runs/AgentPromptsPage";
@@ -35,14 +37,51 @@ import { RunFindingsPage } from "../pages/runs/RunFindingsPage";
 import { FindingDetailPage } from "../pages/runs/FindingDetailPage";
 import { RunEvidencePage } from "../pages/runs/RunEvidencePage";
 import { EvidenceDetailPage } from "../pages/runs/EvidenceDetailPage";
-import { HumanActionPage } from "../pages/runs/HumanActionPage";
 import { ProfileSettingsPage } from "../pages/settings/ProfileSettingsPage";
 import { WorkspaceSettingsPage } from "../pages/settings/WorkspaceSettingsPage";
-import { MembersSettingsPage } from "../pages/settings/MembersSettingsPage";
-import { SecuritySettingsPage } from "../pages/settings/SecuritySettingsPage";
 import { ForbiddenPage } from "../pages/system/ForbiddenPage";
 import { NotFoundPage } from "../pages/system/NotFoundPage";
 import { UnexpectedErrorPage } from "../pages/system/UnexpectedErrorPage";
+
+const summaryViews = {
+  findings: ["Findings", RunFindingsPage],
+  evaluation: ["Evaluation", RunEvaluationPage],
+  perspectives: ["Perspectives", RunPerspectivesPage],
+} as const;
+const activityViews = {
+  board: ["Checks ledger", RunBoardPage],
+  journeys: ["Journeys", RunJourneysPage],
+  missions: ["Missions", RunMissionsPage],
+  agents: ["Testers", AgentPromptsPage],
+} as const;
+
+function RunSection({ section }: { section: "summary" | "activity" }) {
+  const [search] = useSearchParams();
+  const view = search.get("view");
+  const match = Object.entries(section === "summary" ? summaryViews : activityViews)
+    .find(([key]) => key === view);
+  if (!match) return section === "summary" ? <RunOverviewPage /> : <RunActivityPage view="activity" />;
+  const [, [title, Detail]] = match;
+  return <>
+    <nav className="button-row" aria-label={`${title} navigation`}>
+      <Link to={section === "summary" ? "." : "../activity"}>Back to {section === "summary" ? "Summary" : "Activity"}</Link>
+    </nav>
+    <Detail />
+  </>;
+}
+
+function RunBookmark({ pathname, view, fallbackHash }: {
+  pathname: string;
+  view?: string;
+  fallbackHash?: string;
+}) {
+  const location = useLocation();
+  const search = new URLSearchParams(location.search);
+  if (view) search.set("view", view);
+  return <Navigate replace state={location.state} to={{
+    pathname, search: search.toString(), hash: location.hash || fallbackHash,
+  }} />;
+}
 
 export function AuthenticatedRouter({
   user,
@@ -66,10 +105,12 @@ export function AuthenticatedRouter({
         <Route path="/test-results" element={<Navigate to="/runs?status=completed" replace />} />
         <Route path="/watch" element={<Navigate to="/dashboard" replace />} />
         <Route path="/watch-live" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/ingestion" element={<IngestionPage />} />
-        <Route path="/knowledge/review" element={<ReviewKnowledgePage />} />
-        <Route path="/knowledge/review/:entryId" element={<KnowledgeReviewPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
+        <Route path="/knowledge" element={<KnowledgeListPage />} />
+        <Route path="/knowledge/add" element={<IngestionPage />} />
+        <Route path="/ingestion" element={<Navigate to="/knowledge/add" replace />} />
+        <Route path="/knowledge/review" element={<KnowledgeListPage />} />
+        <Route path="/knowledge/review/:entryId" element={<KnowledgeEntryPage />} />
         <Route path="/applications/new" element={<NewApplicationPage />} />
         <Route
           path="/applications/:applicationId"
@@ -77,7 +118,7 @@ export function AuthenticatedRouter({
         />
         <Route
           path="/applications/:applicationId/knowledge"
-          element={<Navigate to="/ingestion" replace />}
+          element={<ApplicationKnowledgePage />}
         />
         <Route
           path="/applications/:applicationId/edit"
@@ -114,33 +155,34 @@ export function AuthenticatedRouter({
           element={<NewRunPage />}
         />
         <Route path="/runs" element={<RunsPage />} />
-        <Route path="/agents" element={<AgentPromptsPage />} />
+        <Route path="/runs/new" element={<UiSlopPage />} />
+        <Route path="/ui-slop" element={<Navigate to="/runs/new?mode=slop" replace />} />
+        <Route path="/agents" element={<Navigate to="/applications" replace />} />
         <Route path="/runs/:runId" element={<RunLayout />}>
-          <Route index element={<Navigate to="overview" replace />} />
-          <Route path="overview" element={<RunOverviewPage />} />
-          <Route path="board" element={<RunBoardPage />} />
-          <Route path="agents" element={<AgentPromptsPage />} />
-          <Route path="perspectives" element={<RunPerspectivesPage />} />
-          <Route path="missions" element={<RunMissionsPage />} />
-          <Route path="journeys" element={<RunJourneysPage />} />
-          <Route path="evaluation" element={<RunEvaluationPage />} />
+          <Route index element={<RunSection section="summary" />} />
+          {["overview", "report", "results"].map(path =>
+            <Route key={path} path={path} element={<RunBookmark pathname=".." />} />,
+          )}
+          {Object.keys(summaryViews).map(view =>
+            <Route key={view} path={view} element={<RunBookmark pathname=".." view={view} />} />,
+          )}
+          {Object.keys(activityViews).map(view =>
+            <Route key={view} path={view} element={<RunBookmark pathname="../activity" view={view} />} />,
+          )}
           <Route path="journeys/:journeyId" element={<JourneyDetailPage />} />
-          <Route path="activity" element={<LiveTestPage view="watch" />} />
-          <Route path="watch" element={<LiveTestPage view="watch" />} />
-          <Route path="findings" element={<RunFindingsPage />} />
+          <Route path="activity" element={<RunSection section="activity" />} />
+          <Route path="watch" element={<RunActivityPage />} />
           <Route path="findings/:findingId" element={<FindingDetailPage />} />
           <Route path="evidence" element={<RunEvidencePage />} />
           <Route path="evidence/:artifactId" element={<EvidenceDetailPage />} />
-          <Route path="report" element={<LiveTestPage view="results" />} />
-          <Route path="results" element={<LiveTestPage view="results" />} />
-          <Route path="human-action" element={<HumanActionPage />} />
+          <Route path="human-action" element={<RunBookmark pathname="../watch" fallbackHash="#human-action-heading" />} />
         </Route>
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="profile" replace />} />
           <Route path="profile" element={<ProfileSettingsPage />} />
           <Route path="workspace" element={<WorkspaceSettingsPage />} />
-          <Route path="members" element={<MembersSettingsPage />} />
-          <Route path="security" element={<SecuritySettingsPage />} />
+          <Route path="members" element={<Navigate to="../workspace" replace />} />
+          <Route path="security" element={<Navigate to="../profile" replace />} />
         </Route>
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/error" element={<UnexpectedErrorPage />} />

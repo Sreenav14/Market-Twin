@@ -130,6 +130,9 @@ export function ApplicationOverviewPage() {
         <Link className="tab-link" to={`/applications/${application.id}/personas`}>
           Personas
         </Link>
+        <Link className="tab-link" to={`/applications/${application.id}/knowledge`}>
+          Knowledge
+        </Link>
       </div>
 
       <section className="section-block" aria-labelledby="app-targets-heading">

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext } from "react-router-dom";
 
 import { EmptyState } from "../../components/ui/StateViews";
+import { Button } from "../../components/ui/button";
 import { InlineAlert } from "../../components/ui/Feedback";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { StackedBar } from "../../components/markettwin/ResultFigures";
@@ -58,6 +59,20 @@ export function RunBoardPage() {
   }
 
   if (board.isError || !board.data) {
+    const status = (board.error as { status?: number } | null)?.status;
+    if (board.isError && status !== 404) {
+      return (
+        <section aria-labelledby="board-heading">
+          <div className="section-heading">
+            <div>
+              <h2 id="board-heading">Board</h2>
+            </div>
+          </div>
+          <p role="alert">Could not load the board.</p>
+          <Button onClick={() => void board.refetch()}>Try again</Button>
+        </section>
+      );
+    }
     return (
       <section aria-labelledby="board-heading">
         <div className="section-heading">

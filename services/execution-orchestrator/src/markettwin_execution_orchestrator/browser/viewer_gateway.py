@@ -7,8 +7,10 @@ an explicit origin allowlist, and a live session/lease authority implementation.
 import asyncio
 import hashlib
 import json
+import logging
 import secrets
 import time
+from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -28,6 +30,46 @@ from markettwin_execution_orchestrator.browser.owner import (
     ViewerInput,
     ViewerRejectedError,
 )
+
+logger = logging.getLogger(__name__)
+
+# Observer loop exits (doc 11 section 2.3): every exit of the observer loop
+# carries exactly one of these reasons, logged server-side and used as the
+# WebSocket close reason. Authority exits (revoked, expired) close 1008;
+# stream/owner exits close 1011. This is the gateway's exit vocabulary; the
+# connect-path refusal enum reconciles with it (doc 24 section 5.3).
+OBSERVER_EXIT_REASONS = frozenset(
+    {"authority_revoked", "lease_expired", "owner_gone", "stream_error",
+     "screencast_not_allowed"},
+)
+_AUTHORITY_EXIT_REASONS = frozenset(
+    {"authority_revoked", "lease_expired", "screencast_not_allowed"},
+)
+
+# Connect-path refusal classes (doc 24 section 5.3): the closed enum
+# a connect() refusal may carry. For an authenticated caller the
+# class rides the WebSocket close reason; the structured log line
+# records class + sub-condition + session id server-side. An
+# unauthenticated caller (no valid cookie) still gets exactly the
+# incumbent bland close — no class is observable before auth.
+CONNECT_REFUSAL_REASONS = frozenset({
+    "no_session", "ticket_invalid", "ticket_consumed", "ticket_expired",
+    "lease_expired", "authority_unmet", "screencast_not_allowed",
+    "owner_gone", "gateway_error",
+})
+
+
+class _ObserverStreamExit(Exception):
+    """Internal control flow only: carries the observer loop's classified
+    exit to the observer branch of connect(), which closes the socket with
+    its code and reason before the generic boundary can see the exception.
+    The `reason` attribute name matches the connect-path exception shape
+    (doc 24 section 5.3) so the two surfaces share one mechanism."""
+
+    def __init__(self, reason: str, close_code: int) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.close_code = close_code
 
 
 class ViewerAuthority(Protocol):
@@ -78,9 +120,14 @@ class ViewerGateway:
         self._local_ws = allow_local_ws
         self._tickets: dict[str, _Ticket] = {}
         self._observer_tickets: dict[str, _ObserverTicket] = {}
+        # Digests of tickets already consumed, kept only until the
+        # ticket would have expired, so a re-presented ticket reads
+        # ticket_consumed rather than ticket_invalid (section 5.3).
+        self._consumed_digests: dict[str, datetime] = {}
         # Watch instrumentation (U-P3-04): frames actually sent per
         # observed browser, so fps is measured, never assumed.
         self._observer_frames: dict[UUID, int] = {}
+        self._observer_heartbeats: dict[UUID, int] = {}
         self._observer_started_at: dict[UUID, float] = {}
         self._last_observer_stats: dict[str, float | int] = {}
         self._connected: set[UUID] = set()
@@ -95,14 +142,35 @@ class ViewerGateway:
         self._tickets = {
             key: value for key, value in self._tickets.items() if value.expires_at > now
         }
-        if (
-            actor_id != lease.actor_id
-            or lease.expires_at <= now
-            or not await self._authority.permitted(actor_id, lease)
-            or lease.handle.session_id in self._connected
-            or len(self._tickets) >= 100
-        ):
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+        self._consumed_digests = {
+            key: value for key, value in self._consumed_digests.items()
+            if value > now
+        }
+        if actor_id != lease.actor_id:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="actor_mismatch",
+            )
+        if lease.expires_at <= now:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="lease_expired", detail="lease_expired",
+            )
+        if not await self._authority.permitted(actor_id, lease):
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="permitted_false",
+            )
+        if lease.handle.session_id in self._connected:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="already_connected",
+            )
+        if len(self._tickets) >= 100:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="gateway_error", detail="ticket_capacity",
+            )
         # Keep only a digest at rest; a subsequent ticket invalidates the old one.
         self._tickets = {
             key: value
@@ -127,14 +195,31 @@ class ViewerGateway:
         self._observer_tickets = {
             key: value for key, value in self._observer_tickets.items() if value.expires_at > now
         }
-        if (
-            actor_id != lease.actor_id
-            or lease.expires_at <= now
-            or not await self._observer_permitted(actor_id, lease)
-            or lease.handle.session_id in self._observing
-            or len(self._observer_tickets) >= 100
-        ):
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+        if actor_id != lease.actor_id:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="actor_mismatch",
+            )
+        if lease.expires_at <= now:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="lease_expired", detail="lease_expired",
+            )
+        if not await self._observer_permitted(actor_id, lease):
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="permitted_false",
+            )
+        if lease.handle.session_id in self._observing:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="already_observing",
+            )
+        if len(self._observer_tickets) >= 100:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="gateway_error", detail="ticket_capacity",
+            )
         self._observer_tickets = {
             key: value
             for key, value in self._observer_tickets.items()
@@ -160,12 +245,19 @@ class ViewerGateway:
             )
             seconds = max(time.monotonic() - started, 0.001)
             frames = self._observer_frames.get(session_id, 0)
+            heartbeats = self._observer_heartbeats.get(session_id, 0)
             return {
+                **self._screencast_stats(session_id),
                 "frames": frames,
+                "heartbeats": heartbeats,
                 "seconds": round(seconds, 3),
-                "fps": round(frames / seconds, 2),
+                "fps": round((frames + heartbeats) / seconds, 2),
             }
         return dict(self._last_observer_stats)
+
+    def _screencast_stats(self, session_id: UUID) -> dict[str, int]:
+        read = getattr(self._owner, "screencast_stats", None)
+        return read(session_id) if callable(read) else {}
 
     async def _observer_permitted(self, actor_id: UUID, lease: ObserverLease) -> bool:
         if lease.expires_at <= datetime.now(UTC):
@@ -185,52 +277,161 @@ class ViewerGateway:
         Human-control leases keep using connect()'s unchanged path.
         """
         cookie = websocket.cookies.get("markettwin_session", "")
-        if (
-            actor_id != lease.actor_id
-            or await self._authority.actor(cookie) != actor_id
-            or not await self._observer_permitted(actor_id, lease)
-            or lease.handle.session_id in self._connected
-            or lease.handle.session_id in self._observing
-        ):
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+        if actor_id != lease.actor_id:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="actor_mismatch",
+            )
+        if await self._authority.actor(cookie) != actor_id:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="cookie_actor_mismatch",
+            )
+        if not await self._observer_permitted(actor_id, lease):
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="permitted_false",
+            )
+        if lease.handle.session_id in self._connected:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="already_connected",
+            )
+        if lease.handle.session_id in self._observing:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="already_observing",
+            )
         self._observing.add(lease.handle.session_id)
         self._observer_frames[lease.handle.session_id] = 0
+        self._observer_heartbeats[lease.handle.session_id] = 0
         self._observer_started_at[lease.handle.session_id] = time.monotonic()
+        stream_context = AsyncExitStack()
+        exit_reason = "stream_error"
         try:
-            await self._owner.start_screencast(lease.handle, generation=lease.generation)
-            while True:
-                if (
-                    await self._authority.actor(cookie) != actor_id
-                    or not await self._observer_permitted(actor_id, lease)
-                ):
-                    break
-                frame = await self._owner.next_screencast_frame(
-                    lease.handle, generation=lease.generation,
+            try:
+                observer_stream = getattr(self._authority, "observer_stream", None)
+                if callable(observer_stream):
+                    context = cast(Callable[[], AbstractAsyncContextManager[None]], observer_stream)
+                    await stream_context.enter_async_context(context())
+                try:
+                    await self._owner.start_screencast(lease.handle, generation=lease.generation)
+                except ViewerRejectedError:
+                    # Observation refused for this session's state:
+                    # the stream never started, which is
+                    # screencast_not_allowed — not an owner vanishing
+                    # mid-stream (owner_gone in the loop below).
+                    raise ViewerRejectedError(
+                        "Browser observation is unavailable.",
+                        reason="screencast_not_allowed",
+                        detail="screencast_refused",
+                    ) from None
+                last_frame: bytes | None = None
+                # The connect-time gate above just ran the full authority
+                # check, so the first in-loop check is the cached outcome.
+                last_sent_at = 0.0
+                last_check_at = time.monotonic()
+                last_permitted = True
+                while True:
+                    # Lease expiry is local and free: checked every iteration
+                    # and never folded into the authority cache, so expiry
+                    # and revocation stay distinct exits (doc 11 section 2.2).
+                    if lease.expires_at <= datetime.now(UTC):
+                        exit_reason = "lease_expired"
+                        break
+                    frame: bytes | None = None
+                    try:
+                        async with asyncio.timeout(1.0):
+                            frame = await self._owner.next_screencast_frame(
+                                lease.handle, generation=lease.generation,
+                            )
+                    except TimeoutError:
+                        # Owner silence (a static page during a model call):
+                        # fall through to the snapshot below. Cancelling the
+                        # wait is safe; frames are acked in the owner's
+                        # screencast callback, not in the wait itself.
+                        frame = None
+                    # Full authority check at most every 2 s; between checks
+                    # the cached outcome is reused. A denied fresh check
+                    # exits at once (revocation latency <= 2 s is the
+                    # accepted trade, doc 11 section 2.2).
+                    now = time.monotonic()
+                    if now - last_check_at >= 2.0:
+                        combined = getattr(self._authority, "observer_permitted_session", None)
+                        if callable(combined):
+                            check = cast(
+                                Callable[[str, UUID, BrowserSessionHandle, int], Awaitable[bool]], combined,
+                            )
+                            last_permitted = await check(
+                                cookie, actor_id, lease.handle, lease.generation,
+                            )
+                        else:
+                            current_actor, permitted = await asyncio.gather(
+                                self._authority.actor(cookie), self._observer_permitted(actor_id, lease),
+                            )
+                            last_permitted = permitted and current_actor == actor_id
+                        last_check_at = now
+                    if not last_permitted:
+                        exit_reason = "authority_revoked"
+                        break
+                    async with asyncio.timeout(5):
+                        current_frame = getattr(self._owner, "current_observer_frame", None)
+                        if callable(current_frame):
+                            # Discard pixels that became stale during the wait.
+                            snapshot = cast(
+                                Callable[..., tuple[bytes, dict[str, object]]], current_frame,
+                            )
+                            frame, pointer = snapshot(lease.handle, generation=lease.generation)
+                            await websocket.send_json(pointer)
+                        if frame is not None and (
+                            frame is not last_frame or now - last_sent_at >= 1.0
+                        ):
+                            heartbeat = frame is last_frame
+                            await websocket.send_bytes(frame)
+                            last_frame = frame
+                            last_sent_at = now
+                            if heartbeat:
+                                self._observer_heartbeats[lease.handle.session_id] += 1
+                            else:
+                                self._observer_frames[lease.handle.session_id] += 1
+            except ViewerRejectedError as exc:
+                exit_reason = (
+                    "screencast_not_allowed"
+                    if exc.reason == "screencast_not_allowed"
+                    else "owner_gone"
                 )
-                if (
-                    await self._authority.actor(cookie) != actor_id
-                    or not await self._observer_permitted(actor_id, lease)
-                ):
-                    break
-                async with asyncio.timeout(5):
-                    await websocket.send_bytes(frame)
-                self._observer_frames[lease.handle.session_id] += 1
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+            except asyncio.CancelledError:
+                raise  # Cancellation is not an exit classification.
+            except Exception:
+                exit_reason = "stream_error"
+            # Reason code + session id only: no exception text, cookie or
+            # ticket may reach the logs (connect()'s boundary discipline).
+            logger.info(
+                "observer stream exit: reason=%s session=%s",
+                exit_reason, lease.handle.session_id,
+            )
+            raise _ObserverStreamExit(
+                exit_reason, 1008 if exit_reason in _AUTHORITY_EXIT_REASONS else 1011,
+            )
         finally:
             started = self._observer_started_at.pop(lease.handle.session_id, None)
             frames = self._observer_frames.pop(lease.handle.session_id, 0)
+            heartbeats = self._observer_heartbeats.pop(lease.handle.session_id, 0)
             if started is not None:
                 seconds = max(time.monotonic() - started, 0.001)
                 self._last_observer_stats = {
+                    **self._screencast_stats(lease.handle.session_id),
                     "frames": frames,
+                    "heartbeats": heartbeats,
                     "seconds": round(seconds, 3),
-                    "fps": round(frames / seconds, 2),
+                    "fps": round((frames + heartbeats) / seconds, 2),
                 }
             self._observing.discard(lease.handle.session_id)
             try:
                 await self._owner.stop_screencast(lease.handle)
             except Exception:
                 pass
+            await stream_context.aclose()
 
     async def _permitted(self, cookie: str, lease: OwnerLease) -> bool:
         if lease.expires_at <= datetime.now(UTC):
@@ -243,7 +444,7 @@ class ViewerGateway:
             and await self._authority.permitted(lease.actor_id, lease)
         )
 
-    async def prune_expired(self) -> None:
+    async def prune_expired(self, *, detached_lease_id: UUID | None = None) -> None:
         """Release expired disconnected bookkeeping without breaking live renewal."""
         now = datetime.now(UTC)
         self._tickets = {
@@ -252,6 +453,10 @@ class ViewerGateway:
         self._observer_tickets = {
             key: ticket for key, ticket in self._observer_tickets.items() if ticket.expires_at > now
         }
+        self._consumed_digests = {
+            key: value for key, value in self._consumed_digests.items()
+            if value > now
+        }
         for lease_id, lease in tuple(self._leases.items()):
             if lease.expires_at > now or lease.handle.session_id in self._connected:
                 continue
@@ -259,7 +464,7 @@ class ViewerGateway:
             self._leases.pop(lease_id, None)
             was_attached = lease_id in self._attached
             self._attached.discard(lease_id)
-            if was_attached:
+            if was_attached and lease_id != detached_lease_id:
                 try:
                     await self._owner.detach(lease)
                 except ViewerRejectedError:
@@ -267,15 +472,26 @@ class ViewerGateway:
 
     async def renew(self, actor_id: UUID, lease: OwnerLease) -> None:
         previous = self._leases.get(lease.lease_id)
+        if previous is None:
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="no_session", detail="no_lease",
+            )
         if (
-            previous is None
-            or actor_id != lease.actor_id
+            actor_id != lease.actor_id
             or previous.handle != lease.handle or previous.actor_id != lease.actor_id
             or previous.generation != lease.generation or previous.request_id != lease.request_id
             or lease.expires_at < previous.expires_at
-            or not await self._authority.permitted(actor_id, lease)
         ):
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="lease_mismatch",
+            )
+        if not await self._authority.permitted(actor_id, lease):
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="permitted_false",
+            )
         if lease.lease_id in self._attached:
             await self._owner.renew(lease)
         self._leases[lease.lease_id] = lease
@@ -283,7 +499,10 @@ class ViewerGateway:
     async def renew_for_actor(self, actor_id: UUID, lease_id: UUID) -> None:
         lease = await self._authority.refresh_lease(actor_id, lease_id)
         if lease is None:
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="no_session", detail="refresh_missed",
+            )
         await self.renew(actor_id, lease)
 
     async def revoke_lease(
@@ -294,10 +513,16 @@ class ViewerGateway:
     ) -> None:
         lease = self._leases.get(lease_id)
         if lease is not None and session_id is not None and lease.handle.session_id != session_id:
-            raise ViewerRejectedError("Viewer authority is unavailable.")
+            raise ViewerRejectedError(
+                "Viewer authority is unavailable.",
+                reason="authority_unmet", detail="session_mismatch",
+            )
         if lease is not None:
             if generation <= lease.generation:
-                raise ViewerRejectedError("A newer control generation is required.")
+                raise ViewerRejectedError(
+                    "A newer control generation is required.",
+                    reason="authority_unmet", detail="generation_stale",
+                )
             await self._owner.revoke(lease.handle, generation)
             self._leases.pop(lease_id, None)
             self._attached.discard(lease_id)
@@ -347,23 +572,75 @@ class ViewerGateway:
             observer_ticket = self._observer_tickets.pop(digest, None)
             if observer_ticket is not None:
                 if observer_ticket.expires_at <= datetime.now(UTC):
-                    raise ViewerRejectedError("Viewer ticket is unavailable.")
-                await self._connect_observer(websocket, actor_id, observer_ticket.lease)
+                    raise ViewerRejectedError(
+                        "Viewer ticket is unavailable.",
+                        reason="ticket_expired",
+                        detail="observer_ticket_expired",
+                    )
+                self._consumed_digests[digest] = observer_ticket.expires_at
+                try:
+                    await self._connect_observer(websocket, actor_id, observer_ticket.lease)
+                except _ObserverStreamExit as stream_exit:
+                    # The observer loop classified its own exit (doc 11
+                    # section 2.3): close with its code and reason here, so
+                    # the generic boundary below never sees the exception.
+                    # The human path's boundary behaviour is unchanged.
+                    try:
+                        await websocket.close(
+                            code=stream_exit.close_code, reason=stream_exit.reason,
+                        )
+                    except Exception:
+                        pass
                 return
             ticket = self._tickets.pop(digest, None)
-            if ticket is None or ticket.expires_at <= datetime.now(UTC):
-                raise ViewerRejectedError("Viewer ticket is unavailable.")
+            if ticket is None:
+                consumed = digest in self._consumed_digests
+                raise ViewerRejectedError(
+                    "Viewer ticket is unavailable.",
+                    reason="ticket_consumed" if consumed else "ticket_invalid",
+                    detail="ticket_reused" if consumed else "ticket_unknown",
+                )
+            if ticket.expires_at <= datetime.now(UTC):
+                raise ViewerRejectedError(
+                    "Viewer ticket is unavailable.",
+                    reason="ticket_expired", detail="ticket_expired",
+                )
+            self._consumed_digests[digest] = ticket.expires_at
             lease = self._leases.get(ticket.lease.lease_id)
-            if (
-                lease is None
-                or actor_id != lease.actor_id
-                or not await self._permitted(cookie, lease)
-                or lease.handle.session_id in self._connected
-            ):
-                raise ViewerRejectedError("Viewer authority is unavailable.")
+            if lease is None:
+                raise ViewerRejectedError(
+                    "Viewer authority is unavailable.",
+                    reason="no_session", detail="lease_gone",
+                )
+            if actor_id != lease.actor_id:
+                raise ViewerRejectedError(
+                    "Viewer authority is unavailable.",
+                    reason="authority_unmet", detail="actor_mismatch",
+                )
+            if lease.expires_at <= datetime.now(UTC):
+                raise ViewerRejectedError(
+                    "Viewer authority is unavailable.",
+                    reason="lease_expired", detail="lease_expired",
+                )
+            if not await self._permitted(cookie, lease):
+                raise ViewerRejectedError(
+                    "Viewer authority is unavailable.",
+                    reason="authority_unmet", detail="permitted_false",
+                )
+            if lease.handle.session_id in self._connected:
+                raise ViewerRejectedError(
+                    "Viewer authority is unavailable.",
+                    reason="authority_unmet", detail="already_connected",
+                )
             self._connected.add(lease.handle.session_id)
             registered = True
-            await self._owner.attach(lease)
+            try:
+                await self._owner.attach(lease)
+            except ViewerRejectedError:
+                raise ViewerRejectedError(
+                    "Viewer authority is unavailable.",
+                    reason="owner_gone", detail="attach_failed",
+                ) from None
             attached = True
             self._attached.add(lease.lease_id)
 
@@ -427,7 +704,11 @@ class ViewerGateway:
                                 previous_diagnostics = safe_snapshot
                         if not use_screencast:
                             await asyncio.sleep(0.5)
-                    raise ViewerRejectedError("Viewer authority is unavailable.")
+                    raise ViewerRejectedError(
+                        "Viewer authority is unavailable.",
+                        reason="authority_unmet",
+                        detail="permitted_revoked_midstream",
+                    )
                 finally:
                     if use_screencast:
                         try:
@@ -449,15 +730,33 @@ class ViewerGateway:
             async with asyncio.TaskGroup() as group:
                 group.create_task(send_frames())
                 group.create_task(receive_input())
-        except Exception:
+        except Exception as exc:
             # Only a safe close code leaves the boundary. No payload or exception
             # text may reach logs, traces, Kafka, artifacts or error responses.
+            # The refusal class (doc 24 section 5.3) is safe on the wire for
+            # this authenticated caller; the structured log line records the
+            # class, the sub-condition and the session id — never a ticket
+            # digest, a cookie value, or exception text beyond its type.
+            reason = (
+                exc.reason
+                if isinstance(exc, ViewerRejectedError)
+                and exc.reason in CONNECT_REFUSAL_REASONS
+                else "gateway_error"
+            )
+            logger.warning(
+                "viewer connect refused: class=%s detail=%s session=%s type=%s",
+                reason,
+                exc.detail if isinstance(exc, ViewerRejectedError) else None,
+                lease.handle.session_id if lease is not None else None,
+                type(exc).__name__,
+            )
             try:
-                await websocket.close(code=1008)
+                await websocket.close(code=1008, reason=reason)
             except Exception:
                 pass
         finally:
             if lease is not None and registered:
+                detached_lease_id = None
                 if attached:
                     try:
                         # Renewals change expiry while retaining this connection's
@@ -466,10 +765,11 @@ class ViewerGateway:
                         if (current.handle == lease.handle and current.actor_id == lease.actor_id
                                 and current.generation == lease.generation):
                             await self._owner.detach(current)
+                            detached_lease_id = current.lease_id
                             # Detach ends transport, but the owner retains this
                             # lease for reconnect. Renew its expiry even while
                             # disconnected so the next attach has the same lease.
                     except Exception:
                         pass
                 self._connected.discard(lease.handle.session_id)
-                await self.prune_expired()
+                await self.prune_expired(detached_lease_id=detached_lease_id)

@@ -117,3 +117,27 @@ export function JourneyMeter({ completed, attempted }: { completed: number; atte
     />
   );
 }
+
+
+export function CountBars({ title, rows }: {
+  title: string;
+  rows: Array<{ label: string; count: number; color: "teal" | "coral" | "amber" | "blue" }>;
+}) {
+  const maximum = Math.max(0, ...rows.map(row => row.count));
+  if (!maximum) return null;
+  return <figure className="report-chart">
+    <figcaption>{title}</figcaption>
+    <dl className="report-bars">{rows.map(row => <div key={row.label}>
+      <dt>{row.label}</dt>
+      <dd><CountTrack count={row.count} maximum={maximum} color={row.color} />
+        <strong>{row.count.toLocaleString()}</strong></dd>
+    </div>)}</dl>
+  </figure>;
+}
+
+export function CountTrack({ count, maximum, color }: {
+  count: number; maximum: number; color: "teal" | "coral" | "amber" | "blue";
+}) {
+  return <span aria-hidden="true" className="report-track"><i data-color={color}
+    style={{ width: `${100 * count / maximum}%` }} /></span>;
+}

@@ -4,7 +4,6 @@ from .agent_runtime_snapshot_repository import AgentRuntimeSnapshotRepository
 from .artifact_repository import ArtifactRepository
 from .artifact_storage import S3ArtifactStorage
 from .execution_repository import ExecutionRepository
-from .fixture_action_approval import FixtureActionApproval, FixtureApprovalRejected
 from .human_action_lifecycle_repository import (
     HumanActionLifecycleRepository,
     HumanActionState,
@@ -36,8 +35,6 @@ __all__ = [
     "AgentRuntimeSnapshotRepository",
     "RunStateRepository",
     "ExecutionRepository",
-    "FixtureActionApproval",
-    "FixtureApprovalRejected",
     "HumanActionLifecycleRepository",
     "HumanActionState",
     "HumanHandoffUnavailable",

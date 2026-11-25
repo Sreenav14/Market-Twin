@@ -1,0 +1,240 @@
+{
+  "MT-000199": {
+    "run_id": "0b9aae6a-70d1-4d7d-afea-6757dbe072aa",
+    "state_element_verdict_counts": [
+      {
+        "clean": 1
+      },
+      {
+        "clean": 16
+      },
+      {
+        "clean": 360
+      },
+      {
+        "clean": 356
+      },
+      {
+        "clean": 367
+      },
+      {
+        "clean": 404
+      },
+      {
+        "cant_tell": 8,
+        "clean": 302,
+        "slop_minor": 3
+      },
+      {
+        "cant_tell": 12,
+        "clean": 298,
+        "slop_minor": 3
+      },
+      {
+        "cant_tell": 9,
+        "clean": 318,
+        "slop_minor": 3
+      },
+      {
+        "cant_tell": 6,
+        "clean": 346,
+        "slop_minor": 3
+      },
+      {
+        "cant_tell": 8,
+        "clean": 343,
+        "slop_minor": 3
+      },
+      {
+        "cant_tell": 8,
+        "clean": 301,
+        "slop_minor": 3
+      },
+      {
+        "cant_tell": 87,
+        "clean": 482
+      },
+      {
+        "cant_tell": 80,
+        "clean": 464
+      },
+      {
+        "cant_tell": 36,
+        "clean": 493
+      },
+      {
+        "cant_tell": 82,
+        "clean": 525
+      },
+      {
+        "clean": 249
+      },
+      {
+        "clean": 242
+      },
+      {
+        "cant_tell": 2,
+        "clean": 316,
+        "slop": 7
+      },
+      {
+        "cant_tell": 5,
+        "clean": 299,
+        "slop": 7,
+        "slop_minor": 5
+      },
+      {
+        "clean": 369
+      },
+      {
+        "clean": 344
+      },
+      {
+        "clean": 368
+      },
+      {
+        "clean": 410
+      },
+      {
+        "clean": 402
+      },
+      {
+        "clean": 289
+      },
+      {
+        "cant_tell": 6,
+        "clean": 280
+      },
+      {
+        "clean": 302
+      },
+      {
+        "cant_tell": 65,
+        "clean": 359
+      },
+      {
+        "cant_tell": 65,
+        "clean": 352
+      },
+      {},
+      {},
+      {
+        "clean": 254,
+        "slop_minor": 5
+      },
+      {
+        "clean": 247,
+        "slop_minor": 5
+      },
+      {
+        "cant_tell": 10,
+        "clean": 399,
+        "slop_minor": 1
+      },
+      {
+        "cant_tell": 14,
+        "clean": 393,
+        "slop_minor": 1
+      },
+      {
+        "cant_tell": 10,
+        "clean": 413,
+        "slop_minor": 1
+      },
+      {
+        "cant_tell": 10,
+        "clean": 401,
+        "slop_minor": 1
+      },
+      {
+        "clean": 287
+      },
+      {
+        "clean": 280
+      },
+      {
+        "cant_tell": 1,
+        "clean": 416
+      },
+      {
+        "cant_tell": 1,
+        "clean": 395
+      },
+      {
+        "cant_tell": 2,
+        "clean": 457
+      },
+      {
+        "clean": 292
+      },
+      {
+        "clean": 285
+      },
+      {
+        "cant_tell": 90,
+        "clean": 396
+      },
+      {
+        "cant_tell": 94,
+        "clean": 388
+      },
+      {
+        "clean": 277
+      },
+      {
+        "clean": 270
+      },
+      {
+        "clean": 286
+      },
+      {
+        "clean": 281
+      },
+      {
+        "clean": 274
+      }
+    ],
+    "reported": {
+      "clean": 16648,
+      "minor": 37,
+      "severe": 14,
+      "cant_tell": 711,
+      "judged": 16699,
+      "percentage": 0.2
+    }
+  },
+  "MT-000206": {
+    "run_id": "f25fad6e-1870-411a-b402-f74a222dabcb",
+    "entry": {
+      "url": "https://supermemory.ai/product/",
+      "viewports": [
+        "desktop1280"
+      ],
+      "elements_judged": 259,
+      "findings_count": 3
+    },
+    "findings": [
+      {
+        "detail": "Peer elements share a row but their shared edge misses by 2-6px.",
+        "severity": "minor",
+        "viewports": [
+          "desktop1280"
+        ]
+      },
+      {
+        "detail": "27 monospace micro-labels precede headings on one page.",
+        "severity": "minor",
+        "viewports": [
+          "desktop1280"
+        ]
+      },
+      {
+        "detail": "The default family geist serves both display and body with no contrast between them.",
+        "severity": "minor",
+        "viewports": [
+          "desktop1280"
+        ]
+      }
+    ]
+  }
+}

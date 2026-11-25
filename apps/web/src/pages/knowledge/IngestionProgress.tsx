@@ -24,10 +24,9 @@ export function IngestionProgress({ entry }: { entry: IngestionSummary }) {
     const label = entry.processing_error
       || (entry.processing_stage ? ingestionStageLabel(entry)
         : queued ? "Source saved · Waiting to process" : "Processing source");
-    const stageWord = entry.processing_error ? "Processing failed"
-      : statusEntry("lifecycle", entry.processing_stage ?? (queued ? "queued" : "processing")).word;
+    const stageWord = statusEntry("lifecycle", entry.processing_stage ?? (queued ? "queued" : "processing")).word;
     return <div className="ingestion-progress">
-      <StatusPill tone={entry.processing_error ? "danger" : "info"} glyph={entry.processing_error ? "✕" : "•"}>
+      <StatusPill tone="info" glyph="•">
         {stageWord}
       </StatusPill>
       {entry.processing_error ? <span role="status">{entry.processing_error}</span> : null}

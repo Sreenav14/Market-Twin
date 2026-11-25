@@ -1,9 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { PersonaImpressions } from "./PersonaImpressions";
+import { PersonaImpressions, PersonaTakeaway } from "./PersonaImpressions";
 
 describe("PersonaImpressions", () => {
+  it("counts friction from the displayed impressions when stored totals differ", () => {
+    const payload = {
+      total_impressions: 18, friction_count: 18,
+      personas: [{ persona_name: "Keyboard user", friction_count: 18,
+        impressions: [{ kind: "focus_indicator_invisible", journey_url: "https://shop.example.test/" }],
+        keyboard_walk: { tabs: 2, steps: [{ name: "Start", indicator_visible: true }, { name: "Next", indicator_visible: false }] },
+      }],
+    };
+    render(<><PersonaTakeaway payload={payload} /><PersonaImpressions payload={payload} /></>);
+    expect(screen.getByText("1 recorded impression from 1 persona · 1 about friction")).toBeVisible();
+    expect(screen.getByText("1 friction note")).toBeVisible();
+    expect(screen.getByText(/Mentioned by 1 of 1 personas/)).toBeVisible();
+    expect(screen.getByText("Keyboard record")).toBeVisible();
+  });
+
   it("renders anchored quotes per persona and never a verdict", () => {
     render(
       <PersonaImpressions
@@ -38,9 +53,9 @@ describe("PersonaImpressions", () => {
         }}
       />,
     );
-    expect(screen.getByText("What it felt like")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Persona impressions" })).toBeTruthy();
     expect(screen.getByText(/I waited 4\.2 seconds/)).toBeTruthy();
-    expect(screen.getByText(/loaded in 4\.2s/)).toBeTruthy();
+    expect(screen.getByText(/loaded in 4\.2s/i)).toBeTruthy();
     expect(screen.getByText("Impatient mobile user")).toBeTruthy();
     expect(screen.queryByText(/Not ready yet|Ready to ship/)).toBeNull();
   });

@@ -5,7 +5,9 @@ import { Spinner } from "../../components/ui/StateViews";
 import { RequiredMark } from "../../components/ui/Field";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { ConceptFooter, ConceptHeader, TriptychSignature } from "../../components/concept";
+import { ConceptFooter } from "../../components/concept/ConceptFooter";
+import { ConceptHeader } from "../../components/concept/ConceptHeader";
+import { TriptychSignature } from "../../components/concept/TriptychSignature";
 import { ApiError, CurrentUser, api } from "../../lib/api";
 
 export function LoginPage({

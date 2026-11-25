@@ -25,12 +25,14 @@ class PinnedEgressProxy:
 
     def __init__(
         self, network_policy: NetworkPolicy, *, on_failure: EgressFailureCallback | None = None,
+        destination_policy: Callable[[str, str, int], NetworkPolicy] | None = None,
     ) -> None:
         self._policy: NetworkPolicy = network_policy
         self._server: asyncio.Server | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         self._writers: set[asyncio.StreamWriter] = set()
         self._on_failure = on_failure
+        self._destination_policy = destination_policy
 
     async def start(self) -> str:
         self._server = await asyncio.start_server(
@@ -42,7 +44,16 @@ class PinnedEgressProxy:
     async def close(self) -> None:
         if self._server is not None:
             self._server.close()
-            await self._server.wait_closed()
+            try:
+                await asyncio.wait_for(self._server.wait_closed(), timeout=2)
+            except TimeoutError:
+                # A live CONNECT tunnel can hold wait_closed() open
+                # for as long as the browser keeps it alive
+                # (MT-000160 wedged here until the stall watchdog
+                # killed the run). The listening socket is already
+                # closed; the writer closes and task cancels below
+                # tear the tunnels down.
+                pass
         for writer in tuple(self._writers):
             writer.close()
         tasks = tuple(self._tasks)
@@ -87,7 +98,10 @@ class PinnedEgressProxy:
                 scheme, hostname = parsed.scheme, parsed.hostname
                 reason = "dns_resolution_failed"
                 addresses = await resolve_and_validate_host(
-                    parsed.hostname, self._policy, system_host_lookup,
+                    parsed.hostname,
+                    self._destination_policy(scheme, hostname, port)
+                    if self._destination_policy else self._policy,
+                    system_host_lookup,
                 )
                 # Pass only a validated numeric IP to the TCP dialer. Chromium
                 # cannot perform a second hostname lookup for this connection.

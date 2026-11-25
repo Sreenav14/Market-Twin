@@ -56,7 +56,8 @@ export type StatusSource =
   | "evaluation"
   | "lifecycle"
   | "mode"
-  | "flow";
+  | "flow"
+  | "skill";
 
 export const RUN_STATUS: Record<TestRunStatus, StatusEntry> = {
   draft: { word: "Draft", tone: "notchecked" },
@@ -225,6 +226,26 @@ export const MODE_STATUS: Record<string, StatusEntry> = {
   harness_v1: { word: "Lead agent testing", tone: "info" },
 };
 
+// Skill lifecycle words (doc 29 section 8.2): the six shared lifecycle
+// states of an app-map skill, plus the source-knowledge label for task
+// candidates — document-sourced task skills not yet compiled or
+// executed. The skill surfaces render no other lifecycle words.
+export const SKILL_STATUS: Record<string, StatusEntry> = {
+  draft: { word: "Draft — compiled, not yet replay-verified", tone: "notchecked" },
+  replay_verified: {
+    word: "Replay-verified — waiting for activation",
+    tone: "notchecked",
+  },
+  active: { word: "Active — runs replay it in tests", tone: "works" },
+  suspect: { word: "Suspect — a replay disagreed; re-checking", tone: "couldnot" },
+  quarantined: { word: "Quarantined — held out of runs", tone: "couldnot" },
+  retired: { word: "Retired — no longer used", tone: "notchecked" },
+  source_knowledge: {
+    word: "Source-derived skill — execution unverified",
+    tone: "notchecked",
+  },
+};
+
 const STATUS_MAPS: Record<StatusSource, Record<string, StatusEntry>> = {
   run: RUN_STATUS,
   harnessItem: HARNESS_ITEM_STATUS,
@@ -244,6 +265,7 @@ const STATUS_MAPS: Record<StatusSource, Record<string, StatusEntry>> = {
   lifecycle: LIFECYCLE_STATUS,
   mode: MODE_STATUS,
   flow: FLOW_STATUS,
+  skill: SKILL_STATUS,
 };
 
 export function statusEntry(source: StatusSource, value: string): StatusEntry {

@@ -156,3 +156,76 @@ async def test_contract_get_returns_the_stored_contract(api_context):
     assert contract.version == 3
     assert contract.status == "approved"
     assert contract.journeys[0].assertions[0].origin == "user_approved"
+
+
+@pytest.mark.asyncio
+async def test_preserved_contract_payload_passes_serve_validation():
+    """T-P5-E1 (serve half): a preserved contract report payload —
+    frozen identity, no confirmed findings, zero coverage — is
+    exactly what get_test_run_results serves for a
+    discovery_contract_v1 run: validate_contract_report accepts it
+    and raises no 409."""
+    from types import SimpleNamespace
+
+    from markettwin_control_api.api.contract_report_validation import (
+        validate_contract_report,
+    )
+    from markettwin_shared.discovery_contract import (
+        DiscoveryMap,
+        TestContract,
+    )
+
+    run_id = uuid4()
+    contract = TestContract(
+        contract_id=uuid4(),
+        test_run_id=run_id,
+        version=1,
+        status="frozen",
+        approved_by_user_id=uuid4(),
+        approved_at=datetime.now(UTC),
+        journeys=[],
+    )
+    discovery = DiscoveryMap(target_origin="https://app.test")
+    identity = {
+        "contract_id": str(contract.contract_id),
+        "contract_version": contract.version,
+        "contract_hash": contract.content_hash(),
+    }
+    snapshot = {
+        "frozen_contract": contract.model_dump(mode="json"),
+        "discovery_map": discovery.model_dump(mode="json"),
+        "frozen_contract_hash": contract.content_hash(),
+    }
+    payload = {
+        **identity,
+        "confirmed": [],
+        "what_works": [],
+        "coverage": {"executed": 0, "approved": 0, "verified_findings": 0},
+        "market_verdict": {"coverage": 0.0, "confirmed_defects": 0},
+    }
+    plan_event = SimpleNamespace(
+        event_type="contract.execution_plan",
+        payload={**identity, "cases": []},
+        execution_id=None,
+        journey_id=None,
+    )
+
+    class _Scalars:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return self._rows
+
+    class _Session:
+        async def scalars(self, _select):
+            return _Scalars([plan_event])
+
+    # Returns None (no HTTPException) when the payload serves.
+    await validate_contract_report(
+        run_id=run_id,
+        snapshot=snapshot,
+        payload=payload,
+        finding_ids=set(),
+        session=_Session(),
+    )

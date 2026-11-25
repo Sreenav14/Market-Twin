@@ -11,7 +11,6 @@ from markettwin_shared.model_parameters import completion_parameters
 from markettwin_execution_orchestrator.models.budgeted_client import BudgetedLiteLLMClient
 
 DEFAULT_MODEL_PROVIDER: Final[str] = "openai"
-DEFAULT_OPENAI_MODEL_NAME: Final[str] = "openai/gpt-4o-mini"
 DEFAULT_OPENAI_NUM_RETRIES: Final[int] = 2
 
 DEFAULT_OLLAMA_MODEL_NAME: Final[str] = "ollama_chat/qwen3:1.7b"
@@ -78,10 +77,12 @@ def resolve_model_runtime_configuration(
             provider = "ollama"
 
     if provider == "openai":
-        model_name = (
-            os.getenv("MODEL_NAME")
-            or DEFAULT_OPENAI_MODEL_NAME
-        ).strip()
+        model_name = (os.getenv("MODEL_NAME") or "").strip()
+
+        if not model_name:
+            raise ValueError(
+                'MODEL_NAME is required for MODEL_PROVIDER "openai".'
+            )
 
         if not model_name.startswith("openai/"):
             model_name = f"openai/{model_name}"

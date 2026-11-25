@@ -304,15 +304,11 @@ class BrowserSession(Base):
         ),
         UniqueConstraint(
             "execution_id",
-            name="uq_browser_sessions_execution_id",
-        ),
-        UniqueConstraint(
-            "execution_id",
             "id",
             name="uq_browser_sessions_execution_id_id",
         ),
         CheckConstraint(
-            "session_role IN ('room', 'proof', 'persona', 'legacy')",
+            "session_role IN ('room', 'proof', 'persona', 'legacy', 'worker')",
             name="ck_browser_sessions_session_role_allowed",
         ),
         # One open Room per run (U-P2-01): the unified engine's shared
@@ -556,7 +552,8 @@ class ExecutionPauseRequest(Base):
         CheckConstraint("generation >= 0", name="ck_pause_requests_generation_nonnegative"),
         ForeignKeyConstraint(
             ["execution_id", "browser_session_id"],
-            ["execution.browser_sessions.execution_id", "execution.browser_sessions.id"],
+            ["execution.browser_execution_bindings.execution_id", "execution.browser_execution_bindings.browser_session_id"],
+            name="fk_pause_requests_execution_id_browser_sessions",
             ondelete="CASCADE",
         ),
         Index(
@@ -597,6 +594,19 @@ class ExecutionPauseRequest(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class BrowserExecutionBinding(Base):
+    """Immutable pairs used by historical requests after a Room changes owners."""
+
+    __tablename__ = "browser_execution_bindings"
+    __table_args__ = {"schema": "execution"}
+    execution_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("execution.agent_executions.id", ondelete="CASCADE"), primary_key=True,
+    )
+    browser_session_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("execution.browser_sessions.id", ondelete="CASCADE"), primary_key=True,
+    )
+
+
 class HumanActionRequest(Base):
     __tablename__ = "human_action_requests"
     __table_args__ = (
@@ -610,7 +620,8 @@ class HumanActionRequest(Base):
         ),
         ForeignKeyConstraint(
             ["execution_id", "browser_session_id"],
-            ["execution.browser_sessions.execution_id", "execution.browser_sessions.id"],
+            ["execution.browser_execution_bindings.execution_id", "execution.browser_execution_bindings.browser_session_id"],
+            name="fk_human_action_requests_execution_id_browser_sessions",
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(
@@ -853,7 +864,8 @@ class ExecutionSuspension(Base):
         ),
         ForeignKeyConstraint(
             ["execution_id", "browser_session_id"],
-            ["execution.browser_sessions.execution_id", "execution.browser_sessions.id"],
+            ["execution.browser_execution_bindings.execution_id", "execution.browser_execution_bindings.browser_session_id"],
+            name="fk_execution_suspensions_execution_id_browser_sessions",
             ondelete="CASCADE",
         ),
         Index(

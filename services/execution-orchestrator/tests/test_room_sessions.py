@@ -87,6 +87,7 @@ async def test_room_is_shared_rebound_and_proof_is_a_fresh_context(
         # Closing the proof context leaves the Room fully usable.
         await controller.close_session(session_id=proof.session_id)
         assert proof.session_id not in controller._sessions
+        assert proof.session_id not in controller._session_purposes
         await controller.navigate(
             session_id=room.session_id, url=f"{origin}/",
             execution_id=item_execution, journey_id=item_journey,

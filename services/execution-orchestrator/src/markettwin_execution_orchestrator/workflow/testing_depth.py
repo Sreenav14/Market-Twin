@@ -10,6 +10,8 @@ FEATURE_CASE_LIMITS: dict[TestingDepth, int] = {"low": 3, "medium": 6, "high": 8
 
 def mission_limit(depth: TestingDepth) -> int:
     """Bound distinct missions; each mission runs with all three personas."""
+    if depth not in MISSION_LIMITS:
+        raise ValueError(f"Unknown testing_depth: {depth!r}")
     return MISSION_LIMITS[depth]
 
 

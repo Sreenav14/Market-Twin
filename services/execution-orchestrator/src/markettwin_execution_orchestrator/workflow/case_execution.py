@@ -7,6 +7,7 @@ not an LLM persona, and never retries a submit or silently changes a case oracle
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -14,9 +15,9 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from markettwin_database.models import ExecutionSuspension
+from markettwin_database.models import ExecutionSuspension, RunEvent, TestRun
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.deep_testing import (
     AssertionResult,
@@ -70,6 +71,8 @@ from markettwin_execution_orchestrator.persistence import (
 )
 from markettwin_execution_orchestrator.persistence.models import Artifact
 from markettwin_execution_orchestrator.persistence.run_event_repository import RunEventRepository
+from markettwin_execution_orchestrator.expectations import login_skill
+from markettwin_execution_orchestrator.workflow.harness_items import run_safety_mode
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +101,14 @@ class PersonaJourneyExecutionRequest:
     fixture_action_rules: tuple[SensitiveActionRule, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class BrowserHandoffExecution:
+    test_run_id: UUID
+    execution_id: UUID
+    journey_id: UUID
+    allowed_origins: tuple[AllowedOrigin, ...]
+
+
 class CaseActionLimitError(RuntimeError):
     """No browser action was attempted after exhausting the deterministic cap."""
 
@@ -108,6 +119,10 @@ class AuthenticationVerificationBlocked(BrowserPolicyError):
 
 class AuthenticationChallengeBlocked(AuthenticationVerificationBlocked):
     """Released login control without establishing the approved signed-in state."""
+
+
+class HumanAssistanceTimeoutError(AuthenticationVerificationBlocked):
+    """A non-login human assistance window expired unanswered."""
 
 
 class SensitiveActionApprovalBlocked(BrowserPolicyError):
@@ -179,9 +194,497 @@ async def pause_case_deadline(
             case_timer.reschedule(deadline + time.monotonic() - started)
 
 
-async def verify_or_request_login(
+async def _run_event(
+    session: AsyncSession,
+    request: PersonaJourneyExecutionRequest | BrowserHandoffExecution,
+    event_type: str,
+    payload: dict[str, object],
+) -> None:
+    await RunEventRepository(session).create(
+        test_run_id=request.test_run_id,
+        event_type=event_type,
+        payload=payload,
+        journey_id=request.journey_id,
+        execution_id=request.execution_id,
+    )
+    await session.commit()
+
+
+async def _attempt_login_skill(
+    *,
+    request: PersonaJourneyExecutionRequest | BrowserHandoffExecution,
+    controller: BrowserController,
+    handle: BrowserSessionHandle,
+    policy: AuthVerificationPolicy | None,
+    auth_scope: AuthSessionScope | None,
+    session: AsyncSession,
+) -> bool:
+    """Doc 21 section 13.3: replay the compiled login skill, if any.
+
+    Returns True only when the replay authenticated the session. Every
+    other outcome falls back to the human handoff verbatim; an
+    unresolvable credential key is named in a login_skill_refused event.
+    """
+    try:
+        run = await session.get(TestRun, request.test_run_id)
+        snapshot = run.configuration_snapshot if run is not None else {}
+        block = snapshot.get("app_map") if isinstance(snapshot, dict) else None
+        map_id = block.get("map_id") if isinstance(block, dict) else None
+        if not isinstance(map_id, str):
+            return False
+        app_map_id = UUID(map_id)
+        version = await login_skill.select_login_version(
+            session, app_map_id=app_map_id
+        )
+        if version is None:
+            return False
+        from markettwin_execution_orchestrator.workflow.run_request import (
+            _parse_approved_test_data,
+        )
+
+        values = {
+            entry.key: entry.value
+            for entry in _parse_approved_test_data(snapshot)
+        }
+        allowed, refusal_key = login_skill.login_mode_allowed(
+            run_mode=run_safety_mode(snapshot),
+            is_persona_run=(run.run_kind == "persona" if run else False),
+            approved_keys=set(values),
+        )
+        if refusal_key is not None:
+            await _run_event(
+                session,
+                request,
+                "login_skill_refused",
+                {
+                    "reason": "NOT_EXERCISED_UNAPPROVED_DATA",
+                    "key": refusal_key,
+                },
+            )
+            return False
+        if not allowed:
+            return False
+        definition = version.definition_json or {}
+        origins = tuple(
+            f"{origin.scheme}://{origin.hostname}"
+            + (f":{origin.port}" if origin.port else "")
+            for origin in request.allowed_origins
+        )
+        succeeded, failure_step, failure_site = (
+            await login_skill.replay_login_definition(
+                controller,
+                handle,
+                definition=definition,
+                values=values,
+                allowed_origins=origins,
+                policy=policy,
+            )
+        )
+        await login_skill.record_login_replay(
+            session,
+            version=version,
+            app_map_id=app_map_id,
+            result="passed" if succeeded else "failed",
+            failure_step=failure_step,
+            failure_site=failure_site,
+        )
+        await session.commit()
+        if not succeeded:
+            return False
+        if policy is not None and auth_scope is not None:
+            captured = await controller.capture_verified_auth_session(
+                handle=handle, policy=policy, scope=auth_scope
+            )
+            if captured is None:
+                return False
+        return True
+    except Exception as error:  # noqa: BLE001 - the handoff is the fallback
+        await session.rollback()
+        await _run_event(
+            session, request, "login_skill_failed", {"error_type": type(error).__name__},
+        )
+        await session.commit()
+        return False
+
+
+async def _compile_login_skill_after_handoff(
+    *,
+    request: PersonaJourneyExecutionRequest | BrowserHandoffExecution,
+    controller: BrowserController,
+    handle: BrowserSessionHandle,
+    session: AsyncSession,
+) -> None:
+    """Doc 21 sections 13.2-13.3: compile the login skill from the graph
+    after a successful handoff. Failures are recorded, never raised."""
+    try:
+        run = await session.get(TestRun, request.test_run_id)
+        snapshot = run.configuration_snapshot if run is not None else {}
+        block = snapshot.get("app_map") if isinstance(snapshot, dict) else None
+        map_id = block.get("map_id") if isinstance(block, dict) else None
+        if not isinstance(map_id, str):
+            return
+        from markettwin_database.models.knowledge import AppMap
+
+        app_map = await session.get(AppMap, UUID(map_id))
+        if app_map is None:
+            return
+        result = await controller.get_page_index(
+            session_id=handle.session_id,
+            execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+            cursor=0,
+        )
+        signature = hashlib.sha256(
+            " ".join(result.observation.aria_snapshot.split()).encode()
+        ).hexdigest()
+        version = await login_skill.compile_login_skill(
+            session,
+            app_map=app_map,
+            landing_url=result.observation.url,
+            landing_signature=signature,
+        )
+        await session.commit()
+        if version is not None:
+            await _run_event(
+                session,
+                request,
+                "login_skill_compiled",
+                {"skill_version_id": str(version.id)},
+            )
+    except Exception as error:  # noqa: BLE001 - recorded, never raised
+        await session.rollback()
+        try:
+            await _run_event(
+                session,
+                request,
+                "login_skill_compile_failed",
+                {"error": f"{type(error).__name__}: {error}"},
+            )
+        except Exception:  # noqa: BLE001
+            await session.rollback()
+
+
+async def execute_skill_replay(
     *,
     request: PersonaJourneyExecutionRequest,
+    controller: BrowserController,
+    handle: BrowserSessionHandle,
+    session: AsyncSession,
+    skill_entry: dict[str, object],
+    board_item_ref: str,
+    requesting_case: TestCaseSpec | None = None,
+) -> dict[str, object]:
+    """Doc 22 section 8.4: replay one served skill inside the run's
+    own browser session and record the consumption replay
+    (skill_replays, context 'run', zero model calls — a replay never
+    calls a model).
+
+    Outcomes: 'passed' (the terminal assertion held), 'failed' (a
+    step failed to execute — a locator-shaped divergence: the
+    active version demotes to suspect, section 8.4.3), 'diverged'
+    (the steps completed but the terminal assertion did not hold —
+    an assertion-shaped divergence: the active version is
+    quarantined in the same step, section 8.4.2, and no heal is
+    attempted), 'mode_filtered' (the execution-time mode re-check
+    of section 8.3 refused: nothing replays, nothing is
+    recorded)."""
+    from markettwin_database.models.knowledge import (
+        SkillReplay,
+        SkillUsageEvent,
+        SkillVersion,
+    )
+    from markettwin_shared.app_map_common import (
+        canonical_url,
+        check_skill_transition,
+    )
+    from markettwin_shared.feature_plan import FeatureScope, TestCaseSpec
+
+    from markettwin_execution_orchestrator.harvest.harvest_capture import (
+        capture_state,
+    )
+    from markettwin_execution_orchestrator.harvest.harvest_inventory import (
+        distil_elements,
+        distil_forms,
+        identity_for,
+    )
+    from markettwin_execution_orchestrator.workflow.run_request import (
+        _parse_approved_test_data,
+    )
+    from markettwin_execution_orchestrator.workflow.skill_filter import (
+        skill_selectability,
+        task_case_mismatch,
+    )
+
+    run = await session.get(TestRun, request.test_run_id)
+    snapshot = run.configuration_snapshot if run is not None else {}
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    approved = _parse_approved_test_data(snapshot)
+    definition = skill_entry.get("definition")
+    reason = skill_selectability(
+        definition,
+        mode=run_safety_mode(snapshot),
+        approved_keys={entry.key for entry in approved},
+    )
+    if reason is not None:
+        return {"status": "mode_filtered", "reason": reason}
+    assert isinstance(definition, dict)
+    if requesting_case is not None and isinstance(definition.get("task"), dict):
+        # Skill-replay selection (doc 29 section 7 as amended): a
+        # task skill handed to this executor FOR a specific case
+        # must be that case's contract -- steps, targets and the
+        # case's own expected outcomes, with value-bound outcomes
+        # asserting this run's approved values. The digest half of
+        # the check lives in the matcher (the definition here may
+        # already be rebound, and the digest covers stored
+        # values), so equivalence is what is re-verified, before
+        # any browser action and before anything is recorded.
+        mismatch = task_case_mismatch(
+            definition,
+            requesting_case,
+            approved_values={entry.key: entry.value for entry in approved},
+            start_url=getattr(request, "start_url", None),
+            check_digest=False,
+        )
+        if mismatch is not None:
+            return {"status": "refused", "reason": mismatch}
+    block = snapshot.get("app_map")
+    if not isinstance(block, dict):
+        block = {}
+    map_id = block.get("map_id")
+    try:
+        version_id = UUID(str(skill_entry.get("skill_version_id")))
+    except ValueError:
+        return {"status": "refused", "reason": "invalid_skill_version_id"}
+    try:
+        app_map_id = UUID(map_id) if isinstance(map_id, str) else None
+    except ValueError:
+        return {"status": "refused", "reason": "invalid_app_map_id"}
+    native = {
+        key: definition[key]
+        for key in (
+            "case_id",
+            "feature_key",
+            "title",
+            "kind",
+            "steps",
+            "expected",
+        )
+        if key in definition
+    }
+    native.setdefault("safety", "non_destructive")
+    native.setdefault("estimated_seconds", 60)
+    spec = TestCaseSpec.model_validate(native)
+    from markettwin_execution_orchestrator.workflow.feature_scope import origin_url
+
+    origins = tuple(origin_url(origin) for origin in request.allowed_origins)
+    first_url = next(
+        (step.url for step in spec.steps if step.action == "navigate" and step.url),
+        f"{origins[0]}/" if origins else "",
+    )
+    scope = FeatureScope(
+        feature_key=spec.feature_key,
+        goal="Replay a library skill for this run.",
+        starting_url=first_url,
+        allowed_origins=origins,
+        safe_test_data=approved,
+    )
+    started = datetime.now(UTC)
+    failure_step: int | None = None
+    failure_site: str | None = None
+    diverged = False
+    terminal_state_match: bool | None = None
+    per_step: list[dict[str, object]] = []
+    from markettwin_execution_orchestrator.workflow.skill_assertions import check_skill_assertions
+
+    async def check_skill_checkpoint(checkpoint: int | None) -> str | None:
+        return await check_skill_assertions(
+            controller, handle, spec, checkpoint=checkpoint,
+            approved_values=tuple(value.value for value in approved),
+            run_mode=run_safety_mode(snapshot),
+        )
+
+    for index, action in enumerate(spec.steps):
+        try:
+            failed_assertion = await check_skill_checkpoint(index)
+            if failed_assertion:
+                diverged = True
+                failure_site = f"skill_assertion:{failed_assertion}"
+                break
+            await perform_case_action(controller, handle, action, scope)
+        except Exception as exc:  # noqa: BLE001 - recorded as the failure
+            failure_step = index
+            failure_site = f"case_execution:{type(exc).__name__}"
+            per_step.append({"order": index, "result": "failed"})
+            break
+        per_step.append({"order": index, "result": "passed"})
+    if failure_step is None and not diverged:
+        try:
+            failed_assertion = (
+                await check_skill_checkpoint(len(spec.steps))
+                or await check_skill_checkpoint(None)
+            )
+            capture = await capture_state(
+                controller,
+                handle,
+                execution_id=handle.execution_id,
+                journey_id=handle.journey_id,
+            )
+            elements = distil_elements(capture)
+            forms = distil_forms(capture)
+            live_state_id, _, _ = identity_for(capture.url, elements, forms)
+            assertion = definition.get("success_assertion") or {}
+            url_ok = canonical_url(capture.url) == canonical_url(
+                str(assertion.get("url") or "")
+            )
+            state_ok = live_state_id == assertion.get("state_id")
+            if not state_ok and assertion.get("signature_superset_fallback"):
+                harvested = set(assertion.get("element_signature") or [])
+                live = {
+                    f"{element['role']}|{element['name']}"
+                    for element in elements
+                }
+                state_ok = bool(harvested) and harvested <= live
+            terminal_state_match = url_ok and state_ok and failed_assertion is None
+            if failed_assertion:
+                failure_site = f"skill_assertion:{failed_assertion}"
+            diverged = not terminal_state_match
+        except Exception as exc:  # noqa: BLE001 - a failed replay, not a crash
+            failure_step = len(spec.steps)
+            failure_site = f"skill_replay:{type(exc).__name__}"
+    finished = datetime.now(UTC)
+    result = "failed" if failure_step is not None or diverged else "passed"
+    replay = SkillReplay(
+        id=uuid4(),
+        skill_version_id=version_id,
+        app_map_id=app_map_id,
+        result=result,
+        failure_step=failure_step,
+        failure_site=failure_site,
+        heal_cycle=False,
+        context_kind="run",
+        model_calls=0,
+        started_at=started,
+        finished_at=finished,
+        run_id=request.test_run_id,
+        board_item_ref=board_item_ref,
+    )
+    session.add(replay)
+    version = await session.get(SkillVersion, version_id)
+    if version is not None:
+        version.last_replay_result = result
+        version.last_replay_at = finished
+        version.replay_count = (version.replay_count or 0) + 1
+        # Section 8.3: every consumption replay writes its run_replay
+        # usage event (zero model calls — a replay never calls one).
+        session.add(
+            SkillUsageEvent(
+                id=uuid4(),
+                workspace_id=version.workspace_id,
+                skill_id=version.skill_id,
+                skill_version_id=version.id,
+                app_map_id=version.app_map_id,
+                run_id=request.test_run_id,
+                kind="run_replay",
+                from_status=version.lifecycle_status,
+                to_status=version.lifecycle_status,
+                result=result,
+                payload={
+                    "board_item_ref": board_item_ref,
+                    "outcome": (
+                        "satisfied_by_replay"
+                        if result == "passed"
+                        else "diverged"
+                    ),
+                    "terminal_state_match": terminal_state_match,
+                },
+            )
+        )
+        if diverged and version.lifecycle_status == "active":
+            # Section 8.4.2 (assertion-shaped): quarantine at once —
+            # defect-shaped signals are never healed around.
+            evidence: dict[str, object] = {
+                "assertion_divergence": {
+                    "replay_id": str(replay.id),
+                    "kind": "assertion_divergence",
+                }
+            }
+            if check_skill_transition("active", "quarantined", evidence):
+                version.lifecycle_status = "quarantined"
+                session.add(
+                    SkillUsageEvent(
+                        id=uuid4(),
+                        workspace_id=version.workspace_id,
+                        skill_id=version.skill_id,
+                        skill_version_id=version.id,
+                        app_map_id=version.app_map_id,
+                        run_id=request.test_run_id,
+                        kind="quarantine",
+                        from_status="active",
+                        to_status="quarantined",
+                        result="failed",
+                        payload={
+                            "replay_id": str(replay.id),
+                            "kind": "assertion_divergence",
+                            "board_item_ref": board_item_ref,
+                        },
+                    )
+                )
+        elif failure_step is not None and version.lifecycle_status == "active":
+            # Section 8.4.3 (locator-shaped): demote to suspect; the
+            # re-verification queue takes it from there.
+            evidence = {
+                "demotion": {
+                    "replay_id": str(replay.id),
+                    "kind": "locator_failure",
+                    "failure_step": failure_step,
+                    "failure_site": failure_site,
+                }
+            }
+            if check_skill_transition("active", "suspect", evidence):
+                version.lifecycle_status = "suspect"
+                session.add(
+                    SkillUsageEvent(
+                        id=uuid4(),
+                        workspace_id=version.workspace_id,
+                        skill_id=version.skill_id,
+                        skill_version_id=version.id,
+                        app_map_id=version.app_map_id,
+                        run_id=request.test_run_id,
+                        kind="demotion",
+                        from_status="active",
+                        to_status="suspect",
+                        result="failed",
+                        payload={
+                            "replay_id": str(replay.id),
+                            "kind": "locator_failure",
+                            "failure_step": failure_step,
+                            "failure_site": failure_site,
+                            "board_item_ref": board_item_ref,
+                        },
+                    )
+                )
+    await session.flush()
+    record: dict[str, object] = {
+        "replay_id": str(replay.id),
+        "per_step": per_step,
+        "terminal_state_match": terminal_state_match,
+    }
+    if diverged:
+        return {"status": "diverged", **record}
+    if failure_step is not None:
+        return {
+            "status": "failed",
+            "failure_step": failure_step,
+            "failure_site": failure_site,
+            **record,
+        }
+    return {"status": "passed", **record}
+
+
+async def verify_or_request_login(
+    *,
+    request: PersonaJourneyExecutionRequest | BrowserHandoffExecution,
     controller: BrowserController,
     handle: BrowserSessionHandle,
     policy: AuthVerificationPolicy | None,
@@ -194,10 +697,11 @@ async def verify_or_request_login(
     | None = None,
     continuation_verifier: Callable[[], Awaitable[bool]] | None = None,
     planned_step_index: int = 0,
+    encountered_challenge: bool = False,
 ) -> None:
     principal = (
         await controller.verify_authenticated_role(handle=handle, policy=policy)
-        if assistance_reason is None and policy is not None
+        if not encountered_challenge and assistance_reason is None and policy is not None
         else None
     )
     if principal is not None:
@@ -211,6 +715,20 @@ async def verify_or_request_login(
             raise AuthenticationVerificationBlocked(
                 "Authenticated identity could not be safely captured."
             )
+        await _run_event(
+            session, request, "login_via", {"via": "already_authenticated"}
+        )
+        return
+
+    if not encountered_challenge and assistance_reason is None and await _attempt_login_skill(
+        request=request,
+        controller=controller,
+        handle=handle,
+        policy=policy,
+        auth_scope=auth_scope,
+        session=session,
+    ):
+        await _run_event(session, request, "login_via", {"via": "skill_replay"})
         return
 
     expires_at = datetime.now(UTC) + timedelta(seconds=max_wait_seconds)
@@ -221,6 +739,8 @@ async def verify_or_request_login(
             if continuation_verifier is None:
                 raise ValueError("A recovery verifier is required.")
             handoff_options["assistance_reason"] = assistance_reason
+        if encountered_challenge:
+            handoff_options["encountered_challenge"] = True
         request_id = await lifecycle.create_login_request(
             test_run_id=request.test_run_id,
             execution_id=request.execution_id,
@@ -281,28 +801,29 @@ async def verify_or_request_login(
                 "human_pending",
                 "human",
             }:
-                suspension = ExecutionSuspensionRepository(session)
-                try:
-                    await suspension.create_waiting(
-                        test_run_id=request.test_run_id,
-                        journey_id=request.journey_id,
-                        execution_id=request.execution_id,
-                        browser_session_id=handle.session_id,
-                        request_id=request_id,
-                        last_durable_step_id=None,
-                        owner_generation=state.control_generation,
-                        phase="case_action" if assistance_reason else "auth_preflight",
-                        planned_step_index=planned_step_index,
-                        remaining=timedelta(seconds=remaining),
-                        human_deadline=expires_at,
-                    )
-                    await session.commit()
-                    checkpoint_created = True
-                except Exception as error:
-                    await session.rollback()
-                    raise AuthenticationVerificationBlocked(
-                        "The human login checkpoint could not be persisted."
-                    ) from error
+                if not checkpoint_created:
+                    suspension = ExecutionSuspensionRepository(session)
+                    try:
+                        await suspension.create_waiting(
+                            test_run_id=request.test_run_id,
+                            journey_id=request.journey_id,
+                            execution_id=request.execution_id,
+                            browser_session_id=handle.session_id,
+                            request_id=request_id,
+                            last_durable_step_id=None,
+                            owner_generation=state.control_generation,
+                            phase="case_action" if assistance_reason else "auth_preflight",
+                            planned_step_index=planned_step_index,
+                            remaining=timedelta(seconds=remaining),
+                            human_deadline=expires_at,
+                        )
+                        await session.commit()
+                        checkpoint_created = True
+                    except Exception as error:
+                        await session.rollback()
+                        raise AuthenticationVerificationBlocked(
+                            "The human login checkpoint could not be persisted."
+                        ) from error
                 try:
                     await wait_for_human_action_resume(
                         request_id=request_id,
@@ -333,14 +854,15 @@ async def verify_or_request_login(
                 policy=policy,
                 scope=auth_scope,
             )
-        continuation_verified = (
-            await continuation_verifier()
-            if (
-                continuation_verifier is not None
-                and (assistance_reason is not None or policy is None)
+        if continuation_verifier is not None and (
+            assistance_reason is not None or policy is None or encountered_challenge
+        ):
+            continuation_verified = (
+                (policy is None or assistance_reason is not None or principal is not None)
+                and await continuation_verifier()
             )
-            else principal is not None
-        )
+        else:
+            continuation_verified = principal is not None
         if not continuation_verified:
             try:
                 await controller.end_human_control(
@@ -391,10 +913,19 @@ async def verify_or_request_login(
             verified=True,
             safe_to_capture=True,
         )
+        await _run_event(session, request, "login_via", {"via": "handoff"})
+        if not encountered_challenge:
+            await _compile_login_skill_after_handoff(
+                request=request, controller=controller, handle=handle, session=session
+            )
     except TimeoutError as error:
         await session.rollback()
         await lifecycle.abandon(request_id=request_id)
         await session.commit()
+        if assistance_reason is not None:
+            raise HumanAssistanceTimeoutError(
+                "The bounded human assistance window expired."
+            ) from error
         raise AuthenticationVerificationBlocked(
             "The bounded human assistance window expired."
         ) from error
@@ -423,6 +954,35 @@ async def verify_or_request_login(
         await lifecycle.abandon(request_id=request_id)
         await session.commit()
         raise AuthenticationVerificationBlocked("The human continuation failed closed.") from error
+
+
+async def request_browser_handoff(
+    *,
+    request: BrowserHandoffExecution,
+    controller: BrowserController,
+    handle: BrowserSessionHandle,
+    session: AsyncSession,
+    expected_url: str | None = None,
+    policy: AuthVerificationPolicy | None = None,
+    auth_scope: AuthSessionScope | None = None,
+) -> None:
+    """Continue the exact browser after the gate is verified clear."""
+    async def continuation_ready() -> bool:
+        if expected_url is not None:
+            return await controller.verify_handoff_destination(handle, expected_url=expected_url)
+        return await controller.human_continuation_ready(handle)
+
+    await verify_or_request_login(
+        request=request,
+        controller=controller,
+        handle=handle,
+        policy=policy,
+        auth_scope=auth_scope,
+        session=session,
+        max_wait_seconds=MAX_HUMAN_LOGIN_WAIT_SECONDS,
+        continuation_verifier=continuation_ready,
+        encountered_challenge=True,
+    )
 
 
 async def request_runtime_assistance(
@@ -633,6 +1193,7 @@ async def execute_test_case(
     persisted_browser = False
     storage: S3ArtifactStorage | None = None
     recorder: ExecutionStepRecorder | None = None
+    trace_recorder: TaskTraceRecorder | None = None
     attempted_steps = 0
     recovery_attempted = False
     stage = "browser_start"
@@ -659,6 +1220,64 @@ async def execute_test_case(
             payload=payload,
         )
         await session.commit()
+
+    async def persist_task_trace(case_status: str) -> None:
+        """Doc 29 section 4: persist the case's task trace as one
+        test_case.task_trace event beside test_case.completed.
+        Segments are derived from the run's own persisted events
+        (the login handoff and in-flow assistance). Observational:
+        a failure here never changes the case's outcome."""
+        if trace_recorder is None:
+            return
+        try:
+            rows = await session.scalars(
+                select(RunEvent).where(
+                    RunEvent.execution_id == request.execution_id,
+                    RunEvent.event_type.in_(
+                        ["login_via", "test_case.assistance_requested"]
+                    ),
+                )
+            )
+            for row in rows:
+                payload_in = row.payload if isinstance(row.payload, dict) else {}
+                if (
+                    row.event_type == "login_via"
+                    and payload_in.get("via") == "handoff"
+                ):
+                    trace_recorder.note_segment(
+                        kind="assisted_login", from_step=None, to_step=None
+                    )
+                elif row.event_type == "test_case.assistance_requested":
+                    index = payload_in.get("planned_step_index")
+                    trace_recorder.note_segment(
+                        kind="assisted_other",
+                        from_step=index if isinstance(index, int) else None,
+                        to_step=index if isinstance(index, int) else None,
+                        reason_code=(
+                            payload_in.get("reason_code")
+                            if isinstance(payload_in.get("reason_code"), str)
+                            else None
+                        ),
+                    )
+        except Exception:
+            await session.rollback()
+        try:
+            from markettwin_execution_orchestrator.workflow.task_spec_store import store_task_spec
+
+            spec_ref = await store_task_spec(
+                session, run_id=request.test_run_id, journey_id=request.journey_id,
+                execution_id=request.execution_id, spec=case.model_dump(mode="json"),
+            )
+            await event(
+                "test_case.task_trace",
+                {
+                    "schema_version": 1,
+                    "spec_ref": str(spec_ref),
+                    **trace_recorder.payload(case_status=case_status),
+                },
+            )
+        except Exception:
+            await session.rollback()
 
     def reserve_step() -> None:
         nonlocal attempted_steps
@@ -711,6 +1330,16 @@ async def execute_test_case(
                     "reason": OPAQUE_CONFIRMATION_REASON,
                     "action": action_details,
                 })
+            if trace_recorder is not None:
+                try:
+                    trace_recorder.record_step(
+                        action_type=action_type,
+                        case_action=case_action,
+                        locator_strategy=None,
+                        outcome="failed",
+                    )
+                except Exception:
+                    pass
             await recorder.finish_step(
                 step_id=step_id,
                 status="policy_blocked" if isinstance(error, BrowserPolicyError) else "failed",
@@ -749,6 +1378,19 @@ async def execute_test_case(
                 observation_summary="Evidence persistence failed.",
             )
             raise
+        if trace_recorder is not None:
+            try:
+                trace_recorder.record_step(
+                    action_type=action_type,
+                    case_action=case_action,
+                    locator_strategy=observed.locator_strategy,
+                    outcome="completed",
+                )
+                trace_recorder.observe_url(
+                    observed.observation.url if observed.observation else None
+                )
+            except Exception:
+                pass
 
     await event(
         "test_case.started",
@@ -827,6 +1469,19 @@ async def execute_test_case(
             stage = "storage_setup"
             storage = await asyncio.to_thread(S3ArtifactStorage.from_environment)
             recorder = ExecutionStepRecorder(session, request.execution_id, storage)
+            try:
+                run_row = await session.get(TestRun, request.test_run_id)
+            except AttributeError:
+                run_row = None
+            run_kind = getattr(run_row, "run_kind", None)
+            if not isinstance(run_kind, str) or run_kind == "explore_test":
+                from markettwin_execution_orchestrator.workflow.task_trace import (
+                    TaskTraceRecorder,
+                )
+
+                trace_recorder = TaskTraceRecorder(
+                    case=case, start_url=request.start_url
+                )
             if auth_verification is not None:
 
                 async def request_login() -> None:
@@ -918,6 +1573,21 @@ async def execute_test_case(
             async def check_assertions(checkpoint: int | None) -> bool:
                 nonlocal stage
                 assert handle is not None
+                approved_values = tuple(
+                    item.value for item in scope.safe_test_data
+                )
+                try:
+                    run = await session.get(TestRun, request.test_run_id)
+                except AttributeError:
+                    # A session that cannot load rows (the unit
+                    # fakes) leaves the channel closed, exactly as
+                    # an unloadable row does.
+                    run = None
+                run_mode = (
+                    run_safety_mode(run.configuration_snapshot)
+                    if run is not None
+                    else None
+                )
                 failed_precondition = False
                 for expected in case.expected:
                     if expected.after_step_ordinal != checkpoint:
@@ -935,6 +1605,8 @@ async def execute_test_case(
                             execution_id=request.execution_id,
                             journey_id=request.journey_id,
                             assertion=expected,
+                            approved_values=approved_values,
+                            run_mode=run_mode,
                         )
                         await recorder.record_evidence(step_id=step_id, result=browser_result)
                         artifact_ids = tuple(
@@ -978,6 +1650,15 @@ async def execute_test_case(
                         )
                         raise
                     assertions.append(assertion)
+                    if trace_recorder is not None:
+                        try:
+                            trace_recorder.record_assertion(
+                                assertion_id=assertion.assertion_id,
+                                oracle=assertion.oracle,
+                                status=assertion.status,
+                            )
+                        except Exception:
+                            pass
                     await event("test_case.assertion", assertion.model_dump(mode="json"))
                     next_action = (
                         case.steps[checkpoint]
@@ -1144,9 +1825,53 @@ async def execute_test_case(
                     break
             if blocker != "assertion_precondition_failed":
                 await check_assertions(None)
+        if trace_recorder is not None and handle is not None:
+            try:
+                from markettwin_execution_orchestrator.harvest.harvest_capture import (
+                    capture_state,
+                )
+                from markettwin_execution_orchestrator.harvest.harvest_inventory import (
+                    distil_elements,
+                    distil_forms,
+                    identity_for,
+                )
+
+                async with asyncio.timeout(3):
+                    capture = await capture_state(
+                        browser_controller,
+                        handle,
+                        execution_id=handle.execution_id,
+                        journey_id=handle.journey_id,
+                    )
+                elements = distil_elements(capture)
+                forms = distil_forms(capture)
+                state_id, _, _ = identity_for(capture.url, elements, forms)
+                trace_recorder.set_terminal(
+                    {
+                        "url": capture.url,
+                        "state_id": state_id,
+                        "element_signature": [
+                            f"{element['role']}|{element['name']}"
+                            for element in elements
+                        ],
+                    }
+                )
+            except Exception:
+                pass
     except HumanAssistanceSkipped:
         status, blocker = "skipped", "human_assistance_skipped"
         assertions.clear()
+    except HumanAssistanceTimeoutError:
+        status, blocker = "policy_blocked", "human_assistance_timeout"
+        await event(
+            "test_case.diagnostic",
+            {
+                "schema_version": 1,
+                "case_id": case.case_id,
+                "stage": stage,
+                "reason_code": "human_assistance_timeout",
+            },
+        )
     except AuthenticationVerificationBlocked as error:
         status = "policy_blocked"
         blocker = (
@@ -1202,6 +1927,7 @@ async def execute_test_case(
             blocker=blocker,
         )
         await event("test_case.completed", cancelled.model_dump(mode="json"))
+        await persist_task_trace(status)
         raise
     except Exception as error:
         await session.rollback()
@@ -1276,5 +2002,6 @@ async def execute_test_case(
         human_wait_ms=human_wait_ms(),
         blocker=blocker,
     )
+    await persist_task_trace(status)
     await event("test_case.completed", result.model_dump(mode="json"))
     return result

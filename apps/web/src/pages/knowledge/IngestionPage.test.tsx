@@ -5,8 +5,8 @@ import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, type IngestionEntry } from "../../lib/api";
 import { IngestionPage } from "./IngestionPage";
-import { KnowledgeReviewPage } from "./KnowledgeReviewPage";
-import { ReviewKnowledgePage } from "./ReviewKnowledgePage";
+import { KnowledgeEntryPage } from "./KnowledgeEntryPage";
+import { KnowledgeListPage } from "./KnowledgeListPage";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -32,8 +32,8 @@ function renderPage(role = "member", path = "/ingestion", knowledge = entry) {
       <MemoryRouter initialEntries={[path]}>
         <Routes><Route element={<Outlet context={{ user: { id: "user" }, workspace: { id: "workspace", role } }} />}>
           <Route path="/ingestion" element={<IngestionPage />} />
-          <Route path="/knowledge/review/:entryId" element={<KnowledgeReviewPage />} />
-          <Route path="/knowledge/review" element={<ReviewKnowledgePage />} />
+          <Route path="/knowledge/review/:entryId" element={<KnowledgeEntryPage />} />
+          <Route path="/knowledge/review" element={<KnowledgeListPage />} />
         </Route></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -46,40 +46,39 @@ async function selectSource() {
   await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
   // jsdom does not validate a FileList populated by userEvent; real clicks are covered by Playwright.
   await act(async () => {
-    fireEvent.submit(screen.getByRole("button", { name: "Add knowledge" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Add source" }).closest("form")!);
   });
   return user;
 }
 
 describe("workspace ingestion", () => {
-  it("switches source types with arrows, Home and End without duplicate tab stops", async () => {
+  it("shows one form with a file upload and a public link, and no source-type choice", async () => {
+    renderPage();
+    // One form, one pipeline: the file dropzone and the link field are
+    // both present; either one satisfies the source requirement. There
+    // is no mode selector and no research/learn mode on this page.
+    expect(await screen.findByLabelText(/^Source file/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Public source link/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Knowledge set name/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Source purpose/)).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText("Research a link")).not.toBeInTheDocument();
+    expect(screen.queryByText("Learn a task in an app")).not.toBeInTheDocument();
+  });
+
+  it("requires a file or a link before submitting", async () => {
+    const upload = vi.spyOn(api, "ingestKnowledge").mockResolvedValue(entry);
+    const link = vi.spyOn(api, "ingestKnowledgeLink").mockResolvedValue(entry);
     renderPage();
     const user = userEvent.setup();
-    // Phase 2c: the source choice is ONE segmented recipe \u2014 a radio
-    // group (Spec 2 \u00a77.6), not a tablist. Radios move AND check.
-    const fileOption = await screen.findByRole("radio", { name: "Upload a file" });
-    const linkOption = screen.getByRole("radio", { name: "Research a link" });
-    expect(screen.getByRole("radiogroup", { name: "Source type" })).toBeInTheDocument();
-    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    fileOption.focus();
-    await user.keyboard("{ArrowRight}");
-    expect(linkOption).toHaveFocus();
-    expect(linkOption).toHaveAttribute("aria-checked", "true");
-    expect(fileOption).toHaveAttribute("tabindex", "-1");
-    expect(screen.getByLabelText(/^Public source link/)).toBeInTheDocument();
-    await user.tab();
-    expect(screen.getByLabelText(/^Public source link/)).toHaveFocus();
-    await user.tab({ shift: true });
-    expect(linkOption).toHaveFocus();
-    await user.keyboard("{Home}");
-    expect(fileOption).toHaveFocus();
-    expect(fileOption).toHaveAttribute("aria-checked", "true");
-    await user.keyboard("{End}");
-    expect(linkOption).toHaveFocus();
-    await user.keyboard("{ArrowRight}");
-    expect(fileOption).toHaveFocus();
-    await user.keyboard("{ArrowLeft}");
-    expect(linkOption).toHaveFocus();
+    await user.click(await screen.findByLabelText(/^Knowledge set name/));
+    await user.paste("Product docs");
+    await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
+    await user.click(screen.getByRole("button", { name: "Add source" }));
+    expect((await screen.findAllByText("Add a source file or paste a public link.")).length).toBeGreaterThan(0);
+    expect(upload).not.toHaveBeenCalled();
+    expect(link).not.toHaveBeenCalled();
   });
 
   it("keeps the original public link distinct from retained research and displays research stage", async () => {
@@ -101,14 +100,14 @@ describe("workspace ingestion", () => {
     const ingest = vi.spyOn(api, "ingestKnowledgeLink").mockResolvedValue(entry);
     renderPage();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: "Research a link" }));
-    expect(screen.queryByLabelText("Source file")).not.toBeInTheDocument();
+    // The link field sits in the same single form as the file dropzone.
+    expect(await screen.findByLabelText(/^Source file/)).toBeInTheDocument();
     await user.click(screen.getByLabelText(/^Public source link/));
     await user.paste("https://example.com/docs");
     await user.click(screen.getByLabelText(/^Knowledge set name/));
     await user.paste("Product docs");
     await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
-    await user.click(screen.getByRole("button", { name: "Add knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Add source" }));
     expect(ingest).toHaveBeenCalledWith("workspace", "https://example.com/docs", "Product docs", ["product_knowledge"]);
     expect(await screen.findByText("A documented feature")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve knowledge" })).toBeDisabled();
@@ -125,15 +124,15 @@ describe("workspace ingestion", () => {
     renderPage();
     vi.mocked(api.getIngestion).mockResolvedValue(queued);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: "Research a link" }));
-    await user.click(screen.getByLabelText(/^Public source link/));
+    await user.click(await screen.findByLabelText(/^Public source link/));
     await user.paste("https://example.com/docs");
     await user.click(screen.getByLabelText(/^Knowledge set name/));
     await user.paste("Product docs");
     await user.selectOptions(screen.getByLabelText(/^Source purpose/), "product_knowledge");
-    await user.click(screen.getByRole("button", { name: "Add knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Add source" }));
     expect(await screen.findByRole("progressbar", { name: "Ingestion progress" })).toBeInTheDocument();
     expect(screen.getByText("Researching public pages — 0 inspected, 0 inaccessible.")).toBeInTheDocument();
+    expect(screen.queryByText("Processing failed")).not.toBeInTheDocument();
     expect(screen.getByText(/You can leave this page/)).toBeInTheDocument();
   });
 
@@ -144,7 +143,7 @@ describe("workspace ingestion", () => {
     const user = await selectSource();
     expect(ingest).toHaveBeenCalledWith("workspace", expect.any(File), "source", ["product_knowledge"]);
     expect(await screen.findByText("A documented feature")).toBeInTheDocument();
-    expect(screen.getByText("No testable Skills found in this source.")).toBeInTheDocument();
+    expect(screen.getByText("No workflow guidance found in this source.")).toBeInTheDocument();
     expect(screen.getByText(/Pages 3–5/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve knowledge" })).toBeDisabled();
     await user.click(screen.getByRole("checkbox"));
@@ -158,9 +157,9 @@ describe("workspace ingestion", () => {
     renderPage();
     await selectSource();
     expect(await screen.findByRole("alert")).toHaveTextContent("Knowledge processing is unavailable.");
-    expect(screen.getByRole("button", { name: "Add knowledge" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add source" })).toBeEnabled();
     await act(async () => {
-      fireEvent.submit(screen.getByRole("button", { name: "Add knowledge" }).closest("form")!);
+      fireEvent.submit(screen.getByRole("button", { name: "Add source" }).closest("form")!);
     });
     expect(ingest).toHaveBeenCalledTimes(2);
   });

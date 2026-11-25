@@ -369,11 +369,11 @@ test("populated feature case inspector and exact More routing reflow across the 
     await checkViewportAndA11y(page);
     await page.screenshot({ path: path.join(screenshotDirectory, `cases-${viewport.width}.png`) });
 
-    const more = page.locator(".run-more-nav summary");
-    await expect(more).toBeVisible();
-    await more.click();
-    await page.getByRole("link", { name: "Human Assistance", exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/runs/${runId}/human-action$`));
+    const tabs = page.getByRole("navigation", { name: "Test sections" });
+    await expect(tabs.getByRole("link")).toHaveText(["Summary", "Watch", "Activity", "Evidence"]);
+    await tabs.getByRole("link", { name: "Activity", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${runId}/activity$`));
+    await expect(page.getByRole("heading", { name: "Recorded activity" })).toBeVisible();
   }
 });
 
@@ -516,22 +516,23 @@ test("new test zones reflow and default legacy creation payload stays unchanged"
     await expect(page.locator(".security-disclosure summary")).toBeVisible();
     await page.locator(".security-disclosure summary").click();
     await expect(page.getByRole("heading", { name: "Security and authorization" })).toBeAttached();
-    await expect(page.getByLabel("Testing mode")).toHaveValue("legacy_persona");
+    await expect(page.getByRole("radio", { name: "Explore & Test" })).toBeChecked();
     await checkViewportAndA11y(page);
     if (viewport.width === 1440 || viewport.width === 320) {
       await page.screenshot({ path: path.join(screenshotDirectory, `new-run-${viewport.width}.png`) });
     }
   }
 
-  await page.getByLabel("Your testing goal").fill("Can a synthetic user save a profile preference?");
+  await page.getByLabel("What is this app and who is it for?").fill("Can a synthetic user save a profile preference?");
   await page.getByRole("button", { name: "Create test" }).click();
   await expect(page).toHaveURL(new RegExp(`/runs/${runId}/overview$`));
   expect(fixture.createRunPayload).toEqual({
     target_id: targetId,
     study_brief: "Can a synthetic user save a profile preference?",
-    knowledge_entry_ids: [],
-    testing_depth: "medium",
+    run_kind: "explore_test",
     runtime_human_assistance: true,
+    allow_offsite_navigation: false,
+    testing_depth: "medium",
   });
 });
 

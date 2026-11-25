@@ -1,6 +1,7 @@
 """Focused worker listener and signed owner-handoff tests."""
 
 import hashlib
+import asyncio
 import hmac
 import socket
 import time
@@ -27,6 +28,20 @@ def build_service() -> HITLWorkerService:
         viewer_url="ws://localhost:5173/api/v1/hitl-viewer",
         allow_local_ws=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_stop_bounds_a_server_that_does_not_exit(monkeypatch):
+    from types import SimpleNamespace
+    from markettwin_execution_orchestrator.browser import owner_service
+
+    service = build_service()
+    service._server = SimpleNamespace(should_exit=False)
+    service._server_task = asyncio.create_task(asyncio.Event().wait())
+    monkeypatch.setattr(owner_service, "OWNER_SHUTDOWN_TIMEOUT_SECONDS", 0.01)
+    await service.stop()
+    assert service._server.should_exit
+    assert service._server_task.cancelled()
 
 
 @pytest.mark.asyncio

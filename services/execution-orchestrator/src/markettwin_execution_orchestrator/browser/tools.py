@@ -38,6 +38,8 @@ def create_browser_tools(
     # ADK may dispatch several tool calls concurrently. Serialize the complete
     # action, including database writes outside the controller's browser lock.
     action_lock = asyncio.Lock()
+    scroll_views: set[tuple[object, ...]] = set()
+    stalled_scrolls = 0
 
     async def run_recorded_action(
         *,
@@ -65,6 +67,7 @@ def create_browser_tools(
         ],
         click_preflight: Callable[[], Awaitable[SensitiveActionIntent | None]] | None = None,
     ) -> dict[str, object]:
+        nonlocal stalled_scrolls
         step_id: int | None = None
 
         controller.require_agent_control(handle)
@@ -87,6 +90,12 @@ def create_browser_tools(
                 ))
 
         try:
+            if action_type == "scroll" and stalled_scrolls >= 2:
+                raise BrowserActionError(
+                    "Scrolling revisited the same page states twice without progress. "
+                    "Choose an observed control relevant to the objective or report the blocker.",
+                    reason_code="scroll_no_progress",
+                )
             intent = await click_preflight() if click_preflight is not None else None
             if intent is not None:
                 begin = getattr(step_recorder, "begin_sensitive_action", None)
@@ -112,6 +121,19 @@ def create_browser_tools(
                 )
 
             result = await operation()
+            observation = result.observation
+            view = (observation.url, observation.scroll_y, observation.aria_snapshot,
+                    tuple((element.role, element.name, element.enabled)
+                          for element in observation.visible_elements))
+            if action_type == "scroll":
+                stalled_scrolls = stalled_scrolls + 1 if view in scroll_views else 0
+                scroll_views.add(view)
+            elif action_type in {"navigate", "click", "fill", "select", "go_back", "check"}:
+                scroll_views.clear()
+                stalled_scrolls = 0
+                scroll_views.add(view)
+            elif action_type == "get_state":
+                scroll_views.add(view)
         except BrowserPolicyError as exc:
             await finish_approval("uncertain")
             if step_recorder is not None and step_id is not None:
@@ -207,6 +229,17 @@ def create_browser_tools(
             )
 
         payload = result.to_dict()
+        if action_type == "scroll":
+            payload["scroll_progress"] = {
+                "revisited_state": stalled_scrolls > 0,
+                "consecutive_revisits": stalled_scrolls,
+                "next_step": (
+                    "Choose a relevant observed control or report the blocker; "
+                    "further scrolling is stopped."
+                    if stalled_scrolls >= 2
+                    else "Check whether the sought task target is now visible."
+                ),
+            }
         
         if step_id is not None:
             payload["step_id"] = step_id
@@ -324,19 +357,25 @@ def create_browser_tools(
 
     async def browser_scroll(
         direction: Literal["up", "down"],
+        reason: str,
         amount: int = 600,
     ) -> dict[str, object]:
-        """Scroll the page up or down by at most 2000 pixels."""
+        """Reveal a task-relevant control or section. State what you are looking for and why.
+
+        Do not scroll to appear active. Repeated unchanged states stop scrolling.
+        """
+        async def scroll_with_purpose() -> BrowserActionResult:
+            if not reason.strip():
+                raise BrowserActionError("Name the task-relevant target before scrolling.",
+                                         reason_code="scroll_reason_required")
+            return await controller.scroll(
+                session_id=handle.session_id, execution_id=handle.execution_id,
+                journey_id=handle.journey_id, direction=direction, amount=amount,
+            )
         return await run_recorded_action(
             action_type="scroll",
-            action_summary=f"Scroll {direction} by {amount} pixels.",
-            operation=lambda: controller.scroll(
-                session_id=handle.session_id,
-                execution_id=handle.execution_id,
-                journey_id=handle.journey_id,
-                direction=direction,
-                amount=amount,
-            ),
+            action_summary=f"Scroll {direction} by {amount} pixels: {reason[:240]}",
+            operation=scroll_with_purpose,
         )
 
     async def browser_go_back() -> dict[str, object]:

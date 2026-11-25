@@ -1,17 +1,14 @@
 import { statusLabel } from "../../lib/format";
 import { ArtifactEvidence } from "../../components/markettwin/ArtifactEvidence";
-import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import { ArrowLeft, Paperclip, Route, ScanSearch } from "lucide-react";
+import { Paperclip, Route, ScanSearch } from "lucide-react";
 import { RunContext } from "../../layouts/RunLayout";
 import { ResultsBoundary } from "../../components/markettwin/ResultsBoundary";
 import { CopyButton } from "../../components/markettwin/CopyButton";
-import { InlineAlert } from "../../components/ui/Feedback";
 import { SeverityBadge, StatusBadge } from "../../components/ui/StatusBadge";
 import { Breadcrumbs } from "../../components/ui/Breadcrumbs";
 import { EmptyState } from "../../components/ui/StateViews";
 import { findingClassification } from "../../lib/results";
-import { api, type ArtifactAccess } from "../../lib/api";
 
 export function FindingDetailPage() {
   const { run, results } = useOutletContext<RunContext>();

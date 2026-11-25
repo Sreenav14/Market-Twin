@@ -16,6 +16,7 @@ AssertionStatus = Literal["satisfied", "not_satisfied", "unverified"]
 AssertionReason = Literal[
     "page_not_loaded",
     "unsupported_safe_value_read",
+    "not_exercised_read_only",
     "ambiguous_target",
     "page_closed",
     "inspection_failed",
@@ -41,6 +42,7 @@ CaseBlocker = Literal[
     "evidence_persistence_failed",
     "cancelled",
     "human_assistance_skipped",
+    "human_assistance_timeout",
     "authentication_challenge_blocked",
     "human_takeover_required",
     "assertion_precondition_failed",

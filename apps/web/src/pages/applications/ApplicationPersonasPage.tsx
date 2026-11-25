@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext, useParams } from "react-router-dom";
 
 import { InlineAlert } from "../../components/ui/Feedback";
+import { ProjectAgentBrowser } from "../../components/markettwin/ProjectAgentBrowser";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState, ErrorPanel, LoadingPanel } from "../../components/ui/StateViews";
 import { api } from "../../lib/api";
@@ -120,6 +121,7 @@ export function ApplicationPersonasPage() {
           ) : null}
         </div>
       )}
+      <ProjectAgentBrowser workspaceId={workspace.id} applicationId={applicationId} />
     </div>
   );
 }

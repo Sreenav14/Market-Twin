@@ -1,0 +1,112 @@
+{
+  "sources": "slop_catalogue.json plus measure.py, persona_evaluator.py and persona_goal.py, board_evaluator.py, and the Contract report payload. Refresh these values when a producer adds or retires an emitted value. The 37 producer-less catalogue rules are excluded.",
+  "rules": [
+    "DEF_JS_CONSOLE_ERROR",
+    "DEF_JS_UNCAUGHT",
+    "DEF_JS_UNHANDLED_REJECTION",
+    "SLOP_ACID_DARK",
+    "SLOP_AI_CHROME",
+    "SLOP_ALIGNMENT",
+    "SLOP_BROKEN_MEDIA",
+    "SLOP_CARD_GRID",
+    "SLOP_CENTRED_HERO",
+    "SLOP_CENTRED_LAYOUT",
+    "SLOP_CLIPPED_CONTROL_LABEL",
+    "SLOP_COLOUR_DISCIPLINE",
+    "SLOP_COMPONENT_FINGERPRINTS",
+    "SLOP_CONTRAST",
+    "SLOP_COPY_CADENCE",
+    "SLOP_DEAD_END",
+    "SLOP_DEFAULT_FONT",
+    "SLOP_EDITORIAL_CLUSTER",
+    "SLOP_EMOJI_ICONS",
+    "SLOP_EMPTY_VISUAL",
+    "SLOP_FABRICATED_PROOF",
+    "SLOP_FLAT_TYPE",
+    "SLOP_GENERIC_CTA",
+    "SLOP_GENERIC_PHRASES",
+    "SLOP_GLASS_GLOW",
+    "SLOP_GRADIENT_SIGNATURE",
+    "SLOP_LOW_RES_MEDIA",
+    "SLOP_MOCK_CHROME",
+    "SLOP_MOTION_TELLS",
+    "SLOP_NO_MICROSTATES",
+    "SLOP_PLACEHOLDER_TEXT",
+    "SLOP_ROUND_STATS",
+    "SLOP_SIDE_TAB_BORDER",
+    "SLOP_SPACING_RHYTHM",
+    "SLOP_STRETCHED_IMAGE",
+    "SLOP_STYLE_INCONSISTENCY",
+    "SLOP_TEMPLATE_ASSETS",
+    "SLOP_TEMPLATE_CHROME",
+    "SLOP_TYPE_DISCIPLINE",
+    "SLOP_UNIFORM_RHYTHM",
+    "SLOP_UNIFORM_SURFACE",
+    "SLOP_VIEWPORT_INTEGRITY"
+  ],
+  "impressions": [
+    "slow_load",
+    "page_errors",
+    "small_targets",
+    "no_keyboard_focus",
+    "focus_indicator_invisible",
+    "fast_and_clean",
+    "observation"
+  ],
+  "personaTask": [
+    "attempted",
+    "timed_out",
+    "blocked",
+    "call_limit_exhausted",
+    "stopped_at_checkpoint",
+    "unverified"
+  ],
+  "harnessVerdicts": [
+    "Ready",
+    "Not ready yet",
+    "Can't tell yet",
+    "ready",
+    "not_ready",
+    "insufficient_evidence"
+  ],
+  "shippingVerdicts": [
+    "ready",
+    "not_ready",
+    "insufficient_evidence"
+  ],
+  "contractVerdicts": [
+    "ready",
+    "not_ready",
+    "insufficient_evidence",
+    "ready_with_issues"
+  ],
+  "boardOutcomes": [
+    "worked",
+    "broken",
+    "could_not_check",
+    "not_checked",
+    "blocked",
+    "owner_disabled",
+    "pending",
+    "running",
+    "needs_human_login"
+  ],
+  "contractUnverified": [
+    "did_not_reproduce",
+    "replay_unavailable",
+    "authentication_required",
+    "policy_blocked",
+    "testing_depth_budget",
+    "unsupported_case_bounds_or_check",
+    "timed_out",
+    "time_budget",
+    "time_limit"
+  ],
+  "assertions": [
+    "outcome",
+    "visible",
+    "enabled",
+    "url",
+    "text"
+  ]
+}

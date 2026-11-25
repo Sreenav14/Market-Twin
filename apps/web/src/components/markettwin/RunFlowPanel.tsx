@@ -43,12 +43,12 @@ export function RunFlowPanel({ runId, userId, runStatus, reportReady }: {
             <InlineAlert severity="error" title="Could not load test execution" role="alert" action={<button type="button" className="text-link" onClick={() => void flow.refetch()}>Try again</button>}>{flow.error.message}</InlineAlert>
           ) : flow.data ? (
             <>
-              {isFeaturePlan ? <p className="run-flow-caption">Discovery prepares the authorized page before planning. Each planned feature case runs once; discovery is not counted as a case. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
+              {flow.data.execution_policy === "supervised_ui_audit" ? <p className="run-flow-caption">The browser audits discovered authorized pages and states with lead progress checks. Saved evidence is collected and evaluated; the report shows coverage gaps.</p> : isFeaturePlan ? <p className="run-flow-caption">Discovery prepares the authorized page before planning. Each planned feature case runs once; discovery is not counted as a case. Recorded results are evaluated after execution.</p> : flow.data.execution_policy === "once_per_journey" ? <p className="run-flow-caption">Each planned journey runs once. The supervisor collects outputs before evaluation.</p> : null}
               <ol className="run-flow-nodes">
                 {flow.data.nodes.map((node, index) => {
                   const previous = flow.data.nodes[index - 1];
                   const connected = Boolean(previous && flow.data.edges.some((edge) => edge.source === previous.id && edge.target === node.id));
-                  if (node.kind !== "journey") return <FlowStep key={node.id} node={node} connected={connected} />;
+                  if (node.kind !== "journey" || flow.data.execution_policy === "supervised_ui_audit") return <FlowStep key={node.id} node={node} connected={connected} />;
                   if (node.id !== journeyNodes[0].id) return null;
                   return <li key="journey-agents" className={connected ? "run-flow-node connected" : "run-flow-node"}>
                     <details className="run-flow-journeys" open={journeysExpanded} onToggle={(event) => setJourneysExpanded(event.currentTarget.open)}>

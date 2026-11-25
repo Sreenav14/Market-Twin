@@ -1,4 +1,5 @@
-import React, { useRef, useState } from "react";
+import "../../styles/marketing.css";
+import React, { useState } from "react";
 import { Tab, TabPanel, Tabs } from "../../components/ui/Tabs";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
@@ -30,7 +31,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const [heroTab, setHeroTab] = useState<"app" | "example" | "how">("app");
   const [exampleCardTab, setExampleCardTab] = useState<"results" | "watch">("results");
-  const urlInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleStartTest = () => {
     // Scroll to intake form and focus input

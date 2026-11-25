@@ -67,3 +67,10 @@ class BrowserTimeoutError(BrowserActionError):
 
 class HumanControlActiveError(BrowserSessionStateError):
     """Raised when an agent action is attempted during human control."""
+
+class SuspiciousEgressError(BrowserPolicyError):
+    """A cross-origin submission carries sensitive data off the target origin."""
+
+    def __init__(self, message: str, *, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason

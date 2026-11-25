@@ -10,7 +10,7 @@ export type BadgeTone = "success" | "danger" | "warning" | "info" | "neutral";
 // lib/status.ts — one vocabulary of words (statusEntry), two tone sets
 // (concept pills use the status tones directly; these CSS classes are the
 // signed-in set the sheets already style).
-const BADGE_TONES: Record<StatusTone, BadgeTone> = {
+export const BADGE_TONES: Record<StatusTone, BadgeTone> = {
   works: "success",
   broken: "danger",
   couldnot: "warning",

@@ -70,6 +70,47 @@ async def validate_contract_report(
                     )):
                 raise ValueError("Executed plan differs from approved tests.")
             planned_keys.add(planned_case.case_id)
+        # Batched evidence lookups: one query per table covers every execution
+        # in this report, replacing the per-journey and per-proof query loops.
+        all_execution_ids: set[UUID] = set()
+        for completed_event in events:
+            if completed_event.event_type != "contract.case.completed":
+                continue
+            try:
+                all_execution_ids.add(
+                    CaseExecutionResult.model_validate(
+                        completed_event.payload.get("result"),
+                    ).execution_id
+                )
+            except ValidationError:
+                continue
+        owned_index: set[tuple[UUID, UUID, int]] = set()
+        steps_by_execution: dict[UUID, dict[int, ExecutionStep]] = {}
+        artifacts_by_execution: dict[UUID, dict[UUID, Artifact]] = {}
+        if all_execution_ids:
+            owned_index = {
+                (row_id, row_journey_id, row_attempt)
+                for row_id, row_journey_id, row_attempt in (await session.execute(
+                    select(
+                        AgentExecution.id, AgentExecution.journey_id,
+                        AgentExecution.attempt_number,
+                    ).join(
+                        PersonaJourney, PersonaJourney.id == AgentExecution.journey_id,
+                    ).where(
+                        PersonaJourney.test_run_id == run_id,
+                        AgentExecution.id.in_(all_execution_ids),
+                        AgentExecution.status == "completed",
+                    )
+                )).all()
+            }
+            for step in (await session.scalars(select(ExecutionStep).where(
+                ExecutionStep.execution_id.in_(all_execution_ids),
+            ))).all():
+                steps_by_execution.setdefault(step.execution_id, {})[step.id] = step
+            for artifact in (await session.scalars(select(Artifact).where(
+                Artifact.execution_id.in_(all_execution_ids),
+            ))).all():
+                artifacts_by_execution.setdefault(artifact.execution_id, {})[artifact.id] = artifact
         for key in cast(list[str], payload.get("what_works", [])):
             if key not in planned_keys:
                 raise ValueError("Working journey was not in the executed plan.")
@@ -88,20 +129,10 @@ async def validate_contract_report(
                         or result.execution_id != event.execution_id
                         or any(event.payload.get(k) != v for k, v in identity.items())):
                     raise ValueError("Working journey contains incomplete or failed checks.")
-                owned = await session.scalar(select(AgentExecution.id).join(
-                    PersonaJourney, PersonaJourney.id == AgentExecution.journey_id,
-                ).where(PersonaJourney.test_run_id == run_id,
-                        AgentExecution.id == result.execution_id,
-                        AgentExecution.journey_id == event.journey_id,
-                        AgentExecution.attempt_number == 1, AgentExecution.status == "completed"))
-                if owned is None:
+                if (result.execution_id, event.journey_id, 1) not in owned_index:
                     raise ValueError("Working journey execution is not owned by this run.")
-                steps = {s.id: s for s in (await session.scalars(select(ExecutionStep).where(
-                    ExecutionStep.execution_id == result.execution_id,
-                ))).all()}
-                artifacts = {a.id: a for a in (await session.scalars(select(Artifact).where(
-                    Artifact.execution_id == result.execution_id,
-                ))).all()}
+                steps = steps_by_execution.get(result.execution_id, {})
+                artifacts = artifacts_by_execution.get(result.execution_id, {})
                 if not valid_case_evidence(
                     case, result, cast(Mapping[int, StepEvidence], steps),
                     cast(Mapping[UUID, ArtifactEvidence], artifacts),
@@ -124,22 +155,11 @@ async def validate_contract_report(
                     raise ValueError("Confirmation execution provenance is missing.")
                 event = rows[0]
                 result = CaseExecutionResult.model_validate(event.payload.get("result"))
-                owned = await session.scalar(select(AgentExecution.id).join(
-                    PersonaJourney, PersonaJourney.id == AgentExecution.journey_id,
-                ).where(
-                    PersonaJourney.test_run_id == run_id,
-                    AgentExecution.id == execution_id,
-                    AgentExecution.journey_id == event.journey_id,
-                    AgentExecution.attempt_number == attempt, AgentExecution.status == "completed",
-                ))
-                if owned is None or result.execution_id != execution_id:
+                if ((execution_id, event.journey_id, attempt) not in owned_index
+                        or result.execution_id != execution_id):
                     raise ValueError("Execution belongs to another run or attempt.")
-                steps = {s.id: s for s in (await session.scalars(select(ExecutionStep).where(
-                    ExecutionStep.execution_id == execution_id,
-                ))).all()}
-                artifacts = {a.id: a for a in (await session.scalars(select(Artifact).where(
-                    Artifact.execution_id == execution_id,
-                ))).all()}
+                steps = steps_by_execution.get(execution_id, {})
+                artifacts = artifacts_by_execution.get(execution_id, {})
                 if not valid_case_evidence(
                     case, result, cast(Mapping[int, StepEvidence], steps),
                     cast(Mapping[UUID, ArtifactEvidence], artifacts),

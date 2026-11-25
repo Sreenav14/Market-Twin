@@ -11,6 +11,11 @@ class SkillDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     intent: str = Field(min_length=1, max_length=1000)
+    procedure: tuple[str, ...] = Field(
+        default=(),
+        description="Ordered task instructions explicitly supported by the source. "
+        "Empty when no procedure is documented. These are guidance, not verified browser steps.",
+    )
 
     preconditions: tuple[str, ...] = Field(
         default=(), description="Only source-stated prerequisites. Empty when not established."
@@ -58,6 +63,7 @@ class GeneratedSkillDraft(BaseModel):
         "high",
     ]
 
+    source_kind: Literal["owner_document", "observed_app"] = "owner_document"
     warnings: tuple[str, ...] = ()
 
 
@@ -77,6 +83,7 @@ class ApplicationKnowledgeDraft(BaseModel):
         min_length=1,
     )
     grounding_confidence: Literal["low", "medium", "high"]
+    source_kind: Literal["owner_document", "observed_app"] = "owner_document"
     warnings: tuple[str, ...] = ()
 
 
@@ -100,6 +107,7 @@ class ProcedureArtifactDraft(BaseModel):
         min_length=1,
     )
     grounding_confidence: Literal["low", "medium", "high"]
+    source_kind: Literal["owner_document", "observed_app"] = "owner_document"
     warnings: tuple[str, ...] = ()
 
 

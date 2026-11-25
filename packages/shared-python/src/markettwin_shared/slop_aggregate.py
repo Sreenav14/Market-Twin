@@ -21,7 +21,15 @@ from decimal import ROUND_HALF_UP, Decimal
 from importlib import resources
 from typing import Any
 
+from markettwin_shared.slop_tiers import (
+    bare_code,
+    is_bundle_constituted,
+    tier_of,
+    tier_weight,
+)
+
 _CATALOGUE: dict[str, Any] | None = None
+SLOP_EVALUATION_CONTRACT_VERSION = 1
 
 
 def load_catalogue() -> dict[str, Any]:
@@ -46,6 +54,91 @@ def _round_half_up_1dp(value: float) -> float:
     )
 
 
+def _element_load(
+    element: dict[str, Any], tier_context: dict[str, Any],
+) -> float:
+    """Section 6.4 load for one flagged element: min(1, the sum of
+    tier weights over its distinct verified non-offset tells)."""
+
+    weights: dict[str, float] = {}
+    for entry in element.get("rules_fired", []):
+        if entry.get("offset_reason"):
+            continue
+        rule_id = str(entry.get("rule_id", ""))
+        tier = tier_of(
+            rule_id,
+            eyebrow_sections=int(
+                tier_context.get("template_chrome_eyebrow_sections", 0),
+            ),
+            generic_phrase_viewport_distinct=int(
+                tier_context.get("generic_phrase_viewport_distinct", 0),
+            ),
+        )
+        if tier is not None:
+            weights[bare_code(rule_id)] = tier_weight(tier)
+    return min(1.0, sum(weights.values()))
+
+
+def _gate_problem(
+    element: dict[str, Any], tier_context: dict[str, Any],
+) -> str | None:
+    """Re-derive the section 4.3 gate from the recorded tells. A
+    flagged verdict the tells cannot justify is a provenance error."""
+
+    verdict = element.get("verdict")
+    fired = element.get("rules_fired", [])
+    severe = any(entry.get("severity") == "severe" for entry in fired)
+    if verdict == "slop":
+        return None if severe else "slop_without_severe_tell"
+    if verdict == "slop_minor":
+        if severe:
+            return "slop_minor_with_severe_tell"
+        counting = [
+            entry for entry in fired if not entry.get("offset_reason")
+        ]
+        gate_met = (
+            any(
+                tier_of(
+                    str(entry.get("rule_id", "")),
+                    eyebrow_sections=int(
+                        tier_context.get(
+                            "template_chrome_eyebrow_sections", 0,
+                        ),
+                    ),
+                    generic_phrase_viewport_distinct=int(
+                        tier_context.get(
+                            "generic_phrase_viewport_distinct", 0,
+                        ),
+                    ),
+                ) == "strong"
+                for entry in counting
+            )
+            or any(
+                is_bundle_constituted(str(entry.get("rule_id", "")))
+                for entry in counting
+            )
+            or len({bare_code(str(entry.get("rule_id", ""))) for entry in counting}) >= 2
+        )
+        return None if gate_met else "slop_minor_gate_unmet"
+    return None
+
+
+def _provenance_error_key(
+    error: dict[str, Any],
+) -> tuple[str, str, str, str]:
+    """Total order for provenance errors: the aggregate is a pure
+    function of the verdict set, never of lane arrival order, so the
+    errors are reported in one canonical order. Any field may be
+    None; the key is built from strings only."""
+
+    return (
+        str(error.get("url") or ""),
+        str(error.get("element_id") or ""),
+        str(error.get("verdict") or ""),
+        str(error.get("problem") or ""),
+    )
+
+
 def slop_family(states: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate element verdicts across state results.
 
@@ -58,8 +151,13 @@ def slop_family(states: list[dict[str, Any]]) -> dict[str, Any]:
     judged_area = 0.0
     areas_known = True
     page_signals: list[dict[str, Any]] = []
+    page_scores: list[float] = []
+    provenance_errors: list[dict[str, Any]] = []
     for state in states:
         page_signals.extend(state.get("page_signals", []))
+        tier_context = state.get("tier_context") or {}
+        state_judged_area = 0.0
+        state_load = 0.0
         for element in state.get("elements", []):
             verdict = element.get("verdict")
             area = element.get("area")
@@ -79,12 +177,28 @@ def slop_family(states: list[dict[str, Any]]) -> dict[str, Any]:
                 areas_known = False
             else:
                 judged_area += float(area)
+                state_judged_area += float(area)
+                if verdict in {"slop", "slop_minor"}:
+                    state_load += float(area) * _element_load(
+                        element, tier_context,
+                    )
+            if verdict in {"slop", "slop_minor"}:
+                problem = _gate_problem(element, tier_context)
+                if problem is not None:
+                    provenance_errors.append({
+                        "url": state.get("url"),
+                        "element_id": element.get("element_id"),
+                        "verdict": verdict,
+                        "problem": problem,
+                    })
             if verdict == "slop":
                 severe += 1
             elif verdict == "slop_minor":
                 minor += 1
             elif verdict == "clean":
                 clean += 1
+        if state_judged_area > 0:
+            page_scores.append(100.0 * state_load / state_judged_area)
     total = judged + cant_tell
     coverage = (judged / total) if total else 0.0
     if areas_known and judged_area > 0:
@@ -114,6 +228,13 @@ def slop_family(states: list[dict[str, Any]]) -> dict[str, Any]:
         "undecided_weight": round(undecided_weight, 4),
         "undecided_basis": undecided_basis,
         "page_signals": page_signals,
+        "prominence_secondary": (
+            round(sum(page_scores) / len(page_scores), 4)
+            if page_scores else None
+        ),
+        "provenance_errors": sorted(
+            provenance_errors, key=_provenance_error_key
+        ),
     }
 
 
@@ -124,9 +245,18 @@ def defect_family(states: list[dict[str, Any]]) -> dict[str, Any]:
     per_rule: dict[str, dict[str, Any]] = {}
     serious = 0
     minor = 0
+    test_condition_occurrences = 0
     for state in states:
         for error in state.get("js_errors", []):
             rule_id = str(error.get("rule_id", ""))
+            occurrences = int(error.get("count", 1))
+            message = str(error.get("message") or "")
+            if rule_id == "DEF_JS_CONSOLE_ERROR" and any(
+                message.startswith(f"Failed to load resource: net::{code}")
+                for code in ("ERR_BLOCKED_BY_CLIENT", "ERR_EMPTY_RESPONSE")
+            ):
+                test_condition_occurrences += occurrences
+                continue
             # Each error counts under its OWN severity: the same rule
             # legitimately arrives serious on one page (a reproduced
             # console error) and minor on another, so totalling by the
@@ -147,15 +277,16 @@ def defect_family(states: list[dict[str, Any]]) -> dict[str, Any]:
             })
             if severity == "serious":
                 entry["severity"] = "serious"
-            entry["occurrences"] += int(error.get("count", 1))
+            entry["occurrences"] += occurrences
             entry["pages"].add(state.get("url", ""))
             if severity == "serious":
-                serious += int(error.get("count", 1))
+                serious += occurrences
             else:
-                minor += int(error.get("count", 1))
+                minor += occurrences
     return {
         "serious": serious,
         "minor": minor,
+        "test_condition_occurrences": test_condition_occurrences,
         "per_rule": [
             {**entry, "pages": sorted(entry["pages"])}
             for entry in sorted(per_rule.values(), key=lambda e: e["rule_id"])

@@ -2,22 +2,24 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
 import type { RunContext } from "../../layouts/RunLayout";
-import { api, type ExecutionPause, type LiveExecution, type RunActivityItem } from "../../lib/api";
+import { ApiError, api, type ExecutionPause, type LiveExecution, type RunActivityItem } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
 import { terminalTestStatuses } from "../../lib/results";
 import { testBrief, statusLabel } from "../../lib/format";
-import { HumanActionPage } from "./HumanActionPage";
+import { HumanActionPage, useHumanControlSurface } from "./HumanActionPage";
 import { InlineAlert } from "../../components/ui/Feedback";
 import { LoadMore } from "../../components/ui/Pagination";
 import { LiveBrowserObserver } from "./LiveBrowserObserver";
+import { StopRunButton } from "../../components/markettwin/StopRunButton";
 
-export function RunActivityPage() {
+export function RunActivityPage({ view = "watch" }: { view?: "watch" | "activity" }) {
   const { run, user, workspace, results } = useOutletContext<RunContext>();
-  return <LiveExecutionWorkbench key={`${user.id}:${workspace.id}:${workspace.role}:${run.id}`} context={{ run, user, workspace, results }} />;
+  return <LiveExecutionWorkbench key={`${user.id}:${workspace.id}:${workspace.role}:${run.id}:${view}`} context={{ run, user, workspace, results }} watch={view === "watch"} />;
 }
 
-function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: { context: Pick<RunContext, "run" | "user" | "workspace" | "results"> }) {
+function LiveExecutionWorkbench({ context: { run, user, workspace, results }, watch }: { context: Pick<RunContext, "run" | "user" | "workspace" | "results">; watch: boolean }) {
   const permitted = canAuthorizeTarget(workspace.role);
+  const humanControl = useHumanControlSurface();
   const queryClient = useQueryClient();
   const liveKey = ["live-execution", user.id, workspace.id, workspace.role, run.id];
   const [selectedJourney, setSelectedJourney] = useState("active");
@@ -50,7 +52,7 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
   const pause = metadata.data?.pause;
   const actions = useQuery({
     queryKey: ["human-actions", user.id, workspace.id, run.id],
-    queryFn: ({ signal }) => api.listHumanActions(run.id, signal), enabled: permitted,
+    queryFn: ({ signal }) => api.listHumanActions(run.id, signal), enabled: watch && permitted,
     refetchInterval: 2500,
   });
   const linked = actions.data?.find((action) => action.id === pause?.human_request_id);
@@ -63,7 +65,10 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
   const requestPause = useMutation({ mutationFn: async () => {
     if (!browser) throw new Error("No browser is available for a pause request.");
     return api.requestExecutionPause(run.id, browser);
-  }, onSuccess: pauseSaved });
+  }, onSuccess: (value) => {
+    queryClient.setQueryData(["takeover-intent", user.id, workspace.id, workspace.role, run.id], value.id);
+    pauseSaved(value);
+  } });
   const resumePause = useMutation({ mutationFn: async () => {
     if (!pause) throw new Error("No acknowledged pause is available.");
     return api.resumeExecutionPause(run.id, pause.id);
@@ -72,16 +77,16 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
   // browser + generation on screen. Re-granted when the browser
   // identity changes, and on demand when the stream asks to reconnect.
   const grant = useQuery({
-    queryKey: ["live-grant", user.id, workspace.id, run.id, chosenBrowser?.browser_session_id, chosenBrowser?.generation],
+    queryKey: ["live-grant", user.id, workspace.id, run.id, chosenBrowser?.browser_session_id, chosenBrowser?.execution_id, chosenBrowser?.journey_id, chosenBrowser?.generation],
     queryFn: ({ signal }) => api.getLiveGrant(run.id, chosenBrowser?.browser_session_id, signal),
-    enabled: permitted && !metadata.isError && chosenBrowser?.viewer_state === "available",
-    retry: false,
+    enabled: watch && permitted && !humanControl && !metadata.isError && chosenBrowser?.viewer_state === "available",
+    retry: (failures, error) => failures < 2 && error instanceof ApiError && error.status === 409,
     staleTime: Infinity,
   });
   const stream = grant.data ? { url: grant.data.viewer_url, ticket: grant.data.ticket } : null;
   const reconnectStream = async () => {
     const fresh = await grant.refetch();
-    if (!fresh.data) throw new Error("The live grant could not be renewed.");
+    if (fresh.isError || !fresh.data) throw new Error("The live grant could not be renewed.");
     return { url: fresh.data.viewer_url, ticket: fresh.data.ticket };
   };
   const deep = run.configuration_snapshot.execution_mode === "deep_feature_v1";
@@ -104,8 +109,10 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
   }
   return <section className="live-execution" aria-labelledby="live-execution-heading">
     <header className="live-execution-heading"><div><p className="section-label">Recorded state · {deep ? "Feature cases" : run.configuration_snapshot.execution_mode === "discovery_contract_v1" ? "Approved journeys and checks" : "Simulated tester journeys"}</p>
-      <h2 id="live-execution-heading">{run.status === "running" || run.status === "awaiting_human" ? "Watch live" : "Watch"}</h2><p>{testBrief(run.configuration_snapshot)}</p></div>
+      <h2 id="live-execution-heading">{watch ? run.status === "running" || run.status === "awaiting_human" ? "Watch live" : "Watch" : "Activity"}</h2><p>{testBrief(run.configuration_snapshot)}</p></div>
       <div><strong>{statusLabel(metadata.data?.run_status ?? run.status)}</strong>
+        {permitted ? <StopRunButton run={run} /> : null}
+        {run.status === "failed" && run.status_reason ? <p>{run.status_reason}</p> : null}
         {run.status === "completed" ? <p>{results.status === "ready" ? <Link to={`/runs/${run.id}/results`}>See test results</Link> : "Execution finished; evaluation/report still processing."}</p> : null}</div>
     </header>
     {metadata.isError ? <InlineAlert severity="warning" title="Live execution status is unavailable" role="alert" action={<button className="text-link" onClick={() => void metadata.refetch()}>Retry status</button>}>Recorded evidence remains available.</InlineAlert> : null}
@@ -123,23 +130,30 @@ function LiveExecutionWorkbench({ context: { run, user, workspace, results } }: 
         <details><summary>Mode and tester context</summary><p className="muted">{deep ? "Feature cases use recorded browser actions and checks." : "Simulated testers are hypothetical testing perspectives, not human participants. Journeys run one at a time."}</p><Link className="text-link" to={`/runs/${run.id}/agents`}>Testers, goals and advanced settings</Link></details>
         </div>
       </aside>
-      <div className="live-browser-column">
+      {watch ? <div className="live-browser-column">
         <div className="section-heading"><h3>{live ? "Actual test browser" : "Recorded journey"}</h3><span>{run.status === "awaiting_human" ? <a className="text-link" href="#human-action-heading">Human assistance required — Assist</a> : live ? chosenBrowser?.viewer_state === "available" ? "Read only" : "Protected / unavailable" : "Historical evidence"}</span></div>
         <p className="muted">Live observation is read-only. Choose a recorded journey to inspect saved evidence.</p>
-        {permitted && live ? <section className="live-pause-controls" aria-label="Execution pause">
-          <button type="button" className="secondary-button" disabled={!browser || browser.control_state !== "agent" || Boolean(pendingPause) || requestPause.isPending || metadata.isError} onClick={() => requestPause.mutate()}>Request pause</button>
+        {permitted ? <section className="live-pause-controls" aria-label="Execution pause">
+          <button type="button" className="secondary-button" disabled={!browser || browser.control_state !== "agent" || Boolean(pendingPause) || requestPause.isPending || metadata.isError} onClick={() => { setSelectedJourney("active"); requestPause.mutate(); }}>Take over</button>
           {pause?.status === "paused" && linked?.status === "pending" && browser?.control_state === "human_pending" ? <button type="button" className="primary-button" disabled={resumePause.isPending} onClick={() => resumePause.mutate()}>Hand back</button> : null}
           <p role="status" aria-label="Manual pause status">{pause?.status === "requested" || pause?.status === "quiescing" ? "Pause requested; waiting for the current action to reach a safe boundary." : pause?.status === "paused" ? "Execution paused at a safe boundary. You can resume or take browser control below." : pause?.status === "resume_requested" || pause?.status === "verifying" ? "Resume requested; the worker is checking safe continuation." : pause ? `Pause ${pause.status.replaceAll("_", " ")}.` : "A pause is cooperative: it does not interrupt or replay an action already in flight."}</p>
           {pause && pendingPause ? <p className="muted">Pause expires <time dateTime={pause.expires_at}>{new Date(pause.expires_at).toLocaleTimeString()}</time>.</p> : null}
           {requestPause.isError || resumePause.isError ? <InlineAlert severity="error" title="The pause transition could not be confirmed" role="alert">Refresh status before trying again; no action is replayed.</InlineAlert> : null}
         </section> : null}
         {chosenBrowser?.board_item ? <p className="live-board-banner" role="status">Item {chosenBrowser.board_item.index} of {chosenBrowser.board_item.total} — {chosenBrowser.board_item.label}</p> : null}
-        {!live && selected ? <section className="live-browser-empty"><h3>Historical evidence, not a live browser</h3><p>This journey has {selected.step_count} recorded steps and {selected.artifact_count} artifacts. Nothing from another browser is shown here.</p><Link className="primary-button" to={`/runs/${run.id}/journeys/${selected.id}`}>Inspect recorded steps and evidence</Link></section> : <LiveBrowserObserver runId={run.id} browser={chosenBrowser} identity={`${user.id}:${workspace.id}:${workspace.role}`} permitted={permitted && !metadata.isError} stream={stream} onReconnect={reconnectStream} />}
+        {humanControl ? null : !live && selected ? <section className="live-browser-empty"><h3>Historical evidence, not a live browser</h3><p>This journey has {selected.step_count} recorded steps and {selected.artifact_count} artifacts. Nothing from another browser is shown here.</p><Link className="primary-button" to={`/runs/${run.id}/journeys/${selected.id}`}>Inspect recorded steps and evidence</Link></section> : grant.isError && !stream ? null : <LiveBrowserObserver runId={run.id} browser={chosenBrowser} identity={`${user.id}:${workspace.id}:${workspace.role}`} permitted={permitted && !metadata.isError} stream={stream} onReconnect={stream ? reconnectStream : undefined} />}
+        {!humanControl && grant.isError && !stream ? (
+          <InlineAlert severity="warning" title="The viewer could not connect" role="alert"
+            action={<button type="button" className="text-link" onClick={() => void grant.refetch()}>Retry viewing</button>}>
+            Check the run status above for execution progress.
+          </InlineAlert>
+        ) : null}
         <HumanActionPage />
         {chosenBrowser ? <details><summary>Browser identity</summary><dl className="definition-list"><div><dt>Session</dt><dd className="monospace">{chosenBrowser.browser_session_id}</dd></div><div><dt>Generation</dt><dd>{chosenBrowser.generation}</dd></div><div><dt>Executor</dt><dd>{chosenBrowser.requesting_agent}</dd></div></dl></details> : null}
-      </div>
+      </div> : null}
       <section className="live-activity" aria-labelledby="recorded-activity-heading">
         <h3 id="recorded-activity-heading">Recorded activity</h3>
+        {!watch ? <details><summary>Advanced</summary><Link to="?view=board">Checks ledger</Link> · <Link to="?view=journeys">Journeys</Link> · <Link to="?view=missions">Missions</Link> · <Link to="?view=agents">Testers</Link></details> : null}
         <label htmlFor="activity-filter" className="visually-hidden">Activity filter</label><select id="activity-filter" className="text-input" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">All activity</option><option value="problems">Problems</option><option value="human">Human needed</option><option value="browser">Browser actions</option></select>
         {!permitted ? <p>Live activity and browser observation require owner or administrator access. Your recorded journey access is unchanged.</p> : metadata.isPending ? <p role="status">Loading recorded execution…</p> : !visibleEvents.length ? <p>{terminalTestStatuses.has(run.status) ? "No further recorded action." : "No further recorded action yet."}</p> : <ol className="live-activity-list mt-timeline">{visibleEvents.map((item) => <li key={item.id}><button type="button" className="mt-timeline-row" aria-pressed={selectedEvent === item.id} onClick={() => setSelectedEvent(item.id)}><time className="mt-timeline-time" dateTime={item.occurred_at} title={new Date(item.occurred_at).toLocaleString()}>{new Date(item.occurred_at).toLocaleTimeString()}</time><strong className="mt-timeline-title">{item.title}</strong><span className="mt-timeline-meta">{statusLabel(item.status)} · {statusLabel(item.source)}</span></button></li>)}</ol>}
         {cursor ? <LoadMore noun="activity" loaded={events.length} loading={loadingHistory} onLoad={() => void loadHistory()} /> : null}

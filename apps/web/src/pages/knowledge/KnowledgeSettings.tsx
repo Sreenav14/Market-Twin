@@ -98,7 +98,7 @@ export function KnowledgeApplications({ entry, onSaved }: Props) {
   }
   return <section className="panel section-block">
     <h2>Your apps</h2>
-    <p className="muted">Attach this approved knowledge to the applications that should use it. Select it when creating a test.</p>
+    <p className="muted">Optionally attach this approved knowledge to applications. You can keep it in the workspace without linking an app.</p>
     {applications.isPending ? <p role="status">Loading applications…</p> : applications.isError ? <InlineAlert severity="error" title="Could not load applications" role="alert" action={<Button variant="ghost" size="sm" onClick={() => void applications.refetch()}>Try again</Button>} /> : applications.data.length ? <>
       <fieldset className="knowledge-choices" disabled={busy || !canWrite}>
         <legend className="visually-hidden">Attach knowledge to applications</legend>

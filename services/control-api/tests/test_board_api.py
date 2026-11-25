@@ -149,10 +149,12 @@ async def test_disable_pending_item_in_a_list_shaped_board(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("run_status", ["planning", "running", "awaiting_human"])
 async def test_disable_refused_while_running(
     monkeypatch: pytest.MonkeyPatch,
+    run_status: str,
 ) -> None:
-    record = _record(status="running")
+    record = _record(status=run_status)
     _install(monkeypatch, record)
     with pytest.raises(HTTPException) as exc:
         await test_run_api.disable_board_item(

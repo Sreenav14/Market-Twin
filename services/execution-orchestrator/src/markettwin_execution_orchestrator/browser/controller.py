@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from ipaddress import ip_address
 from pathlib import Path
+from time import monotonic
 from typing import Any, Literal, cast
 from urllib.parse import urljoin, urlsplit
 from uuid import UUID, uuid4
@@ -61,8 +62,10 @@ from markettwin_execution_orchestrator.browser.auth_session_broker import (
     HumanSessionScope,
 )
 from markettwin_execution_orchestrator.browser.auth_verifier import (
+    SENSITIVE_CHALLENGE_TIMEOUT_SECONDS,
     VerifiedPrincipal,
     has_active_sensitive_challenge,
+    inspect_sensitive_challenge,
     verify_authenticated_role,
 )
 from markettwin_execution_orchestrator.browser.contracts import (
@@ -76,6 +79,7 @@ from markettwin_execution_orchestrator.browser.contracts import (
     NetworkPolicy,
     ScopeRole,
 )
+from markettwin_execution_orchestrator.browser.discovery_checkpoint import is_discovery_checkpoint
 from markettwin_execution_orchestrator.browser.egress import PinnedEgressProxy
 from markettwin_execution_orchestrator.browser.errors import (
     BrowserActionBlockedError,
@@ -88,6 +92,7 @@ from markettwin_execution_orchestrator.browser.errors import (
     BrowserTimeoutError,
     HostResolutionError,
     HumanControlActiveError,
+    SuspiciousEgressError,
     TargetUrlValidationError,
     UnsafeDestinationAddressError,
 )
@@ -103,7 +108,12 @@ from markettwin_execution_orchestrator.browser.human_control import (
     begin_human_control,
     end_human_control,
 )
+from markettwin_execution_orchestrator.browser.live_pointer import LiveClickTarget
 from markettwin_execution_orchestrator.browser.network import resolve_and_validate_host
+from markettwin_execution_orchestrator.browser.offsite import (
+    OffsiteBrowsing, is_handoff_provider, public_url, safe_address,
+    validate_browsing_url, validate_human_url,
+)
 from markettwin_execution_orchestrator.browser.network_diagnostics import (
     NetworkDiagnosticDestination,
     NetworkDiagnosticReason,
@@ -114,7 +124,9 @@ from markettwin_execution_orchestrator.browser.observations import (
 )
 from markettwin_execution_orchestrator.browser.policy import (
     ValidatedUrl,
+    ensure_unsuspicious_submission,
     is_known_captcha_host,
+    normalize_hostname,
     validate_captcha_subresource,
     validate_target_url,
     validate_websocket_url,
@@ -124,6 +136,54 @@ from markettwin_execution_orchestrator.browser.sensitive_action_policy import (
     classify_click_action,
 )
 from markettwin_execution_orchestrator.browser.session import JourneyBrowserSession
+
+
+_AUTH_BUTTON_PATTERN = re.compile(
+    r"^(sign\s*in|log\s*in|sign\s*up|register|create (?:an? )?account|continue(?: with .+)?)$",
+    re.I,
+)
+_AUTH_HEADING_PATTERN = re.compile(
+    r"^(sign\s*in|log\s*in|login|sign\s*up|register|create (?:an? )?account|"
+    r"verify (?:your identity|your email|your phone number)|authorize .+|permissions requested)$",
+    re.I,
+    )
+_AUTH_CONTINUE_PATTERN = re.compile(
+    r"^(continue(?: with .+)?|sign\s*in.*|log\s*in.*|sign\s*up|register|"
+    r"create (?:an? )?account|verify|allow|authorize)$", re.I,
+    )
+_ARIA_SNAPSHOT_ENTRY_PATTERN = re.compile(
+    r'''^\s*- (?:')?(button|link|textbox|searchbox|combobox|checkbox|radio|'''
+    r'''tab|menuitem)'''
+    r'''(?: ("(?:[^"\\]|\\.)*"))?(?:\s|:|$)'''
+    )
+
+
+# Bound for the best-effort reset of a wedged resting page (see
+# BrowserController._validate_resting_page).
+_RESTING_PAGE_RESET_TIMEOUT_SECONDS = 5
+
+
+# Unhandled-rejection init hook (U-P6-03; doc 24 section 4.1): ONE
+# definition, installed by every context that can produce a slop or
+# proof record — create_session with js_capture, proof siblings, and
+# the harvest verification replay (which goes through create_session).
+# Each item carries the URL of the document that produced it, read at
+# event time; harvest stamps records from the item, never from
+# whatever page is current when the harvest happens to run.
+JS_REJECTION_HOOK_SCRIPT = """
+window.__mt_rejections = [];
+window.__mt_rejection_doc = Date.now().toString(36)
+  + Math.random().toString(36).slice(2);
+window.__mt_rejection_doc_url = location.href;
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  window.__mt_rejections.push({
+    message: String(reason && reason.message ? reason.message : reason),
+    stack: reason && reason.stack ? String(reason.stack) : null,
+    url: location.href,
+  });
+});
+"""
 
 
 class BrowserController:
@@ -144,6 +204,7 @@ class BrowserController:
         self._max_pages_per_session = max_pages_per_session
         self._playwright: Playwright | None = None
         self._sessions: dict[UUID, JourneyBrowserSession] = {}
+        self._session_purposes: dict[UUID, str] = {}
         self._rooms: dict[UUID, UUID] = {}
         self._egress_proxies: dict[UUID, PinnedEgressProxy] = {}
         self._auth_session_broker = AuthSessionBroker()
@@ -154,6 +215,7 @@ class BrowserController:
         self._cooperative_locks: dict[UUID, asyncio.Lock] = {}
         self._start_lock = asyncio.Lock()
         self._approval_salt = secrets.token_hex(32)
+        self.offsite: OffsiteBrowsing | None = None
 
     async def start(self) -> None:
         """Start the in-process Playwright driver once."""
@@ -226,9 +288,19 @@ class BrowserController:
         artifact_directory.mkdir(parents=True, exist_ok=True)
 
         browser: Browser | None = None
+        def destination_policy(scheme: str, hostname: str, port: int) -> NetworkPolicy:
+            if self.offsite is not None:
+                host = f"[{hostname}]" if ":" in hostname else hostname
+                try:
+                    validate_target_url(f"{scheme}://{host}:{port}", allowed_origins, network_policy)
+                except BrowserPolicyError:
+                    return "public_only"
+            return network_policy
+
         egress = PinnedEgressProxy(
             network_policy, on_failure=lambda reason, scheme, hostname, port:
             self._on_egress_failure(session_id, reason, scheme, hostname, port),
+            destination_policy=destination_policy,
         )
         try:
             proxy_url = await egress.start()
@@ -282,25 +354,13 @@ class BrowserController:
                 fixture_action_rules=fixture_action_rules,
                 is_room=is_room,
                 js_capture=js_capture,
+                offsite=self.offsite,
             )
             if js_capture:
                 # Unhandled-rejection hook (U-P6-03): pageerror does
                 # not fire for rejected promises, so the page itself
                 # collects them for harvest_js_records().
-                await context.add_init_script(
-                    """
-                    window.__mt_rejections = [];
-                    window.__mt_rejection_doc = Date.now().toString(36)
-                      + Math.random().toString(36).slice(2);
-                    window.addEventListener('unhandledrejection', (event) => {
-                      const reason = event.reason;
-                      window.__mt_rejections.push({
-                        message: String(reason && reason.message ? reason.message : reason),
-                        stack: reason && reason.stack ? String(reason.stack) : null,
-                      });
-                    });
-                    """,
-                )
+                await context.add_init_script(JS_REJECTION_HOOK_SCRIPT)
             self._sessions[session_id] = session
 
             await context.route("**/*", lambda route: self._route_request(session, route))
@@ -414,6 +474,11 @@ class BrowserController:
         )
         session.execution_id = execution_id
         session.journey_id = journey_id
+        self._authentication_handlers.pop(session_id, None)
+        self._authentication_locks.pop(session_id, None)
+        self._pending_authentication.discard(session_id)
+        self._cooperative_handlers.pop(session_id, None)
+        self._cooperative_locks.pop(session_id, None)
         handle = BrowserSessionHandle(
             session_id=session_id,
             execution_id=execution_id,
@@ -439,11 +504,58 @@ class BrowserController:
         """
 
         room = self._get_session(session_id=room_session_id)
+        return await self._create_sibling_session(
+            room, execution_id=execution_id, journey_id=journey_id,
+            purpose="proof", js_capture=True,
+        )
+
+    async def create_worker_session(
+        self,
+        *,
+        room_session_id: UUID,
+        execution_id: UUID,
+        journey_id: UUID,
+        lane_index: int,
+        js_capture: bool = False,
+        reuse_room_auth: bool = True,
+    ) -> BrowserSessionHandle:
+        """Open a lane context INSIDE the Room's browser (doc 18 S1).
+
+        A lane is a read-only window opened from the Room: seeded
+        with the Room's storage state when the Room is authenticated
+        (one login serves the run), born with the guardrail route
+        handlers, and borrowable repeatedly - one lane session
+        serves many pages sequentially. It never authenticates and
+        never writes session state back to the Room. Closing it
+        closes only its context. lane_index is the caller's lane
+        number, recorded in the run's page records by the caller.
+        js_capture is the caller's choice: slop lanes opt in (their
+        per-page JS records feed the defect family); harness lanes
+        leave it off.
+        """
+
+        room = self._get_session(session_id=room_session_id)
+        return await self._create_sibling_session(
+            room, execution_id=execution_id, journey_id=journey_id,
+            purpose="worker", js_capture=js_capture, reuse_room_auth=reuse_room_auth,
+        )
+
+    async def _create_sibling_session(
+        self,
+        room: JourneyBrowserSession,
+        *,
+        execution_id: UUID,
+        journey_id: UUID,
+        purpose: str,
+        js_capture: bool = False,
+        reuse_room_auth: bool = True,
+    ) -> BrowserSessionHandle:
         session_id = uuid4()
         artifact_directory = self._artifact_root / str(execution_id) / str(session_id)
         artifact_directory.mkdir(parents=True, exist_ok=True)
         storage_state = None
-        if room.authenticated_session:
+        authenticated_session = room.authenticated_session and reuse_room_auth
+        if authenticated_session:
             storage_state = await room.context.storage_state()
         context = await room.browser.new_context(
             viewport={"width": 1280, "height": 900},
@@ -467,11 +579,21 @@ class BrowserController:
             page=page,
             artifact_directory=artifact_directory,
             auth_only_origins=room.auth_only_origins,
-            authenticated_session=room.authenticated_session,
+            authenticated_session=authenticated_session,
             fixture_action_rules=room.fixture_action_rules,
             shares_browser=True,
+            js_capture=js_capture,
+            offsite=self.offsite,
         )
+        if js_capture:
+            # Capture parity (doc 24 section 4.2): a context whose
+            # JS records are harvested installs the same rejection
+            # hook as a capture session — proof contexts for
+            # attribution parity, slop lane contexts because the
+            # JS defect family is harvested per lane session.
+            await context.add_init_script(JS_REJECTION_HOOK_SCRIPT)
         self._sessions[session_id] = session
+        self._session_purposes[session_id] = purpose
         await context.route("**/*", lambda route: self._route_request(session, route))
         await context.route_web_socket(
             "**/*",
@@ -544,9 +666,7 @@ class BrowserController:
             if session.state != "open" or session.control_mode != "agent":
                 return False
             try:
-                validate_target_url(
-                    session.page.url, session.allowed_origins, session.network_policy,
-                )
+                validate_browsing_url(session, session.page.url)
             except BrowserPolicyError:
                 return False
             return not await self._has_authentication_challenge(session)
@@ -566,25 +686,36 @@ class BrowserController:
         if ((include_pending and session.session_id in self._pending_authentication)
                 or session.is_auth_only_url(session.page.url)):
             return True
-        if await has_active_sensitive_challenge(session.page):
+        if session.page.url == "about:blank":
+            return False
+        inspection = await inspect_sensitive_challenge(session.page)
+        if inspection.timed_out:
+            # A check that cannot complete is not a challenge (Fix C):
+            # record it on the session so the inspecting workflow can
+            # drain it onto the page state; never raise it here.
+            session.challenge_check_timed_out = True
+        if inspection.active:
             return True
         # Email-only login and SSO chooser screens need an actual auth form;
         # ordinary navigation links and newsletter fields are not challenges.
         if await session.page.locator("form:visible").filter(
             has=session.page.locator('input[type="email"]:visible, input[name="username"]:visible'),
         ).filter(has=session.page.get_by_role(
-            "button", name=re.compile(r"^(sign\s*in|log\s*in|continue(?: with .+)?)$", re.I),
+            "button", name=_AUTH_BUTTON_PATTERN,
         )).count():
             return True
-        return bool(await session.page.get_by_role(
-            "heading", name=re.compile(
-                r"^(sign\s*in|log\s*in|login|authorize .+|permissions requested)$", re.I,
-            ),
+        if await session.page.get_by_role(
+            "heading", name=_AUTH_HEADING_PATTERN,
         ).count() and await session.page.get_by_role(
-            "button", name=re.compile(
-                r"^(continue with .+|sign\s*in.*|log\s*in.*|allow|authorize)$", re.I,
-            ),
-        ).count())
+            "button", name=_AUTH_CONTINUE_PATTERN,
+        ).count():
+            return True
+        try:
+            async with asyncio.timeout(SENSITIVE_CHALLENGE_TIMEOUT_SECONDS):
+                signals = await self.discovery_page_signals(session_id=session.session_id)
+        except TimeoutError:
+            raise BrowserTimeoutError("Timed out inspecting the page for a checkpoint.") from None
+        return is_discovery_checkpoint(**signals)
 
     async def human_continuation_ready(self, handle: BrowserSessionHandle) -> bool:
         """Validate safe continuation, without claiming an authenticated identity."""
@@ -593,6 +724,44 @@ class BrowserController:
         validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
         return (session.state == "open" and session.control_mode == "verifying"
                 and not await self._has_authentication_challenge(session, include_pending=False))
+
+    async def verify_handoff_destination(
+        self, handle: BrowserSessionHandle, *, expected_url: str,
+    ) -> bool:
+        """Confirm a frozen audit route on the same session before reopening capture."""
+        session = self._get_session(session_id=handle.session_id,
+                                    execution_id=handle.execution_id, journey_id=handle.journey_id)
+        async with session.lock:
+            try:
+                expected = validate_target_url(
+                    expected_url, session.allowed_origins, session.network_policy,
+                )
+                if not await self.human_continuation_ready(handle):
+                    return False
+
+                def route_identity(value: str) -> tuple[str, str, str, str]:
+                    checked = validate_target_url(
+                        value, session.allowed_origins, session.network_policy,
+                    )
+                    parsed = urlsplit(checked.href)
+                    fragment = parsed.fragment if parsed.fragment.startswith(("/", "!/")) else ""
+                    return checked.origin, parsed.path.rstrip("/"), parsed.query, fragment
+
+                if route_identity(session.page.url) == route_identity(expected.href):
+                    return True
+                # The operator can land on a post-login page. Read the original
+                # audit route again before attributing any observations to it.
+                await resolve_and_validate_host(expected.hostname, session.network_policy)
+                response = await session.page.goto(
+                    expected.href, wait_until="domcontentloaded", timeout=session.timeout_ms,
+                )
+                return (
+                    response is not None and response.ok
+                    and route_identity(session.page.url) == route_identity(expected.href)
+                    and await self.human_continuation_ready(handle)
+                )
+            except (BrowserActionError, BrowserPolicyError, PlaywrightError):
+                return False
 
     def take_human_session_snapshot(
         self, *, run_id: UUID, target_id: UUID, case_id: str,
@@ -616,10 +785,12 @@ class BrowserController:
             origin = validate_target_url(
                 session.page.url, session.allowed_origins, session.network_policy,
             ).origin
+            scope = HumanSessionScope(run_id=run_id, target_id=target_id, origin=origin)
             await self._auth_session_broker.capture_human_session(
-                scope=HumanSessionScope(run_id=run_id, target_id=target_id, origin=origin),
+                scope=scope,
                 context=cast(Any, session.context), page=session.page,
             )
+            self._auth_session_broker.retain_for_task_verification(scope)
             return True
 
     async def _authentication_checkpoint(
@@ -641,8 +812,10 @@ class BrowserController:
         try:
             async with self._authentication_locks[session.session_id]:
                 if await self._has_authentication_challenge(session):
-                    await handler()
-                    self._pending_authentication.discard(session.session_id)
+                    try:
+                        await handler()
+                    finally:
+                        self._pending_authentication.discard(session.session_id)
         finally:
             if lock_held:
                 await session.lock.acquire()
@@ -650,6 +823,8 @@ class BrowserController:
 
     @staticmethod
     def _ensure_agent_control(session: JourneyBrowserSession) -> None:
+        if session.offsite is not None:
+            session.offsite.ensure_journey(session.journey_id)
         if session.control_mode != "agent":
             raise HumanControlActiveError(
                 "Agent browser tools are disabled during human-control handoff."
@@ -676,12 +851,98 @@ class BrowserController:
         self, session: JourneyBrowserSession
     ) -> AsyncGenerator[None, None]:
         handle = BrowserSessionHandle(session.session_id, session.execution_id, session.journey_id)
+        if session.offsite is not None:
+            await session.offsite.checkpoint(session.page.url, session.journey_id, session.execution_id)
         await self.cooperative_checkpoint(handle)
         await self._authentication_checkpoint(session)
         async with session.lock:
             await self._authentication_checkpoint(session, lock_held=True)
             self._ensure_agent_control(session)
+            if session.offsite is not None and session.page.url != "about:blank":
+                await self._validate_resting_page(session)
             yield
+
+    @staticmethod
+    async def _validate_resting_page(session: JourneyBrowserSession) -> None:
+        """Validate the page a session is resting on before an agent action.
+
+        A resting page that is not a public URL at all (a browser error
+        page, a blob:/data: page) can never become valid, and refusing
+        here would also block the navigation that could rescue the lane,
+        so park the page on about:blank and let the action proceed. A
+        public page that is merely off-origin still refuses, unchanged.
+        """
+        try:
+            validate_browsing_url(session, session.page.url)
+        except TargetUrlValidationError as original_error:
+            try:
+                async with asyncio.timeout(_RESTING_PAGE_RESET_TIMEOUT_SECONDS):
+                    await session.page.goto("about:blank")
+            except Exception:
+                pass
+            if session.page.url == "about:blank":
+                return
+            try:
+                validate_browsing_url(session, session.page.url)
+            except TargetUrlValidationError:
+                raise original_error from None
+
+    @staticmethod
+    async def _require_keyboard_focus(session: JourneyBrowserSession, locator: Locator) -> None:
+        if session.keyboard_only and not await locator.evaluate(
+            "element => element === element.ownerDocument.activeElement"
+        ):
+            raise BrowserActionError("Use Tab to focus this control before activating it.",
+                                     reason_code="keyboard_focus_required")
+
+    def set_keyboard_only(self, handle: BrowserSessionHandle) -> None:
+        session = self._get_session(session_id=handle.session_id,
+            execution_id=handle.execution_id, journey_id=handle.journey_id)
+        self._ensure_agent_control(session)
+        session.keyboard_only = True
+
+    @staticmethod
+    async def _track_pointer(session: JourneyBrowserSession, locator: Locator) -> None:
+        """Move the actual pointer and publish each position before the semantic action."""
+        if getattr(session, "keyboard_only", False):
+            return
+        generation = session.control_generation
+
+        def ensure_control() -> None:
+            if session.control_mode != "agent" or session.control_generation != generation:
+                raise HumanControlActiveError("Agent pointer control was revoked.")
+
+        ensure_control()
+        try:
+            await locator.scroll_into_view_if_needed(timeout=250)
+            ensure_control()
+            box = await locator.bounding_box(timeout=250)
+        except PlaywrightError:
+            return
+        finally:
+            ensure_control()
+        viewport = session.page.viewport_size
+        if box and viewport:
+            x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            if not (0 <= x < viewport["width"] and 0 <= y < viewport["height"]):
+                return
+            previous = session.live_click_target
+            start_x = previous.x if previous else 0.0
+            start_y = previous.y if previous else 0.0
+            for step in range(1, 9):
+                ensure_control()
+                px = start_x + (x - start_x) * step / 8
+                py = start_y + (y - start_y) * step / 8
+                await session.page.mouse.move(px, py)
+                ensure_control()
+                # Publish positions only after the browser accepted the movement.
+                session.live_click_target = LiveClickTarget(
+                    px, py, viewport["width"], viewport["height"],
+                    session.page.url, monotonic(),
+                )
+                session.live_view_changed.set()
+                if step < 8:
+                    await asyncio.sleep(1 / 60)
 
     async def _route_request(
         self,
@@ -689,6 +950,74 @@ class BrowserController:
         route: Route,
     ) -> None:
         try:
+            request = route.request
+            main = self._is_main_frame_request(request)
+            if session.offsite is not None:
+                if session.control_mode != "human":
+                    await session.offsite.checkpoint(
+                        session.page.url, session.journey_id, session.execution_id,
+                    )
+                if session.control_mode == "human":
+                    try:
+                        validated = validate_human_url(session, request.url)
+                    except BrowserPolicyError:
+                        if main:
+                            raise
+                        if is_handoff_provider(session.page.url):
+                            validated = public_url(request.url)
+                        elif (self._is_strict_target(session, session.page.url)
+                              and request.method == "GET"
+                              and request.resource_type in {"script", "stylesheet", "font"}):
+                            # Target sign-in pages also load their UI from public CDNs.
+                            validated = public_url(request.url)
+                        else:
+                            raise
+                else:
+                    if main and (is_handoff_provider(request.url)
+                                 or session.is_auth_only_url(request.url)):
+                        session.provider_handoff_url = public_url(request.url).href
+                        self._pending_authentication.add(session.session_id)
+                        raise BrowserActionBlockedError("Provider navigation requires human control.")
+                    if (not self._is_strict_target(session, session.page.url)
+                            and session.page.url != "about:blank"
+                            and request.method not in {"GET", "HEAD"}):
+                        raise BrowserActionBlockedError("Outside pages cannot submit requests.")
+                    try:
+                        validated = validate_target_url(request.url, session.allowed_origins, session.network_policy)
+                    except BrowserPolicyError:
+                        if main and is_handoff_provider(request.url):
+                            session.provider_handoff_url = public_url(request.url).href
+                            self._pending_authentication.add(session.session_id)
+                            raise BrowserActionBlockedError("Provider navigation requires human control.")
+                        if main:
+                            if request.method != "GET":
+                                raise BrowserActionBlockedError("Outside submissions are not allowed.")
+                            validated = await session.offsite.navigate(
+                                request.url, session.page.url, session.journey_id, session.execution_id,
+                            )
+                        else:
+                            # Subresources follow the guarded-freedom rule
+                            # (see _validated_subresource_url): public loads
+                            # are free; submissions and provider assets are not.
+                            validated = self._validated_subresource_url(session, request)
+                    if main:
+                        previous = urlsplit(session.page.url).hostname
+                        # A journey's first load is its start, not a domain
+                        # change; the run's own page events record it. Only a
+                        # move between two real pages is recorded here, so a
+                        # bookkeeping write never gates a run's first page.
+                        if previous is not None and previous != validated.hostname:
+                            await session.offsite.record("offsite.domain_changed", {
+                                "from": previous or "start", "to": validated.hostname,
+                                "decision": "continue", "reason": "Navigation passed browsing policy.",
+                            }, session.journey_id, session.execution_id)
+                await resolve_and_validate_host(validated.hostname, (
+                    session.network_policy if self._is_strict_target(session, request.url)
+                    else "public_only"
+                ))
+                await self._record_third_party_domain(session, request, validated)
+                await route.continue_()
+                return
             if session.control_mode != "human" and session.is_auth_only_url(route.request.url):
                 if (route.request.is_navigation_request()
                         and route.request.frame.parent_frame is None):
@@ -697,15 +1026,44 @@ class BrowserController:
             validated = self._validated_request_url(session, route.request)
             await resolve_and_validate_host(
                 validated.hostname,
-                session.network_policy,
+                session.network_policy if self._is_strict_target(session, route.request.url)
+                else "public_only",
             )
             await route.continue_()
         except Exception as error:
+            if isinstance(error, SuspiciousEgressError):
+                await self._record_egress_block(session, error, route.request.url)
             self._record_network_failure(
                 session, error, route.request.url,
                 resource=not self._is_main_frame_request(route.request),
             )
             await route.abort("blockedbyclient")
+
+    @staticmethod
+    def _is_strict_target(session: JourneyBrowserSession, url: str) -> bool:
+        try:
+            validate_target_url(url, session.allowed_origins, session.network_policy)
+            return True
+        except BrowserPolicyError:
+            return False
+
+    async def _navigation_url(self, session: JourneyBrowserSession, url: str) -> ValidatedUrl:
+        try:
+            return validate_target_url(url, session.allowed_origins, session.network_policy)
+        except BrowserPolicyError:
+            if session.offsite is None:
+                raise
+            session.offsite.ensure_journey(session.journey_id)
+            try:
+                result = public_url(url)
+                await resolve_and_validate_host(result.hostname, "public_only")
+                return result
+            except (BrowserPolicyError, ValueError):
+                await session.offsite.stop(
+                    "Outside destination is not a public HTTP(S) address.",
+                    session.page.url, url, session.journey_id, session.execution_id,
+                )
+                raise
 
     @staticmethod
     def _network_destination(
@@ -737,10 +1095,14 @@ class BrowserController:
         elif isinstance(error, HostResolutionError):
             reason = "dns_resolution_failed"
         elif isinstance(error, BrowserPolicyError):
-            reason = (
-                "captcha_resource_denied" if resource and destination == "known_provider"
-                else "target_origin_denied"
-            )
+            reason = "target_origin_denied"
+            if resource and destination == "known_provider":
+                try:
+                    validate_captcha_subresource(url)
+                except TargetUrlValidationError:
+                    pass
+                else:
+                    reason = "captcha_resource_denied"
         session.human_network_diagnostics.record(reason, destination)
 
     def _on_egress_failure(
@@ -778,22 +1140,128 @@ class BrowserController:
                 main_frame = True
         return main_frame
 
+    async def _record_egress_block(
+        self,
+        session: JourneyBrowserSession,
+        error: SuspiciousEgressError,
+        url: str,
+    ) -> None:
+        """Persist one suspicious-egress block on the Lead-review surface.
+
+        The block itself is the enforcement; the record is audit only, so
+        a failed record never changes the request's fate.
+        """
+
+        offsite = getattr(session, "offsite", None)
+        record = getattr(offsite, "record", None)
+        if record is None:
+            return
+        try:
+            await record("browser.egress_blocked", {
+                "decision": "blocked", "reason": error.reason,
+                "from": safe_address(session.page.url), "to": safe_address(url),
+            }, session.journey_id, session.execution_id)
+        except Exception:
+            pass
+
+    async def _record_third_party_domain(
+        self,
+        session: JourneyBrowserSession,
+        request: Request,
+        validated: ValidatedUrl,
+    ) -> None:
+        """Record the first subresource load from each outside host.
+
+        Navigations already reach the Lead through the offsite review;
+        this covers the quieter half — the third parties a page itself
+        talks to — once per host per run, on the same surface. Audit
+        only: recording never gates the request.
+        """
+
+        offsite = getattr(session, "offsite", None)
+        seen = getattr(offsite, "subresource_hosts", None)
+        record = getattr(offsite, "record", None)
+        if seen is None or record is None or self._is_main_frame_request(request):
+            return
+        if validated.hostname in seen:
+            return
+        try:
+            target_hosts = {
+                normalize_hostname(origin.hostname)
+                for origin in session.allowed_origins
+            }
+        except TargetUrlValidationError:
+            target_hosts = set()
+        if validated.hostname in target_hosts:
+            return
+        seen.add(validated.hostname)
+        try:
+            await record("browser.third_party_domain", {
+                "decision": "allow", "host": validated.hostname,
+                "from": safe_address(session.page.url),
+            }, session.journey_id, session.execution_id)
+        except Exception:
+            pass
+
     def _validated_request_url(
         self,
         session: JourneyBrowserSession,
         request: Request,
     ) -> ValidatedUrl:
-        """Approve the target origin, or a captcha widget asset inside the page."""
+        """Approve a navigation to the target origin, or any subresource
+        the guarded-freedom rule allows (see _validated_subresource_url)."""
         if not self._is_main_frame_request(request):
-            try:
-                return validate_captcha_subresource(request.url)
-            except TargetUrlValidationError:
-                pass
+            return self._validated_subresource_url(session, request)
         return validate_target_url(
             request.url,
             session.allowed_origins,
             session.network_policy,
         )
+
+    def _validated_subresource_url(
+        self,
+        session: JourneyBrowserSession,
+        request: Request,
+    ) -> ValidatedUrl:
+        """Approve one non-navigation request under the guarded-freedom rules.
+
+        Order matters: captcha widgets keep their exception — including
+        their token calls, which are POSTs, so the method is not gated;
+        the submission scan is what guards them now. The target's own
+        assets keep today's strict validation (including its form posts).
+        Sign-in and CAPTCHA provider hosts never serve assets to the
+        agent. Any other public load is free, and any other public
+        submission is free unless it carries sensitive data off the
+        target's origin (owner rule, 2026-11-24: allow by default, block
+        the suspicious send and record it). Public still means the
+        location rules apply: no private, loopback or link-local address
+        is ever approved here.
+        """
+        try:
+            captcha_url = validate_captcha_subresource(request.url)
+        except TargetUrlValidationError:
+            captcha_url = None
+        if captcha_url is not None:
+            ensure_unsuspicious_submission(
+                request.method, getattr(request, "post_data", None),
+            )
+            return captcha_url
+        if is_handoff_provider(request.url):
+            raise BrowserPolicyError("Provider assets require human control.")
+        try:
+            return validate_target_url(
+                request.url,
+                session.allowed_origins,
+                session.network_policy,
+            )
+        except BrowserPolicyError:
+            pass
+        if request.method in {"GET", "HEAD"}:
+            return public_url(request.url)
+        ensure_unsuspicious_submission(
+            request.method, getattr(request, "post_data", None),
+        )
+        return public_url(request.url)
 
     async def _route_web_socket(
         self,
@@ -829,7 +1297,14 @@ class BrowserController:
         session: JourneyBrowserSession,
         page: Page,
     ) -> None:
-        asyncio.create_task(self._configure_page(session, page))
+        task = asyncio.create_task(self._configure_page(session, page))
+
+        def completed(task: asyncio.Task[None]) -> None:
+            if not task.cancelled() and task.exception() is not None:
+                session.page_setup_failures += 1
+                self._record_page_error(session, "Popup page setup failed.")
+
+        task.add_done_callback(completed)
 
     async def _configure_page(
         self,
@@ -918,7 +1393,8 @@ class BrowserController:
         from markettwin_execution_orchestrator.slop.probe import PROBE_SCRIPT
 
         session = self._get_session(session_id=session_id)
-        return await session.page.evaluate(PROBE_SCRIPT)
+        async with self._agent_control_action(session):
+            return await session.page.evaluate(PROBE_SCRIPT)
 
     async def harvest_js_records(
         self, *, session_id: UUID,
@@ -927,14 +1403,18 @@ class BrowserController:
         the last harvest (U-P6-03) and return ALL structured records."""
 
         session = self._get_session(session_id=session_id)
+        session.last_rejection_harvest_failed = False
         if session.js_capture:
             try:
                 snapshot = await session.page.evaluate(
                     "() => ({ doc: window.__mt_rejection_doc || '',"
+                    " doc_url: window.__mt_rejection_doc_url || '',"
                     " items: window.__mt_rejections || [] })"
                 )
             except Exception:
-                snapshot = {"doc": "", "items": []}
+                session.rejection_harvest_failures += 1
+                session.last_rejection_harvest_failed = True
+                snapshot = {"doc": "", "doc_url": "", "items": []}
             # The init hook resets the array on every new document,
             # so the watermark is only valid for the document that
             # produced it. Keying the watermark to the document id
@@ -947,14 +1427,38 @@ class BrowserController:
             collected = list(snapshot.get("items") or [])
             new_items = collected[session.rejections_harvested:]
             session.rejections_harvested = len(collected)
+            doc_url = str(snapshot.get("doc_url", ""))
             for item in new_items:
+                url = str(item.get("url") or "") or doc_url
+                if not url:
+                    session.rejections_dropped += 1
+                    continue
                 session.event_buffer.record_js(JsErrorRecord(
                     kind="unhandled_rejection",
                     message=str(item.get("message", "")),
                     stack=item.get("stack"),
-                    url=session.page.url,
+                    url=url,
                 ))
         return list(session.event_buffer.js_records)
+
+    def js_capture_diagnostics(self, *, session_id: UUID) -> dict[str, int | bool]:
+        session = self._get_session(session_id=session_id)
+        return {
+            "rejections_dropped": session.rejections_dropped,
+            "rejection_harvest_failures": session.rejection_harvest_failures,
+            "last_rejection_harvest_failed": session.last_rejection_harvest_failed,
+            "page_setup_failures": session.page_setup_failures,
+        }
+
+    def take_challenge_check_timeout(self, *, session_id: UUID) -> bool:
+        """Return and clear the challenge-check timeout recorded since
+        the last take (Fix C): a bounded challenge inspection that
+        could not answer is surfaced on the page state by the caller,
+        never raised into the crawl."""
+        session = self._get_session(session_id=session_id)
+        timed_out = session.challenge_check_timed_out
+        session.challenge_check_timed_out = False
+        return timed_out
 
     @staticmethod
     def _on_request_failed(session: JourneyBrowserSession, request: Request) -> None:
@@ -989,6 +1493,7 @@ class BrowserController:
         session_id: UUID,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Return the current compact browser observation."""
 
@@ -999,6 +1504,8 @@ class BrowserController:
         )
         async with self._agent_control_action(session):
             session.next_action_number()
+            if not observe:
+                return BrowserActionResult(action="get_state", observation=None)
             screenshot = await capture_screenshot(
                 session,
                 label="state",
@@ -1016,6 +1523,7 @@ class BrowserController:
         scope_name: str,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Inspect bounded form metadata without returning entered values."""
         session = self._get_session(
@@ -1024,12 +1532,14 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with self._agent_control_action(session):
-            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            validate_browsing_url(session, session.page.url)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             # A named scope was required above, so this is a Locator.
             assert isinstance(root, Locator)
             fields, more_available = await inspect_form_fields(root)
             session.next_action_number()
+            if not observe:
+                return BrowserActionResult(action="get_form_state", observation=None)
             screenshot = await capture_screenshot(session, label="form-state")
             snapshot = json.dumps([asdict(field) for field in fields])
             return BrowserActionResult(
@@ -1051,6 +1561,9 @@ class BrowserController:
         timeout_ms: int = 1500,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
+        approved_values: tuple[str, ...] = (),
+        run_mode: str | None = None,
     ) -> tuple[BrowserActionResult, AssertionObservation]:
         """Read an assertion under the same origin, ownership and control guards."""
         if timeout_ms < 1 or timeout_ms > 5000:
@@ -1061,7 +1574,7 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with self._agent_control_action(session):
-            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            validate_browsing_url(session, session.page.url)
             session.next_action_number()
             if assertion.target is not None:
                 target = assertion.target
@@ -1088,6 +1601,7 @@ class BrowserController:
                 first, second = await repeat_read_only_assertion(
                     session.page, assertion, timeout_ms=min(timeout_ms, 2000),
                     minimum_interval_ms=500,
+                    approved_values=approved_values, run_mode=run_mode,
                 )
                 stable = (first.status, first.observed_value, first.reason) == (
                     second.status, second.observed_value, second.reason,
@@ -1099,7 +1613,15 @@ class BrowserController:
                     reason=second.reason if stable else "inspection_failed",
                 )
             else:
-                outcome = await evaluate_assertion(session.page, assertion, timeout_ms=timeout_ms)
+                outcome = await evaluate_assertion(
+                    session.page, assertion, timeout_ms=timeout_ms,
+                    approved_values=approved_values, run_mode=run_mode,
+                )
+            if not observe:
+                return (
+                    BrowserActionResult(action="assertion", observation=None),
+                    outcome,
+                )
             screenshot = await capture_screenshot(session, label="assertion")
             result = BrowserActionResult(
                 action="assertion",
@@ -1117,6 +1639,7 @@ class BrowserController:
         reverse: bool = False,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Move keyboard focus one stop; no activation keys are accepted."""
         session = self._get_session(
@@ -1128,11 +1651,100 @@ class BrowserController:
             validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             session.next_action_number()
             await session.page.keyboard.press("Shift+Tab" if reverse else "Tab")
+            if not observe:
+                return BrowserActionResult(action="focus_next", observation=None)
             screenshot = await capture_screenshot(session, label="focus-next")
             return BrowserActionResult(
                 action="focus_next",
                 observation=await build_observation(session, screenshot_path=screenshot),
             )
+
+    async def focused_element_state(
+        self,
+        *,
+        session_id: UUID,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
+    ) -> dict[str, Any] | None:
+        """The focused element's identity + indicator style (read-only).
+
+        For the persona keyboard walk (doc 24 section 3.1): which
+        element holds focus — role, accessible name, and its ordinal
+        among focusable elements, the same ordinal the style baseline
+        is keyed by — plus the style facts an indicator judgement
+        diffs against that baseline. None when nothing holds focus.
+        """
+
+        session = self._get_session(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        return await session.page.evaluate(
+            """() => {
+              const focusable = 'a[href], button:not([disabled]),'
+                + ' input:not([disabled]):not([type="hidden"]),'
+                + ' select:not([disabled]), textarea:not([disabled]),'
+                + ' [tabindex]:not([tabindex="-1"])';
+              const el = document.activeElement;
+              if (!el || el === document.body) return null;
+              const all = Array.from(document.querySelectorAll(focusable));
+              const style = window.getComputedStyle(el);
+              const name = (el.getAttribute('aria-label')
+                || el.innerText || el.textContent || '')
+                .trim().replace(/\\s+/g, ' ').slice(0, 200);
+              return {
+                role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                name,
+                ordinal: all.indexOf(el),
+                outline_style: style.outlineStyle,
+                outline_width: style.outlineWidth,
+                box_shadow: style.boxShadow,
+                background: style.backgroundColor,
+                border_width: style.borderTopWidth,
+                border_color: style.borderTopColor,
+              };
+            }"""
+        )
+
+    async def focusable_style_baseline(
+        self,
+        *,
+        session_id: UUID,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        """Pre-focus computed styles of every focusable element, keyed
+        by the ordinal focused_element_state reports — the baseline an
+        indicator judgement diffs against (doc 24 section 3.1)."""
+
+        session = self._get_session(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        return await session.page.evaluate(
+            """() => {
+              const focusable = 'a[href], button:not([disabled]),'
+                + ' input:not([disabled]):not([type="hidden"]),'
+                + ' select:not([disabled]), textarea:not([disabled]),'
+                + ' [tabindex]:not([tabindex="-1"])';
+              const baseline = {};
+              document.querySelectorAll(focusable).forEach((el, index) => {
+                if (index >= 200) return;
+                const style = window.getComputedStyle(el);
+                baseline[String(index)] = {
+                  outline_style: style.outlineStyle,
+                  outline_width: style.outlineWidth,
+                  box_shadow: style.boxShadow,
+                  background: style.backgroundColor,
+                  border_width: style.borderTopWidth,
+                  border_color: style.borderTopColor,
+                };
+              });
+              return baseline;
+            }"""
+        )
 
     async def emulate_network(
         self,
@@ -1168,6 +1780,7 @@ class BrowserController:
         preset: Literal["mobile320", "desktop1280"],
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Use a fixed fixture-tested viewport preset."""
         if preset not in {"mobile320", "desktop1280"}:
@@ -1178,7 +1791,7 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with self._agent_control_action(session):
-            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
+            validate_browsing_url(session, session.page.url)
             session.next_action_number()
             await session.page.set_viewport_size(
                 {
@@ -1186,6 +1799,8 @@ class BrowserController:
                     "height": 800,
                 }
             )
+            if not observe:
+                return BrowserActionResult(action="set_viewport", observation=None)
             screenshot = await capture_screenshot(session, label="viewport")
             return BrowserActionResult(
                 action="set_viewport",
@@ -1199,6 +1814,7 @@ class BrowserController:
         url: str,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Navigate to an explicitly allowed URL and capture evidence."""
 
@@ -1207,6 +1823,12 @@ class BrowserController:
             execution_id=execution_id,
             journey_id=journey_id,
         )
+        if session.offsite is not None and is_handoff_provider(url):
+            session.provider_handoff_url = public_url(url).href
+            self._pending_authentication.add(session.session_id)
+            await self._authentication_checkpoint(session, force=True)
+            return await self.get_state(session_id=session_id, execution_id=execution_id,
+                                        journey_id=journey_id, observe=observe)
         if session.is_auth_only_url(url):
             handler = self._authentication_handlers.get(session.session_id)
             if handler is None:
@@ -1217,13 +1839,9 @@ class BrowserController:
             async with session.lock:
                 await self._authentication_checkpoint(session, lock_held=True, force=True)
             return await self.get_state(session_id=session_id, execution_id=execution_id,
-                                        journey_id=journey_id)
+                                        journey_id=journey_id, observe=observe)
         async with self._agent_control_action(session):
-            validated = validate_target_url(
-                url,
-                session.allowed_origins,
-                session.network_policy,
-            )
+            validated = await self._navigation_url(session, url)
             await resolve_and_validate_host(validated.hostname, session.network_policy)
             session.next_action_number()
             try:
@@ -1232,15 +1850,13 @@ class BrowserController:
                     wait_until="domcontentloaded",
                     timeout=session.timeout_ms,
                 )
-                final_url = validate_target_url(
-                    session.page.url,
-                    session.allowed_origins,
-                    session.network_policy,
-                )
+                final_url = validate_browsing_url(session, session.page.url)
                 await resolve_and_validate_host(final_url.hostname, session.network_policy)
             except PlaywrightTimeoutError as exc:
                 raise BrowserTimeoutError(f'Navigation to "{validated.origin}" timed out.') from exc
             except Exception as exc:
+                if session.offsite is not None:
+                    session.offsite.ensure_journey(session.journey_id)
                 if isinstance(exc, BrowserPolicyError):
                     raise
                 if session.session_id not in self._pending_authentication:
@@ -1249,11 +1865,18 @@ class BrowserController:
                     ) from exc
 
             await self._authentication_checkpoint(session, lock_held=True)
+            if not observe:
+                return BrowserActionResult(action="navigate", observation=None)
             screenshot = await capture_screenshot(session, label="navigate")
             return BrowserActionResult(
                 action="navigate",
                 observation=await build_observation(session, screenshot_path=screenshot),
             )
+
+    async def _state_after_handoff(self, session, locator_strategy) -> BrowserActionResult:
+        screenshot = await capture_screenshot(session, label="handoff-return")
+        return BrowserActionResult(action="click", locator_strategy=locator_strategy,
+                                   observation=await build_observation(session, screenshot_path=screenshot))
 
     async def inspect_click_approval(
         self,
@@ -1319,6 +1942,15 @@ class BrowserController:
         )
         navigation_url = state.get("href")
         navigation_authorized = False
+        if session.offsite is not None:
+            outside_page = not self._is_strict_target(session, session.page.url)
+            link = (state.get("tag") == "a" and not state.get("hasForm")
+                    and isinstance(navigation_url, str))
+            if outside_page and not link:
+                raise BrowserActionBlockedError("Outside sites are browse-only; only navigation links may be clicked.")
+            if link:
+                await self._navigation_url(session, navigation_url)
+                navigation_authorized = True
         if isinstance(navigation_url, str):
             try:
                 validate_target_url(navigation_url, session.allowed_origins, session.network_policy)
@@ -1373,6 +2005,65 @@ class BrowserController:
         # to dispatch a different control, even when the original exact name is stale.
         return await exact.count() == 1 and await locator.and_(exact).count() == 1
 
+    async def sitemap_locations(self, *, session_id: UUID, url: str) -> list[str]:
+        """Read a sitemap in an isolated context without changing the watched page."""
+        room = self._get_session(session_id=session_id)
+        handle = await self._create_sibling_session(
+            room, execution_id=room.execution_id, journey_id=room.journey_id,
+            purpose="worker",
+        )
+        try:
+            await self.navigate(session_id=handle.session_id, url=url, observe=False)
+            session = self._get_session(session_id=handle.session_id)
+            async with self._agent_control_action(session):
+                return await session.page.evaluate("""() => /xml/i.test(document.contentType)
+                    ? [...document.getElementsByTagName('loc')].map(el => el.textContent.trim())
+                    : []""")
+        finally:
+            await self.close_session(session_id=handle.session_id)
+
+    async def ui_state_targets(self, *, session_id: UUID) -> list[dict[str, str]]:
+        """Read explicit disclosure/tab controls; activation uses normal click policy."""
+        session = self._get_session(session_id=session_id)
+        async with self._agent_control_action(session):
+            controls = session.page.locator(
+                'summary,[role="tab"],button,[role="button"],[role="menuitem"],'
+                'input[type="button"],input[type="submit"],a[href^="#"],a:not([href])')
+            targets = []
+            for index in range(await controls.count()):
+                control = controls.nth(index)
+                if not await control.is_visible() or not await control.is_enabled():
+                    continue
+                snapshot = await control.aria_snapshot(timeout=session.timeout_ms)
+                match = re.match(r'^- (button|tab|link|menuitem) ("(?:[^"\\]|\\.)*")', snapshot)
+                if match:
+                    targets.append({"role": match[1], "name": json.loads(match[2])})
+            return targets
+
+    async def page_links(self, *, session_id: UUID) -> list[str]:
+        """Read destinations without clicking or changing page state."""
+        session = self._get_session(session_id=session_id)
+        async with self._agent_control_action(session):
+            links = await session.page.evaluate("""() => (
+                [...document.querySelectorAll('a[href]')]
+                .filter(a => !a.hasAttribute('download'))
+                .map(a => ({url: a.href, name: a.getAttribute('aria-label') || a.innerText || ''}))
+                .filter(a => /^https?:/.test(a.url))
+            )""")
+            from markettwin_execution_orchestrator.workflow.harness_items import classify_action
+
+            destinations: list[str] = []
+            for link in links:
+                if classify_action(role="link", name=link["name"] + " " + link["url"]) != "read":
+                    continue
+                try:
+                    ensure_low_risk_click_target(link["name"], None, link["url"])
+                except BrowserPolicyError:
+                    continue
+                if link["url"] not in destinations:
+                    destinations.append(link["url"])
+            return destinations
+
     async def current_origin(
         self,
         *,
@@ -1423,11 +2114,7 @@ class BrowserController:
                 raise BrowserPolicyError("Full-page discovery excludes authenticated sessions.")
             snapshot = await session.page.locator("body").aria_snapshot(timeout=session.timeout_ms)
             entries: list[dict[str, object]] = []
-            pattern = re.compile(
-                r'''^\s*- (?:')?(button|link|textbox|searchbox|combobox|checkbox|radio|'''
-                r'''tab|menuitem)'''
-                r'''(?: ("(?:[^"\\]|\\.)*"))?(?:\s|:|$)'''
-            )
+            pattern = _ARIA_SNAPSHOT_ENTRY_PATTERN
             for line in snapshot.splitlines():
                 match = pattern.match(line)
                 if match:
@@ -1457,6 +2144,8 @@ class BrowserController:
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
         approval_fingerprint: str | None = None,
+        observe: bool = True,
+        form_index: int | None = None,
     ) -> BrowserActionResult:
         """Click one exact semantic element."""
 
@@ -1468,6 +2157,11 @@ class BrowserController:
         async with self._agent_control_action(session):
             ensure_low_risk_click_target(name, label, text)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
+            if form_index is not None:
+                if type(form_index) is not int or form_index < 0 or scope_role is not None:
+                    raise BrowserActionBlockedError("Invalid probe form identity.")
+                root = session.page.locator("form").nth(form_index)
+                await require_unique(root, "Probe form")
             locator, locator_strategy = await resolve_action_locator(
                 root,
                 role=role,
@@ -1475,6 +2169,14 @@ class BrowserController:
                 label=label,
                 text=text,
             )
+            if form_index is not None:
+                submission = await locator.evaluate("""el => ({
+                    method: el.getAttribute('formmethod') || el.form?.method || '',
+                    action: el.getAttribute('formaction') ? el.formAction : el.form?.action
+                })""")
+                if submission.get("method", "").lower() != "get" or not submission.get("action"):
+                    raise BrowserActionBlockedError("Form probing requires GET.")
+                await self._navigation_url(session, submission["action"])
             intent = await self._click_intent(
                 locator, role=role, name=name, label=label, text=text,
                 scope_role=scope_role, scope_name=scope_name, session=session,
@@ -1496,11 +2198,18 @@ class BrowserController:
                 if href:
                     destination = urljoin(session.page.url, href)
                     if urlsplit(destination).scheme in {"http", "https"}:
-                        validate_target_url(
-                            destination,
-                            session.allowed_origins,
-                            session.network_policy,
-                        )
+                        await self._navigation_url(session, destination)
+                    else:
+                        raise BrowserActionBlockedError("Non-HTTP links require human control.")
+                    if session.offsite is not None and is_handoff_provider(destination):
+                        session.provider_handoff_url = public_url(destination).href
+                        self._pending_authentication.add(session.session_id)
+                        await self._authentication_checkpoint(session, lock_held=True, force=True)
+                        if not observe:
+                            return BrowserActionResult(
+                                action="click", observation=None,
+                                locator_strategy=locator_strategy)
+                        return await self._state_after_handoff(session, locator_strategy)
                 if href and session.is_auth_only_url(urljoin(session.page.url, href)):
                     if session.session_id not in self._authentication_handlers:
                         raise BrowserActionBlockedError(
@@ -1508,15 +2217,29 @@ class BrowserController:
                         )
                     await self._authentication_checkpoint(session, lock_held=True, force=True)
                 else:
-                    await locator.click(timeout=session.timeout_ms)
+                    await self._require_keyboard_focus(session, locator)
+                    await self._track_pointer(session, locator)
+                    if session.keyboard_only:
+                        input_type = await locator.get_attribute("type")
+                        await session.page.keyboard.press(
+                            "Space" if role in {"checkbox", "radio"}
+                            or input_type in {"checkbox", "radio"} else "Enter")
+                    else:
+                        await locator.click(timeout=session.timeout_ms)
             except BrowserPolicyError:
                 raise
             except PlaywrightTimeoutError as exc:
                 raise BrowserTimeoutError("Click timed out.") from exc
             except Exception as exc:
+                if session.offsite is not None:
+                    session.offsite.ensure_journey(session.journey_id)
                 raise BrowserActionError("Click could not be completed.") from exc
 
             await self._authentication_checkpoint(session, lock_held=True)
+            if not observe:
+                return BrowserActionResult(
+                    action="click", observation=None,
+                    locator_strategy=locator_strategy)
             screenshot = await capture_screenshot(session, label="click")
             return BrowserActionResult(
                 action="click",
@@ -1534,6 +2257,7 @@ class BrowserController:
         scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Fill non-secret text into an exactly labelled field."""
 
@@ -1543,6 +2267,7 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with self._agent_control_action(session):
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = root.get_by_label(label, exact=True)
             await require_unique(locator)
@@ -1554,13 +2279,21 @@ class BrowserController:
                 autocomplete=autocomplete,
             )
             session.next_action_number()
+            await self._require_keyboard_focus(session, locator)
+            await self._track_pointer(session, locator)
             try:
-                await locator.fill(value, timeout=session.timeout_ms)
+                if session.keyboard_only:
+                    await session.page.keyboard.press("ControlOrMeta+A")
+                    await session.page.keyboard.insert_text(value)
+                else:
+                    await locator.fill(value, timeout=session.timeout_ms)
             except PlaywrightTimeoutError as exc:
                 raise BrowserTimeoutError("Fill timed out.") from exc
             except Exception as exc:
                 raise BrowserActionError("Fill could not be completed.") from exc
 
+            if not observe:
+                return BrowserActionResult(action="fill", observation=None)
             screenshot = await capture_screenshot(session, label="fill")
             return BrowserActionResult(
                 action="fill",
@@ -1577,6 +2310,7 @@ class BrowserController:
         scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Select one option from an exactly labelled select control."""
 
@@ -1586,25 +2320,39 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with self._agent_control_action(session):
+            validate_target_url(session.page.url, session.allowed_origins, session.network_policy)
             root = await scoped_root(session.page, scope_role=scope_role, scope_name=scope_name)
             locator = root.get_by_label(label, exact=True)
             await require_unique(locator)
             ensure_non_sensitive_fill(
                 label=label,
-                input_type=await locator.get_attribute("type"),
+                input_type=await locator.evaluate("el => el.type"),
                 autocomplete=await locator.get_attribute("autocomplete"),
             )
             session.next_action_number()
+            await self._require_keyboard_focus(session, locator)
+            await self._track_pointer(session, locator)
             try:
-                await locator.select_option(
-                    value=value,
-                    timeout=session.timeout_ms,
-                )
+                if session.keyboard_only:
+                    index = await locator.evaluate(
+                        "(el, value) => Array.from(el.options).findIndex(o => o.value === value)", value)
+                    if index < 0:
+                        raise BrowserActionError("Requested option is unavailable.")
+                    await session.page.keyboard.press("Home")
+                    for _ in range(index):
+                        await session.page.keyboard.press("ArrowDown")
+                    await session.page.keyboard.press("Enter")
+                    if await locator.input_value() != value:
+                        raise BrowserActionError("Keyboard selection did not reach the requested option.")
+                else:
+                    await locator.select_option(value=value, timeout=session.timeout_ms)
             except PlaywrightTimeoutError as exc:
                 raise BrowserTimeoutError("Select timed out.") from exc
             except Exception as exc:
                 raise BrowserActionError("Select could not be completed.") from exc
 
+            if not observe:
+                return BrowserActionResult(action="select", observation=None)
             screenshot = await capture_screenshot(session, label="select")
             return BrowserActionResult(
                 action="select",
@@ -1621,6 +2369,7 @@ class BrowserController:
         scope_name: str | None = None,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Set an exactly labeled checkbox; no radio/file/payment activation."""
         session = self._get_session(
@@ -1643,13 +2392,21 @@ class BrowserController:
             if input_type != "checkbox":
                 raise BrowserActionError("Check/uncheck requires a checkbox control.")
             session.next_action_number()
+            await self._require_keyboard_focus(session, locator)
+            await self._track_pointer(session, locator)
             try:
-                await locator.set_checked(checked, timeout=session.timeout_ms)
+                if session.keyboard_only:
+                    if await locator.is_checked() != checked:
+                        await session.page.keyboard.press("Space")
+                else:
+                    await locator.set_checked(checked, timeout=session.timeout_ms)
             except PlaywrightTimeoutError as exc:
                 raise BrowserTimeoutError("Checkbox action timed out.") from exc
             except Exception as exc:
                 raise BrowserActionError("Checkbox action could not be completed.") from exc
             action = "check" if checked else "uncheck"
+            if not observe:
+                return BrowserActionResult(action=action, observation=None)
             screenshot = await capture_screenshot(session, label=action)
             return BrowserActionResult(
                 action=action,
@@ -1664,6 +2421,7 @@ class BrowserController:
         amount: int = 600,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Scroll the current page by a bounded amount."""
 
@@ -1678,8 +2436,13 @@ class BrowserController:
         async with self._agent_control_action(session):
             session.next_action_number()
             delta = amount if direction == "down" else -amount
-            await session.page.mouse.wheel(0, delta)
+            if session.keyboard_only:
+                await session.page.keyboard.press("PageDown" if direction == "down" else "PageUp")
+            else:
+                await session.page.mouse.wheel(0, delta)
             await session.page.wait_for_timeout(150)
+            if not observe:
+                return BrowserActionResult(action="scroll", observation=None)
             screenshot = await capture_screenshot(session, label="scroll")
             return BrowserActionResult(
                 action="scroll",
@@ -1692,6 +2455,7 @@ class BrowserController:
         session_id: UUID,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Navigate back within the same policy-controlled session."""
 
@@ -1711,13 +2475,11 @@ class BrowserController:
                 raise BrowserTimeoutError("Back navigation timed out.") from exc
 
             if session.page.url and session.page.url != "about:blank":
-                final_url = validate_target_url(
-                    session.page.url,
-                    session.allowed_origins,
-                    session.network_policy,
-                )
+                final_url = validate_browsing_url(session, session.page.url)
                 await resolve_and_validate_host(final_url.hostname, session.network_policy)
 
+            if not observe:
+                return BrowserActionResult(action="go_back", observation=None)
             screenshot = await capture_screenshot(session, label="back")
             return BrowserActionResult(
                 action="go_back",
@@ -1731,6 +2493,7 @@ class BrowserController:
         milliseconds: int = 500,
         execution_id: UUID | None = None,
         journey_id: UUID | None = None,
+        observe: bool = True,
     ) -> BrowserActionResult:
         """Wait briefly for a bounded asynchronous UI transition."""
 
@@ -1745,6 +2508,8 @@ class BrowserController:
         async with self._agent_control_action(session):
             session.next_action_number()
             await session.page.wait_for_timeout(milliseconds)
+            if not observe:
+                return BrowserActionResult(action="wait", observation=None)
             screenshot = await capture_screenshot(session, label="wait")
             return BrowserActionResult(
                 action="wait",
@@ -1868,6 +2633,32 @@ class BrowserController:
                 observation=await build_observation(session, screenshot_path=screenshot),
             )
 
+    async def capture_evidence_screenshot(
+        self,
+        *,
+        session_id: UUID,
+        execution_id: UUID | None = None,
+        journey_id: UUID | None = None,
+    ) -> str:
+        """Capture a screenshot as evidence WITHOUT building an observation.
+
+        Speed S0 (doc 18 section 7.2): callers that need the image file
+        itself (the slop traversal's visual review) skip the accessibility
+        snapshot and the observation build entirely. Returns the
+        screenshot path, or an empty string when capture is disabled
+        for the session.
+        """
+
+        session = self._get_session(
+            session_id=session_id,
+            execution_id=execution_id,
+            journey_id=journey_id,
+        )
+        async with self._agent_control_action(session):
+            session.next_action_number()
+            screenshot = await capture_screenshot(session, label="explicit")
+            return str(screenshot) if screenshot is not None else ""
+
     async def begin_human_control(
         self,
         *,
@@ -1885,6 +2676,9 @@ class BrowserController:
         async with session.lock:
             session.human_network_diagnostics.clear()
             await begin_human_control(session)
+            if session.provider_handoff_url is not None:
+                destination, session.provider_handoff_url = session.provider_handoff_url, None
+                await session.page.goto(destination, wait_until="domcontentloaded", timeout=session.timeout_ms)
 
     async def ensure_human_control(
         self, *, handle: BrowserSessionHandle, generation: int | None = None,
@@ -1926,6 +2720,11 @@ class BrowserController:
             journey_id=journey_id,
         )
         async with session.lock:
+            if verified and safe_to_capture and session.js_capture:
+                # The page hook runs independently of trace capture. Discard
+                # any rejections accumulated while the operator controlled it.
+                await session.page.evaluate("() => { window.__mt_rejections = []; }")
+                session.rejections_harvested = 0
             await end_human_control(
                 session,
                 verified=verified,
@@ -2041,6 +2840,7 @@ class BrowserController:
                 context=cast(Any, session.context),
                 page=session.page,
             )
+            self._auth_session_broker.retain_for_task_verification(scope)
             return principal
 
     def take_auth_session_snapshot(
@@ -2121,6 +2921,7 @@ class BrowserController:
                             await egress.close()
                     session.human_network_diagnostics.clear()
                     self._sessions.pop(session_id, None)
+                    self._session_purposes.pop(session_id, None)
                     self._authentication_handlers.pop(session_id, None)
                     self._authentication_locks.pop(session_id, None)
                     self._pending_authentication.discard(session_id)

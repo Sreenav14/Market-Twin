@@ -4,23 +4,17 @@ import { api } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
-it("sends workspace ingestion as browser-encoded multipart data", async () => {
-  const fetchMock = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ source: { name: "source.txt" } }), { status: 200 }),
-  );
+it("follows bounded run pages without truncating aggregate counts", async () => {
+  const page = Array.from({ length: 100 }, (_, index) => ({ id: `run-${index}` }));
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(page)))
+    .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "run-100" }])));
   vi.stubGlobal("fetch", fetchMock);
-  const file = new File(["source"], "source.txt", { type: "text/plain" });
-
-  await api.ingestKnowledge("workspace", file, "Source knowledge", ["product_knowledge"]);
-
-  const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(path).toBe("/api/v1/workspaces/workspace/ingestion");
-  expect(init.credentials).toBe("include");
-  expect(init.headers).toEqual({ "X-MarketTwin-Request": "1" });
-  expect(init.body).toBeInstanceOf(FormData);
-  expect((init.body as FormData).get("file")).toBe(file);
-  expect((init.body as FormData).get("name")).toBe("Source knowledge");
-  expect((init.body as FormData).getAll("roles")).toEqual(["product_knowledge"]);
+  expect(await api.listRuns("app")).toHaveLength(101);
+  expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+    "/api/v1/applications/app/test-runs?limit=100&offset=0",
+    "/api/v1/applications/app/test-runs?limit=100&offset=100",
+  ]);
 });
 
 it("marks JSON mutations for the shared browser origin policy", async () => {
@@ -51,7 +45,7 @@ it.each(["explore_test", "persona", "slop"])(
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await api.createRun("app", "target", "Test the fixture", [], "medium", "", mode);
+    await api.createRun("app", "target", "Test the fixture", "medium", "", mode);
 
     const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/applications/app/test-runs");
@@ -75,9 +69,29 @@ it("preserves explicit identity policies for existing API callers", async () => 
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "run" }), { status: 200 }));
   vi.stubGlobal("fetch", fetchMock);
   const policy = { origin: "https://fixture.test", marker_selector: "#identity", expected_marker: "user", role: "user", account_reference: "synthetic-01" };
-  await api.createRun("app", "target", "Verify protected fixture", [], "low", "", "persona", policy, false, false, [], "required", false);
+  await api.createRun("app", "target", "Verify protected fixture", "low", "", "persona", policy, false, false, [], "required", false);
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(JSON.parse(init.body as string)).toMatchObject({
     auth_verification: policy, auth_mode: "required", runtime_human_assistance: false,
   });
+});
+
+it("sends the run mode and approved test data only for standard runs (W1)", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "run" }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  await api.createRun("app", "target", "Test the fixture", "medium", "", "explore_test", undefined, false, false, [], undefined, true, false, "standard", [{ key: "company_name", value: "Thread & Co. Test" }]);
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  const payload = JSON.parse(init.body as string);
+  expect(payload.harness_run_mode).toBe("standard");
+  expect(payload.approved_test_data).toEqual([{ key: "company_name", value: "Thread & Co. Test" }]);
+});
+
+it("omits the run mode for read-only runs (W1)", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "run" }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  await api.createRun("app", "target", "Test the fixture");
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  const payload = JSON.parse(init.body as string);
+  expect(payload).not.toHaveProperty("harness_run_mode");
+  expect(payload).not.toHaveProperty("approved_test_data");
 });

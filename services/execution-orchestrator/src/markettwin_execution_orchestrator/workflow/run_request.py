@@ -1,5 +1,6 @@
 """Build execution requests from persisted TestRuns."""
 
+import re
 from ipaddress import ip_address
 from typing import Literal, cast
 from urllib.parse import urlsplit
@@ -9,11 +10,180 @@ from markettwin_shared.action_approval import SensitiveActionRule
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from markettwin_shared.run_kind import resolve_run_kind
 
+from markettwin_execution_orchestrator.agents.schemas.test_case import (
+    SafeTestValue,
+)
 from markettwin_execution_orchestrator.browser import AllowedOrigin
 from markettwin_execution_orchestrator.workflow.run_executor import (
     MarketTwinRunRequest,
 )
 from markettwin_execution_orchestrator.workflow.testing_depth import TestingDepth, mission_limit
+
+
+def _parse_app_map(
+    configuration_snapshot: dict[str, object],
+) -> dict[str, object] | None:
+    """Accept the snapshot's app_map block only in its pinned shape.
+
+    The block is written at run creation from the application map
+    (Phase 1a spec section 9.3). A malformed block is treated as
+    absent (section 10.1): a run must never die over reference
+    data, it simply starts uninformed.
+    """
+
+    raw = configuration_snapshot.get("app_map")
+    if not isinstance(raw, dict):
+        return None
+    if not isinstance(raw.get("map_id"), str) or not raw.get("map_id"):
+        return None
+    routes = raw.get("routes")
+    if not isinstance(routes, list) or not all(
+        isinstance(route, str) for route in routes
+    ):
+        return None
+    freshness = raw.get("freshness")
+    if freshness is not None and not _freshness_shape_ok(freshness):
+        # Doc 23 section 8.1: a malformed freshness block is treated
+        # as absent — the map block itself still serves.
+        raw = {
+            key: value for key, value in raw.items() if key != "freshness"
+        }
+    return cast(dict[str, object], raw)
+
+
+_FRESHNESS_STATES = ("current", "stale", "unknown")
+_FRESHNESS_PREFLIGHT_STATUSES = (
+    "reused",
+    "completed",
+    "timed_out",
+    "failed",
+    "not_required",
+    "not_run",
+)
+_FRESHNESS_TTL_TRUST = ("within", "beyond", "not_applicable")
+_FRESHNESS_OUTCOME_KEYS = ("present", "changed", "unreachable", "missing", "new")
+
+
+def _freshness_shape_ok(value: object) -> bool:
+    """The section 8.1 freshness block's pinned shape, checked
+    additively exactly as the 1a block is checked: the three enums,
+    the pin flag as a bool, the five outcome counts as ints.
+    Anything else is malformed and the caller treats the block as
+    absent. Never raises."""
+
+    if not isinstance(value, dict):
+        return False
+    if value.get("state") not in _FRESHNESS_STATES:
+        return False
+    if value.get("preflight_status") not in _FRESHNESS_PREFLIGHT_STATUSES:
+        return False
+    if value.get("ttl_trust") not in _FRESHNESS_TTL_TRUST:
+        return False
+    if not isinstance(value.get("pinned_via_preflight"), bool):
+        return False
+    counts = value.get("outcome_counts")
+    if not isinstance(counts, dict):
+        return False
+    return all(
+        isinstance(counts.get(key), int) for key in _FRESHNESS_OUTCOME_KEYS
+    )
+
+
+def _parse_source_knowledge(
+    configuration_snapshot: dict[str, object],
+) -> dict[str, object] | None:
+    """Accept the snapshot's source_knowledge block only in its
+    pinned shape (doc 33 section 3.6). The block is written at run
+    creation from the approved file index, pinned by hash. A
+    malformed block is treated as absent, exactly like the app_map
+    block: a run must never die over reference data. Never raises."""
+
+    raw = configuration_snapshot.get("source_knowledge")
+    if not isinstance(raw, dict):
+        return None
+    files = raw.get("files")
+    collections = raw.get("collections")
+    if not isinstance(files, list) or not isinstance(collections, list):
+        return None
+    for entry in files:
+        if not isinstance(entry, dict):
+            return None
+        if not all(
+            isinstance(entry.get(key), str) and entry.get(key)
+            for key in ("file_id", "entry_id", "slug", "title", "object_key", "sha256")
+        ):
+            return None
+    for entry in collections:
+        if not isinstance(entry, dict):
+            return None
+        if not all(
+            isinstance(entry.get(key), str) and entry.get(key)
+            for key in ("entry_id", "manifest_object_key")
+        ):
+            return None
+    return cast(dict[str, object], raw)
+
+
+_APPROVED_TEST_DATA_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+
+
+def _parse_approved_test_data(
+    configuration_snapshot: dict[str, object],
+) -> tuple[SafeTestValue, ...]:
+    """Accept the snapshot's approved_test_data block only in its pinned shape.
+
+    The block is written at run creation from the owner's declared
+    test data (doc 17 section 5.2). An entry that fails the shape is
+    dropped and a non-list block yields nothing (C7): consumption
+    forgives, so the run falls back to the built-in defaults rather
+    than dying over owner data. Never raises.
+    """
+
+    raw = configuration_snapshot.get("approved_test_data")
+    if not isinstance(raw, list):
+        return ()
+    entries: list[SafeTestValue] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        value = entry.get("value")
+        if not isinstance(key, str) or not _APPROVED_TEST_DATA_KEY.match(key):
+            continue
+        if not isinstance(value, str):
+            continue
+        try:
+            entries.append(SafeTestValue(key=key, value=value))
+        except Exception:
+            continue
+    return tuple(entries)
+
+
+def _parse_brand_tokens(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    palette = value.get("palette_hexes")
+    families = value.get("font_families")
+    return {
+        "palette_hexes": (
+            [str(item) for item in palette if isinstance(item, str)]
+            if isinstance(palette, list) else []
+        ),
+        "font_families": (
+            [str(item) for item in families if isinstance(item, str)]
+            if isinstance(families, list) else []
+        ),
+    }
+
+
+def _parse_slop_classes(value: object) -> tuple[str, ...] | None:
+    if not isinstance(value, list):
+        return None
+    classes = tuple(
+        item for item in value
+        if isinstance(item, str) and item.strip()
+    )
+    return classes or None
 
 
 def build_run_request(
@@ -145,6 +315,13 @@ def build_run_request(
         network_policy="local_development" if fixture_approval_enabled else "public_only",
         knowledge_context=tuple(
             cast(list[dict[str, object]], configuration_snapshot.get("knowledge", []))
+        ),
+        app_map=_parse_app_map(configuration_snapshot),
+        source_knowledge=_parse_source_knowledge(configuration_snapshot),
+        approved_test_data=_parse_approved_test_data(configuration_snapshot),
+        brand_tokens=_parse_brand_tokens(configuration_snapshot.get("brand_tokens")),
+        slop_classes_enabled=_parse_slop_classes(
+            configuration_snapshot.get("slop_classes_enabled")
         ),
         testing_depth=testing_depth,
         fixture_action_rules=tuple(

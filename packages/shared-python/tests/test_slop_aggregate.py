@@ -60,6 +60,18 @@ def test_js_errors_land_in_defects_never_in_slop() -> None:
     assert result["effort"]["value"] is None
 
 
+def test_browser_and_connection_conditions_do_not_inflate_defect_totals() -> None:
+    result = defect_family([{"url": "https://app.test", "js_errors": [
+        {"rule_id": "DEF_JS_CONSOLE_ERROR", "count": 4,
+         "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT"},
+        {"rule_id": "DEF_JS_CONSOLE_ERROR", "count": 2,
+         "message": "Failed to load resource: net::ERR_EMPTY_RESPONSE"},
+        {"rule_id": "DEF_JS_CONSOLE_ERROR", "count": 3, "message": "App error"},
+    ]}])
+    assert (result["minor"], result["serious"], result["test_condition_occurrences"]) == (3, 0, 6)
+    assert result["per_rule"][0]["occurrences"] == 3
+
+
 def test_defect_totals_use_each_errors_own_severity_in_any_order() -> None:
     # Audit fix: the same rule arrives serious where it reproduced
     # and minor where it did not; the totals must not depend on

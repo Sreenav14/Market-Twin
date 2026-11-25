@@ -133,6 +133,20 @@ async def test_activity_is_redacted_stable_and_refreshed_without_a_watermark():
     assert all(run_id in query.compile().params.values() for query in queries)
 
 
+@pytest.mark.parametrize("result,expected", [("observed", "completed"), ("approval_required", "unverified")])
+async def test_ui_audit_progress_is_visible_without_exposing_payload(result, expected):
+    now = datetime.now(UTC)
+    event = SimpleNamespace(id=1, occurred_at=now, event_type="slop.state.progress",
+        journey_id=uuid4(), execution_id=uuid4(), payload={"result": result, "private": "CANARY"})
+    class Session:
+        async def execute(self, statement):
+            return SimpleNamespace(all=lambda: [(event,)] if "run_events" in str(statement) else [])
+    page = await LiveBrowserRepository(Session()).activity(run_id=uuid4(), cursor=None, limit=50)
+    assert page["items"][0]["kind"] == "slop.state.progress"
+    assert page["items"][0]["status"] == expected
+    assert "CANARY" not in str(page)
+
+
 async def test_historical_cursor_never_filters_the_latest_refresh():
     import base64
     import json
@@ -207,6 +221,15 @@ async def test_live_grant_is_503_when_the_worker_is_unconfigured(
     monkeypatch.setattr(live_browser, "worker_client", unavailable)
     response = await _post_grant(observation)
     assert response.status_code == 503
+
+
+async def test_live_grant_reports_owner_refusal_as_browser_unavailable(observation) -> None:
+    observation.worker.issue_observer_grant = AsyncMock(
+        side_effect=live_browser.ObserverUnavailableError("Internal owner refusal"),
+    )
+    response = await _post_grant(observation)
+    assert response.status_code == 409
+    assert "Internal owner refusal" not in response.text
 
 
 def test_board_item_banner_reads_the_running_item() -> None:

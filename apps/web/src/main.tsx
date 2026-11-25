@@ -8,6 +8,15 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import { App } from "./app/App";
 import { RenderErrorBoundary } from "./app/RenderErrorBoundary";
 import "./styles.css";
+import { applyTheme, getStoredTheme } from "./lib/theme";
+
+applyTheme(getStoredTheme());
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (getStoredTheme() === "system") applyTheme("system");
+});
+window.addEventListener("storage", (event) => {
+  if (event.key === "markettwin-theme") applyTheme(getStoredTheme());
+});
 
 const rootElement = document.getElementById("root");
 

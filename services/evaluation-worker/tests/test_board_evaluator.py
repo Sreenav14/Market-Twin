@@ -1,4 +1,8 @@
-from markettwin_evaluation_worker.board_evaluator import compute_board_verdict
+import pytest
+from markettwin_evaluation_worker.board_evaluator import (
+    compute_board_verdict,
+    market_verdict_section,
+)
 
 
 def _board(statuses: list[str]) -> dict[str, object]:
@@ -93,3 +97,65 @@ def test_missing_event_for_terminal_item_is_a_per_item_gap() -> None:
 def test_empty_board_cant_tell() -> None:
     result = compute_board_verdict(board_document={"items": {}}, board_results={})
     assert result["verdict"] == "Can't tell yet"
+
+
+def _board_section(verdict, *, coverage=1.0, counts=None):
+    return {
+        "verdict": verdict,
+        "coverage": {"coverage": coverage, "counts": counts or {}},
+        "items": [],
+    }
+
+
+@pytest.mark.parametrize(
+    ("board_word", "stored_word"),
+    [
+        ("Ready", "ready"),
+        ("Not ready yet", "not_ready"),
+        ("Can't tell yet", "insufficient_evidence"),
+        ("Some future word", "insufficient_evidence"),
+    ],
+)
+def test_market_verdict_section_maps_board_vocabulary(board_word, stored_word):
+    section = market_verdict_section(_board_section(board_word))
+
+    assert section["verdict"] == stored_word
+
+
+def test_market_verdict_section_carries_coverage_and_confirmed_broken_count():
+    section = market_verdict_section(
+        _board_section("Not ready yet", coverage=0.75,
+                       counts={"worked": 3, "broken": 2, "could_not_check": 1})
+    )
+
+    assert section == {
+        "verdict": "not_ready", "coverage": 0.75, "confirmed_defects": 2,
+    }
+
+    no_broken = market_verdict_section(
+        _board_section("Ready", counts={"worked": 4})
+    )
+    assert no_broken["confirmed_defects"] == 0
+
+
+def test_market_verdict_section_never_emits_ready_with_issues():
+    for word in ("Ready", "Not ready yet", "Can't tell yet"):
+        section = market_verdict_section(
+            _board_section(word, counts={"worked": 1, "broken": 1})
+        )
+        assert section["verdict"] != "ready_with_issues"
+        assert "journeys_executed" not in section
+        assert "journeys_approved" not in section
+
+
+def test_market_verdict_section_degrades_to_cannot_tell_on_malformed_input():
+    fallback = {
+        "verdict": "insufficient_evidence", "coverage": 0.0, "confirmed_defects": 0,
+    }
+
+    assert market_verdict_section({}) == fallback
+    assert market_verdict_section({"verdict": "Ready"}) == fallback
+    assert market_verdict_section(None) == fallback
+    assert market_verdict_section(
+        {"verdict": "Ready", "coverage": {"coverage": "high", "counts": {}}}
+    ) == fallback

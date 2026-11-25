@@ -16,6 +16,7 @@ import {
   MODE_STATUS,
   RUN_STATUS,
   SEVERITY_STATUS,
+  SKILL_STATUS,
   statusEntry,
 } from "./status";
 import type { StatusEntry, StatusSource } from "./status";
@@ -36,6 +37,7 @@ const MAPS: Record<StatusSource, Record<string, StatusEntry>> = {
   lifecycle: LIFECYCLE_STATUS,
   mode: MODE_STATUS,
   flow: FLOW_STATUS,
+  skill: SKILL_STATUS,
 };
 
 afterEach(() => {

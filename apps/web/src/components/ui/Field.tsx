@@ -88,14 +88,3 @@ export function ErrorSummary({ errors }: { errors: SummaryError[] }) {
   );
 }
 
-/* Per-field touched bookkeeping for the punish-late/reward-early
-   timing: a field's error is visible once the field has been blurred
-   or the form has been submitted; because errors are derived from the
-   current value, a corrected field clears instantly. */
-export function fieldErrorVisible(
-  touched: ReadonlySet<string>,
-  submitted: boolean,
-  field: string,
-): boolean {
-  return submitted || touched.has(field);
-}

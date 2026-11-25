@@ -11,7 +11,8 @@ from uuid import uuid4
 import pytest
 from markettwin_execution_orchestrator.browser.auth_session_broker import AuthSessionScope
 from markettwin_execution_orchestrator.browser.auth_verifier import VerifiedPrincipal
-from markettwin_execution_orchestrator.browser.contracts import BrowserSessionHandle
+from markettwin_execution_orchestrator.browser.controller import BrowserController
+from markettwin_execution_orchestrator.browser.contracts import AllowedOrigin, BrowserSessionHandle
 from markettwin_execution_orchestrator.persistence.human_action_lifecycle_repository import (
     HumanActionState,
 )
@@ -20,6 +21,44 @@ from markettwin_execution_orchestrator.workflow.case_execution import (
     PersonaJourneyExecutionRequest,
 )
 from markettwin_shared.auth_verification import AuthVerificationPolicy
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("returned_path", "verified"),
+    [("/protected", True), ("/challenge", False), ("/public", False)],
+)
+async def test_audit_handoff_rechecks_original_destination(
+    monkeypatch: pytest.MonkeyPatch, returned_path: str, verified: bool,
+) -> None:
+    from markettwin_execution_orchestrator.browser import controller as controller_module
+
+    origin = "https://example.invalid"
+    controller = BrowserController()
+    handle = BrowserSessionHandle(uuid4(), uuid4(), uuid4())
+    page = SimpleNamespace(url=f"{origin}/post-signin")
+
+    async def open_route(url, **_kwargs):
+        assert url == f"{origin}/protected"
+        page.url = f"{origin}{returned_path}"
+        return SimpleNamespace(ok=True)
+
+    page.goto = AsyncMock(side_effect=open_route)
+    browser = SimpleNamespace(
+        page=page, lock=asyncio.Lock(), timeout_ms=2000,
+        allowed_origins=(AllowedOrigin("https", "example.invalid"),),
+        network_policy="public_only",
+    )
+    monkeypatch.setattr(controller, "_get_session", lambda **_kwargs: browser)
+    monkeypatch.setattr(controller, "human_continuation_ready", AsyncMock(
+        side_effect=lambda _handle: not page.url.endswith("/challenge"),
+    ))
+    monkeypatch.setattr(controller_module, "resolve_and_validate_host", AsyncMock())
+
+    assert await controller.verify_handoff_destination(
+        handle, expected_url=f"{origin}/protected",
+    ) is verified
+    page.goto.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -94,6 +133,7 @@ async def test_login_handoff_waits_for_signed_release_then_verifies_same_handle(
     db_session.commit = AsyncMock()
     db_session.rollback = AsyncMock()
     db_session.scalar = AsyncMock(return_value=suspension_id)
+    db_session.flush = AsyncMock()
     request = cast(
         PersonaJourneyExecutionRequest,
         SimpleNamespace(
@@ -184,3 +224,127 @@ async def test_human_wait_is_excluded_from_case_action_deadline() -> None:
             # The initial 40 ms action allowance remains after the human wait.
             await asyncio.sleep(0.06)
     assert time.monotonic() - started >= 0.1
+
+
+def _unanswered_lifecycle(request_id: Any) -> MagicMock:
+    """Lifecycle double whose request is never leased or answered."""
+    lifecycle = MagicMock()
+    lifecycle.create_login_request = AsyncMock(return_value=request_id)
+
+    async def pending_state(**_kwargs: Any) -> HumanActionState:
+        return HumanActionState(
+            "pending", "agent", 1, datetime.now(UTC) + timedelta(minutes=2)
+        )
+
+    lifecycle.state = AsyncMock(side_effect=pending_state)
+    lifecycle.finish_verification = AsyncMock()
+    lifecycle.abandon = AsyncMock()
+    return lifecycle
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "assistance_reason",
+    ["absent_scope", "ambiguous_scope", "absent_target", "ambiguous_target"],
+)
+async def test_recovery_assistance_timeout_raises_timeout_subclass_and_abandons(
+    monkeypatch: pytest.MonkeyPatch,
+    assistance_reason: str,
+) -> None:
+    request_id = uuid4()
+    handle = BrowserSessionHandle(uuid4(), uuid4(), uuid4())
+    lifecycle = _unanswered_lifecycle(request_id)
+    monkeypatch.setattr(
+        case_execution, "HumanActionLifecycleRepository", lambda _session: lifecycle
+    )
+    controller = MagicMock()
+    controller.verify_authenticated_role = AsyncMock(return_value=None)
+    db_session = MagicMock()
+    db_session.commit = AsyncMock()
+    db_session.rollback = AsyncMock()
+    request = cast(
+        PersonaJourneyExecutionRequest,
+        SimpleNamespace(
+            test_run_id=uuid4(),
+            execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+        ),
+    )
+    verifier = AsyncMock(return_value=True)
+    with pytest.raises(case_execution.HumanAssistanceTimeoutError) as caught:
+        await case_execution.verify_or_request_login(
+            request=request,
+            controller=controller,
+            handle=handle,
+            policy=None,
+            auth_scope=None,
+            session=db_session,
+            max_wait_seconds=0.05,
+            assistance_reason=assistance_reason,  # type: ignore[arg-type]
+            continuation_verifier=verifier,
+            planned_step_index=2,
+        )
+    # The subclass keeps every base-type catch working; the request is
+    # abandoned after the same cleanup and no verification is attempted.
+    assert isinstance(caught.value, case_execution.AuthenticationVerificationBlocked)
+    assert str(caught.value) == "The bounded human assistance window expired."
+    lifecycle.abandon.assert_awaited_once_with(request_id=request_id)
+    lifecycle.finish_verification.assert_not_awaited()
+    verifier.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_login_handoff_timeout_raises_base_blocked_not_timeout_subclass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request_id = uuid4()
+    handle = BrowserSessionHandle(uuid4(), uuid4(), uuid4())
+    run_id, target_id = uuid4(), uuid4()
+    policy = AuthVerificationPolicy(
+        origin="https://example.invalid",
+        marker_selector="[data-testid='signed-in-role']",
+        expected_marker="member",
+        role="member",
+        account_reference="fixture-member-1",
+    )
+    auth_scope = AuthSessionScope(
+        run_id=run_id,
+        target_id=target_id,
+        role="member",
+        account_reference="fixture-member-1",
+        origin="https://example.invalid",
+    )
+    lifecycle = _unanswered_lifecycle(request_id)
+    monkeypatch.setattr(
+        case_execution, "HumanActionLifecycleRepository", lambda _session: lifecycle
+    )
+    controller = MagicMock()
+    controller.verify_authenticated_role = AsyncMock(return_value=None)
+    db_session = MagicMock()
+    db_session.get = AsyncMock(return_value=None)
+    db_session.commit = AsyncMock()
+    db_session.rollback = AsyncMock()
+    request = cast(
+        PersonaJourneyExecutionRequest,
+        SimpleNamespace(
+            test_run_id=run_id,
+            execution_id=handle.execution_id,
+            journey_id=handle.journey_id,
+        ),
+    )
+    with pytest.raises(case_execution.AuthenticationVerificationBlocked) as caught:
+        await case_execution.verify_or_request_login(
+            request=request,
+            controller=controller,
+            handle=handle,
+            policy=policy,
+            auth_scope=auth_scope,
+            session=db_session,
+            max_wait_seconds=0.05,
+        )
+    # Login byte-identity at the seam: exact base type, same message,
+    # same abandon cleanup as before the branch existed.
+    assert type(caught.value) is case_execution.AuthenticationVerificationBlocked
+    assert str(caught.value) == "The bounded human assistance window expired."
+    lifecycle.abandon.assert_awaited_once_with(request_id=request_id)
+    lifecycle.finish_verification.assert_not_awaited()

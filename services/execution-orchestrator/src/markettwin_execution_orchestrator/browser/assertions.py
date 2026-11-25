@@ -4,6 +4,7 @@ import asyncio
 import re
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from urllib.parse import urlsplit, urlunsplit
 
 from markettwin_shared.deep_testing import AssertionReason, AssertionStatus
@@ -33,19 +34,35 @@ async def repeat_read_only_assertion(
     assertion: ExpectedAssertion,
     timeout_ms: int = 1500,
     *, minimum_interval_ms: int = 0,
+    approved_values: tuple[str, ...] = (),
+    run_mode: str | None = None,
 ) -> tuple[AssertionObservation, AssertionObservation]:
     """Read the same oracle twice without repeating the action that produced it."""
-    first = await evaluate_assertion(page, assertion, timeout_ms)
+    first = await evaluate_assertion(
+        page, assertion, timeout_ms,
+        approved_values=approved_values, run_mode=run_mode,
+    )
     if minimum_interval_ms:
         await asyncio.sleep(minimum_interval_ms / 1000)
-    second = await evaluate_assertion(page, assertion, timeout_ms)
+    second = await evaluate_assertion(
+        page, assertion, timeout_ms,
+        approved_values=approved_values, run_mode=run_mode,
+    )
     return first, second
+
+
+@lru_cache(maxsize=128)
+def _url_path_regex(expected: str) -> re.Pattern[str]:
+    return re.compile("^" + re.escape(expected) + r"(?:[?#].*)?$")
 
 
 async def evaluate_assertion(
     page: Page,
     assertion: ExpectedAssertion,
     timeout_ms: int = 1500,
+    *,
+    approved_values: tuple[str, ...] = (),
+    run_mode: str | None = None,
 ) -> AssertionObservation:
     """Wait only for read-only expected state; never retry a user action."""
     if not 1 <= timeout_ms <= 5000:
@@ -86,7 +103,36 @@ async def evaluate_assertion(
         # Values from arbitrary text fields can contain credentials or personal data.
         # Selected-option/value assertions need a separately approved safe read contract.
         if oracle == "value":
-            return result("unverified", None, "unsupported_safe_value_read")
+            # The one approved channel (doc 24 section 6.1, over doc
+            # 17's approved data): the expected value must be one the
+            # owner declared or a built-in safe default; the compare
+            # runs in-page and only the boolean result ever leaves the
+            # page — the field's actual content enters no record. A
+            # read-only run refuses distinctly, so the mode refusal is
+            # never confused with the privacy refusal above.
+            if run_mode == "read_only":
+                return result("unverified", None, "not_exercised_read_only")
+            if (
+                locator is None
+                or not isinstance(expected, str)
+                or expected not in approved_values
+            ):
+                return result("unverified", None, "unsupported_safe_value_read")
+            count = await locator.count()
+            if count > 1:
+                return result("unverified", None, "ambiguous_target")
+            if count == 0:
+                return result("unverified", None, "inspection_failed")
+            matched = await locator.evaluate(
+                "(element, expectedValue) => {"
+                " const actual = ('value' in element && typeof element.value === 'string')"
+                " ? element.value : (element.textContent || '');"
+                " return actual === expectedValue; }",
+                expected,
+            )
+            return result(
+                "satisfied" if matched else "not_satisfied", bool(matched),
+            )
         try:
             if oracle == "title":
                 assert isinstance(expected, str)
@@ -99,7 +145,7 @@ async def evaluate_assertion(
                 # Exact public origin/path; query and fragment are intentionally
                 # outside this versioned oracle, not redacted full-URL equality.
                 await expect(page).to_have_url(
-                    re.compile("^" + re.escape(expected) + r"(?:[?#].*)?$"), timeout=timeout_ms
+                    _url_path_regex(expected), timeout=timeout_ms
                 )
             else:
                 assert locator is not None

@@ -1,7 +1,8 @@
 """Read-only authenticated identity and role checks for approved targets."""
 
+import asyncio
 from typing import NamedTuple
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from markettwin_shared.auth_verification import AuthVerificationPolicy
 from playwright.async_api import Page
@@ -15,11 +16,31 @@ class VerifiedPrincipal(NamedTuple):
     origin: str
 
 
+class SensitiveChallengeInspection(NamedTuple):
+    active: bool
+    timed_out: bool
+
+
 __all__ = [
     "AuthVerificationPolicy",
+    "SensitiveChallengeInspection",
     "VerifiedPrincipal",
+    "inspect_sensitive_challenge",
     "verify_authenticated_role",
 ]
+
+# A challenge inspection is a handful of DOM queries that a live page
+# answers in milliseconds. The bound exists so a wedged renderer or
+# connection can never hold a run open (MT-000169).
+SENSITIVE_CHALLENGE_TIMEOUT_SECONDS = 10
+
+
+def is_account_entry_route(url: str) -> bool:
+    """Recognize standalone account destinations during read-only discovery."""
+    parts = unquote(urlsplit(url).path).casefold().split("/")
+    return any(part in {
+        "login", "log-in", "signin", "sign-in", "signup", "sign-up", "register",
+    } for part in parts)
 
 
 def _origin(url: str) -> str | None:
@@ -41,12 +62,39 @@ def _anchor_location(url: str) -> tuple[str, str] | None:
     return source.hostname, source.path
 
 
-async def has_active_sensitive_challenge(page: Page) -> bool:
+async def inspect_sensitive_challenge(page: Page) -> SensitiveChallengeInspection:
     """Inspect visible challenge UI only, never challenge tokens or credentials.
 
     A persistent provider anchor is cleared only by its checked checkbox. Missing,
     unreadable or ambiguous widget state remains an active challenge.
+
+    The inspection is bounded: a page that cannot answer within
+    SENSITIVE_CHALLENGE_TIMEOUT_SECONDS reports timed_out instead of
+    raising, so a wedged renderer or connection can neither hold a run
+    open (MT-000169) nor veto the navigation that would leave the page
+    (MT-000237). Non-timeout failures propagate exactly as before.
     """
+    try:
+        active = await asyncio.wait_for(
+            _inspect_sensitive_challenge(page),
+            timeout=SENSITIVE_CHALLENGE_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        return SensitiveChallengeInspection(active=False, timed_out=True)
+    return SensitiveChallengeInspection(active=active, timed_out=False)
+
+
+async def has_active_sensitive_challenge(page: Page) -> bool:
+    """True only when a challenge is actually seen.
+
+    A check that cannot complete is not a challenge: on timeout this
+    answers False. Callers that must distinguish the timeout use
+    inspect_sensitive_challenge.
+    """
+    return (await inspect_sensitive_challenge(page)).active
+
+
+async def _inspect_sensitive_challenge(page: Page) -> bool:
     if await page.locator(
         'input[type="password"]:visible, input[autocomplete="one-time-code"]:visible, '
         'input[autocomplete="username"]:visible, input[name*="otp" i]:visible, '
@@ -98,7 +146,11 @@ async def verify_authenticated_role(
     if policy.origin not in allowed_origins or _origin(page.url) != policy.origin:
         return None
     try:
-        if await has_active_sensitive_challenge(page):
+        inspection = await inspect_sensitive_challenge(page)
+        # Fail closed on a check that could not answer, exactly as the
+        # pre-Fix-C timeout raise did through the except below: an
+        # unknown challenge state never verifies an identity.
+        if inspection.active or inspection.timed_out:
             return None
         locator = page.locator(policy.marker_selector)
         if await locator.count() != 1 or not await locator.is_visible():

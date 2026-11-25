@@ -10,6 +10,11 @@ import pytest
 from litellm.exceptions import RateLimitError
 from markettwin_evaluation_worker import visual_verifier
 
+@pytest.fixture(autouse=True)
+def _configured_visual_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_NAME", "openai/gpt-6-luna")
+    monkeypatch.delenv("VISUAL_MODEL_NAME", raising=False)
+
 
 @pytest.mark.parametrize("preconditions_met", [False, None, "true", True])
 async def test_unestablished_precondition_cannot_confirm_a_product_defect(
@@ -274,3 +279,15 @@ async def test_visual_verifier_marks_exhausted_rate_limit_unverified(
     assert "rate-limited" in result.rationale
     assert attempts == visual_verifier.VISUAL_RATE_LIMIT_MAX_ATTEMPTS
     assert delays == [1.0, 2.0, 4.0]
+
+
+def test_visual_model_name_requires_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("VISUAL_MODEL_NAME", raising=False)
+    monkeypatch.delenv("MODEL_NAME", raising=False)
+
+    with pytest.raises(
+        RuntimeError, match="VISUAL_MODEL_NAME or MODEL_NAME is required"
+    ):
+        visual_verifier._visual_model_name()

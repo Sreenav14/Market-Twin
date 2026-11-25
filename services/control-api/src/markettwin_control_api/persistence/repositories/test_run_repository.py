@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from markettwin_control_api.persistence.models import (
@@ -72,6 +72,12 @@ class TestRunRepository:
     ) -> None:
         self._session = session
 
+    async def lock_creation_request(self, draft_id: UUID, user_id: UUID) -> TestRunRecord | None:
+        # Serialize only retries of this request until draft creation commits or rolls back.
+        key = int.from_bytes(draft_id.bytes[:8], "big", signed=True)
+        await self._session.execute(select(func.pg_advisory_xact_lock(key)))
+        return await self.get_for_user(test_run_id=draft_id, user_id=user_id)
+
     async def create(
         self,
         *,
@@ -84,10 +90,12 @@ class TestRunRepository:
         synthetic_fixture_approval_enabled: bool = False,
         human_action_approvals_enabled: bool = False,
         run_kind: str | None = None,
+        draft_id: UUID | None = None,
     ) -> TestRunRecord:
         """Create a draft test run."""
 
         test_run = TestRun(
+            id=draft_id,
             workspace_id=workspace_id,
             application_id=application_id,
             target_id=target_id,
@@ -109,6 +117,8 @@ class TestRunRepository:
         self,
         *,
         application_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[TestRunRecord]:
         """List test runs for an application."""
 
@@ -118,8 +128,9 @@ class TestRunRepository:
                 TestRun.application_id == application_id
             )
             .order_by(
-                TestRun.created_at.desc()
+                TestRun.created_at.desc(), TestRun.id.desc(),
             )
+            .limit(limit).offset(offset)
         )
 
         result = await self._session.execute(statement)

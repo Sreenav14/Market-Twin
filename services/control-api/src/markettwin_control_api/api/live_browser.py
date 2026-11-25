@@ -19,7 +19,7 @@ from markettwin_control_api.persistence.repositories.execution_pause_repository 
 from markettwin_control_api.persistence.repositories.live_browser_repository import (
     LiveBrowserRepository,
 )
-from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient
+from markettwin_control_api.services.hitl_worker_client import HitlWorkerClient, ObserverUnavailableError
 
 
 router = APIRouter(tags=["Live Execution"], route_class=ObservationRoute)
@@ -162,6 +162,8 @@ async def create_live_grant(
             journey_id=browser.journey_id,
             generation=browser.generation,
         )
+    except ObserverUnavailableError:
+        raise HTTPException(409, "The browser session changed or is no longer available to watch.") from None
     except RuntimeError:
         raise HTTPException(
             503, "The supervised browser owner is unavailable.",

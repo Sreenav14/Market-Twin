@@ -7,7 +7,6 @@ import { SegmentedControl } from "./SegmentedControl";
 import { Tab, TabPanel, Tabs } from "./Tabs";
 import { Menu, NavDisclosure } from "./Menu";
 import { Dialog, DiscardChangesDialog } from "./Dialog";
-import { Popover } from "./Popover";
 import { Tooltip } from "./tooltip";
 import { CommandMenu } from "../markettwin/CommandMenu";
 import { NAV_COMMANDS, filterNavCommands } from "../../lib/navCommands";
@@ -179,23 +178,6 @@ describe("Dialog — ONE dialog primitive", () => {
     expect(screen.getByRole("button", { name: "Keep editing" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(screen.queryByRole("dialog", { name: "Rename knowledge" })).not.toBeInTheDocument();
-  });
-});
-
-describe("Popover — non-modal, interactive content", () => {
-  it("opens on click, Esc closes and returns focus to the trigger", async () => {
-    const user = userEvent.setup();
-    render(
-      <Popover label="About checks" trigger={<button type="button">About checks</button>} title="Checks">
-        <a href="/runs">See tests</a>
-      </Popover>,
-    );
-    const trigger = screen.getByRole("button", { name: "About checks" });
-    await user.click(trigger);
-    expect(await screen.findByRole("link", { name: "See tests" })).toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("link", { name: "See tests" })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
   });
 });
 

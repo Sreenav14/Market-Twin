@@ -63,10 +63,12 @@ def test_failed_request_records_only_origin() -> None:
 async def test_sensitive_select_is_blocked_before_mutation(monkeypatch, label, autocomplete):
     locator = SimpleNamespace(
         count=AsyncMock(return_value=1), select_option=AsyncMock(),
-        get_attribute=AsyncMock(side_effect=[None, autocomplete]),
+        get_attribute=AsyncMock(return_value=autocomplete),
+        evaluate=AsyncMock(return_value="select-one"),
     )
     session = SimpleNamespace(
-        page=SimpleNamespace(get_by_label=Mock(return_value=locator)),
+        page=SimpleNamespace(url="https://example.test/form", get_by_label=Mock(return_value=locator)),
+        allowed_origins=(AllowedOrigin("https", "example.test"),), network_policy="public_only",
         next_action_number=Mock(),
     )
     controller = BrowserController()

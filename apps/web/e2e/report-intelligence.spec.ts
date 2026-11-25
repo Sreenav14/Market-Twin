@@ -324,7 +324,7 @@ async function reportWorkspace(page: Page) {
     {id:'a0000000-0000-4000-8000-000000000004',title:'Saved state differs across tasks',summary:'Two task records cite a saved-state issue.',severity:'medium',category:'functional',finding_kind:'observed_product_issue',verification_status:'verified_visual',status:'open',recommendation:'Review both task records.',journey_ids:[journeyId,tasks[1].id],evidence:{step_ids:[13],artifact_ids:[artifactId]}},
   ];
   await page.route(`**/test-runs/${runId}`,route=>route.fulfill({json:{...run,configuration_snapshot:{...run.configuration_snapshot,execution_mode:'legacy_persona'}}}));
-  await page.route(`**/test-runs/${runId}/results`,route=>route.fulfill({json:{...results,findings,report:{...results.report,payload:{schema_version:1,generator:'deterministic_evaluation_v1',journeys:{total:6,status_counts:{completed:4,policy_blocked:1,skipped:1}},assessment:{status:'completed',individual_results:tasks.map(task=>({journey_id:task.id,goal_outcome:task.execution_status==='completed'?'partially_met':'inconclusive',ease_of_use:'inconclusive',summary:'Synthetic qualitative assessment of saved evidence.',recommendations:['Review the supporting record.']}))}}}}}));
+  await page.route(`**/test-runs/${runId}/results`,route=>route.fulfill({json:{...results,findings,report:{...results.report,payload:{schema_version:1,generator:'deterministic_evaluation_v1',journeys:{total:6,status_counts:{completed:4,policy_blocked:1,skipped:1},outcome_counts:{passed:3,failed:1,none:2}},findings:{total:4,confirmed_issue_count:2,unverified_observation_count:1,execution_diagnostic_count:1,category_counts:{functional:2,visual_criterion:1,policy:1}},assessment:{status:'completed',individual_results:tasks.map(task=>({journey_id:task.id,goal_outcome:task.execution_status==='completed'?'partially_met':'inconclusive',ease_of_use:'inconclusive',summary:'Synthetic qualitative assessment of saved evidence.',recommendations:['Review the supporting record.']}))}}}}}));
   await page.route(`**/test-runs/${runId}/journeys`,route=>route.fulfill({json:tasks}));
   await page.route(`**/journeys/${journeyId}?*`,route=>{
     const after=Number(new URL(route.request().url()).searchParams.get('after_step')??0);
@@ -333,84 +333,47 @@ async function reportWorkspace(page: Page) {
 }
 const evidence=process.env.REPORT_EVIDENCE_DIR||(process.env.DESIGN_EVIDENCE_DIR?path.join(process.env.DESIGN_EVIDENCE_DIR,'report'):path.resolve(process.cwd(),'test-results/report-intelligence'));
 
-test('report intelligence: three analytical views at four widths',async({page})=>{
-  test.setTimeout(240000);await mkdir(evidence,{recursive:true});await reportWorkspace(page);
-  const records=[];
-  for(const width of [1440,1024,768,390]){await page.setViewportSize({width,height:1000});
-    for(const view of ['overview','usefulness','inspection']){
-      await page.goto(`/runs/${runId}/report?reportView=${view}`);
-      await expect(page.getByRole('navigation',{name:'Report views'})).toBeVisible();
-      await expect(page.getByText('Loading recorded task outcomes')).toHaveCount(0);
-      await page.evaluate(()=>document.fonts.ready);
-      const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations;
-      const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);
-      await page.screenshot({path:path.join(evidence,`${view}-${width}.png`),fullPage:true,animations:'disabled'});
-      records.push({view,width,overflow,violations:violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))}))});
-    }
+test("Summary stays readable across four widths and keeps the legacy report URL usable", async ({ page }) => {
+  test.setTimeout(120_000);
+  await reportWorkspace(page);
+  await mkdir(evidence, { recursive: true });
+  for (const width of [1440, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(`/runs/${runId}/report`);
+    await expect(page.getByRole("region", { name: "Takeaway" })).toBeVisible();
+    const tabs = page.getByRole("navigation", { name: "Test sections" });
+    await expect(tabs.getByRole("link")).toHaveText(["Summary", "Watch", "Activity", "Evidence"]);
+    await expect(tabs.getByRole("link", { name: "Summary" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { name: "Journey outcomes" })).toBeVisible();
+    await expect(page.getByText("Worked · 3 of 6")).toBeVisible();
+    await expect(page.getByText("Model assessment")).toHaveCount(0);
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
+    const violations = (await new AxeBuilder({ page }).include(".report-frame").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations;
+    expect(violations.map(({ id, nodes }) => ({ id, nodes: nodes.map(node => node.target) }))).toEqual([]);
+    await page.screenshot({ path: path.join(evidence, `summary-${width}.png`), fullPage: true, animations: "disabled" });
   }
-  const fs=await import('node:fs/promises');await fs.writeFile(path.join(evidence,'manifest.json'),JSON.stringify(records,null,2));
-  expect(records.filter(r=>r.overflow)).toEqual([]);expect(records.filter(r=>r.violations.length)).toEqual([]);
 });
 
-test('report intelligence: outcome and persona filters preserve truthful denominators',async({page})=>{
-  await reportWorkspace(page);await page.goto(`/runs/${runId}/report`);
-  await page.getByText('Recorded task outcomes and coverage', { exact: true }).click();
-  const chart=page.getByRole('region',{name:'Recorded task outcomes'});
-  await chart.getByRole('button',{name:/Blocked.*1/}).click();
-  await expect(page).toHaveURL(/outcome=blocked/);
-  await expect(page.getByRole('status').filter({hasText:'1 of 6 recorded tasks'})).toBeVisible();
-  await expect(page.locator('.report-task-table tbody')).toContainText('Submit protected form');
-  await expect(page.locator('.report-task-table tbody')).toContainText('Blocked');
-  await page.getByRole('button',{name:'Reset task filters'}).click();
-  await page.getByRole('combobox',{name:'Recorded persona',exact:true}).selectOption('Returning user');
-  await expect(page.getByRole('status').filter({hasText:'3 of 6 recorded tasks'})).toBeVisible();
-  await page.reload();await expect(page.getByRole('combobox',{name:'Recorded persona',exact:true})).toHaveValue('Returning user');
+test("Summary enables keyboard review of a finding with its own evidence link", async ({ page }) => {
+  await reportWorkspace(page);
+  await page.goto(`/runs/${runId}`);
+  const findings = page.locator("#report-findings");
+  await expect(findings.getByText("Preference was not retained")).toHaveCount(0);
+  await findings.getByRole("button", { name: "Functionality · 2" }).click();
+  const verified = findings.getByText("Verified · 2", { exact: true });
+  await verified.focus();
+  await verified.press("Enter");
+  await expect(findings.getByText("Preference was not retained")).toBeVisible();
+  await expect(findings.getByText("Label needs a visual review")).toHaveCount(0);
+  await findings.getByText("Preference was not retained").click();
+  await expect(findings.getByRole("link", { name: "View evidence" })).toHaveAttribute("href", `/runs/${runId}/journeys/${journeyId}?step=13`);
 });
 
-test('report intelligence: category severity and selected evidence stay synchronized',async({page})=>{
-  await reportWorkspace(page);await page.goto(`/runs/${runId}/report?reportView=inspection`);
-  await page.getByRole('region',{name:'Findings by category'}).getByRole('button',{name:/functional.*2/}).click();
-  await page.getByRole('combobox',{name:'Severity',exact:true}).selectOption('high');
-  await expect(page.getByRole('status').filter({hasText:'1 matching finding'})).toBeVisible();
-  await expect(page.getByRole('article',{name:'Selected finding'})).toContainText('Preference was not retained');
-  await expect(page.getByRole('combobox',{name:'Category',exact:true})).toHaveValue('functional');
-  await page.reload();await expect(page.getByRole('combobox',{name:'Severity',exact:true})).toHaveValue('high');
-  await page.getByRole('button',{name:'Reset finding filters'}).click();
-  await expect(page.getByRole('status').filter({hasText:'4 matching findings'})).toBeVisible();
-  await page.getByRole('button',{name:/Saved state differs across tasks/}).click();
-  await expect(page.getByRole('article',{name:'Selected finding'}).getByRole('link',{name:'Open finding and linked evidence'})).toHaveAttribute('href',`/runs/${runId}/findings/a0000000-0000-4000-8000-000000000004`);
-});
-
-test('report intelligence: recorded workflow pagination and exact step evidence',async({page})=>{
-  await reportWorkspace(page);await page.goto(`/runs/${runId}/report?reportView=usefulness&journey=${journeyId}`);
-  await expect(page.getByText('Partial sequence',{exact:false})).toBeVisible();
-  await expect(page.getByRole('list',{name:'Recorded workflow steps'}).getByRole('button')).toHaveCount(2);
-  await page.getByRole('button',{name:'Load more recorded steps'}).click();
-  await page.getByRole('button',{name:/Step 3.*Verify saved state/}).click();
-  await expect(page).toHaveURL(/reportStep=13/);
-  await expect(page.getByRole('region',{name:'Selected recorded step'})).toContainText('Synthetic preference shown');
-  await page.getByRole('link',{name:'Inspect this step and supporting evidence'}).click();
-  await expect(page).toHaveURL(/journeys.*step=13/);
-});
-
-test('report intelligence: missing journeys never conceal saved findings',async({page})=>{
-  await reportWorkspace(page);await page.route(`**/test-runs/${runId}/journeys`,route=>route.fulfill({status:503,json:{detail:'Synthetic unavailable data'}}));
-  await page.goto(`/runs/${runId}/report?reportView=inspection`);
-  await expect(page.getByRole('article',{name:'Selected finding'})).toBeVisible();
-  await expect(page.getByRole('alert').filter({hasText:'Related task labels could not be loaded'})).toBeVisible({timeout:15000});
-  await page.screenshot({path:path.join(evidence,'partial-error-1440.png'),fullPage:true,animations:'disabled'});
-});
-
-test('report intelligence: legacy feature reports preserve verdict and source cases',async({page})=>{
-  await installWorkspace(page);await mkdir(path.resolve(evidence,'../after'),{recursive:true});
-  for(const width of [1440,1024,768,390]){
-    await page.setViewportSize({width,height:1000});await page.goto(`/runs/${runId}/report`);
-    await expect(page.getByRole('region',{name:'Test result'})).toContainText('Insufficient evidence');
-    await expect(page.getByRole('button',{name:/Save profile preference/})).toBeVisible();
-    await page.evaluate(()=>document.fonts.ready);
-    await page.screenshot({path:path.resolve(evidence,'../after',`report-${width}.png`),fullPage:true,animations:'disabled'});
-  }
-  await page.goto(`/runs/${runId}/report?reportView=usefulness`);
-  await expect(page.getByText('Case executors are not personas',{exact:false})).toBeVisible();
-  await expect(page.getByRole('combobox',{name:'Recorded persona',exact:true})).toHaveCount(0);
+test("historical feature-case anchor opens its saved case list", async ({ page }) => {
+  await installWorkspace(page);
+  await page.goto(`/runs/${runId}/results#report-feature-cases`);
+  const cases = page.locator("#report-feature-cases");
+  await expect(cases).toHaveAttribute("open", "");
+  await expect(cases.getByRole("button", { name: /Save profile preference/ })).toBeVisible();
 });

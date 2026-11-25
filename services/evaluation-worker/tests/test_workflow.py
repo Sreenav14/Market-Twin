@@ -263,3 +263,72 @@ async def test_retry_after_each_commit_boundary(
     assert result.finding_ids == ()
     assert snapshot_repository.ensure_run_level_snapshot.await_count == 2
     assert session.commit.await_count == (2 if failure_stage == "provenance" else 3)
+
+
+@pytest.mark.asyncio
+async def test_enrichment_merge_adds_market_verdict(monkeypatch) -> None:
+    """W1 (doc 19 section 5.3): the U-P1-05 enrichment merge stamps the same
+    projected market_verdict onto an explore_test report row, so the stored
+    payload carries the key whichever completion path wrote the report."""
+    run_id = uuid4()
+    report_id = uuid4()
+    items = [
+        {"item_id": str(index), "name": f"Check {index}", "status": "worked"}
+        for index in range(3)
+    ]
+    board = {"items": items, "state": "completed"}
+    events = {item["item_id"]: {"board_status": "worked"} for item in items}
+    run = SimpleNamespace(
+        run_kind="explore_test",
+        configuration_snapshot={"execution_mode": "legacy_x", "harness_state": board},
+    )
+    report_row = SimpleNamespace(report_payload={})
+
+    async def _get(model, _key):
+        return run if model.__name__ == "TestRun" else report_row
+
+    session = SimpleNamespace(get=_get, commit=AsyncMock())
+
+    class Repository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def validate_run_ready(self, *, test_run_id) -> None:
+            return None
+
+        async def list_board_item_results(self, *, test_run_id):
+            return events
+
+    class Snapshots:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def ensure_run_level_snapshot(self, *, snapshot_id, **_kwargs):
+            return snapshot_id
+
+    monkeypatch.setattr(workflow, "EvaluationRepository", Repository)
+    monkeypatch.setattr(
+        workflow, "EvaluationRuntimeSnapshotRepository", Snapshots)
+    monkeypatch.setattr(
+        workflow, "evaluate_completed_run",
+        AsyncMock(return_value=SimpleNamespace(finding_ids=())),
+    )
+    monkeypatch.setattr(
+        workflow, "evaluate_visual_criteria_for_run",
+        AsyncMock(return_value=SimpleNamespace(evaluations=[])),
+    )
+    monkeypatch.setattr(
+        workflow, "persist_visual_findings", AsyncMock(return_value=()))
+    monkeypatch.setattr(
+        workflow, "generate_deterministic_report",
+        AsyncMock(return_value=SimpleNamespace(report_id=report_id)),
+    )
+
+    await workflow._evaluate_and_generate_report(
+        test_run_id=run_id, session=session, visual_storage=SimpleNamespace(),
+    )
+
+    assert report_row.report_payload["market_verdict"] == {
+        "verdict": "ready", "coverage": 1.0, "confirmed_defects": 0,
+    }
+    assert report_row.report_payload["verdict"] == "Ready"

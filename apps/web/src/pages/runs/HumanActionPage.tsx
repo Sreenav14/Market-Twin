@@ -6,7 +6,7 @@ import { AlertTriangle, Clock3, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useLocation, useOutletContext } from "react-router-dom";
 
 import type { RunContext } from "../../layouts/RunLayout";
-import { api, type HumanAction, type HumanLeaseGrant, type LiveExecution } from "../../lib/api";
+import { api, ApiError, type HumanAction, type HumanLeaseGrant, type LiveExecution } from "../../lib/api";
 import { canAuthorizeTarget } from "../../lib/permissions";
 import { terminalTestStatuses } from "../../lib/results";
 import { HumanBrowserViewer } from "./HumanBrowserViewer";
@@ -56,12 +56,15 @@ function RequestContext({ action, runId }: { action: HumanAction; runId: string 
 }
 
 const HumanAssistanceContainer = createContext<HTMLDivElement | null>(null);
+const HumanControlSurface = createContext(false);
+export const useHumanControlSurface = () => useContext(HumanControlSurface);
 type ActiveControl = { requestId: string; done: () => void } | null;
 
 /** One lease/viewer owner persists across run routes; the portal target never changes. */
 export function HumanAssistanceHost({ context, children }: { context: RunContext; children: ReactNode }) {
   const [container] = useState(() => document.createElement("div"));
   const [control, setControl] = useState<ActiveControl>(null);
+  const [controlSurface, setControlSurface] = useState(false);
   const fallback = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const inline = ["/activity", "/watch"].some((suffix) => location.pathname.endsWith(suffix));
@@ -70,10 +73,12 @@ export function HumanAssistanceHost({ context, children }: { context: RunContext
     if (!showing && !container.parentElement) fallback.current?.append(container);
   }, [showing, container]);
   return <HumanAssistanceContainer.Provider value={container}>
+    <HumanControlSurface.Provider value={controlSurface}>
     {control && !showing ? <Banner severity="info" titleAs="h2" title="You still control the test browser" action={<span style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><Link className="secondary-button" to={`/runs/${context.run.id}/watch`}>Return to browser control</Link><button type="button" className="primary-button" onClick={control.done}>Hand back</button></span>}>The tester is paused. Return to the browser or finish the handoff.</Banner> : null}
     {children}
     <div ref={fallback} hidden={showing || !control} className="human-assistance-fallback" />
-    {createPortal(<HumanActionPanel context={context} inline={inline} onControlChange={setControl} />, container)}
+    {createPortal(<HumanActionPanel context={context} inline={inline} onControlChange={setControl} onSurfaceChange={setControlSurface} />, container)}
+    </HumanControlSurface.Provider>
   </HumanAssistanceContainer.Provider>;
 }
 
@@ -88,10 +93,12 @@ export function HumanActionPage() {
   return container ? <div ref={slot} className="human-assistance-slot" /> : <HumanActionPanel />;
 }
 
-function HumanActionPanel({ context, inline = false, onControlChange }: {
+function HumanActionPanel({ context, inline = false, onControlChange, onSurfaceChange }: {
   context?: RunContext; inline?: boolean; onControlChange?: (control: ActiveControl) => void;
+  onSurfaceChange?: (active: boolean) => void;
 }) {
   const inherited = useOutletContext<RunContext>();
+  const { hash, key: locationKey } = useLocation();
   const { run, user, workspace } = context ?? inherited;
   const canManageHumanActions = canAuthorizeTarget(workspace.role);
   const ended = terminalTestStatuses.has(run.status);
@@ -109,6 +116,11 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
     () => queryClient.getQueryData<LiveExecution>(["live-execution", user.id, workspace.id, workspace.role, run.id])?.pause?.status ?? "",
   );
   const resumePending = ["resume_requested", "verifying"].includes(pauseStatus);
+  const takeoverKey = ["takeover-intent", user.id, workspace.id, workspace.role, run.id];
+  const takeoverIntent = useSyncExternalStore(
+    (notify) => queryClient.getQueryCache().subscribe(notify),
+    () => queryClient.getQueryData<string | null>(takeoverKey) ?? null,
+  );
   const [activeLease, setActiveLease] = useState<HumanLeaseGrant | null>(null);
   const activeLeaseRef = useRef<HumanLeaseGrant | null>(null);
   const mountedRef = useRef(true);
@@ -127,7 +139,44 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
       releasingRef.current = false;
       queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
     },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ["human-actions", user.id, workspace.id, run.id] });
+      void queryClient.invalidateQueries({ queryKey: ["live-execution", user.id, workspace.id, workspace.role, run.id] });
+      void queryClient.invalidateQueries({ queryKey: ["run", user.id, run.id] });
+    },
   });
+  useEffect(() => {
+    onSurfaceChange?.(claim.isPending || Boolean(activeLease));
+  }, [claim.isPending, activeLease, onSurfaceChange]);
+  useEffect(() => {
+    if (!takeoverIntent) return;
+    const live = queryClient.getQueryData<LiveExecution>(["live-execution", user.id, workspace.id, workspace.role, run.id]);
+    const pause = live?.pause;
+    const browser = live?.browser;
+    if (!canManageHumanActions || ended || !pause || pause.id !== takeoverIntent
+      || ["resume_requested", "verifying", "completed", "expired", "cancelled"].includes(pause.status)) {
+      queryClient.setQueryData(takeoverKey, null);
+      return;
+    }
+    if (pause.status !== "paused" || !browser || browser.control_state !== "human_pending") return;
+    const action = actions.data?.find((item) => item.id === pause.human_request_id);
+    if (!action || action.status !== "pending" || activeLease || claim.isPending) return;
+    if (Date.parse(pause.expires_at) <= Date.now()
+      || browser.generation !== pause.generation
+      || action.browser_session_id !== pause.browser_session_id
+      || action.execution_id !== pause.execution_id
+      || browser.browser_session_id !== pause.browser_session_id
+      || browser.execution_id !== pause.execution_id
+      || action.control_generation !== browser.generation
+      || (action.expires_at && Date.parse(action.expires_at) <= Date.now())) {
+      queryClient.setQueryData(takeoverKey, null);
+      return;
+    }
+    // Consume before dispatch so polling and StrictMode cannot claim twice.
+    queryClient.setQueryData(takeoverKey, null);
+    claim.mutate(action.id);
+    document.getElementById("human-action-heading")?.scrollIntoView?.({ block: "start" });
+  }, [takeoverIntent, pauseStatus, actions.data, canManageHumanActions, ended, activeLease, claim.isPending, queryClient, run.id, user.id, workspace.id, workspace.role]);
   const renew = useMutation({
     mutationFn: (requestId: string) => {
       const lease = activeLeaseRef.current;
@@ -237,19 +286,28 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
   const parkMeta = (run.configuration_snapshot?.harness_park ?? null) as
     | { parked_at: string; deadline_at: string; item_id?: string }
     | null;
-  const harnessLoginPark = run.status === "awaiting_human"
+  const controlRecovery = activeAction?.request_type === "other"
+    || pending.some((action) => action.request_type === "other")
+    || leased.some((action) => action.request_type === "other");
+  const harnessLoginPark = !controlRecovery && run.status === "awaiting_human"
     && (parkMeta !== null
       || run.configuration_snapshot?.execution_mode === "harness_v1"
       || run.run_kind === "explore_test");
 
-  if (inline && !activeLease && !pending.length && !leased.length && !pendingApprovals.length
-      && !actions.isError && !approvals.isError && run.status !== "awaiting_human") return null;
+  const showPanel = !inline || Boolean(activeLease || pending.length || leased.length || pendingApprovals.length
+    || actions.isError || approvals.isError || run.status === "awaiting_human");
+  useEffect(() => {
+    if (showPanel && hash === "#human-action-heading")
+      document.getElementById("human-action-heading")?.scrollIntoView?.({ block: "start" });
+  }, [showPanel, hash, locationKey]);
+
+  if (!showPanel) return null;
 
   return (
     <section className="results-boundary" aria-labelledby="human-action-heading">
       <p className="section-label">Human assistance</p>
-      <h2 id="human-action-heading">{harnessLoginPark ? "Log in so the test can continue" : "Continue in the test browser"}</h2>
-      {harnessLoginPark ? <p>Your login session is held only in memory on our servers while this run is active. It is discarded when the run ends. We never store your password.</p> : <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>}
+      <h2 id="human-action-heading">{controlRecovery ? "Help the tester with the requested control" : harnessLoginPark ? "Log in so the test can continue" : "Continue in the test browser"}</h2>
+      {controlRecovery ? <p>The tester could not identify the intended control. Follow the request below on the current page; this request does not require finding a login page.</p> : harnessLoginPark ? <p>Your login session is held only in memory on our servers while this run is active. It is discarded when the run ends. We never store your password.</p> : <p>MarketTwin pauses the tester while an authorized operator handles login, MFA, SSO, CAPTCHA, or another protected step.</p>}
       {harnessLoginPark && parkMeta ? <ParkCountdown runId={run.id} deadlineAt={parkMeta.deadline_at} /> : null}
       {!canManageHumanActions ? <p className="human-action-denied" role="status">Human browser control and action approvals require an owner or administrator role. {run.status === "awaiting_human" ? "This test is paused until an authorized operator acts." : "Ask an authorized operator to review protected requests."}</p> : null}
       {canManageHumanActions ? <>
@@ -285,7 +343,13 @@ function HumanActionPanel({ context, inline = false, onControlChange }: {
         </article>
       ))}
 
-      {claim.isError ? <InlineAlert severity="error" role="alert" title="Browser control could not be claimed. The request remains available until it expires." /> : null}
+      {claim.isError ? <InlineAlert severity="error" role="alert" title="Browser control could not be claimed.">
+        <p>{claim.error instanceof ApiError && claim.error.status === 503
+          ? "The browser owner could not provide control. Check the execution worker; request status is being refreshed."
+          : claim.error instanceof ApiError && claim.error.status === 409
+            ? "The request expired, changed, or is already controlled. Request status is being refreshed."
+            : "The handoff could not be confirmed. Check the refreshed request status before retrying."}</p>
+      </InlineAlert> : null}
       {activeLease && activeRequestId ? (
         <div className="hbv-active-section">
           <div className="hbv-active-header">

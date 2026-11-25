@@ -46,10 +46,6 @@ from markettwin_database.models.execution import (
     HumanActionRequest,
     HumanControlLease,
 )
-from markettwin_execution_orchestrator.persistence.fixture_action_approval import (
-    FixtureActionApproval,
-    FixtureApprovalRejected,
-)
 from sqlalchemy import Table, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.schema import CreateSchema
@@ -321,51 +317,6 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
             approved_row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
             assert await ActionApprovalRepository(session).expire_due(limit=1) == 1
             assert approved_row.status == "expired"
-
-        async with factory() as session:
-            fixture_step = ExecutionStep(
-                execution_id=execution_id,
-                step_number=2,
-                action_type="registration_submit",
-                action_summary="Submit the synthetic local registration fixture.",
-                status="completed",
-            )
-            session.add(fixture_step)
-            await session.flush()
-            fixture_approval_id = await FixtureActionApproval(session).create(
-                run_id=run_id,
-                execution_id=execution_id,
-                step_id=fixture_step.id,
-                owner_id=user_id,
-                environment="local",
-            )
-
-        async with factory() as worker_session:
-            approval_service = FixtureActionApproval(worker_session)
-            wait_task = asyncio.create_task(
-                approval_service.wait(approval_id=fixture_approval_id, timeout_seconds=3)
-            )
-            await asyncio.sleep(0.3)
-            async with factory.begin() as api_session:
-                await ActionApprovalRepository(api_session).decide(
-                    approval_id=fixture_approval_id,
-                    actor_id=user_id,
-                    approved=True,
-                )
-            await wait_task
-            await approval_service.consume(
-                approval_id=fixture_approval_id,
-                environment="local",
-            )
-            with pytest.raises(FixtureApprovalRejected):
-                await approval_service.consume(
-                    approval_id=fixture_approval_id,
-                    environment="local",
-                )
-        async with factory() as session:
-            fixture_receipt = await session.get(ActionApprovalReceipt, fixture_approval_id)
-            assert fixture_receipt is not None
-            assert fixture_receipt.dispatch_state == "claimed"
 
         # General approval dispatch uses the same session binding in a separate
         # worker transaction, while the owner decides in the API transaction.
@@ -857,8 +808,6 @@ async def test_claim_is_exclusive_and_generation_fences_stale_input(monkeypatch,
         async with factory.begin() as session:
             await abandon_run_handoffs(session, test_run_id=run_id)
         async with factory() as session:
-            fixture_receipt = await session.get(ActionApprovalReceipt, fixture_approval_id)
-            assert fixture_receipt is not None and fixture_receipt.dispatch_state == "uncertain"
             lost_browser = await session.get(BrowserSession, browser_id)
             assert lost_browser is not None and lost_browser.control_mode == "none"
 
